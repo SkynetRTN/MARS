@@ -1,8 +1,9 @@
 # Benchmarking
 
-Everything about measuring models on Kepler's tool surface: the harness's
+Everything about measuring models on the tool surface of MARS (MCP Astronomy
+Research Suite): the harness's
 architecture, the sweep it produced, and the figures drawn from it. The code is
-`tools/bench/` and the CLI is `kepler-bench`;
+`tools/bench/` and the CLI is `mars-bench`;
 [`../tool-architecture.md`](../tool-architecture.md) section 10.1 is the
 one-screen summary that tracks the code.
 
@@ -17,7 +18,7 @@ than a plan, and carries an `Archived` block saying what was re-checked.
 | --- | --- |
 | [harness.md](harness.md) | The architecture, the corpus, the graders, the security and correctness requirements, and the rollout record. The design document; was `docs/working/benchmark.md`. |
 | [results.md](results.md) | The sweep, read and interpreted: all sixteen prompts, what separates the models, what every model gets wrong, what no check catches, and the limits. **Start here** if you want the findings rather than the machinery. |
-| [report.md](report.md) | The full generated report `kepler-bench compare` produced. `results.md` selects from it. |
+| [report.md](report.md) | The full generated report `mars-bench compare` produced. `results.md` selects from it. |
 | `report.json` | The same report as data. Committed because the run directories under `artifacts/` are not, and the figures are built from it. |
 | [`figures/`](figures) | The five PNGs `results.md` embeds, and `make.py`, which regenerates them. |
 
@@ -51,12 +52,12 @@ catalogue name passes every check in the suite.
 ## Reproducing
 
 ```bash
-kepler-bench run <suite> --backend <provider/model> --repeats 3 \
+mars-bench run <suite> --backend <provider/model> --repeats 3 \
     --max-tokens <budget> --out artifacts/bench/<date>-<model>-<suite>
-kepler-bench grade   artifacts/bench/<date>-<model>-<suite>
-kepler-bench falsify artifacts/bench/*        # attack the keys
-kepler-bench answers artifacts/bench/* --wrong-only
-kepler-bench compare artifacts/bench/*        # the report
+mars-bench grade   artifacts/bench/<date>-<model>-<suite>
+mars-bench falsify artifacts/bench/*        # attack the keys
+mars-bench answers artifacts/bench/* --wrong-only
+mars-bench compare artifacts/bench/*        # the report
 ```
 
 Every verb but `run` is offline and free, and `--max-tokens` has no default —

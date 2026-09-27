@@ -208,6 +208,8 @@ def build_server(
     return Server(
         surface.SERVER_NAME,
         version=_package_version(),
+        title=surface.SERVER_TITLE,
+        icons=[types.Icon(**icon) for icon in surface.served_icons()],
         instructions=instructions,
         on_list_tools=on_list_tools,
         on_call_tool=on_call_tool,

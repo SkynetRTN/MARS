@@ -37,6 +37,7 @@ __all__ = [
     "normalize_result",
     "result_is_error",
     "served_instructions",
+    "served_icons",
     "served_resources",
     "served_tools",
     "stringified_nulls",
@@ -44,6 +45,14 @@ __all__ = [
 ]
 
 SERVER_NAME = "mars"
+
+#: What a host shows for the server, where it shows more than the name.
+SERVER_TITLE = "MARS \u2014 MCP Astronomy Research Suite"
+
+#: The square mark, exported from ``brand/`` by ``docs/assets/make_brand.py``
+#: and shipped in the wheel. Theme-neutral: the mark carries its own navy tile.
+ICON_DIR = Path(__file__).resolve().parent / "icons"
+ICON_SIZES = (64, 128)
 
 #: Case-folded strings a model sends when it means JSON ``null`` -- the
 #: confirmed-live failure ``SYSTEM_PROMPT`` and the skill both warn about.
@@ -149,6 +158,25 @@ def served_instructions(artifact_root: Path | None = None) -> str:
         # would cut the facts short, so the path gives way to where to find it.
         text = brief + "\n\n" + install_facts("the artifact directory list_artifacts names")
     return text
+
+
+def served_icons() -> list[dict[str, Any]]:
+    """The server's icons, as ``Implementation.icons`` entries.
+
+    ``data:`` URIs, not URLs: a stdio server has nothing to serve a URL from,
+    and a host that fetched one from the repository would show nothing
+    offline. Hosts that ignore ``icons`` lose nothing but the picture.
+    """
+
+    return [
+        {
+            "src": "data:image/png;base64,"
+            + base64.b64encode((ICON_DIR / f"mars-{side}.png").read_bytes()).decode("ascii"),
+            "mime_type": "image/png",
+            "sizes": [f"{side}x{side}"],
+        }
+        for side in ICON_SIZES
+    ]
 
 
 def served_resources() -> list[dict[str, str]]:

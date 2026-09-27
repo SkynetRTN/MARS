@@ -1,5 +1,11 @@
 # Kepler Algorithm Remediation Plan
 
+> [!NOTE] Renamed 2026-09-25
+> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
+> carries the new names from `0.1.0rc3`. This record keeps the names in use
+> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
+> plan](../working/mars-rebrand.md).
+
 Date: 2026-08-10
 Status: proposed
 Scope: correctness of the algorithms in `algorithms/wcs/`, `algorithms/photometry/`,

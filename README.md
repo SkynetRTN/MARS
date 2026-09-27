@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kepler-banner-dark.svg">
-    <img src="docs/assets/kepler-banner-light.svg" alt="Kepler — astronomy research console" width="880">
-  </picture>
+  <img src="docs/assets/mars-banner.png" alt="MARS — MCP Astronomy Research Suite" width="880">
 </p>
 
 <p align="center">
@@ -11,7 +8,7 @@
 </p>
 
 An agentic, tool-enabled system for automated astronomy — an LLM agent,
-named Kepler, that plans and executes astronomy tasks by calling a registry
+named MARS (MCP Astronomy Research Suite), that plans and executes astronomy tasks by calling a registry
 of purpose-built tools backed by algorithms extracted from two production
 systems.
 
@@ -24,7 +21,7 @@ systems.
 - [Repository Shape](#repository-shape)
 - [Getting Started](#getting-started)
   - [Running the Console](#running-the-console)
-  - [Using Kepler from Your Own Coding Agent](#using-kepler-from-your-own-coding-agent)
+  - [Using MARS from Your Own Coding Agent](#using-mars-from-your-own-coding-agent)
 - [Testing & Validation](#testing--validation)
 - [Configuration](#configuration)
 - [Architecture & Further Reading](#architecture--further-reading)
@@ -33,7 +30,7 @@ systems.
 
 ## Overview
 
-Kepler is an agentic, tool-enabled system for automated astronomy: an LLM
+MARS is an agentic, tool-enabled system for automated astronomy: an LLM
 agent that plans and executes astronomy research and data-reduction tasks —
 literature and catalog search, target resolution, and, as the underlying
 algorithms come online, WCS plate solving, photometry, and photometric
@@ -64,12 +61,12 @@ named divergences.
 
 ## The Agent
 
-Kepler has one model-driven entry point — the `kepler` console — and a
+MARS has one model-driven entry point — the `mars` console — and a
 reusable local pipeline, both built on the plain Python functions in `tools/`.
 [Running the Console](#running-the-console) is the guide; this section is what
 it is made of:
 
-- **`kepler` — the interactive console.** The full-screen Textual application
+- **`mars` — the interactive console.** The full-screen Textual application
   over the agent loop: a transcript that keeps your question in view and
   renders each tool call as it runs, the model's reasoning where the provider
   reveals it, image and waveform previews of the artifacts a run produces,
@@ -160,7 +157,7 @@ identical function any other caller would import and run.
 
 ## Highlights
 
-- **Provider-neutral agent surface.** The `kepler` console, and the
+- **Provider-neutral agent surface.** The `mars` console, and the
   `tools/agent/` loop under it, run a bounded tool-use loop over eight remote
   astronomy databases — Anthropic by default, or an OpenAI-compatible, Ollama,
   or Gemini backend, chosen with `/backend` in the session or with
@@ -192,8 +189,8 @@ identical function any other caller would import and run.
 | Path | Status | What it contains |
 | --- | --- | --- |
 | `tools/` | Python tools | Plain Python wrappers for local frame discovery (`tools/optical.py`), WCS description and plate solving (`tools/astrometry.py`, `tools/wcs.py`), catalog metadata, reference-band resolution, zero-point solving and the recorded-solve references (`tools/fieldcal_reference.py`), local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
-| `tools/agent/`, `tools/llm/`, `tools/tui/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The tool-use loop behind the `kepler` console: the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the Textual console (`tools/tui/`), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
-| `tools/bench/`, `benchmarks/` | Python agent | The model benchmark harness (`kepler-bench`) and its corpus. Answers which model is better on this tool surface and at what cost in work: it reads the registry and the session manifest, replays the 22 remote tools from recorded fixtures, runs the 26 local ones live, and grades on four axes. It owns no tool. Offline and deterministic -- the smoke suite runs inside a plain `uv run pytest` with no key and no socket. See `docs/tool-architecture.md` 10.1. |
+| `tools/agent/`, `tools/llm/`, `tools/tui/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The tool-use loop behind the `mars` console: the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the Textual console (`tools/tui/`), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
+| `tools/bench/`, `benchmarks/` | Python agent | The model benchmark harness (`mars-bench`) and its corpus. Answers which model is better on this tool surface and at what cost in work: it reads the registry and the session manifest, replays the 22 remote tools from recorded fixtures, runs the 26 local ones live, and grades on four axes. It owns no tool. Offline and deterministic -- the smoke suite runs inside a plain `uv run pytest` with no key and no socket. See `docs/tool-architecture.md` 10.1. |
 | `tools/photometry_pipeline.py` | Python pipeline | Reusable FITS photometry, zero-point resolution, and plotting implementation used by `tools.photometry`; it has no CLI or model-provider client. |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
@@ -215,7 +212,7 @@ verification already performed for every extracted algorithm package.
 ## Repository Shape
 
 ```text
-Kepler/
+MARS/
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
   CONTRIBUTING.md                # contribution guidelines
@@ -236,7 +233,7 @@ Kepler/
     assets/                      # the README banner
   tools/                         # public Python tool wrappers and shared models
     agent/ llm/ tui/ bench/      #   the loop, the model port, the console, the benchmark
-    mcp/                         #   the MCP server (kepler-mcp) and data bundles
+    mcp/                         #   the MCP server (mars-mcp) and data bundles
     skill/                       #   the agent skill's one source and renderer
     _data -> ../data             #   bundled data: a symlink here, core data in a wheel
   skills/mars-tools/           # the rendered agent skill (generated; see tools/skill)
@@ -296,36 +293,36 @@ Some extracted runtime paths also require non-Python solver data called out in
 `docs/extraction.md`, including astrometry.net index files and local
 UCAC4/UCAC5 catalogs.
 
-### Using Kepler from Your Own Coding Agent
+### Using MARS from Your Own Coding Agent
 
-Kepler's tools are also served over **MCP**, so Claude Code, Codex, Cursor or
+MARS's tools are also served over **MCP**, so Claude Code, Codex, Cursor or
 any other MCP host can call them from a machine that has **no checkout** of
 this repository. Install a release — Python 3.13 is the target — and register
 its server:
 
 ```bash
-python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v0.1.0rc1/kepler-0.1.0rc1-py3-none-any.whl"
-kepler-env/bin/kepler-mcp self-test          # launches the server as a host would, runs a pulsar detection
+python3.13 -m venv mars-env
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v0.1.0rc3/skynet_mars-0.1.0rc3-py3-none-any.whl"
+mars-env/bin/mars-mcp self-test          # launches the server as a host would, runs a pulsar detection
 ```
 
 ```json
-{"mcpServers": {"kepler": {"command": "/path/to/kepler-env/bin/kepler-mcp"}}}
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
 ```
 
 - **Data.** The wheel carries the core data (the pulsar scans and the
   zero-point references). The optical frame library and the isochrone grid are
-  optional bundles: `kepler-mcp fetch-data optical` (or `isochrones`, or
+  optional bundles: `mars-mcp fetch-data optical` (or `isochrones`, or
   `all`). Each is checksum-verified against the install and resumes if
   interrupted.
-- **Scope.** `kepler-mcp --tools databases,timeseries` serves only some of the
+- **Scope.** `mars-mcp --tools databases,timeseries` serves only some of the
   five tool groups: `databases`, `optical`, `timeseries`, `hr`, `radio`.
 - **The skill.** The server brings its own usage guidance — stage orders,
   identifier forms, period provenance — as its instructions and as
   `mars://skill/...` resources. In a checkout, the same skill is
   `skills/mars-tools/`.
-- **Where files go.** Artifacts and downloads go under a per-user Kepler home
-  (`~/.local/share/kepler`, or `MARS_HOME`), never into the install.
+- **Where files go.** Artifacts and downloads go under a per-user MARS home
+  (`~/.local/share/mars`, or `MARS_HOME`), never into the install.
 - **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two
   dependencies compile from source.
 
@@ -334,11 +331,11 @@ kepler-env/bin/kepler-mcp self-test          # launches the server as a host wou
 
 ### Running the Console
 
-`kepler` is the one model-driven entry point, and it takes no required
+`mars` is the one model-driven entry point, and it takes no required
 arguments — everything it needs is chosen inside the session:
 
 ```bash
-uv run kepler
+uv run mars
 ```
 
 ```text
@@ -369,7 +366,7 @@ uv run kepler
   Session finished: end_turn.
 
  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎
- ▊  Ask Kepler…                                                             ▎
+ ▊  Ask MARS…                                                             ▎
  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎
   2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
 ```
@@ -420,9 +417,9 @@ switches straight over. A switch happens only after the new backend is built
 the session — the transcript says which backend is still answering.
 
 ```bash
-uv run kepler --backend ollama       # or start on the local daemon
-uv run kepler --thinking-budget 0    # or without asking for reasoning
-uv run kepler --max-turns 40         # or with a higher ceiling than 20
+uv run mars --backend ollama       # or start on the local daemon
+uv run mars --thinking-budget 0    # or without asking for reasoning
+uv run mars --max-turns 40         # or with a higher ceiling than 20
 ```
 
 **A turn is something you are in.** The prompt never closes while the model
@@ -440,7 +437,7 @@ beside them records every turn and tool call, which is what `/sessions` and
 
 ### Python Entry Points
 
-ADS queries require `ADS_DEV_KEY`. The optional agent loop — the `kepler`
+ADS queries require `ADS_DEV_KEY`. The optional agent loop — the `mars`
 console and `tools/agent/` under it — needs a model backend: a key for the
 provider it opens on, or a local Ollama daemon, which needs none. The backend
 is selectable inside the session with `/backend`, so this is a question of
@@ -483,7 +480,7 @@ from tools.workspace import describe_artifact, list_artifacts
 The same tools are wired into a tool-use loop by the console:
 
 ```bash
-uv run kepler
+uv run mars
 ```
 
 Advanced callers can still import the extracted algorithm packages directly:
@@ -515,7 +512,7 @@ vocabularies; it is pure data and pulls in no network stack. Import
 
 ## Testing & Validation
 
-Kepler's Python folders are byte-preserving extractions from Skynet, so
+MARS's Python folders are byte-preserving extractions from Skynet, so
 `tests/` is not there to check whether the algorithms are *right* — that
 question was settled upstream. It checks whether the extraction still does
 **exactly what it did before**, including the parts that are wrong. Fixtures
@@ -537,7 +534,7 @@ git diff --check
 Astromancer-derived behavior runs through the Python ports in
 `algorithms/pulsar/`, `algorithms/variable_star/`, and
 `algorithms/hrdiagram_py/`. Their parity tests pin the numerical behavior that
-Kepler uses; `docs/extraction.md` retains the retired TypeScript extraction
+MARS uses; `docs/extraction.md` retains the retired TypeScript extraction
 record and the upstream source locations.
 
 The extraction notes record broader one-off checks such as compile/import smoke
@@ -565,7 +562,7 @@ the first slash only. With `MARS_MODEL_BACKEND` unset it uses Anthropic.
   bounded at five seconds.
 
 ```bash
-MARS_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run kepler
+MARS_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run mars
 ```
 
 `.env` at the repository root is read at launch and on every `/backend`, so a
@@ -605,7 +602,7 @@ astrometry.net instead: it needs `solve-field` on `PATH` (or a supported
 ### ATLAS catalog dependency
 
 The UCAC catalog is an operator-owned dependency, like the local HR-diagram
-isochrone grid: do not download, copy, or commit it under Kepler. Set both
+isochrone grid: do not download, copy, or commit it under MARS. Set both
 variables for the installed catalog. The supplied UCAC5 tree on this host is:
 
 ```bash

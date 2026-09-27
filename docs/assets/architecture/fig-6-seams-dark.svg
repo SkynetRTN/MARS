@@ -36,10 +36,10 @@
   </defs>
   <rect width="900" height="446" fill="#0D1117"/>
 
-  <text class="tl" x="30" y="52">KEPLER &#8212; THE CONSOLE</text>
+  <text class="tl" x="30" y="52">MARS &#8212; THE CONSOLE</text>
   <text class="tn" x="30" y="72">a human in the loop</text>
 
-  <text class="tl end" x="870" y="52">KEPLER-BENCH</text>
+  <text class="tl end" x="870" y="52">MARS-BENCH</text>
   <text class="tn end" x="870" y="72">a recorder in the loop</text>
 
   <rect class="d-boxA" x="330" y="90" width="240" height="252"/>

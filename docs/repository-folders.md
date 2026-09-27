@@ -1,6 +1,6 @@
 # Repository Folder Guide
 
-This guide explains the current source folders in Kepler. It documents the
+This guide explains the current source folders in MARS (MCP Astronomy Research Suite). It documents the
 repository as it exists now: root-level tool modules, distinguished extracted
 algorithm modules, and planning material for future tool work.
 
@@ -17,7 +17,7 @@ Repository automation and ownership policy.
 - `workflows/secret-scan.yml` runs gitleaks against the tree and history.
 - `workflows/workflow-safety.yml` runs actionlint and zizmor against workflows.
 - `workflows/release.yml` builds, verifies (a clean install on Python 3.12
-  and 3.13 running `kepler-mcp self-test`) and publishes a release from a
+  and 3.13 running `mars-mcp self-test`) and publishes a release from a
   `v<version>` tag, and checks the standing `data` release holds the pinned
   bundles. Policy: [releasing.md](releasing.md).
 
@@ -29,7 +29,7 @@ end-to-end validation.
 ## `skills/`
 
 `skills/mars-tools/` is the rendered repository copy of the agent skill:
-how to use Kepler's tools correctly (stage orders, identifier forms, period
+how to use MARS's tools correctly (stage orders, identifier forms, period
 provenance, silently wrong results). It is **generated** from
 `tools/skill/source/` by `uv run python -m tools.skill`; edit the source, never
 this copy. `.claude/skills/mars-tools` links to it, so a coding agent in a
@@ -43,7 +43,7 @@ Important files and subfolders:
   remote query, and artifact summary models.
 - `config.py`: small environment-backed settings helpers for the tool layer,
   including `BUNDLED_DATA_DIR` -- the one way tools read bundled data.
-- `paths.py`: the per-user Kepler home (`~/.local/share/kepler`, or
+- `paths.py`: the per-user MARS home (`~/.local/share/mars`, or
   `MARS_HOME`) and `tools/_data`. Resolves nothing at import.
 - `_data`: in a checkout, a committed symlink to `data/`; in a wheel, the
   core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
@@ -71,18 +71,18 @@ Important files and subfolders:
   `ModelBackend` protocol, schema translation, pre-dispatch validation, the
   `provider/model` spec factory, and adapters for Anthropic, OpenAI-compatible
   servers, Ollama and Gemini.
-- `tui/`: the Textual `kepler` console over the loop -- application shell,
+- `tui/`: the Textual `mars` console over the loop -- application shell,
   slash commands and their completion, backend and model selection,
   transcript, artifact and session browsers.
-- `bench/`: the model benchmark harness (`kepler-bench`). It owns no tool.
-- `mcp/`: the MCP server (`kepler-mcp`) -- a fourth consumer of the registry,
+- `bench/`: the model benchmark harness (`mars-bench`). It owns no tool.
+- `mcp/`: the MCP server (`mars-mcp`) -- a fourth consumer of the registry,
   served over stdio to a coding agent's console on a machine with no
   checkout. `roots` pins the artifact and data roots before `tools.config`
   loads; `surface` decides what is served with no SDK import; `server` is the
   only `mcp` SDK import (optional `[mcp]` group); `groups` holds the five
   tool groups and the derived annotations; `install` states the install's
   data and credentials; `bundles` (with `bundles.json`) builds and fetches the
-  optional data bundles; `selftest` is `kepler-mcp self-test`. Imports
+  optional data bundles; `selftest` is `mars-mcp self-test`. Imports
   nothing from `agent/` or `llm/`. See
   [tool-architecture.md](tool-architecture.md) section 10.3 and
   [installing.md](installing.md).
@@ -104,7 +104,7 @@ Current tools:
 - `catalogs.list_photometric_catalogs()`: list local catalog declarations
   without querying remote services.
 - `catalogs.resolve_reference_band(catalog, image_filter)`: summarize the local
-  filter-to-reference-band mapping Kepler would use.
+  filter-to-reference-band mapping MARS would use.
 - `calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`:
   solve a zero point from local measurement and catalog-source records.
 - `pulsar.resolve_pulsar_scan(...)` / `pulsar.list_pulsar_scans(...)`,
@@ -167,7 +167,7 @@ Important files and subfolders:
 
 Extracted Python catalog declarations from Skynet and Afterglow.
 
-What Kepler knows about catalogs and provider vocabularies, and nothing about
+What MARS knows about catalogs and provider vocabularies, and nothing about
 reaching them: no module here imports `astroquery`, `psrqpy`, or opens a
 socket. Photometric catalog declarations cover eleven catalogs — APASS,
 Landolt, PanSTARRS, SDSS, SkyMapper, Stetson, 2MASS, Tycho-2, UCAC5, USNO-B1,
@@ -212,8 +212,8 @@ map and the document lifecycle.
 - `repository-folders.md` — this current-state folder guide.
 - `pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the extracted
   Astromancer code behind each stage.
-- `installing.md` — installing Kepler with no checkout, registering
-  `kepler-mcp` with a host, and the optional data bundles.
+- `installing.md` — installing MARS with no checkout, registering
+  `mars-mcp` with a host, and the optional data bundles.
 - `releasing.md` — version and tag policy, the release workflow, and the
   standing `data` release.
 - `analysis/` — point-in-time review and external-research output (dated).

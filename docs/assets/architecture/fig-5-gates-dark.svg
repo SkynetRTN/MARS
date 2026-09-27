@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="472" viewBox="0 0 880 472" role="img" aria-label="Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right Kepler's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.">
-  <title>Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right Kepler's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="472" viewBox="0 0 880 472" role="img" aria-label="Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right MARS's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.">
+  <title>Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right MARS's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.</title>
   <style>
   svg { color: #E7EDEB; }
   text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #E7EDEB; }
@@ -54,7 +54,7 @@
   <line class="d-line" x1="230" y1="324" x2="230" y2="368" marker-end="url(#a)"/>
   <path class="d-line" d="M 110 392 L 60 392 L 60 82 L 106 82" marker-end="url(#a)"/>
 
-  <text class="tla" x="470" y="20">KEPLER'S LOOP &#8212; engine.py, 547 LINES</text>
+  <text class="tla" x="470" y="20">MARS'S LOOP &#8212; engine.py, 547 LINES</text>
   <text class="tn" x="470" y="38">bounded at max_turns = 20 &#183; every call recorded</text>
   <rect class="d-frame" x="470" y="48" width="380" height="392"/>
 

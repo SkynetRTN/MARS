@@ -5,7 +5,7 @@ distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
 questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
-the feature branch `mars-rebrand` (§5); **R1–R3 are done** (2026-09-27).
+the feature branch `mars-rebrand` (§5); **R1–R4 are done** (2026-09-27).
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -240,6 +240,28 @@ package". Decided on the way:
 
 **Gate:** no dead links; the banner renders in both schemes; a host shows the
 server's icon (or the PR records which hosts ignore `icons`).
+
+**Done 2026-09-27**, except the last gate item:
+
+- `docs/assets/make_brand.py` exports everything from the masters in
+  `brand/`, and reproduces the committed files byte for byte: the README
+  banner `docs/assets/mars-banner.png` (1760×360, the mark beside the
+  wordmark and tagline lifted from the social preview, on Navy (banner)), the
+  mark at 512 px, and the server icons `tools/mcp/icons/mars-{64,128}.png`.
+  The banner carries its own plate, so one PNG serves both schemes and the
+  light/dark SVG pair is retired.
+- The server introduces itself as `mars`, titled *MARS — MCP Astronomy
+  Research Suite*, with both icons as `data:` URIs (a stdio server has no URL
+  to serve), shipped in the wheel. A test reads them from a real handshake.
+  **Not yet seen in a host's UI**; which hosts display `icons` is still to be
+  recorded.
+- Current documents say MARS and spell it out once; records carry a dated
+  note under their titles instead of being rewritten. The guard now covers
+  the documentation, with the records, the "Upgrading from Kepler" section of
+  `docs/installing.md`, and "Keplerian"/"Kepler's laws" (which
+  `docs/working/obs-report.md` uses for orbits) allowed.
+- No new dead links. The README's install line names the `v0.1.0rc3`
+  `skynet_mars` wheel, which exists once R5 tags it.
 
 ### R5 — Repository and release
 

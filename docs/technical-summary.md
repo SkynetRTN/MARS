@@ -1,9 +1,9 @@
-# Kepler Technical Summary
+# MARS Technical Summary
 
 **Status:** current-state reference
 **Verified against:** `dev` at `43247d2` on 2026-09-21
 
-Kepler is an astronomy capability library with an optional LLM-driven console
+MARS (MCP Astronomy Research Suite) is an astronomy capability library with an optional LLM-driven console
 and model-evaluation harness. It lets a Python caller, script, notebook, or
 agent use the same small public functions for astronomy research and data
 reduction. It is deliberately **not** an orchestration framework or a required
@@ -19,7 +19,7 @@ summaries, warnings/errors, and paths to larger local artifacts.
 ## Delivered architecture
 
 ```text
-Python callers, scripts, notebooks        Textual `kepler` console       `kepler-bench`
+Python callers, scripts, notebooks        Textual `mars` console       `mars-bench`
               \                                  |                          /
                \                                 |                         /
                 +------------------------ tools/agent --------------------+
@@ -62,7 +62,7 @@ For the detailed ownership and dependency rules, see
 
 ### Preserved algorithm foundation
 
-Kepler has extracted the relevant Python algorithms from Skynet and ported the
+MARS has extracted the relevant Python algorithms from Skynet and ported the
 Astromancer light-curve, periodogram, pulsar, and HR-diagram computations to
 Python. Extraction is a preservation task rather than a rewrite: upstream
 constants, calculations, comments, and known behavior are retained, and
@@ -88,7 +88,7 @@ network connection.
 
 ### Catalog, archive, and literature access
 
-Kepler supplies a split remote tool surface for SIMBAD, NED, VizieR, ATNF,
+MARS supplies a split remote tool surface for SIMBAD, NED, VizieR, ATNF,
 ADS, MAST, MPC, CASDA, and SIMBAD-backed target resolution. It keeps catalog
 declarations separate from the network-query layer, bounds inline results, and
 writes complete remote results as local artifacts. This supports catalog and
@@ -119,13 +119,13 @@ is in [repository-folders.md](repository-folders.md).
 The project has moved beyond a collection of callable astronomy routines while
 keeping those routines independent of the model layer:
 
-- The `kepler` command launches a Textual console with a live transcript,
+- The `mars` command launches a Textual console with a live transcript,
   tool-call status, approval prompts for risky work, artifact previews, session
   browsing/resume, slash commands, cancellation, and live backend selection.
 - Session manifests preserve each run's turns, tool calls, artifacts, and cache
   hits under `artifacts/sessions/`, allowing later inspection without replaying
   a model.
-- The `kepler-bench` harness measures models over the same registry. It runs
+- The `mars-bench` harness measures models over the same registry. It runs
   deterministic local tools live, replays remote providers from fixtures, and
   grades against recorded evidence rather than asking a second model to judge
   the first.
@@ -163,16 +163,16 @@ Run the current suite before relying on that point-in-time count.
 
 ## Current project position
 
-Kepler is now a documented, installable astronomy tool collection with a
+MARS is now a documented, installable astronomy tool collection with a
 completed optical rollout, provider-neutral model port, interactive console,
 and calibrated benchmark track. Its strongest guarantees are local execution
 boundaries, extraction provenance, recorded scientific baselines, and
 deterministic default validation.
 
-The MCP tool-surface track has landed. `kepler-mcp` serves all 55 tools over
+The MCP tool-surface track has landed. `mars-mcp` serves all 55 tools over
 stdio to a coding agent's own console on a machine with no checkout, with the
 agent skill as its instructions and resources. A wheel carries the core data,
-and `kepler-mcp fetch-data` installs checksum-pinned optional bundles.
+and `mars-mcp fetch-data` installs checksum-pinned optional bundles.
 `v0.1.0rc1` is published as a pre-release. See
 [tool-architecture.md](tool-architecture.md) section 10.3,
 [installing.md](installing.md), and the track record in

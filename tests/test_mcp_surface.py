@@ -517,6 +517,28 @@ def test_the_server_delivers_the_instructions_and_the_skill_resources():
     assert pulsar == served_documents()["references/pulsar.md"]
 
 
+def test_the_server_introduces_itself_as_mars_with_its_icons():
+    """R4: a host that shows server icons shows the square mark."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    async def session(client):
+        return client.server_info
+
+    info = _client_session(session)
+    assert info.name == "mars"
+    assert info.title == "MARS \u2014 MCP Astronomy Research Suite"
+    assert [icon.sizes for icon in info.icons] == [["64x64"], ["128x128"]]
+    for icon in info.icons:
+        assert icon.mime_type == "image/png"
+        header, _, data = icon.src.partition(",")
+        assert header == "data:image/png;base64"
+        side = int(icon.sizes[0].partition("x")[0])
+        assert Image.open(io.BytesIO(base64.b64decode(data))).size == (side, side)
+
+
 def test_an_unknown_resource_is_a_protocol_error():
     pytest.importorskip("mcp")
     from mcp.shared.exceptions import MCPError

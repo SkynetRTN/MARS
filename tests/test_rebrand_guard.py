@@ -10,10 +10,15 @@ purpose, and none is the project's name for itself:
   their ``ARCHIVE_PREFIX``, and the ``.kepler-bundle.json`` marker a fetched
   bundle carries (§3);
 - the repository's first name, which still redirects and must stay unused;
-- the **Kepler mission**. A tool that queries the telescope's data must be
-  able to say so. Add the form it needs to :data:`MISSION`, never a path.
+- the **Kepler mission**, and the astronomy named after Kepler himself
+  ("Keplerian" orbits, Kepler's laws). A tool that queries the telescope's
+  data must be able to say so. Add the form it needs to :data:`MISSION`,
+  never a path.
 
-The documentation joins this scope in R4.
+The documentation joined this scope in R4. A **record** -- a dated plan,
+analysis or report -- says what was true when it was written, and keeps the
+old names under a dated note (``RECORDS``); a current document may name them
+only to describe the upgrade from Kepler.
 """
 
 from __future__ import annotations
@@ -27,8 +32,14 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: What is searched: everything that is not prose documentation.
+#: What is searched: the whole repository but its binary data.
 SCOPE = (
+    "README.md",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    ".gitleaks.toml",
+    "docs",
     "tools",
     "tests",
     "algorithms",
@@ -51,24 +62,51 @@ SHIMS = frozenset(
     }
 )
 
+#: Records, kept as written under a dated note (docs/working/mars-rebrand.md
+#: §2), and the rebrand plan itself.
+RECORDS = frozenset(
+    {
+        "docs/working/mars-rebrand.md",
+        "docs/archive/mcp-tool-surface.md",
+        "docs/archive/model-backends.md",
+        "docs/archive/optical-tools.md",
+        "docs/analysis/algorithm-remediation-plan.md",
+        "docs/analysis/applicable-designs.md",
+        "docs/benchmarking/report.md",
+        "docs/benchmarking/report.json",
+        "docs/benchmarking/results.md",
+        "docs/superpowers/plans/2026-09-14-tui-artifact-rendering.md",
+    }
+)
+RECORD_TREES = ("docs/benchmarking/figures/",)
+
 #: Published names that keep their bytes, wherever they are mentioned.
 PUBLISHED = (
-    r"kepler-(?:optical|isochrones)-[0-9a-f]{12}\.tar",
+    r"kepler-(?:optical|isochrones)-(?:[0-9a-f]{12}|<sha12>)\.tar",
     r'ARCHIVE_PREFIX = "kepler-"',
     r"\.kepler-bundle\.json",
     r"archon774/kepler\b",
+    # Retired before the rename; named only where its retirement is recorded.
+    r"kepler-astro-query",
 )
 
-#: The telescope, not the project.
+#: The telescope and the astronomer, not the project.
 MISSION = (
+    r"\bKeplerian\b",
+    r"\bKepler's (?:laws?|equation)\b",
     r"\bKepler(?:/K2)? (?:space telescope|mission|spacecraft|Input Catalog)\b",
     r"\bKIC ?\d+",
     r"\bKOI-?\d+",
 )
 
-#: Single lines outside the shims that name them, by file.
+#: Whole sections of a current document that describe the upgrade from
+#: Kepler, by file and heading; the section ends at the next heading.
+UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
+
+#: Single lines outside the shims that name the old name on purpose, by file.
 SHIM_REFERENCES = {
     "pyproject.toml": r'^kepler(?:-bench|-mcp)? = "tools\.aliases:',
+    "docs/working/README.md": r"Renaming Kepler to MARS",
     "tools/config.py": r"^# Kepler's KEPLER_\* names",
     "tools/mcp/__main__.py": r"project called ``kepler``",
     "tools/mcp/selftest.py": r"# KEPLER_\* too",
@@ -99,8 +137,21 @@ def _hits() -> list[tuple[str, int, str]]:
     return hits
 
 
-def _unexplained(path: str, text: str) -> bool:
-    if path in SHIMS:
+def _section_lines(path: str, heading: str) -> range:
+    """1-based line numbers of the section, its heading included."""
+    lines = (_REPO_ROOT / path).read_text(encoding="utf-8").splitlines()
+    heading_index = lines.index(heading)
+    end_index = next(
+        (i for i in range(heading_index + 1, len(lines)) if lines[i].startswith("#")),
+        len(lines),
+    )
+    return range(heading_index + 1, end_index + 1)
+
+
+def _unexplained(path: str, text: str, number: int = 0) -> bool:
+    if path in SHIMS or path in RECORDS or path.startswith(RECORD_TREES):
+        return False
+    if path in UPGRADE_SECTIONS and number in _section_lines(path, UPGRADE_SECTIONS[path]):
         return False
     reference = SHIM_REFERENCES.get(path)
     if reference and re.search(reference, text):
@@ -116,7 +167,7 @@ def test_kepler_appears_only_where_it_must():
     unexplained = [
         f"{path}:{number}: {text.strip()}"
         for path, number, text in _hits()
-        if _unexplained(path, text)
+        if _unexplained(path, text, number)
     ]
     assert unexplained == [], "\n".join(unexplained)
 
@@ -126,6 +177,8 @@ def test_the_mission_stays_nameable():
         "light curves from the Kepler space telescope",
         "the Kepler/K2 mission archive",
         "KIC 8462852",
+        "Keplerian orbital position",
+        "solving Kepler's equation",
     ):
         assert not _unexplained("tools/future_mission_tool.py", text), text
     assert _unexplained("tools/future_mission_tool.py", "Kepler's astronomy tools")

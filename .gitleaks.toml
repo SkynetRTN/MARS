@@ -1,4 +1,4 @@
-# Gitleaks configuration for Kepler.
+# Gitleaks configuration for MARS.
 #
 # Keep the default rule set active. Add allowlist entries only for documented,
 # non-secret placeholders that are safe to publish.
