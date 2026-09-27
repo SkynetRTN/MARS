@@ -1,4 +1,4 @@
-"""Kepler: shared name resolution for ``tools``.
+"""MARS: shared name resolution for ``tools``.
 
 Wraps ``algorithms.query.simbad.resolve_simbad`` so every tool that needs "which sky
 position is this object" goes through the same path, and a name that doesn't

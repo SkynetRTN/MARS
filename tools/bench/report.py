@@ -8,7 +8,7 @@ diagnostic axes sit beside them to explain a number rather than competing with
 it for attention.
 
 **The score is three measurements and nothing else.** A model is asked a
-question about Kepler's tool surface, and only three things about its reply are
+question about MARS's tool surface, and only three things about its reply are
 scored: **is it correct**, **how long did it take**, and **how many tokens did
 it cost**. Everything else the harness records -- trajectory, protocol, fixture
 misses, duplicate calls -- is diagnosis for reading *why* a score came out as it
@@ -717,7 +717,7 @@ def _failures(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def render_markdown(report: Mapping[str, Any]) -> str:
     header = report["header"]
-    lines: list[str] = ["# Kepler model benchmark", ""]
+    lines: list[str] = ["# MARS model benchmark", ""]
 
     for run in header["runs"]:
         lines.append(f"## Run `{run['run_id']}` -- suite `{run['suite_id']}`")

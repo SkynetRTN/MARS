@@ -1,7 +1,7 @@
 """The declared vocabulary of :class:`~tools.models.ToolError` and
 :class:`~tools.models.ToolWarning` codes.
 
-Every coded signal any Kepler tool raises is named here with a one-line
+Every coded signal any MARS tool raises is named here with a one-line
 meaning. ``tests/test_tool_codes.py`` AST-scans ``tools/`` and ``algorithms/``
 and fails if a code is constructed that is not declared, or declared that is
 not constructed -- so this file cannot drift from the code without a test
@@ -29,7 +29,7 @@ from __future__ import annotations
 __all__ = ["TOOL_ERROR_CODES", "TOOL_WARNING_CODES"]
 
 
-#: Every ``ToolError.code`` a Kepler tool constructs, and what it means.
+#: Every ``ToolError.code`` a MARS tool constructs, and what it means.
 TOOL_ERROR_CODES: dict[str, str] = {
     "ambiguous": "A name matched more than one frame or fixture; nothing was chosen.",
     "catalog_fixture_empty": "The named recorded catalog response holds no row the catalog mapping can use.",
@@ -77,7 +77,7 @@ TOOL_ERROR_CODES: dict[str, str] = {
 }
 
 
-#: Every ``ToolWarning.code`` a Kepler tool constructs, and what it means.
+#: Every ``ToolWarning.code`` a MARS tool constructs, and what it means.
 #:
 #: A warning is how this surface reports a bound on an answer that is still an
 #: answer. Several of them mark the silent failures the tools exist to make
@@ -105,7 +105,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "frequency_filtered": "Rows were dropped by the requested frequency bounds; the count reflects that.",
     "legacy_download_root_present": "A non-empty legacy download directory exists that this search does not cover.",
     "listing_truncated": "More entries were found than the listing returns (frames per root, or served artifacts); the total is named.",
-    "max_results_capped": "max_results was capped at a Kepler-side safety limit, not a service limit.",
+    "max_results_capped": "max_results was capped at a MARS-side safety limit, not a service limit.",
     "missing_fit_data": "The recorded solve carries no fit_data.csv, so detections are unavailable.",
     "missing_image_shape": "The FITS header carries no usable NAXIS1/NAXIS2.",
     "missing_mag": "A measurement carried no instrumental magnitude and was skipped.",

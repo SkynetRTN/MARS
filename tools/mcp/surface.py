@@ -244,7 +244,7 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """Serialize one tool's return value into a JSON object.
 
     Mirrors ``tools/agent/engine.py::_normalize_result``, which this surface
-    may not import: a Kepler model becomes its fields, and the three tools that
+    may not import: a MARS model becomes its fields, and the three tools that
     return a bare ``list`` of models are wrapped as ``{status, count,
     results}``. Serialization goes through ``pydantic_core.to_json`` rather
     than ``model_dump()``, so a NaN or infinity becomes ``null`` and a path or
@@ -259,7 +259,7 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
         return _to_jsonable(value)
     raise TypeError(
         f"tool {name!r} returned {type(value).__name__}; a registered tool must "
-        "return a Kepler model or a list of them"
+        "return a MARS model or a list of them"
     )
 
 

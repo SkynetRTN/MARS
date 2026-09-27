@@ -1,4 +1,4 @@
-"""Kepler: FITS frame -> HR diagram -> literature comparison.
+"""MARS: FITS frame -> HR diagram -> literature comparison.
 
 Chains together pieces that already exist:
 

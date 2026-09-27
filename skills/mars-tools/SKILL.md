@@ -1,13 +1,13 @@
 ---
 name: mars-tools
-description: How to use Kepler's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and the local pulsar, variable-star, optical photometry, plate-solving, HR-diagram and radio-source pipelines. Use when calling any Kepler tool, and before any pulsar period measurement, database name lookup or literature claim -- it covers the stage orders, identifier forms and silently wrong results the tool descriptions alone do not.
+description: How to use MARS's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and the local pulsar, variable-star, optical photometry, plate-solving, HR-diagram and radio-source pipelines. Use when calling any MARS tool, and before any pulsar period measurement, database name lookup or literature claim -- it covers the stage orders, identifier forms and silently wrong results the tool descriptions alone do not.
 ---
 
 <!-- Rendered from tools/skill/source/SKILL.md by `python -m tools.skill`. Edit the source, not this file. -->
 
-# Kepler astronomy tools
+# MARS astronomy tools
 
-Kepler is 55 astronomy tools: thin clients over eight remote databases
+MARS is 55 astronomy tools: thin clients over eight remote databases
 (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA, ADS) and local pipelines that run
 on data already on this machine — a radio-pulsar chain, a variable-star chain,
 optical frames with plate solving, photometry and zero-point calibration, an
@@ -29,10 +29,10 @@ carry the workflow for one area and are worth reading before working in it.
 | [`references/optical.md`](references/optical.md) | FITS frames, plate solving, photometry, zero points |
 | [`references/hr.md`](references/hr.md) | an HR diagram or cluster parameters |
 | [`references/radio.md`](references/radio.md) | a radio FITS map or a source's radio spectrum |
-| [`references/checkout.md`](references/checkout.md) | calling the tools from a Kepler checkout rather than through a tool server |
+| [`references/checkout.md`](references/checkout.md) | calling the tools from a MARS checkout rather than through a tool server |
 
 Every rule below restates guidance whose authority is the system prompt of
-Kepler's own agent loop, `tools/agent/prompt.py`, and names the section it
+MARS's own agent loop, `tools/agent/prompt.py`, and names the section it
 comes from. Where the two ever disagree, the prompt is right and this file is
 stale.
 

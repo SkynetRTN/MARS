@@ -81,7 +81,7 @@ def test_a_list_result_is_wrapped_like_the_agent_loop_wraps_it():
 
 
 def test_a_non_model_result_is_a_registry_defect():
-    with pytest.raises(TypeError, match="must return a Kepler model"):
+    with pytest.raises(TypeError, match="must return a MARS model"):
         surface.normalize_result("x", {"not": "a model"})
 
 
@@ -265,7 +265,7 @@ def test_served_resources_are_the_skill_documents():
 
     resources = surface.served_resources()
     assert [r["uri"] for r in resources] == [SERVED_URI_PREFIX + n for n in served_documents()]
-    assert {r["title"] for r in resources} >= {"Kepler astronomy tools"}
+    assert {r["title"] for r in resources} >= {"MARS astronomy tools"}
 
 
 # --- groups and annotations (C6) ------------------------------------------------
@@ -511,7 +511,7 @@ def test_the_server_delivers_the_instructions_and_the_skill_resources():
         return client.instructions, listed, pulsar.contents[0].text
 
     instructions, listed, pulsar = _client_session(session)
-    assert instructions.startswith("Kepler: astronomy tools.")
+    assert instructions.startswith("MARS: astronomy tools.")
     assert "This install:" in instructions
     assert listed == [SERVED_URI_PREFIX + name for name in served_documents()]
     assert pulsar == served_documents()["references/pulsar.md"]

@@ -24,10 +24,10 @@ from tools.agent.events import UserMessage as UserMessageEvent
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import ModelResponse, ToolCallBlock, ToolResultBlock
 from tools.tui import __main__ as tui_main
-from tools.tui.app import ApprovalModal, KeplerApp
+from tools.tui.app import ApprovalModal, MARSApp
 from tools.tui.render.capability import GraphicsTier
 from tools.tui.commands import Suggestion
-from tools.tui.widgets.header import WORDMARK, KeplerHeader
+from tools.tui.widgets.header import WORDMARK, MARSHeader
 from tools.tui.widgets.models import ModelBrowser
 from tools.tui.widgets.prompt import CommandMenu
 from tools.tui.widgets.transcript import ThoughtBlock, Transcript, UserEntry
@@ -47,7 +47,7 @@ def _run(coroutine):
 
 def test_shell_exposes_a_transcript_prompt_and_status_bar():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test():
             assert app.query_one("#transcript")
             assert app.query_one("#prompt")
@@ -58,9 +58,9 @@ def test_shell_exposes_a_transcript_prompt_and_status_bar():
 
 def test_shell_identifies_the_selected_backend_in_its_title_frame():
     async def scenario() -> None:
-        app = KeplerApp(backend=SimpleNamespace(spec="stub/model"))
+        app = MARSApp(backend=SimpleNamespace(spec="stub/model"))
         async with app.run_test():
-            assert app.title == "Kepler"
+            assert app.title == "MARS"
             assert app.sub_title == "stub/model"
 
     _run(scenario())
@@ -68,9 +68,9 @@ def test_shell_identifies_the_selected_backend_in_its_title_frame():
 
 def test_engine_events_append_assistant_text_to_the_transcript():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
-            app.post_message(KeplerApp.EngineEvent(TextDelta(text="hello")))
+            app.post_message(MARSApp.EngineEvent(TextDelta(text="hello")))
             await pilot.pause()
             transcript = app.query_one("#transcript", Transcript)
             assert transcript.assistant_text == "hello"
@@ -80,7 +80,7 @@ def test_engine_events_append_assistant_text_to_the_transcript():
 
 def test_unknown_slash_command_renders_an_error_without_starting_the_engine():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("/", "n", "o", "p", "e", "enter")
             await pilot.pause()
@@ -96,7 +96,7 @@ def test_unknown_slash_command_renders_an_error_without_starting_the_engine():
 
 def test_help_command_renders_the_generated_command_list():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("/", "?", "enter")
             await pilot.pause()
@@ -115,7 +115,7 @@ def test_artifacts_command_opens_the_browser_without_starting_the_engine():
     async def scenario() -> None:
         from tools.tui.widgets.artifacts import ArtifactBrowser
 
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             await pilot.press("/", "a", "enter")
             await pilot.pause()
@@ -130,7 +130,7 @@ def test_f3_opens_the_artifact_browser_without_starting_the_engine():
     async def scenario() -> None:
         from tools.tui.widgets.artifacts import ArtifactBrowser
 
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             await pilot.press("f3")
             await pilot.pause()
@@ -147,7 +147,7 @@ def test_sessions_command_opens_the_browser_without_starting_the_engine():
     from tools.tui.widgets.sessions import SessionBrowser
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("/", "s", "enter")
             await pilot.pause()
@@ -164,7 +164,7 @@ def test_f4_opens_the_session_browser_without_starting_the_engine():
     from tools.tui.widgets.sessions import SessionBrowser
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("f4")
             await pilot.pause()
@@ -194,7 +194,7 @@ def test_resume_session_restores_assistant_text_without_starting_the_engine(
     monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             app.resume_session(path)
             await pilot.pause()
@@ -257,7 +257,7 @@ def test_resume_session_with_tool_history_restores_only_assistant_text(
     monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             app.resume_session(path)
             await pilot.pause()
@@ -303,7 +303,7 @@ def test_error_session_history_is_ready_for_the_next_prompt(monkeypatch, tmp_pat
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             first = app.run_prompt("failed prompt")
             async with asyncio.timeout(2):
@@ -345,7 +345,7 @@ def test_unexpected_engine_failure_is_rendered_in_the_transcript(monkeypatch):
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             worker = app.run_prompt("Find M31.")
             async with asyncio.timeout(2):
@@ -385,7 +385,7 @@ def test_unexpected_engine_failure_does_not_retain_an_unanswered_prompt(
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             first = app.run_prompt("failed prompt")
             async with asyncio.timeout(2):
@@ -427,7 +427,7 @@ def test_resume_is_rejected_while_an_engine_session_is_running(monkeypatch, tmp_
     )
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             worker = app.run_prompt("running")
             try:
@@ -463,7 +463,7 @@ def test_resume_command_loads_the_session_matching_its_id(monkeypatch, tmp_path)
     monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             app.resume((manifest["session_id"],))
             await pilot.pause()
@@ -485,7 +485,7 @@ def test_resume_command_reports_an_unknown_session_without_starting_the_engine(
     monkeypatch.setattr(tui_app, "list_sessions", lambda: [])
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             app.resume(("missing",))
             await pilot.pause()
@@ -529,7 +529,7 @@ def test_next_prompt_after_resume_sends_loaded_history_to_the_engine(
     )
 
     async def scenario() -> None:
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             app.resume_session(initial_path)
             prompt = app.query_one("#prompt", Input)
@@ -582,7 +582,7 @@ def test_second_prompt_after_resume_keeps_the_first_follow_up_context(
     )
 
     async def scenario() -> None:
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             app.resume_session(initial_path)
             prompt = app.query_one("#prompt", Input)
@@ -671,7 +671,7 @@ def test_next_prompt_keeps_tool_blocks_from_the_finished_session_manifest(
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             prompt = app.query_one("#prompt", Input)
             prompt.value = "first follow-up"
@@ -719,7 +719,7 @@ def test_artifact_browser_uses_the_resumed_session_directory(monkeypatch, tmp_pa
     monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             app.resume_session(session_directory / "session_manifest.json")
             app.show_artifacts(())
@@ -748,10 +748,10 @@ def test_artifact_browser_uses_the_live_session_directory(monkeypatch, tmp_path)
     monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             app.post_message(
-                KeplerApp.EngineEvent(
+                MARSApp.EngineEvent(
                     SessionStarted(
                         "20260914T120000Z_abcdef123456",
                         str(session_directory / "session_manifest.json"),
@@ -798,7 +798,7 @@ def test_failed_resume_keeps_the_prior_session_artifact_directory(
     monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifests[0])
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             app.resume_session(session_directory / "session_manifest.json")
             manifests[0] = ["invalid manifest"]
@@ -818,9 +818,9 @@ def test_failed_resume_keeps_the_prior_session_artifact_directory(
 
 def test_main_builds_the_requested_backend_and_runs_the_app(monkeypatch):
     backend = object()
-    created: list[KeplerApp] = []
+    created: list[MARSApp] = []
     monkeypatch.setattr(tui_main, "open_backend", lambda spec, **_: backend)
-    monkeypatch.setattr(tui_main.KeplerApp, "run", lambda self: created.append(self))
+    monkeypatch.setattr(tui_main.MARSApp, "run", lambda self: created.append(self))
     monkeypatch.setattr(sys, "argv", ["mars", "--backend", "stub/model"])
 
     assert tui_main.main() == 0
@@ -850,12 +850,12 @@ def _transcript_text(app) -> str:
     )
 
 
-def test_the_header_names_kepler_and_the_backend_from_launch():
+def test_the_header_names_mars_and_the_backend_from_launch():
     async def scenario() -> None:
-        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        app = MARSApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
             await pilot.pause()
-            header = app.query_one("#banner", KeplerHeader)
+            header = app.query_one("#banner", MARSHeader)
 
             assert str(header.border_title) == WORDMARK
             assert "anthropic/claude-sonnet-5" in header.banner_text()
@@ -866,7 +866,7 @@ def test_the_header_names_kepler_and_the_backend_from_launch():
 def test_backend_command_without_arguments_lists_without_switching():
     async def scenario() -> None:
         backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             await pilot.press("/", "b", "enter")
             await pilot.pause()
@@ -890,7 +890,7 @@ def test_backend_command_switches_the_session_and_retitles_the_header(monkeypatc
         # switch to the default rather than opening the picker.
         monkeypatch.setattr(app_module, "offered_models", lambda provider: ())
 
-        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        app = MARSApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
             for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
                 await pilot.press(key)
@@ -898,7 +898,7 @@ def test_backend_command_switches_the_session_and_retitles_the_header(monkeypatc
 
             assert app.backend is replacement
             assert app.sub_title == "ollama/qwen3:8b"
-            header = app.query_one("#banner", KeplerHeader)
+            header = app.query_one("#banner", MARSHeader)
             assert "ollama/qwen3:8b" in header.banner_text()
             assert "Backend switched to ollama/qwen3:8b." in _transcript_text(app)
 
@@ -916,7 +916,7 @@ def test_a_refused_backend_leaves_the_session_on_the_one_that_answers(monkeypatc
         monkeypatch.setattr(app_module, "offered_models", lambda provider: ())
 
         backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
                 await pilot.press(key)
@@ -940,7 +940,7 @@ def test_an_unknown_backend_name_is_refused_without_building_anything(monkeypatc
 
         monkeypatch.setattr(app_module, "open_backend", explode)
 
-        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        app = MARSApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
             for key in ("/", "b", "space", "h", "a", "l", "enter"):
                 await pilot.press(key)
@@ -978,7 +978,7 @@ def test_a_switch_is_refused_while_a_turn_is_still_running(monkeypatch):
         monkeypatch.setattr(app_module, "run_session", blocking_session)
 
         backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             app.run_prompt("a question")
             assert app._session_running()
@@ -1040,7 +1040,7 @@ def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
         tui_main, "open_backend", lambda spec, **_: launched.setdefault("spec", spec)
     )
     monkeypatch.setattr(
-        tui_main, "KeplerApp", lambda **kwargs: type("Stub", (), {"run": lambda self: launched.setdefault("ran", True)})()
+        tui_main, "MARSApp", lambda **kwargs: type("Stub", (), {"run": lambda self: launched.setdefault("ran", True)})()
     )
 
     assert tui_main.main() == 0
@@ -1050,7 +1050,7 @@ def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
 
 def test_typing_a_slash_offers_the_whole_command_registry():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             menu = app.query_one("#completions", CommandMenu)
             assert menu.display is False
@@ -1066,7 +1066,7 @@ def test_typing_a_slash_offers_the_whole_command_registry():
 
 def test_tab_completes_a_partial_command_and_then_its_arguments():
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             prompt = app.query_one("#prompt", Input)
             await pilot.press("slash", "b", "a", "c")
@@ -1091,7 +1091,7 @@ def test_the_menu_closes_and_tab_is_left_alone_for_an_ordinary_message():
     """A console that swallows Tab has made its own footer unreachable."""
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         async with app.run_test() as pilot:
             prompt = app.query_one("#prompt", Input)
             await pilot.press("M", "3", "1")
@@ -1130,7 +1130,7 @@ def test_what_you_typed_stays_visible_after_you_send_it(monkeypatch):
     )
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             app.query_one("#prompt", Input).value = "resolve M31"
             await pilot.press("enter")
@@ -1156,7 +1156,7 @@ def test_a_message_typed_mid_turn_is_queued_and_then_marked_delivered(monkeypatc
     monkeypatch.setattr(app_module, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             prompt = app.query_one("#prompt", Input)
@@ -1208,7 +1208,7 @@ def test_escape_asks_the_running_loop_to_stop_and_the_status_bar_says_so(monkeyp
     monkeypatch.setattr(app_module, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             try:
                 app.query_one("#prompt", Input).value = "first"
@@ -1236,11 +1236,11 @@ def test_escape_asks_the_running_loop_to_stop_and_the_status_bar_says_so(monkeyp
 
 def test_a_note_the_session_never_took_comes_back_to_the_prompt():
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             app._queued_input.append("and the 60 Hz line")
             app.post_message(
-                KeplerApp.EngineEvent(
+                MARSApp.EngineEvent(
                     SessionFinished(outcome="end_turn", manifest_path="/tmp/m.json")
                 )
             )
@@ -1257,7 +1257,7 @@ def test_reasoning_renders_apart_from_the_answer():
     misleads, so the two are different widgets."""
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(ThinkingDelta(text="Weighing two catalogs."))
@@ -1295,7 +1295,7 @@ def test_a_bare_provider_name_opens_the_picker_for_a_host_that_lists_models(
             lambda provider: ("qwen3.8:27b-mlx", "gemma4:12b"),
         )
 
-        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        app = MARSApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
             for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
                 await pilot.press(key)
@@ -1327,7 +1327,7 @@ def test_closing_the_picker_leaves_the_session_where_it_was(monkeypatch):
         )
 
         backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
                 await pilot.press(key)
@@ -1355,7 +1355,7 @@ def test_naming_the_model_outright_switches_without_a_dialog(monkeypatch):
 
         monkeypatch.setattr(app_module, "offered_models", never)
 
-        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        app = MARSApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
             app.query_one("#prompt", Input).value = "/backend ollama gemma4:12b"
             await pilot.press("enter")
@@ -1399,7 +1399,7 @@ def test_quitting_with_an_approval_open_releases_the_worker_waiting_on_it():
     finished = threading.Event()
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
 
         def worker() -> None:
             decisions.append(
@@ -1466,7 +1466,7 @@ def test_an_unreadable_manifest_still_leaves_the_answer_in_the_history(monkeypat
         backend = StubBackend(
             [ModelResponse(stop_reason="end_turn", text="M31 is Andromeda.")]
         )
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             worker = app.run_prompt("what is M31?")
             async with asyncio.timeout(2):
@@ -1485,7 +1485,7 @@ def test_an_unreadable_manifest_still_leaves_the_answer_in_the_history(monkeypat
 
 
 def test_the_console_script_loads_dotenv_before_tools_config():
-    """Second review, finding 12: `kepler` imported tools.config, which fixes
+    """Second review, finding 12: the console script imported tools.config, which fixes
     its settings at import, before main() loaded .env -- so a setting kept in
     .env was read and then ignored."""
     import subprocess

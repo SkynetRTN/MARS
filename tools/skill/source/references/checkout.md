@@ -1,6 +1,6 @@
-# Calling the tools from a Kepler checkout
+# Calling the tools from a MARS checkout
 
-This applies only when you are working **inside a Kepler checkout** and the
+This applies only when you are working **inside a MARS checkout** and the
 tools are not reachable as tool calls. Every tool is then a plain Python
 function in `tools.registry.TOOL_FUNCTIONS`, keyed by the same name its schema
 carries, taking the same arguments as keywords.
@@ -37,4 +37,4 @@ EOF
   be set for the ADS tools.
 
 This is how the skill is exercised before the tools are served over MCP; it is
-not how a user with an installed Kepler reaches them.
+not how a user with an installed MARS reaches them.

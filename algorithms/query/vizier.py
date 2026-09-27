@@ -1,6 +1,6 @@
 """VizieR query backend.
 
-Nine of Kepler's eleven catalogs are hosted at VizieR, and they differ only in
+Nine of MARS's eleven catalogs are hosted at VizieR, and they differ only in
 their declarations: which table, which columns, which bands. This module is the
 one engine that drives all of them.
 
@@ -19,7 +19,7 @@ EXTRACTED FROM:
 ``afterglow-core/afterglow_core/resources/catalog_plugins/vizier_catalogs.py``
 (373 lines) and its de-Flasked counterpart at
 ``skynet/.../optical_data_processing/catalogs/vizier_catalogs.py`` (352 lines).
-Kepler takes Afterglow's version — it is the superset — and replaces
+MARS takes Afterglow's version — it is the superset — and replaces
 ``current_app.config`` with ``query/config.py``. The two upstreams had drifted:
 Skynet dropped the configurable server and the custom-catalog factory, both of
 which are restored here.
@@ -47,7 +47,7 @@ __all__ = ["VizierCatalog", "build_custom_vizier_catalog"]
 
 logger = logging.getLogger(__name__)
 
-# astroquery treats cache failures as query failures; Kepler does not. See
+# astroquery treats cache failures as query failures; MARS does not. See
 # query/cache.py. Installed on import so that merely importing this module gives
 # the same behaviour upstream had, where the patch was a side effect of
 # importing the catalog plugins.
@@ -116,7 +116,7 @@ class VizierCatalog(Catalog):
         two columns that do not exist. VizieR ignores unknown column names, so
         the query still returns the right data — which is why this survived
         upstream unnoticed. Left as-is: filtering builtins out would change the
-        request Kepler sends, and that deserves its own validation against a
+        request MARS sends, and that deserves its own validation against a
         live VizieR rather than a silent fix here.
         """
         columns: TList[str] = []
@@ -168,7 +168,7 @@ class VizierCatalog(Catalog):
 
         Two preserved behaviours worth knowing:
 
-        * **Rows with no magnitudes are dropped.** A source Kepler cannot
+        * **Rows with no magnitudes are dropped.** A source MARS cannot
           photometer is not useful to a caller, and upstream's field calibration
           depends on the filtering. It means ``len(table)`` and
           ``len(sources)`` differ routinely.
@@ -400,7 +400,7 @@ def _round_for_cache(ra_hours: float, dec_degs: float, *sizes):
 def build_custom_vizier_catalog(spec: TDict) -> type:
     """Build a ``VizierCatalog`` subclass from a plain declaration.
 
-    Lets a deployment add a VizieR table Kepler does not ship a plugin for, by
+    Lets a deployment add a VizieR table MARS does not ship a plugin for, by
     supplying the same attributes a plugin would (``name``, ``vizier_catalog``,
     ``mags``, ``col_mapping``, ...). The class name is derived from ``name`` by
     stripping illegal characters and prefixing an underscore if it starts with a
@@ -414,7 +414,7 @@ def build_custom_vizier_catalog(spec: TDict) -> type:
 
     EXTRACTED FROM: the ``CUSTOM_VIZIER_CATALOGS`` loop at the bottom of
     Afterglow's ``vizier_catalogs.py``, which ran at import time over Flask
-    config and swallowed every error into a log line. Kepler makes it an
+    config and swallowed every error into a log line. MARS makes it an
     ordinary function that raises, because a misconfigured catalog should be
     visible at the point it is registered rather than absent at query time.
     """

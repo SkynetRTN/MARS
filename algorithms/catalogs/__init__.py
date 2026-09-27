@@ -1,6 +1,6 @@
-"""Kepler: catalog and provider declarations.
+"""MARS: catalog and provider declarations.
 
-This package answers "what does Kepler know about each catalog/provider" —
+This package answers "what does MARS know about each catalog/provider" —
 band tables, colour transforms, VizieR table IDs, row limits, photometric
 conversions, and static provider vocabularies. It answers nothing about
 *reaching* them: no module here imports ``astroquery``, ``psrqpy``, or opens a
@@ -14,7 +14,7 @@ database tools live in direct submodules such as ``algorithms.catalogs.ads``,
 Two registries live here, and the difference between them is load-bearing:
 
 ``CATALOGS``
-    All 11 catalogs, keyed by Kepler catalog name. Read by filter-aware catalog
+    All 11 catalogs, keyed by MARS catalog name. Read by filter-aware catalog
     selection (``algorithms.query.selection``) and by the query runner.
 ``CATALOG_OPTIONS``
     A two-catalog (APASS, PanSTARRS) subset in ``catalog_options.py``, read only

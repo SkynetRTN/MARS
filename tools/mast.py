@@ -1,4 +1,4 @@
-"""Kepler: MAST archive search and product retrieval.
+"""MARS: MAST archive search and product retrieval.
 
 The old code sliced ``obs_table[:5]`` and ``data_products[:15]`` -- arbitrary
 caps, not service limits. This tool removes both: ``query_object`` and

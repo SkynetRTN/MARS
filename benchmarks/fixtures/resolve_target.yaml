@@ -8,7 +8,7 @@ provenance: >
   empty world punishes a model for cross-checking sources, which is
   behaviour the real surface rewards. The SHAPE is faithful to the tool; the
   VALUES are plausible placeholders and must not be quoted as measurements.
-  Replace with a `kepler-bench record` capture when credentials allow.
+  Replace with a `mars-bench record` capture when credentials allow.
 miss_policy: synthesize
 entries:
   - id: cassiopeia-a

@@ -11,7 +11,7 @@ from tools.skill import REPOSITORY_COPY, check_repository_copy, write_repository
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tools.skill",
-        description=f"Render the Kepler skill source into {REPOSITORY_COPY}.",
+        description=f"Render the MARS skill source into {REPOSITORY_COPY}.",
     )
     parser.add_argument(
         "--check",

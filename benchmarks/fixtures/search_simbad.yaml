@@ -4,7 +4,7 @@ provenance: >
   HAND-AUTHORED, not captured. Written against tools/simbad.py's return model.
   SIMBAD is the name-resolution escape hatch the core suite's resolution tasks
   allow the model to reach for; these entries answer the three names those
-  tasks turn on and nothing else. Replace with a `kepler-bench record` capture
+  tasks turn on and nothing else. Replace with a `mars-bench record` capture
   before trusting any field beyond the identifier.
 miss_policy: error
 entries:

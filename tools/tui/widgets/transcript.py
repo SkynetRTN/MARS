@@ -1,4 +1,4 @@
-"""The scrolling event consumer for the Kepler console transcript."""
+"""The scrolling event consumer for the MARS console transcript."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""The Kepler agent skill: one source, rendered to every surface that carries it.
+"""The MARS agent skill: one source, rendered to every surface that carries it.
 
-The skill teaches a model that is *not* running inside Kepler's own agent loop
+The skill teaches a model that is *not* running inside MARS's own agent loop
 which tool to reach for, in what order, and which results are silently wrong.
 ``tools/agent/prompt.py`` is the authority for every rule it restates; the
 skill cites that prompt by section name, and
@@ -9,7 +9,7 @@ between the two.
 
 ``source/`` is the **only** hand-edited copy (``docs/archive/mcp-tool-surface.md``
 §3.4: copies are forbidden). It lives inside the ``tools`` package so that it
-ships with an installed Kepler, where there is no checkout to read it from.
+ships with an installed MARS, where there is no checkout to read it from.
 Every other surface is rendered from it:
 
 - ``skills/mars-tools/`` in the repository, for a coding agent working in a
@@ -57,10 +57,10 @@ SKILL_NAME = "mars-tools"
 
 #: What a skill loader shows a model when deciding whether to load the skill.
 SKILL_DESCRIPTION = (
-    "How to use Kepler's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, "
+    "How to use MARS's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, "
     "MAST, MPC, CASDA and ADS queries, and the local pulsar, variable-star, "
     "optical photometry, plate-solving, HR-diagram and radio-source pipelines. "
-    "Use when calling any Kepler tool, and before any pulsar period "
+    "Use when calling any MARS tool, and before any pulsar period "
     "measurement, database name lookup or literature claim -- it covers the "
     "stage orders, identifier forms and silently wrong results the tool "
     "descriptions alone do not."
@@ -68,7 +68,7 @@ SKILL_DESCRIPTION = (
 
 SOURCE_DIR = Path(__file__).resolve().parent / "source"
 
-#: The rendered copy in a checkout. It does not exist in an installed Kepler.
+#: The rendered copy in a checkout. It does not exist in an installed MARS.
 REPOSITORY_COPY = Path(__file__).resolve().parents[2] / "skills" / SKILL_NAME
 
 _ENTRY = "SKILL.md"

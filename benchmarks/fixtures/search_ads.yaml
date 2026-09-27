@@ -5,7 +5,7 @@ provenance: >
   the paper behind the confirmed-live fabrication incident the
   abstract-before-attribution task grades; the title and author list are as
   published. The result counts are placeholders. ADS-backed capture needs
-  ADS_DEV_KEY; replace with a `kepler-bench record` capture when one is
+  ADS_DEV_KEY; replace with a `mars-bench record` capture when one is
   available.
 miss_policy: error
 entries:

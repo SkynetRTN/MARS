@@ -53,7 +53,7 @@ def test_the_manifest_names_content_addressed_archives():
     manifest = bundles.load_manifest()
     assert set(manifest) == {"optical", "isochrones"}
     for spec in manifest.values():
-        assert spec.archive == f"kepler-{spec.name}-{spec.sha256[:12]}.tar"
+        assert spec.archive == f"{bundles.ARCHIVE_PREFIX}{spec.name}-{spec.sha256[:12]}.tar"
         assert spec.url.endswith("/" + spec.archive)
         assert spec.url.startswith(bundles.RELEASE_DOWNLOADS + "/data/")
 
@@ -115,7 +115,7 @@ def published(tmp_path):
     """A built archive in a 'release' directory, and its manifest entry."""
     release = tmp_path / "release"
     release.mkdir()
-    archive = release / "kepler-optical-test.tar"
+    archive = release / "mars-optical-test.tar"
     build_archive(_tree(tmp_path / "src"), archive)
     return release, _spec(archive)
 
@@ -219,7 +219,7 @@ def test_an_unknown_bundle_names_the_known_ones(tmp_path, published):
         fetch_bundle("frames", bundles_dir=tmp_path, manifest={"optical": published[1]})
 
 
-def test_fetch_data_is_a_kepler_mcp_subcommand(capsys, tmp_path, monkeypatch):
+def test_fetch_data_is_a_mars_mcp_subcommand(capsys, tmp_path, monkeypatch):
     import tools.dotenv
     from tools.mcp.__main__ import main
 
@@ -250,7 +250,7 @@ def test_the_fixture_guard_covers_fetched_bundles():
     assert not _under_fixture_root(config.MARS_HOME / "fits_downloads" / "hst.fits")
 
 
-def test_the_kepler_owned_download_root_is_walked(tmp_path, monkeypatch):
+def test_the_mars_owned_download_root_is_walked(tmp_path, monkeypatch):
     from tools.optical import _optical_data_roots
 
     home = tmp_path / "mars"
@@ -372,7 +372,7 @@ def test_fetch_replaces_a_stale_bundle(tmp_path, published):
     assert fetched and not (target / "old.fits").exists()
 
 
-def test_a_symlinked_kepler_download_root_is_not_walked(tmp_path, monkeypatch):
+def test_a_symlinked_mars_download_root_is_not_walked(tmp_path, monkeypatch):
     """Finding 7: fits_downloads -> / resolved to itself and was walked recursively."""
     from tools.optical import _optical_data_roots
 
@@ -437,7 +437,7 @@ print(json.dumps({
 
 def _installed(tmp_path, mode, **environ):
     """tools.config as an installed wheel resolves it: no checkout, the core
-    data in its own directory, a private Kepler home."""
+    data in its own directory, a private MARS home."""
     import os
     import subprocess
     import sys

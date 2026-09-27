@@ -83,12 +83,12 @@ because they were graded against a corpus adjusted to one of the models:
 ## The calibration run, when someone does it
 
 ```bash
-kepler-bench run core \
+mars-bench run core \
   --backend anthropic/claude-opus-5 \
   --backend openai/gpt-4.1 \
   --backend ollama/qwen3.8:27b-mlx \
   --repeats 3 --max-tokens 2000000
-kepler-bench compare artifacts/bench/<run-id>
+mars-bench compare artifacts/bench/<run-id>
 ```
 
 Then fill in the table below and review each row against §7.1.9:

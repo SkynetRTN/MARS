@@ -253,7 +253,7 @@ _STOPWORDS = frozenset(
     {
         "The", "This", "That", "What", "Which", "How", "Give", "Get", "Pull",
         "Find", "Report", "Use", "For", "And", "All", "Every", "None", "JSON",
-        "Kepler", "NASA",
+        "MARS", "NASA",
     }
 )
 

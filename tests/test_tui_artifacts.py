@@ -1,4 +1,4 @@
-"""Artifact-browser behaviour for the Kepler Textual application."""
+"""Artifact-browser behaviour for the MARS Textual application."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from PIL.Image import DecompressionBombError
 from textual.widgets import OptionList, Static
 
 from tools.artifacts import describe_artifact_file
-from tools.tui.app import KeplerApp
+from tools.tui.app import MARSApp
 from tools.tui.render.capability import GraphicsTier
 from tools.tui.render.image import render_halfblocks
 
@@ -43,7 +43,7 @@ def test_artifact_browser_lists_workspace_metadata_and_keeps_path_visible(monkey
     monkeypatch.setattr(artifact_widgets, "list_artifacts", lambda: [artifact])
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         browser = artifact_widgets.ArtifactBrowser(tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             app.push_screen(browser)
@@ -66,7 +66,7 @@ def test_artifact_browser_uses_textual_image_for_native_image_tiers(tier):
     from tools.tui.widgets.artifacts import ArtifactBrowser
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=tier)
+        app = MARSApp(backend=object(), graphics_tier=tier)
         browser = ArtifactBrowser([describe_artifact_file(FIXTURE)], tier=tier)
         async with app.run_test() as pilot:
             app.push_screen(browser)
@@ -86,7 +86,7 @@ def test_artifact_browser_opens_selected_path_only_after_user_action():
     opened: list[Path] = []
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        app = MARSApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         browser = ArtifactBrowser(
             [describe_artifact_file(FIXTURE)],
             tier=GraphicsTier.HALFBLOCK,

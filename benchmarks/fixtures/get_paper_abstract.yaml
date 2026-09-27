@@ -5,7 +5,7 @@ provenance: >
   to carry the two facts the abstract-before-attribution task turns on -- the
   rate is 0.670 +/- 0.019 %/yr, and it is an average over six decades that the
   paper states is not constant. It is NOT the published abstract and must not
-  be quoted as one. Replace with a `kepler-bench record` capture once
+  be quoted as one. Replace with a `mars-bench record` capture once
   ADS_DEV_KEY is available; that capture is also what would make the numbers
   here authoritative rather than merely correct-as-far-as-this-task-needs.
 miss_policy: error

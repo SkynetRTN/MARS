@@ -1,4 +1,4 @@
-"""Kepler: tool schemas for wiring ``tools`` into an agent loop.
+"""MARS: tool schemas for wiring ``tools`` into an agent loop.
 
 Each entry is an Anthropic tool-use schema (``name``, ``description``,
 ``input_schema``) plus the callable it maps to. ``tools.agent`` is the only

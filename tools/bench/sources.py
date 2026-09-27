@@ -27,7 +27,7 @@ So a value check names its source instead, and the loader resolves it:
     key that moved with an operator's environment variable would not be a
     fixed reference at all.
 ``tool_result``
-    A field a deterministic Kepler tool returned *in the session being
+    A field a deterministic MARS tool returned *in the session being
     graded* -- the fidelity case. Resolved at grade time, because the value is
     whatever the tool computed on the run.
 

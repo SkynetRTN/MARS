@@ -1,4 +1,4 @@
-"""Console-script entry point for the Kepler Textual application."""
+"""Console-script entry point for the MARS Textual application."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ import sys
 
 if __name__ == "__main__":
     # `python -m tools.tui`: load .env before the imports below read
-    # tools.config, as the `kepler` script does (tools.tui.launch).
+    # tools.config, as the `mars` script does (tools.tui.launch).
     from tools.dotenv import load_dotenv as _load_dotenv_first
 
     _load_dotenv_first()
 
 from tools.config import load_dotenv
 from tools.llm.base import BackendUnavailableError
-from tools.tui.app import DEFAULT_THINKING_BUDGET, KeplerApp
+from tools.tui.app import DEFAULT_THINKING_BUDGET, MARSApp
 from tools.tui.backends import (
     CHOICES,
     UnknownBackendError,
@@ -57,7 +57,7 @@ def launch_spec(requested: str | None = None) -> str:
 
     Resolution order, and no other: the ``--backend`` flag, then
     ``MARS_MODEL_BACKEND``, then the first offered choice. The flag accepts a
-    bare name so ``kepler --backend ollama`` works; the environment variable
+    bare name so ``mars --backend ollama`` works; the environment variable
     does not, because it is the model port's own contract and is read
     identically by the model port's own factory and the benchmark harness.
 
@@ -108,7 +108,7 @@ def main() -> int:
         print(f"Cannot start on {spec}: {exc}", file=sys.stderr)
         return 2
 
-    KeplerApp(
+    MARSApp(
         backend=backend,
         max_turns=args.max_turns,
         thinking_budget=thinking_budget,

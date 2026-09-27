@@ -36,7 +36,7 @@ DEFAULT_OUT_ROOT = Path("artifacts/bench")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mars-bench",
-        description="Benchmark models on Kepler's tool surface.",
+        description="Benchmark models on MARS's tool surface.",
     )
     sub = parser.add_subparsers(dest="verb", required=True)
 

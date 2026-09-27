@@ -700,7 +700,7 @@ def test_a_tool_returning_something_that_is_neither_says_so():
             )
         ]
     )
-    with pytest.raises(TypeError, match="must return a Kepler model"):
+    with pytest.raises(TypeError, match="must return a MARS model"):
         list(
             run_session(
                 "go",

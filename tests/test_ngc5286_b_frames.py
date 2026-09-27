@@ -8,7 +8,7 @@ tests below exist to pin.
 
 **They are the only Git LFS objects in the tree**, and the only multi-HDU frames
 in ``data/optical/``: each holds four Afterglow-aligned exposures, of which every
-Kepler code path reads the primary and nothing else. A checkout without
+MARS code path reads the primary and nothing else. A checkout without
 ``git lfs`` leaves a text stub wearing the frame's name, which is why
 ``tools.config.is_lfs_pointer`` exists and why everything here skips rather than
 errors when the objects are absent.
@@ -135,7 +135,7 @@ def test_each_frame_carries_four_aligned_exposures_and_we_read_the_first(
 ):
     """The only multi-HDU frames in the tree.
 
-    Kepler reads the primary HDU and nothing else (``load_fits_image``,
+    MARS reads the primary HDU and nothing else (``load_fits_image``,
     ``fits.getheader``), so the extra three ride along unused. Pinned because a
     helper that started iterating extensions -- reasonable-looking on every
     other frame, all of which are single-HDU -- would silently change which
@@ -150,7 +150,7 @@ def test_each_frame_carries_four_aligned_exposures_and_we_read_the_first(
         assert len(set(observed)) == 4
         assert len({hdu.data.tobytes() for hdu in hdul}) == 4
 
-    # fits.getheader with no ext is the primary, which is what Kepler reads.
+    # fits.getheader with no ext is the primary, which is what MARS reads.
     assert fits.getheader(frame_path(field))["DATE-OBS"] == observed[0]
 
 
@@ -295,7 +295,7 @@ def test_calibration_from_pixels_matches_each_recorded_solve(field, frame_path):
 
     assert comparison.errors == []
     assert comparison.reference.field == field
-    # Measured on Kepler's scale, which is 20 magnitudes above the recorded one.
+    # Measured on MARS's scale, which is 20 magnitudes above the recorded one.
     assert comparison.zero_point == pytest.approx(
         _summary(field)["zero_point"] + 20.0, abs=0.1
     )

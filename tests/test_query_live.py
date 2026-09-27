@@ -1,4 +1,4 @@
-"""Live end-to-end field-calibration parity: Kepler vs. the Afterglow web service.
+"""Live end-to-end field-calibration parity: MARS vs. the Afterglow web service.
 
 ``test_fieldcal_afterglow_parity.py`` proves ``calc_solution``'s *math* reproduces
 Skynet's and Afterglow's recorded numbers exactly, from *recorded* per-star inputs
@@ -22,7 +22,7 @@ this writing; the target list is discovered dynamically (same rationale as
 ``conftest.py``'s ``_discover_frames``) so a newly bundled frame with a masterlist
 entry is covered automatically, with nothing to keep in sync by hand.
 
-Failure bar: more than ``HARD_FAIL_SIGMA`` combined-sigma (Kepler's and Afterglow's
+Failure bar: more than ``HARD_FAIL_SIGMA`` combined-sigma (MARS's and Afterglow's
 own reported errors added in quadrature) is a hard failure -- something has
 actually drifted. 2-4 sigma prints a warning but does not fail: on real data, a
 handful of frames with large intrinsic photometric scatter (bright nebulosity,
@@ -82,7 +82,7 @@ def _resolvable_targets() -> list[str]:
 @pytest.mark.slow
 @pytest.mark.parametrize("target", _resolvable_targets())
 def test_live_field_cal_zero_point_matches_afterglow_web_value(target, tmp_path):
-    """Kepler's live field-cal solve agrees with an independent reference.
+    """MARS's live field-cal solve agrees with an independent reference.
 
     Confirmed live on this test's first run (2026-08-12, all 37 then-resolvable
     frames): 34 landed under 2 combined-sigma, 2 landed in the 2-4 sigma warning
@@ -104,17 +104,17 @@ def test_live_field_cal_zero_point_matches_afterglow_web_value(target, tmp_path)
         )
 
     assert result.zero_point is not None
-    kepler_zero_point = result.zero_point.zero_point
-    kepler_error = result.zero_point.zero_point_error_mag or 0.0
+    mars_zero_point = result.zero_point.zero_point
+    mars_error = result.zero_point.zero_point_error_mag or 0.0
 
-    diff = kepler_zero_point - web_zero_point
-    combined_sigma = math.sqrt(kepler_error**2 + web_error**2)
+    diff = mars_zero_point - web_zero_point
+    combined_sigma = math.sqrt(mars_error**2 + web_error**2)
     n_sigma = abs(diff) / combined_sigma if combined_sigma > 0 else math.inf
 
     if HARD_FAIL_SIGMA > n_sigma >= 2.0:
         warnings.warn(
             f"{target}: {n_sigma:.1f} combined-sigma from the Afterglow web value "
-            f"(kepler={kepler_zero_point:.4f}+/-{kepler_error:.4f}, "
+            f"(mars={mars_zero_point:.4f}+/-{mars_error:.4f}, "
             f"web={web_zero_point:.3f}+/-{web_error:.3f}, diff={diff:+.4f}) -- "
             "within the non-failing warning band, but worth a look if it recurs "
             "across runs.",
@@ -122,7 +122,7 @@ def test_live_field_cal_zero_point_matches_afterglow_web_value(target, tmp_path)
         )
 
     assert n_sigma < HARD_FAIL_SIGMA, (
-        f"{target}: kepler zero point {kepler_zero_point:.4f}+/-{kepler_error:.4f} "
+        f"{target}: MARS zero point {mars_zero_point:.4f}+/-{mars_error:.4f} "
         f"is {n_sigma:.1f} combined-sigma from the Afterglow web value "
         f"{web_zero_point:.3f}+/-{web_error:.3f} (diff={diff:+.4f}) -- outside the "
         f"{HARD_FAIL_SIGMA}-sigma failure bar."

@@ -201,7 +201,7 @@ def test_unknown_catalog_returns_false_rather_than_raising():
 
 
 def test_custom_filter_lookup_can_add_support():
-    """A deployment can teach a catalog a filter Kepler ships no transform for."""
+    """A deployment can teach a catalog a filter MARS ships no transform for."""
     assert not catalog_supports_filter("2MASS", "OIII")
     assert catalog_supports_filter(
         "2MASS", "OIII", custom_filter_lookup={"2MASS": {"OIII": "J"}}

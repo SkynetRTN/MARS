@@ -265,7 +265,7 @@ def test_live_reference_model_completes_a_tool_using_loop_and_the_union_survives
 
 def test_the_default_timeout_is_sized_for_a_local_model_not_a_hosted_api(monkeypatch):
     """BaseHTTPBackend's 60 s is right for a provider's SLA and wrong for a
-    local daemon. Measured on the development host: one turn of Kepler's real
+    local daemon. Measured on the development host: one turn of MARS's real
     tool surface against qwen3.8:27b-mlx takes ~189 s, with the model already
     resident -- 15,460 prompt tokens, because the 55 registry schemas
     serialize to a 61 KB payload resent every turn."""

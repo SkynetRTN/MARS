@@ -44,7 +44,7 @@ OLLAMA_MAX_OUTPUT_TOKENS = 8192
 #: default for a hosted API and badly wrong for a local daemon: a turn here is
 #: bounded by the host's own hardware, not by a provider's SLA. Measured on the
 #: development host, ``qwen3.8:27b-mlx`` takes **~189 s** for one turn of
-#: Kepler's real tool surface -- 15,460 prompt tokens, because the 55 registry
+#: MARS's real tool surface -- 15,460 prompt tokens, because the 55 registry
 #: schemas serialize to a 61 KB payload that is resent every turn -- and that is
 #: with the model already resident. A cold load adds ~30 s more.
 #:

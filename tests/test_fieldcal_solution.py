@@ -5,7 +5,7 @@ verbatim out of ``skynet_db/runners/utils.py`` (lines 468-603), and
 ``data/fieldcal/zp_solutions/`` holds four *complete* Skynet field
 calibrations — the exact source rows that were fed in, and the exact five
 numbers that came out. So this is not a self-consistency check against values
-Kepler generated: it compares Kepler's extracted solver against output recorded
+MARS generated: it compares MARS's extracted solver against output recorded
 upstream, before the extraction happened.
 
 The solver is a fixed-slope (slope = 1) weighted offset fit with iterative

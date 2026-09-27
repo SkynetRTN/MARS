@@ -540,7 +540,7 @@ def solve_astrometry(
     attempted_backends: list[str] = []
     solver_failures: list[str] = []
     try:
-        with TemporaryDirectory(prefix="kepler-wcs-") as tmpdir:
+        with TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
             solve_result = _solve_wcs(
                 header,
                 data,

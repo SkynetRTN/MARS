@@ -1,4 +1,4 @@
-"""Shared fixtures for Kepler's algorithm tests.
+"""Shared fixtures for MARS's algorithm tests.
 
 Two rules shape everything here, both from ``CLAUDE.md``:
 
@@ -143,7 +143,7 @@ FRAMES: dict[str, str] = {
     "ngc5128_b": "ngc5128_galaxy_b_001.fits",
     # The three frames behind the recorded NGC 5286 B solves (P8). Git LFS
     # objects, and the only multi-HDU frames in the tree: four Afterglow-aligned
-    # exposures each, of which Kepler reads only the primary.
+    # exposures each, of which MARS reads only the primary.
     "ngc5286_b_000": "ngc5286_globular_b_000.fits",
     "ngc5286_b_001": "ngc5286_globular_b_001.fits",
     "ngc5286_b_002": "ngc5286_globular_b_002.fits",
@@ -377,7 +377,7 @@ def afterglow_web_zero_points() -> dict[str, tuple[float, float]]:
 
     Independent ground truth: these came out of the hosted Afterglow
     field-calibration service, not out of Skynet's local pipeline, so agreement
-    between them and Kepler's solver is a cross-implementation check rather than
+    between them and MARS's solver is a cross-implementation check rather than
     a self-comparison. 73 subjects; six of the eight frames in
     ``data/optical`` appear.
     """

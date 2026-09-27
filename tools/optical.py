@@ -142,8 +142,8 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     Re-anchored in C7 for an installed wheel, not relaxed. There the data
     directory is the shipped core inside ``site-packages`` and the download
     root defaults to ``<mars home>/fits_downloads``, outside it -- so under
-    the old rule every installed Kepler searched its own downloads flat and
-    never saw a MAST product. The one directory added is that Kepler-owned
+    the old rule every installed MARS searched its own downloads flat and
+    never saw a MAST product. The one directory added is that MARS-owned
     download tree, ``config.MARS_HOME / "fits_downloads"``: a download root
     pointed anywhere else outside the data directory is still searched flat.
 
@@ -162,7 +162,7 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     if download_dir is not None:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
-        # The second bound is the Kepler home's own download tree, taken
+        # The second bound is the MARS home's own download tree, taken
         # literally: `within` resolves both sides, so a bound resolved in its
         # last component let a symlinked root (<home>/fits_downloads -> /)
         # resolve to itself and earn a walk of whatever it points at. Not the
@@ -190,7 +190,7 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
                             "root that covers it."
                             if is_checkout()
                             # Installed: the data directory is the package, which
-                            # the next upgrade replaces. Point at the Kepler home.
+                            # the next upgrade replaces. Point at the MARS home.
                             else f"point {config.FITS_DOWNLOAD_DIR_ENV} inside "
                             f"{config.MARS_HOME}, or unset it to use "
                             f"{config.MARS_HOME / 'fits_downloads'}."

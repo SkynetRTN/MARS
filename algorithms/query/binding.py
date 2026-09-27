@@ -17,7 +17,7 @@ LandoltCatalog(VizierCatalog)`` put them::
     LandoltQueryable -> LandoltCatalog -> VizierCatalog -> Catalog -> object
                         ^ transform       ^ row mapper     ^ contract
 
-Upstream had a single class per catalog inheriting the backend directly. Kepler
+Upstream had a single class per catalog inheriting the backend directly. MARS
 splits them so the declarations stay importable — and testable — without
 astroquery, and so the same declaration could later be bound to a local backend.
 The generated classes are equivalent to upstream's at runtime.

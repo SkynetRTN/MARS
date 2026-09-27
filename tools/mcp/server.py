@@ -13,7 +13,7 @@ its own beyond two things the SDK's low-level server leaves to its caller:
   -- the skill brief and this install's facts -- and the skill's documents are
   resources, ``mars://skill/...``, read on demand.
 - **One call at a time.** Tool calls are dispatched to a worker thread, so the
-  event loop keeps answering the host, but under a lock: every Kepler tool was
+  event loop keeps answering the host, but under a lock: every MARS tool was
   written and tested to be called sequentially, and the stdio transport has
   one client (``docs/archive/mcp-tool-surface.md`` §3.2).
 

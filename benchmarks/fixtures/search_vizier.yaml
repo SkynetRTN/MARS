@@ -8,7 +8,7 @@ provenance: >
   structure is faithful to the tool. The counts (47 matched catalogs, 4127
   rows) and the flux values in content/vizier_casa_radio.ecsv are plausible
   placeholders, NOT measurements. Do not quote them as Cas A photometry.
-  Replace with a `kepler-bench record` capture before trusting a number.
+  Replace with a `mars-bench record` capture before trusting a number.
 miss_policy: error
 entries:
   # The right call: a category query with the cap explicitly lifted.

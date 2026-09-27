@@ -336,7 +336,7 @@ def test_explicit_arguments_beat_the_environment(monkeypatch):
 
 
 def test_default_vizier_server_is_the_cds_mirror(monkeypatch):
-    """Afterglow used the Harvard mirror; Skynet moved to CDS and Kepler follows."""
+    """Afterglow used the Harvard mirror; Skynet moved to CDS and MARS follows."""
     from algorithms.query.config import QuerySettings
 
     monkeypatch.delenv("VIZIER_SERVER", raising=False)

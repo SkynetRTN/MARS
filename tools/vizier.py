@@ -1,13 +1,13 @@
-"""Kepler: general VizieR access -- any catalog, any spectrum.
+"""MARS: general VizieR access -- any catalog, any spectrum.
 
 VizieR hosts roughly 20,000 tables across every wavelength, not just the
-eleven photometric catalogs ``tools/`` declares for Kepler's own
+eleven photometric catalogs ``tools/`` declares for MARS's own
 zero-point calibration path (a different consumer -- see ``fieldcal``). This
 tool goes straight to ``astroquery.vizier.Vizier`` instead, so it can reach
 any catalog by ID or by VizieR's own spectrum category, with no curated list
 in between.
 
-Bypassing Kepler's ``CatalogSource``/``mags`` mapping here is deliberate, not
+Bypassing MARS's ``CatalogSource``/``mags`` mapping here is deliberate, not
 incidental: ``query/vizier.py`` treats any value >= 99 as VizieR's
 "not measured" magnitude sentinel, which would silently drop radio flux
 measurements (Cas A is ~2.72e6 mJy at 1.4 GHz) if this tool routed through

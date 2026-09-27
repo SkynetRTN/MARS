@@ -11,7 +11,7 @@ scatter input; see
 
 BL-5: the result field was named ``zero_point_corr`` while holding an
 *absolute* zero point. Afterglow fixes ``zero_point = 20`` and reports a
-correction; Kepler computes the absolute value. ``data/README.md`` warns
+correction; MARS computes the absolute value. ``data/README.md`` warns
 that confusing the two "lands 20 magnitudes off in a way that looks entirely
 plausible", so the public name has to be unambiguous -- it is now
 ``zero_point``.
@@ -105,7 +105,7 @@ def test_result_reports_an_absolute_zero_point_under_an_unambiguous_name():
 
 
 def test_the_absolute_zero_point_is_afterglows_base_plus_correction():
-    """Afterglow reports 20.0 + correction; Kepler reports the sum directly."""
+    """Afterglow reports 20.0 + correction; MARS reports the sum directly."""
     summary = json.loads((SOLVE / "fit_summary.json").read_text())
     solution = solve_zeropoint_from_measurements(_calibration_rows(), [])
 

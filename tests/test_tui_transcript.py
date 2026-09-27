@@ -14,7 +14,7 @@ from tools.agent.events import (
     ToolCallStarted,
 )
 from tools.llm.types import ModelResponse
-from tools.tui.app import ApprovalModal, KeplerApp
+from tools.tui.app import ApprovalModal, MARSApp
 from tools.tui.widgets.transcript import Transcript
 from textual.widgets import Static
 from textual.worker import Worker
@@ -36,7 +36,7 @@ def _run(coroutine):
 
 def test_transcript_aggregates_assistant_text_deltas():
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test():
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(TextDelta(text="A"))
@@ -49,7 +49,7 @@ def test_transcript_aggregates_assistant_text_deltas():
 
 def test_transcript_tracks_a_tool_call_through_finished_state():
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(
@@ -86,7 +86,7 @@ def test_transcript_tracks_a_tool_call_through_finished_state():
 
 def test_transcript_marks_a_denied_tool_call_distinctly():
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(ToolCallProposed("call-1", "search_ads", {}))
@@ -105,7 +105,7 @@ def test_transcript_marks_a_denied_tool_call_distinctly():
 def test_thread_worker_delivers_engine_events_to_the_transcript_and_status():
     async def scenario() -> None:
         backend = StubBackend([ModelResponse(stop_reason="end_turn", text="done")])
-        app = KeplerApp(backend=backend)
+        app = MARSApp(backend=backend)
         async with app.run_test() as pilot:
             worker = app.run_prompt("summarize M31")
             assert isinstance(worker, Worker)
@@ -139,11 +139,11 @@ def test_allow_always_is_requested_again_for_a_new_prompt_session(monkeypatch):
         )
         yield TextDelta(text=text)
 
-    monkeypatch.setattr(KeplerApp, "_request_approval", approve_once_per_session)
+    monkeypatch.setattr(MARSApp, "_request_approval", approve_once_per_session)
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             for prompt in ("first", "second"):
                 worker = app.run_prompt(prompt)
@@ -187,7 +187,7 @@ def test_a_second_submission_is_queued_rather_than_starting_a_second_session(
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             prompt = app.query_one("#prompt", Input)
             try:
@@ -217,9 +217,9 @@ def test_a_second_submission_is_queued_rather_than_starting_a_second_session(
 
 def test_approval_request_opens_a_modal_and_releases_the_waiting_worker():
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         proposed = ToolCallProposed("call-1", "search_ads", {})
-        request = KeplerApp.ApprovalRequest(proposed)
+        request = MARSApp.ApprovalRequest(proposed)
         async with app.run_test() as pilot:
             app.post_message(request)
             await pilot.pause()
@@ -244,7 +244,7 @@ def test_a_finished_tool_call_actually_paints_its_line():
     """
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(
@@ -267,7 +267,7 @@ def test_model_text_is_never_read_as_console_markup():
     ordinary astronomy text on the way, since `[OIII]` is markup-shaped."""
 
     async def scenario() -> None:
-        app = KeplerApp(backend=StubBackend([]))
+        app = MARSApp(backend=StubBackend([]))
         async with app.run_test() as pilot:
             transcript = app.query_one("#transcript", Transcript)
             transcript.handle_event(

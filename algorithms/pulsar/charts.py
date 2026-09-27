@@ -67,7 +67,7 @@ class ChartSpec:
 
 
 #: ``PulsarChartInfo.getDefaultChartInfo()`` plus the component's series
-#: literal. The label order matches Kepler's ingest: ``source1`` carries the
+#: literal. The label order matches MARS's ingest: ``source1`` carries the
 #: file's XX1 column and is labelled "Polarization XX", so the plot shows XX
 #: where the file says XX. Both are transposed the same way -- see
 #: ``algorithms/pulsar/ingest.py::CAL_COLUMNS``.

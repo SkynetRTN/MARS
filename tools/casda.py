@@ -1,4 +1,4 @@
-"""Kepler: CASDA (CSIRO ASKAP Science Data Archive) search.
+"""MARS: CASDA (CSIRO ASKAP Science Data Archive) search.
 
 CASDA serves ASKAP continuum images, spectral-line/polarization cubes,
 source catalogues, spectra, and visibilities -- a radio archive distinct

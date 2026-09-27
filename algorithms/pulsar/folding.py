@@ -1,6 +1,6 @@
 """Period folding and phase binning — stage 3 of the pipeline.
 
-PORTED from Kepler's retired TypeScript extraction:
+PORTED from MARS's retired TypeScript extraction:
 
 * ``git-history:algorithms/lightcurve/pulsar/pulsar-lightcurve.algorithms.ts`` —
   ``getPeriodFoldingChartData`` (astromancer ``pulsar.service.ts`` 273-314)

@@ -119,7 +119,7 @@ def _server_environment(artifacts: str) -> dict[str, str]:
     """The child server's environment: the caller's, minus what skews the check.
 
     The package's own root goes first on ``PYTHONPATH``, so the child imports
-    this same Kepler even when it was never installed (a checkout run by
+    this same MARS even when it was never installed (a checkout run by
     pytest), and even though the child starts in the temporary directory.
     """
 
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         import mcp  # noqa: F401
     except ImportError:
         # The server's own advice, which names this interpreter's pip and the
-        # wheel -- a bare pointer at the docs left the PyPI `kepler` trap open.
+        # wheel -- a bare pointer at the docs left the PyPI name trap open.
         from tools.mcp.__main__ import _missing_sdk_message
 
         print(_missing_sdk_message(), file=sys.stderr)

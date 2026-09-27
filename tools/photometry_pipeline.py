@@ -1,4 +1,4 @@
-"""Reusable FITS photometry and plotting pipeline for Kepler tools.
+"""Reusable FITS photometry and plotting pipeline for MARS tools.
 
 The registered ``tools.photometry`` wrapper imports this module to resolve
 local FITS targets, extract sources, compute photometry, select a zero point,

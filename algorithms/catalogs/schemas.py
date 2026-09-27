@@ -1,16 +1,16 @@
-"""Kepler: catalog source data objects.
+"""MARS: catalog source data objects.
 
-This module is Kepler's canonical catalog-source schema. It is the data
+This module is MARS's canonical catalog-source schema. It is the data
 contract between ``catalogs/`` (which declares what a catalog contains) and
 ``query/`` (which fetches rows and maps them onto these objects).
 
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/common/schemas.py
 (331 lines total; the catalog subset is reproduced here, field-for-field).
 Field names, aliases, defaults and the NaN-stripping serializer are preserved
-because they are wire-visible; the upstream class *names* are not, since Kepler
+because they are wire-visible; the upstream class *names* are not, since MARS
 is a separate service and does not present itself as Skynet.
 
-Kepler previously carried these classes inside ``fieldcal/schemas.py``; that
+MARS previously carried these classes inside ``fieldcal/schemas.py``; that
 module now re-exports them, so a ``CatalogSource`` produced by a ``query/``
 backend is the *same* class field calibration matches against rather than a
 structurally identical twin.
@@ -31,7 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 from pydantic.alias_generators import to_camel
 
 __all__ = [
-    "KeplerBaseModel",
+    "MARSBaseModel",
     "Mag",
     "IPhotometry",
     "IAstrometry",
@@ -58,11 +58,11 @@ def _strip_schema_titles(schema: Dict[str, Any], _model: Type[BaseModel]) -> Non
             prop.pop("title", None)
 
 
-class KeplerBaseModel(BaseModel):
-    """Base model for Kepler catalog schemas.
+class MARSBaseModel(BaseModel):
+    """Base model for MARS catalog schemas.
 
     EXTRACTED: was ``skynet_sdk.schemas.base.SkynetBaseModel``, renamed because
-    this is Kepler's own base class, not a Skynet import. The upstream base
+    this is MARS's own base class, not a Skynet import. The upstream base
     additionally carried a cross-package model/union registry
     (``model_registry``, ``register_union``, ``rebuild_all_models``) used by its
     FastAPI/SDK layer; that machinery is service infrastructure and is dropped.
@@ -91,12 +91,12 @@ class KeplerBaseModel(BaseModel):
         return _clean_nans(data)
 
 
-class Mag(KeplerBaseModel):
+class Mag(MARSBaseModel):
     value: Optional[float] = None
     error: Optional[float] = None
 
 
-class IPhotometry(KeplerBaseModel):
+class IPhotometry(MARSBaseModel):
     # Upstream's Marshmallow schema made flux/flux_err_counts required; they are
     # Optional here for robustness in pipeline flows. The ``flux_err_counts`` and
     # ``magnitude_err_mag`` aliases are wire-visible and preserved.
@@ -109,7 +109,7 @@ class IPhotometry(KeplerBaseModel):
     mag_error: Optional[float] = Field(default=None, alias="magnitude_err_mag")
 
 
-class IAstrometry(KeplerBaseModel):
+class IAstrometry(MARSBaseModel):
     ra_hours: Optional[float] = None
     dec_degs: Optional[float] = None
     pm_ra: Optional[float] = None
@@ -127,7 +127,7 @@ class IAstrometry(KeplerBaseModel):
     sat_pixels: Optional[int] = None
 
 
-class ICatalogSource(KeplerBaseModel):
+class ICatalogSource(MARSBaseModel):
     """Generic catalog source definition without astrometry."""
 
     id: Optional[str] = None
@@ -150,7 +150,7 @@ class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
     """
 
 
-class CatalogMeta(KeplerBaseModel):
+class CatalogMeta(MARSBaseModel):
     """Serializable description of a catalog, for API/config surfaces.
 
     EXTRACTED: was named ``Catalog`` upstream. Renamed here because

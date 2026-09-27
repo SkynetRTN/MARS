@@ -1,4 +1,4 @@
-"""Kepler: the pulsar tool pipeline — light curve, periodogram, fold, sonify.
+"""MARS: the pulsar tool pipeline — light curve, periodogram, fold, sonify.
 
 Four tools, one per stage of astromancer's pulsar tool, in the order that tool
 runs them. Each stage's artifact is the next stage's input::

@@ -1,8 +1,8 @@
 """
-Kepler: APASS catalog accessed via VizieR
+MARS: APASS catalog accessed via VizieR
 """
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In MARS the
 # VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
 # import time by ``query/binding.py``, so this module stays declaration-only and
 # carries no network dependency.

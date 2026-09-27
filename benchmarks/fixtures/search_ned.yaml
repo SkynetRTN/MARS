@@ -6,7 +6,7 @@ provenance: >
   taken from a live response. They reproduce the shape of the failure the core
   suite grades -- the colloquial name fails, the formal designation succeeds --
   with plausible rather than actual row counts. Replace with a
-  `kepler-bench record` capture before trusting any absolute number here.
+  `mars-bench record` capture before trusting any absolute number here.
 miss_policy: error
 entries:
   # The formal designation succeeds. Matched loosely on the designation so any

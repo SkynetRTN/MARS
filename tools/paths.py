@@ -1,13 +1,13 @@
 """The per-user MARS home, and the bundled data that ships with the package.
 
-Two locations that exist whether Kepler is a checkout or an installed wheel,
+Two locations that exist whether MARS is a checkout or an installed wheel,
 and that code on both sides of the import-time boundary needs:
 
 - :func:`mars_home` -- the user-writable directory MARS owns:
   ``$XDG_DATA_HOME/mars`` (default ``~/.local/share/mars``),
   ``~/Library/Application Support/mars`` on macOS, ``%LOCALAPPDATA%\\mars``
   on Windows, or ``MARS_HOME`` when set. The MCP server's artifacts, an
-  installed Kepler's archive downloads, and fetched data bundles live under it
+  installed MARS's archive downloads, and fetched data bundles live under it
   (``docs/archive/mcp-tool-surface.md`` §3.2, §3.5).
 - :data:`BUNDLED_DATA_LINK` -- ``tools/_data``. In a checkout it is a symlink to
   the repository's ``data/``; in a wheel it is a real directory holding the
@@ -152,11 +152,11 @@ def user_data_base(
 
 
 def pin_numba_cache(environ: dict[str, str] | None = None) -> None:
-    """On an install, point numba's on-disk cache into the Kepler home.
+    """On an install, point numba's on-disk cache into the MARS home.
 
     ``algorithms/skylib_lite`` compiles with ``@njit(cache=True)``, and numba
     writes that cache beside the source -- into ``site-packages`` for an
-    installed wheel, the directory an installed Kepler otherwise never writes
+    installed wheel, the directory an installed MARS otherwise never writes
     (and which the next upgrade replaces). numba reads ``NUMBA_CACHE_DIR`` when
     it is imported, so an entry point calls this before importing any tool. A
     checkout, or a user's own setting, is left alone.

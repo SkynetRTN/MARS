@@ -1,8 +1,8 @@
 """
-Kepler: SDSS catalog
+MARS: SDSS catalog
 """
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In MARS the
 # VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
 # import time by ``query/binding.py``, so this module stays declaration-only and
 # carries no network dependency.
@@ -15,7 +15,7 @@ __all__ = ['SDSSCatalog']
 class SDSSCatalog(Catalog):
     """SDSS catalog plugin.
 
-    SDSS is the one catalog Kepler does not reach through VizieR: it is served
+    SDSS is the one catalog MARS does not reach through VizieR: it is served
     by SkyServer's SQL endpoint, so its backend hand-writes SQL rather than
     building a VizieR column list. That backend — a ``astroquery.sdss.SDSSClass``
     subclass plus the ``query_objects`` / ``query_box`` / ``query_circ``

@@ -40,7 +40,7 @@ NOT_TOOL_MODULES = {
     # The MCP server: a fourth consumer of the registry, serving it over stdio.
     # It reads TOOL_SCHEMAS/TOOL_FUNCTIONS and owns no tool of its own.
     "tools.mcp",
-    # Where bundled data and the per-user Kepler home are. Paths, no tool.
+    # Where bundled data and the per-user MARS home are. Paths, no tool.
     "tools.paths",
     # The .env loader, kept apart from tools.config so an entry point can load
     # .env before any setting is fixed at import. Re-exported by tools.config.

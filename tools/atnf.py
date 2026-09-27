@@ -1,4 +1,4 @@
-"""Kepler: ATNF Pulsar Catalogue lookup.
+"""MARS: ATNF Pulsar Catalogue lookup.
 
 The old code hardcoded ``params=['PSRJ', 'P0', 'DM', 'AGE']`` -- four columns
 out of the roughly 150 the catalogue can carry. The fix is not to force the

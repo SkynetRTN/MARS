@@ -5,7 +5,7 @@ distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
 questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
-the feature branch `mars-rebrand` (§5); **R1 and R2 are done** (2026-09-27).
+the feature branch `mars-rebrand` (§5); **R1–R3 are done** (2026-09-27).
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -206,6 +206,27 @@ Kepler home still carries, and the three `KEPLER_ISOCHRONE_DIR` messages in
 
 **Gate:** the guard passes, and `git grep -i kepler` returns only allowlisted
 paths.
+
+**Done 2026-09-27**, with the guard (`tests/test_rebrand_guard.py`) scoped to
+the code trees — `tools`, `tests`, `algorithms`, `benchmarks`, `skills`,
+`data`, `.github`, `.claude`, `pyproject.toml`. The documentation is R4's, and
+joins the scope there. The guard allows the shims, published names
+(`ARCHIVE_PREFIX = "kepler-"`, the two bundle archives, `.kepler-bundle.json`,
+`archon774/kepler`) and the mission's forms (`MISSION`), each by content,
+never a whole file outside the shims. It also pins §6.2's "no new top-level
+package". Decided on the way:
+
+- The classes follow PEP 8's capitalised acronyms, as `SDSSQueryBackend`
+  already does: `MARSApp`, `MARSToolModel`, `MARSBaseModel`, `MARSHeader`,
+  `MARSSDSS`.
+- Textual names a message handler after the app class, and turns `MARSApp`
+  into `marsapp`, so the rename silently unhooked the console's four
+  `on_kepler_app_*` handlers. They are now bound with `@on(Message)`, which
+  no class name can break.
+- The bundle builder keeps the `kepler-` archive prefix: a name is part of an
+  archive's content-addressed identity, and `--check` compares it.
+- All 30 `# EXTRACTED: was …` markers keep their upstream symbols; only the
+  "In Kepler the …" prose after them changed.
 
 ### R4 — Documentation and the logo
 

@@ -32,7 +32,7 @@ from algorithms.catalogs import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: Every catalog Kepler declares, and the VizieR table behind it. Pinned because
+#: Every catalog MARS declares, and the VizieR table behind it. Pinned because
 #: a changed table ID silently repoints a query at different photometry.
 EXPECTED_CATALOGS = {
     "APASS": "II/336",

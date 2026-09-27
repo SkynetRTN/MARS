@@ -8,7 +8,7 @@ before this module nothing outside ``tests/`` could read any of it.
 Everything here is offline. ``data/README.md`` spells out the chain for
 NGC 5128 B::
 
-    Kepler calc_solution        21.147659857998637   (bit-exact)
+    MARS calc_solution        21.147659857998637   (bit-exact)
     Skynet recorded local fit   21.147659857998637
     Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
     Afterglow web table         21.147                (3 dp, recorded by hand)

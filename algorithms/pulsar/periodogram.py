@@ -1,6 +1,6 @@
 """Lomb-Scargle periodogram for pulsar light curves — stage 2 of the pipeline.
 
-PORTED from Kepler's retired TypeScript extraction:
+PORTED from MARS's retired TypeScript extraction:
 
 * ``git-history:algorithms/periodogram/core/lomb-scargle.ts`` — ``lombScargle`` and the
   ``ArrMath`` helpers it computes through (astromancer

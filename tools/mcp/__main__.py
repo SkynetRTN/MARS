@@ -1,4 +1,4 @@
-"""``mars-mcp``: serve Kepler's tools to a host over stdio.
+"""``mars-mcp``: serve MARS's tools to a host over stdio.
 
 The order in :func:`main` is the point of this module. A checkout's ``.env``
 is loaded first, then the roots are pinned into the environment, and only then
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
     # First, for every subcommand. fetch-data and self-test import
-    # tools.config too, and a checkout's .env can move the Kepler home or name
+    # tools.config too, and a checkout's .env can move the MARS home or name
     # a bundle mirror: loaded only for the server, the fetch installed into
     # one home and the server read another. The real environment still wins
     # over the file.
@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="mars-mcp",
         description=(
-            "Serve Kepler's astronomy tools over MCP on stdio. A host launches "
+            "Serve MARS's astronomy tools over MCP on stdio. A host launches "
             "this; it is not run by hand. Artifacts go to MARS_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
             "stderr at startup. `mars-mcp fetch-data` installs the optional "

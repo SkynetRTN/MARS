@@ -22,7 +22,7 @@ EXTRACTED FROM: two upstream copies of the same logic, merged here.
 
 * ``afterglow-core/afterglow_core/resources/catalog_plugins/vizier_catalogs.py``
   (lines 27-72) — the monkey-patch, which upstream ran as a bare import-time
-  side effect of importing the catalog plugins. Kepler makes it an explicit
+  side effect of importing the catalog plugins. MARS makes it an explicit
   call: patching a third-party module's globals is not something an import
   should do silently, and a caller may legitimately want astroquery's own
   behaviour. ``query/vizier.py`` calls it on import, so the default is unchanged.

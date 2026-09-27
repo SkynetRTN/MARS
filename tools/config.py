@@ -1,4 +1,4 @@
-"""Small environment-backed settings helpers for Kepler tools."""
+"""Small environment-backed settings helpers for MARS tools."""
 
 from __future__ import annotations
 
@@ -138,15 +138,15 @@ def is_lfs_pointer(path: Path) -> bool:
 # through a path of its own relative to the source tree.
 BUNDLED_DATA_DIR = bundled_data_dir()
 
-# The per-user directory Kepler owns (tools.paths.mars_home). Holds the MCP
-# server's default artifact root, an installed Kepler's archive downloads, and
+# The per-user directory MARS owns (tools.paths.mars_home). Holds the MCP
+# server's default artifact root, an installed MARS's archive downloads, and
 # fetched data bundles under bundles/<name>/.
 MARS_HOME = mars_home().resolve()
 BUNDLES_DIR = MARS_HOME / "bundles"
 
 #: Written into a fetched bundle's directory only after its archive verified.
 #: Kept from before the MARS rename: it is an on-disk format, and a bundle
-#: fetched by Kepler and moved into the MARS home must still be recognised.
+#: fetched by MARS and moved into the MARS home must still be recognised.
 BUNDLE_MARKER = ".kepler-bundle.json"
 
 #: The manifest this install accepts bundles from. Read as a data file, not
@@ -168,7 +168,7 @@ def fetched_bundle(
 
     The marker must record the SHA-256 this install's ``bundles.json`` pins.
     A marker alone was not enough: after an upgrade that pins a rebuilt
-    bundle, the Kepler home still held the previous release's bytes, and every
+    bundle, the MARS home still held the previous release's bytes, and every
     reader used them and called them installed -- the wheel/bundle mismatch
     the manifest exists to prevent. A stale bundle now reads as not installed,
     and ``mars-mcp fetch-data`` replaces it.
@@ -192,8 +192,8 @@ def fetched_bundle(
 # FileMetadata.path, which describe_file() has always resolved.
 #
 # The default is artifacts/ beside the working directory only in a checkout,
-# where that is the repository. An installed Kepler writes only under the
-# Kepler home (docs/installing.md): an installed `kepler` console used to drop
+# where that is the repository. An installed MARS writes only under the
+# MARS home (docs/installing.md): an installed console used to drop
 # an untracked artifacts/ into whatever directory it was started from.
 ARTIFACT_DIR = (
     env_path(ARTIFACT_DIR_ENV)
@@ -229,7 +229,7 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # Re-anchored for an installed wheel (C7 of docs/archive/mcp-tool-surface.md):
 # there DATA_DIR is the shipped core inside site-packages, which a download
 # must never write into -- it may be read-only, and it is replaced wholesale
-# by the next upgrade. An install downloads into the per-user Kepler home
+# by the next upgrade. An install downloads into the per-user MARS home
 # instead. A checkout is unchanged.
 #
 # A MARS_DATA_DIR naming somewhere other than the package still moves it on
@@ -243,7 +243,7 @@ FITS_DOWNLOAD_DIR = env_path(
     if is_checkout() or DATA_DIR != BUNDLED_DATA_DIR
     else MARS_HOME / "fits_downloads",
 ).resolve()
-# The legacy Girardi model is a substantial operator dependency, not Kepler
+# The legacy Girardi model is a substantial operator dependency, not MARS
 # data.  Deliberately no default: silently looking in a repository-relative
 # directory would make a missing model look bundled and conceal setup errors.
 #

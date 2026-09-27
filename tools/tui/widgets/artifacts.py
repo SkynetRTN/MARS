@@ -1,4 +1,4 @@
-"""Modal artifact browser and previews for the Kepler console."""
+"""Modal artifact browser and previews for the MARS console."""
 
 from __future__ import annotations
 

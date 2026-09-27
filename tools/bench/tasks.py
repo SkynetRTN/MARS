@@ -45,7 +45,7 @@ __all__ = [
 #: message and before a run starts.
 TASK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
-#: B7. A task may shape Kepler's own configuration and nothing else.
+#: B7. A task may shape MARS's own configuration and nothing else.
 ENV_KEY_RE = re.compile(r"^MARS_[A-Z0-9_]+$")
 
 _TASK_KEYS = frozenset(
@@ -313,7 +313,7 @@ def _load_env(value: Any, file: Path) -> dict[str, str]:
         if not isinstance(key, str) or not ENV_KEY_RE.match(key):
             raise TaskError(
                 f"{file} env key {key!r} is not allowed. A task may shape "
-                "Kepler's own configuration (MARS_*) and nothing else: it "
+                "MARS's own configuration (MARS_*) and nothing else: it "
                 "cannot set a credential, a provider base URL, or PATH."
             )
         if isinstance(item, bool) or not isinstance(item, (str, int)):

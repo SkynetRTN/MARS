@@ -351,10 +351,10 @@ def test_an_elided_path_with_the_right_filename_passes(tmp_path):
         tmp_path,
         BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
     )
-    real = "/home/claude/Kepler/artifacts/bench/run/r1/preview_search_vizier.ecsv"
+    real = "/home/claude/MARS/artifacts/bench/run/r1/preview_search_vizier.ecsv"
     evidence = evidence_for(
         tmp_path,
-        answer="The full table is at /home/claude/Kepler/artifacts/.../preview_search_vizier.ecsv.",
+        answer="The full table is at /home/claude/MARS/artifacts/.../preview_search_vizier.ecsv.",
         manifest_body=manifest(
             tool_calls=[call("search_vizier", artifacts=[{"path": real}])]
         ),
@@ -370,7 +370,7 @@ def test_a_full_path_still_passes_so_the_rule_stays_symmetric(tmp_path):
         tmp_path,
         BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
     )
-    real = "/home/claude/Kepler/artifacts/bench/run/r1/preview_search_vizier.ecsv"
+    real = "/home/claude/MARS/artifacts/bench/run/r1/preview_search_vizier.ecsv"
     evidence = evidence_for(
         tmp_path,
         answer=f"Written to {real} (4,127 rows).",

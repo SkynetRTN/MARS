@@ -1,7 +1,7 @@
 """The skill and the agent loop's system prompt say the same load-bearing things.
 
 ``tools/skill/source/`` restates, for a model that never receives
-``SYSTEM_PROMPT``, the rules ``tools/agent/prompt.py`` gives Kepler's own loop.
+``SYSTEM_PROMPT``, the rules ``tools/agent/prompt.py`` gives MARS's own loop.
 Two hand-written statements of one rule drift the first time a correction
 lands in one and not the other, so this module pins them together: every
 invariant below must appear, word for word after normalisation, in **both**

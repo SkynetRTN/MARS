@@ -1,4 +1,4 @@
-"""Kepler: NASA/SAO ADS literature search and literature reviews.
+"""MARS: NASA/SAO ADS literature search and literature reviews.
 
 ``astroquery.nasa_ads`` exposes exactly one query method -- confirmed by
 reading its source (astroquery 0.4.11): there is no ``query_advanced``.
@@ -64,7 +64,7 @@ __all__ = [
     "build_literature_review",
 ]
 
-#: Kepler-side safety ceiling on total rows fetched in one call. Not a
+#: MARS-side safety ceiling on total rows fetched in one call. Not a
 #: discovered ADS server-side limit -- no token was available to confirm one
 #: -- just a bound so a very broad topic doesn't page indefinitely.
 _MAX_RESULTS_CEILING = 500
@@ -224,7 +224,7 @@ def _ceiling_warning(max_results: int) -> list[ToolWarning]:
             ToolWarning(
                 code="max_results_capped",
                 message=f"max_results capped at {_MAX_RESULTS_CEILING} -- a "
-                "Kepler-side safety limit, not a confirmed ADS server-side limit",
+                "MARS-side safety limit, not a confirmed ADS server-side limit",
             )
         ]
     return []

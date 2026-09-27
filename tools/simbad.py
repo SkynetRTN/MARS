@@ -1,4 +1,4 @@
-"""Kepler: SIMBAD identity, historical measurements, and bibliography.
+"""MARS: SIMBAD identity, historical measurements, and bibliography.
 
 SIMBAD is richer than a name-to-coordinates lookup (that's
 ``tools.resolve``). Historical per-paper measurements live in

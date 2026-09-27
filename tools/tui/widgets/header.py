@@ -1,10 +1,10 @@
-"""The branded console header shown from the moment Kepler launches."""
+"""The branded console header shown from the moment MARS launches."""
 
 from __future__ import annotations
 
 from textual.widgets import Static
 
-__all__ = ["KeplerHeader", "WORDMARK", "TAGLINE"]
+__all__ = ["MARSHeader", "WORDMARK", "TAGLINE"]
 
 #: Letter-spaced rather than drawn. A block-capital wordmark needs five rows to
 #: stay legible, and this console is a single scrolling conversation where
@@ -15,8 +15,8 @@ WORDMARK = "K E P L E R"
 TAGLINE = "astronomy research console"
 
 
-class KeplerHeader(Static):
-    """The title frame: the Kepler wordmark, the tagline, and the backend spec.
+class MARSHeader(Static):
+    """The title frame: the MARS wordmark, the tagline, and the backend spec.
 
     The backend spec sits in the header, not only in the status bar, because it
     is the one piece of session identity a person must not misread -- a
@@ -29,7 +29,7 @@ class KeplerHeader(Static):
     """
 
     DEFAULT_CSS = """
-    KeplerHeader {
+    MARSHeader {
         dock: top;
         height: 3;
         padding: 0 1;

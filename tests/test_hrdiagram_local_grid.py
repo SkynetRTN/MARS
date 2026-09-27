@@ -150,7 +150,7 @@ def test_failed_track_serialization_removes_temporary_conversion(tmp_path, monke
             logage_half_width=0.0,
         )
 
-    assert not list(tmp_path.glob("kepler_girardi_*.dat"))
+    assert not list(tmp_path.glob("mars_girardi_*.dat"))
 
 
 def test_hr_tool_reads_operator_grid_from_config(tmp_path, monkeypatch):

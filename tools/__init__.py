@@ -1,4 +1,4 @@
-"""Kepler: one thin tool module per astronomy database.
+"""MARS: one thin tool module per astronomy database.
 
 Each module validates input, calls one thing (an astroquery/psrqpy service, or
 a shared helper), and returns a ``tools.models.ToolResult``: a bounded inline

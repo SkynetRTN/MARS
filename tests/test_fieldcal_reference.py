@@ -6,7 +6,7 @@ nothing outside tests/ could read any of it.
 
 The chain, all offline (data/README.md):
 
-    Kepler calc_solution        21.147659857998637   (bit-exact)
+    MARS calc_solution        21.147659857998637   (bit-exact)
     Skynet recorded local fit   21.147659857998637
     Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
     Afterglow web table         21.147                (3 dp, recorded by hand)
@@ -55,7 +55,7 @@ def test_the_ngc5128_reference_carries_all_three_recorded_numbers():
 
 
 def test_the_afterglow_zero_point_is_base_plus_correction():
-    """Kepler computes the absolute value; Afterglow reports 20.0 + a correction."""
+    """MARS computes the absolute value; Afterglow reports 20.0 + a correction."""
     ref = load_zeropoint_reference("ngc5128_b_002")
     assert ref.afterglow_zero_point == pytest.approx(
         ref.afterglow_base + ref.afterglow_correction, abs=1e-12
