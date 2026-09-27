@@ -88,8 +88,8 @@ PUBLISHED = (
     r"archon774/kepler\b",
     # Retired before the rename; named only where its retirement is recorded.
     r"kepler-astro-query",
-    # This checkout's directory, which records quote (renaming it is R6's,
-    # and optional). Never rewritten to a path that does not exist.
+    # The checkout's directory until R6 renamed it /home/claude/mars; records
+    # made before that quote it, and are not rewritten.
     r"/home/claude/Kepler\b",
 )
 

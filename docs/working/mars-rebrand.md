@@ -287,6 +287,11 @@ redirect.
   name.
 - Optionally, the local checkout directory. It is named in this machine's
   agent memory paths and the vault, so change it deliberately or not at all.
+  **Done 2026-09-27**, at the maintainer's direction: `/home/claude/Kepler`
+  is now `/home/claude/mars`, and `.venv` was rebuilt (its scripts carry
+  absolute paths). Its agent-memory directory was empty. Records that quote
+  the old path keep it, as records do. The vault still names the old path,
+  and is the rest of R6.
 
 ---
 
