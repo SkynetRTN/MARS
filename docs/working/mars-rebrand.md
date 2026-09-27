@@ -182,8 +182,11 @@ and one with `MARS_*` set ignores `KEPLER_*`.
 `MARS_X` right after `.env` loads in every entry point (and silently when
 `tools.config` is imported), so every reader knows only `MARS_*`. Each is
 reported on stderr, adopted or ignored. The notice about a leftover `kepler`
-home is given until a `mars` home exists, which the first `mars-mcp` start
-creates. On an installed wheel with only `KEPLER_HOME` set, `mars-mcp
+home repeats at every start until that home is gone or `MARS_HOME` is set,
+and says to move its contents, not rename it (review fix: `mars-mcp` creates
+the `mars` home at startup, so a rename nested the old home inside it).
+`tools.llm.factory` adopts too, because `tools.llm` never imports
+`tools.config`. On an installed wheel with only `KEPLER_HOME` set, `mars-mcp
 self-test` passed and used that home. Two things kept their names on purpose:
 the fetched-bundle marker `.kepler-bundle.json`, an on-disk format a moved
 Kepler home still carries, and the three `KEPLER_ISOCHRONE_DIR` messages in

@@ -88,6 +88,9 @@ PUBLISHED = (
     r"archon774/kepler\b",
     # Retired before the rename; named only where its retirement is recorded.
     r"kepler-astro-query",
+    # This checkout's directory, which records quote (renaming it is R6's,
+    # and optional). Never rewritten to a path that does not exist.
+    r"/home/claude/Kepler\b",
 )
 
 #: The telescope and the astronomer, not the project.
@@ -108,6 +111,7 @@ SHIM_REFERENCES = {
     "pyproject.toml": r'^kepler(?:-bench|-mcp)? = "tools\.aliases:',
     "docs/working/README.md": r"Renaming Kepler to MARS",
     "tools/config.py": r"^# Kepler's KEPLER_\* names",
+    "tools/llm/factory.py": r"# KEPLER_\* names are otherwise adopted",
     "tools/mcp/__main__.py": r"project called ``kepler``",
     "tools/mcp/selftest.py": r"# KEPLER_\* too",
     "tools/paths.py": r"find the ``kepler``",
@@ -120,10 +124,14 @@ SHIM_REFERENCES = {
 
 _ALLOWED = re.compile("|".join(PUBLISHED + MISSION))
 
+#: The name however it is spaced: the console's wordmark was "K E P L E R",
+#: which a plain search for "kepler" never saw.
+_NAME = re.compile(r"k[\s._-]*e[\s._-]*p[\s._-]*l[\s._-]*e[\s._-]*r", re.IGNORECASE)
+
 
 def _hits() -> list[tuple[str, int, str]]:
     result = subprocess.run(
-        ["git", "grep", "-I", "-n", "-i", "kepler", "--", *SCOPE],
+        ["git", "grep", "-I", "-n", "-i", "-E", _NAME.pattern.replace("\\s", "[:space:]"), "--", *SCOPE],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
@@ -156,7 +164,7 @@ def _unexplained(path: str, text: str, number: int = 0) -> bool:
     reference = SHIM_REFERENCES.get(path)
     if reference and re.search(reference, text):
         return False
-    return re.search("kepler", _ALLOWED.sub("", text), re.IGNORECASE) is not None
+    return _NAME.search(_ALLOWED.sub("", text)) is not None
 
 
 @pytest.mark.skipif(
@@ -182,6 +190,7 @@ def test_the_mission_stays_nameable():
     ):
         assert not _unexplained("tools/future_mission_tool.py", text), text
     assert _unexplained("tools/future_mission_tool.py", "Kepler's astronomy tools")
+    assert _unexplained("tools/tui/widgets/header.py", 'WORDMARK = "K E P L E R"')
 
 
 def test_no_new_top_level_package():

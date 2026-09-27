@@ -10,7 +10,7 @@ __all__ = ["MARSHeader", "WORDMARK", "TAGLINE"]
 #: stay legible, and this console is a single scrolling conversation where
 #: every row the header keeps is a row of transcript nobody can see. Spaced
 #: capitals read as a wordmark at one row, in every font a terminal has.
-WORDMARK = "K E P L E R"
+WORDMARK = "M A R S"
 
 TAGLINE = "astronomy research console"
 

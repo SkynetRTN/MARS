@@ -7,10 +7,10 @@ user who configured Kepler keeps a working install for that one pre-release:
 - :func:`adopt_legacy_environment` copies each ``KEPLER_X`` into ``MARS_X``
   when ``MARS_X`` is unset, so every reader needs to know only the new name.
   A ``KEPLER_X`` whose twin is set is ignored, and reported as ignored.
-- :func:`legacy_home_notice` points out a ``kepler`` home left beside a
-  ``mars`` home that does not exist yet. Nothing is ever moved: a fetched
-  bundle is hundreds of megabytes of the user's disk, and where it goes is
-  the user's decision.
+- :func:`legacy_home_notice` points out a ``kepler`` home left in the default
+  location, at every start until it is gone or ``MARS_HOME`` is set. Nothing
+  is ever moved: a fetched bundle is hundreds of megabytes of the user's
+  disk, and where it goes is the user's decision.
 
 Adoption runs in each entry point right after ``.env`` is loaded -- so a
 ``.env`` still written with ``KEPLER_*`` works too -- and before anything
@@ -99,9 +99,11 @@ def legacy_home_notice(
 
     Only for the default location: a ``MARS_HOME`` (or an adopted
     ``KEPLER_HOME``) is the user's own choice and is never second-guessed.
-    Silent once the ``mars`` home exists, whatever it holds -- and the first
-    ``mars-mcp`` start creates it, so the notice is given once. Call this
-    before anything writes into the home.
+    Whether a ``mars`` home exists does not matter: ``mars-mcp`` creates one
+    at startup, right after this is reported, so "rename the old one" would
+    be wrong advice by the time it is read -- ``mv`` would nest ``kepler``
+    inside it. The advice is to move the contents, which is right either way,
+    and the notice stops when the ``kepler`` home is gone.
     """
 
     environ = os.environ if environ is None else environ
@@ -111,12 +113,14 @@ def legacy_home_notice(
     if base is None:
         return None
     legacy = base / LEGACY_HOME_NAME
-    current = mars_home(environ, platform=platform, home=home)
-    if not legacy.is_dir() or current.exists():
+    if not legacy.is_dir():
         return None
+    current = mars_home(environ, platform=platform, home=home)
     return (
-        f"found {legacy}, the home of an earlier Kepler install, and no {current}. "
-        f"Nothing was moved. To keep its artifacts, downloads and fetched bundles, "
-        f"rename that directory to {current}, or set {MARS_HOME_ENV} to it."
+        f"found {legacy}, the home of an earlier Kepler install; this install uses "
+        f"{current}. Nothing was moved. To keep its fetched bundles, downloads and "
+        f"artifacts, move what is inside it (bundles/, fits_downloads/, artifacts/) "
+        f"into {current}, then remove it; or set {MARS_HOME_ENV} to {legacy}. This "
+        f"notice repeats until one of those is done."
     )
 

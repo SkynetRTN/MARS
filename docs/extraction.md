@@ -425,8 +425,8 @@ _Former source: `algorithms/photometry/EXTRACTION.md`._
 ### Photometry extraction record
 
 Source: `/home/claude/skynet` (read-only). Current destination:
-`/home/claude/MARS/algorithms/photometry/`, with shared Skylib code in
-`/home/claude/MARS/algorithms/skylib_lite/`.
+`/home/claude/Kepler/algorithms/photometry/`, with shared Skylib code in
+`/home/claude/Kepler/algorithms/skylib_lite/`.
 
 This is a **verbatim extraction**, not a port. Every algorithm, constant, comment,
 and numeric quirk is preserved exactly as it was in Skynet. The only edits are
@@ -2139,7 +2139,7 @@ Algorithmic TypeScript for the **light curve** and **period folding** stages of
 Astromancer's two light-curve tools, extracted into MARS.
 
 - **Source repo:** `/home/claude/astromancer` (Angular 16 / TypeScript). Read-only for this task; nothing there was modified.
-- **Historical destination:** `/home/claude/MARS/algorithms/lightcurve/`
+- **Historical destination:** `/home/claude/Kepler/algorithms/lightcurve/`
 - **Nature of the work:** extraction, not a port. Algorithms and comments are
   preserved verbatim. Angular decorators, DI, RxJS, `localStorage` and Highcharts
   handles were cut; every cut is marked in-file with an `// EXTRACTED:` comment.
@@ -2382,9 +2382,9 @@ consumed only by sonification — they are fields on an extracted model, not cod
 
 #### 8. Overlap with the periodogram extraction
 
-A separate agent extracted periodogram code into `/home/claude/MARS/algorithms/periodogram/`
+A separate agent extracted periodogram code into `/home/claude/Kepler/algorithms/periodogram/`
 from three of the same source files. Nothing was written outside
-`/home/claude/MARS/algorithms/lightcurve/`. Their output landed before this document was
+`/home/claude/Kepler/algorithms/lightcurve/`. Their output landed before this document was
 finalized, so the overlap below is **verified against their actual files**, not
 predicted.
 
@@ -3090,7 +3090,7 @@ Duplication is intentional and expected — these are copied, not shared:
 | `getJdRange` | likely | `pulsar/pulsar-periodogram.compute.ts` |
 | Nyquist bounds math | shares its source function (the upload handler) | `pulsar/pulsar-periodogram-range.ts` |
 
-Nothing under `/home/claude/MARS/algorithms/lightcurve/` was read or written.
+Nothing under `/home/claude/Kepler/algorithms/lightcurve/` was read or written.
 
 ---
 

@@ -93,9 +93,15 @@ reads its data locations when it starts.
 
 ### Upgrading from Kepler
 
-Kepler was renamed MARS in `0.1.0rc3`. For that one pre-release, what a
-Kepler install was configured with keeps working, and is removed in the
-release after it:
+Kepler was renamed MARS in `0.1.0rc3`. **Install `skynet-mars` into a new
+environment** (or `pip uninstall kepler` first). `kepler` and `skynet-mars`
+are different distributions that install the same `tools` and `algorithms`
+packages and the same `kepler*` commands: installed over Kepler, they share
+files, and a later `pip uninstall kepler` deletes files MARS needs. If that
+has happened, reinstall the `skynet-mars` wheel with `--force-reinstall`.
+
+For that one pre-release, what a Kepler install was configured with keeps
+working, and is removed in the release after it:
 
 - A `KEPLER_*` variable is read as its `MARS_*` twin when the twin is unset,
   and ignored when it is set; the server logs a line naming both either way.
@@ -104,9 +110,12 @@ release after it:
   successors, after saying so on stderr.
 - A Kepler home (`~/.local/share/kepler`, and its macOS and Windows
   equivalents) is **not** used and **never moved**: its fetched bundles are
-  hundreds of megabytes of your disk. The first `mars-mcp` start that finds it
-  beside no MARS home says so once. Rename it to the MARS home to keep its
-  artifacts, downloads and bundles, or point `MARS_HOME` at it.
+  hundreds of megabytes of your disk. Every start says so while it is there
+  and `MARS_HOME` is unset. To keep its bundles, downloads and artifacts,
+  move what is inside it (`bundles/`, `fits_downloads/`, `artifacts/`) into
+  the MARS home and remove it, or point `MARS_HOME` at it. Do not rename the
+  directory itself: `mars-mcp` creates the MARS home when it starts, and a
+  rename would nest the old home inside the new one.
 
 ## The optional data bundles
 

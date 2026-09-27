@@ -61,12 +61,26 @@ def test_a_leftover_kepler_home_is_pointed_out_and_not_moved(tmp_path):
     assert (tmp_path / "kepler" / "bundles").is_dir() and not (tmp_path / "mars").exists()
 
 
-def test_no_home_notice_once_the_mars_home_exists_or_one_is_chosen(tmp_path):
+def test_the_home_notice_never_advises_a_rename_onto_an_existing_home(tmp_path):
+    """Review finding: mars-mcp creates the mars home right after the notice,
+    so "rename kepler to mars" turned into `mv` nesting kepler inside it, and
+    the notice, silenced by the new home, never said so again."""
+    environ = {"XDG_DATA_HOME": str(tmp_path)}
+    (tmp_path / "kepler").mkdir()
+    (tmp_path / "mars" / "artifacts").mkdir(parents=True)
+
+    notice = legacy_home_notice(environ, platform="linux", home=tmp_path)
+
+    assert notice and "move what is inside it" in notice and "rename" not in notice
+
+
+def test_the_home_notice_stops_when_the_old_home_is_gone_or_mars_home_is_set(tmp_path):
     environ = {"XDG_DATA_HOME": str(tmp_path)}
     assert legacy_home_notice(environ, platform="linux", home=tmp_path) is None
     (tmp_path / "kepler").mkdir()
     assert legacy_home_notice({**environ, "MARS_HOME": "/x"}, platform="linux", home=tmp_path) is None
-    (tmp_path / "mars").mkdir()
+    assert legacy_home_notice(environ, platform="linux", home=tmp_path)
+    (tmp_path / "kepler").rmdir()
     assert legacy_home_notice(environ, platform="linux", home=tmp_path) is None
 
 
@@ -112,3 +126,13 @@ def test_mars_mcp_names_both_variables_on_stderr_never_stdout(tmp_path):
     )
     assert "KEPLER_PREVIEW_ROWS" in result.stderr and "MARS_PREVIEW_ROWS" in result.stderr
     assert "KEPLER_" not in result.stdout
+
+
+def test_a_library_caller_of_the_model_factory_gets_its_legacy_backend():
+    """Review finding: tools.llm never imports tools.config, so a caller with
+    only KEPLER_MODEL_BACKEND set was told MARS_MODEL_BACKEND was unset."""
+    result = _run(
+        "from tools.llm import factory; print(type(factory.build_backend(None)).__name__)",
+        KEPLER_MODEL_BACKEND="ollama/llama3.1",
+    )
+    assert result.stdout.strip() == "OllamaBackend"
