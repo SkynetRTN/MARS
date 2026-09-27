@@ -13,6 +13,8 @@ from pathlib import Path
 
 from rich.text import Text
 
+from tools.tui.theme import MIST_BLUE
+
 __all__ = ["render_waveform"]
 
 _BRAILLE_DOTS = ((0x01, 0x02, 0x04, 0x40), (0x08, 0x10, 0x20, 0x80))
@@ -53,7 +55,7 @@ def render_waveform(path: str | Path, *, width: int = 60) -> Text:
         dots = _BRAILLE_DOTS[0][_amplitude_row(points[index])]
         dots |= _BRAILLE_DOTS[1][_amplitude_row(points[index + 1])]
         glyphs.append(chr(0x2800 + dots))
-    return Text("".join(glyphs), style="cyan")
+    return Text("".join(glyphs), style=MIST_BLUE)
 
 
 def _decode_pcm(raw: bytes, sample_width: int) -> list[float]:

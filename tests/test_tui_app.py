@@ -857,8 +857,37 @@ def test_the_header_names_mars_and_the_backend_from_launch():
             await pilot.pause()
             header = app.query_one("#banner", MARSHeader)
 
-            assert str(header.border_title) == WORDMARK
+            # The literal, not only the constant: the constant said
+            # the old spaced-out name after the rename, and this still passed.
+            assert str(header.border_title) == WORDMARK == "M A R S"
             assert "anthropic/claude-sonnet-5" in header.banner_text()
+
+    _run(scenario())
+
+
+def test_the_console_opens_in_the_skynet_palette():
+    """The brand's exact colours (docs/working/mars-rebrand.md §4), with the
+    light variant registered for the theme switcher."""
+    from textual.color import Color
+
+    from tools.tui import theme
+
+    async def scenario() -> None:
+        app = MARSApp(backend=SimpleNamespace(spec="stub/model"))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.theme == "mars"
+            assert app.get_theme("mars-light") is theme.MARS_LIGHT
+            active = app.get_theme("mars")
+            assert (active.accent, active.background, active.foreground) == (
+                theme.WARM_GOLD,
+                theme.NAVY_BANNER,
+                theme.OFF_WHITE,
+            )
+            header = app.query_one("#banner", MARSHeader)
+            # Textual derives $accent through HSL, which can round one unit.
+            drawn, gold = header.styles.border_top[1], Color.parse(theme.WARM_GOLD)
+            assert max(abs(a - b) for a, b in zip(drawn.rgb, gold.rgb)) <= 1
 
     _run(scenario())
 

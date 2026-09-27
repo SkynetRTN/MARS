@@ -47,6 +47,7 @@ from tools.tui.backends import (
 )
 from tools.tui.commands import help_text, parse_input, resolve, suggest
 from tools.tui.render.capability import GraphicsTier, detect_tier
+from tools.tui.theme import MARS_DARK, THEMES
 from tools.tui.widgets.artifacts import ArtifactBrowser
 from tools.tui.widgets.header import MARSHeader
 from tools.tui.widgets.models import ModelBrowser
@@ -251,6 +252,11 @@ class MARSApp(App[None]):
         thinking_budget: int | None = DEFAULT_THINKING_BUDGET,
     ) -> None:
         super().__init__()
+        # The Skynet palette (tools/tui/theme.py). Both are registered, so the
+        # command palette's theme switcher offers the light one too.
+        for theme in THEMES:
+            self.register_theme(theme)
+        self.theme = MARS_DARK.name
         self.backend = backend
         self.max_turns = max_turns
         self.thinking_budget = thinking_budget
