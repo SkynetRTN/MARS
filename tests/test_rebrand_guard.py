@@ -88,10 +88,13 @@ PUBLISHED = (
     r"archon774/kepler\b",
     # Retired before the rename; named only where its retirement is recorded.
     r"kepler-astro-query",
-    # The checkout's directory until R6 renamed it /home/claude/mars; records
-    # made before that quote it, and are not rewritten.
-    r"/home/claude/Kepler\b",
 )
+
+#: The checkout's directory until R6 renamed it /home/claude/mars. Allowed
+#: only in the files that quote it as a record -- extraction provenance and a
+#: live run's output -- never globally: nothing may depend on it any more.
+OLD_CHECKOUT = r"/home/claude/Kepler\b"
+QUOTES_OLD_CHECKOUT = frozenset({"docs/extraction.md", "tools/bench/graders/answer.py"})
 
 #: The telescope and the astronomer, not the project.
 MISSION = (
@@ -110,7 +113,7 @@ UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
 SHIM_REFERENCES = {
     "pyproject.toml": r'^kepler(?:-bench|-mcp)? = "tools\.aliases:',
     "docs/working/README.md": r"Renaming Kepler to MARS",
-    "tools/config.py": r"^# Kepler's KEPLER_\* names",
+    "tools/config.py": r"^# Kepler's KEPLER_\* names|^#: fetched by Kepler and moved into",
     "tools/llm/factory.py": r"# KEPLER_\* names are otherwise adopted",
     "tools/mcp/__main__.py": r"project called ``kepler``",
     "tools/mcp/selftest.py": r"# KEPLER_\* too",
@@ -164,6 +167,8 @@ def _unexplained(path: str, text: str, number: int = 0) -> bool:
     reference = SHIM_REFERENCES.get(path)
     if reference and re.search(reference, text):
         return False
+    if path in QUOTES_OLD_CHECKOUT:
+        text = re.sub(OLD_CHECKOUT, "", text)
     return _NAME.search(_ALLOWED.sub("", text)) is not None
 
 
@@ -191,6 +196,13 @@ def test_the_mission_stays_nameable():
         assert not _unexplained("tools/future_mission_tool.py", text), text
     assert _unexplained("tools/future_mission_tool.py", "Kepler's astronomy tools")
     assert _unexplained("tools/tui/widgets/header.py", 'WORDMARK = "K E P L E R"')
+
+
+def test_the_old_checkout_path_is_allowed_only_where_it_is_quoted():
+    quoted = "`/home/claude/Kepler/algorithms/lightcurve/`"
+    assert not _unexplained("docs/extraction.md", quoted)
+    assert _unexplained("tools/config.py", 'ROOT = "/home/claude/Kepler/data"')
+    assert _unexplained("docs/installing.md", quoted)
 
 
 def test_no_new_top_level_package():

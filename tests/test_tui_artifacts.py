@@ -201,5 +201,28 @@ def test_a_file_named_wav_that_is_not_one_becomes_a_message(tmp_path):
     assert "Unable to render waveform" in str(preview.content)
 
 
+@pytest.mark.parametrize("dark", [True, False])
+def test_the_waveform_is_drawn_in_a_colour_its_theme_can_show(tmp_path, dark):
+    """Second review: a fixed Mist Blue was ~1.4:1 on the light theme."""
+    import wave
+
+    from tools.tui import theme
+    from tools.tui.widgets import artifacts
+
+    path = tmp_path / "tone.wav"
+    with wave.open(str(path), "wb") as sink:
+        sink.setnchannels(1)
+        sink.setsampwidth(2)
+        sink.setframerate(8000)
+        sink.writeframes(bytes(range(256)) * 8)
+
+    preview = artifacts._preview_widget(
+        describe_artifact_file(path), GraphicsTier.HALFBLOCK, dark=dark
+    )
+
+    expected = theme.MIST_BLUE if dark else theme.DEEP_NIGHT_BLUE
+    assert str(preview.content.style) == expected
+
+
 def _raise(error: Exception):
     raise error

@@ -146,7 +146,8 @@ BUNDLES_DIR = MARS_HOME / "bundles"
 
 #: Written into a fetched bundle's directory only after its archive verified.
 #: Kept from before the MARS rename: it is an on-disk format, and a bundle
-#: fetched by MARS and moved into the MARS home must still be recognised.
+#: fetched by Kepler and moved into the MARS home must still be recognised.
+#: Renaming it would orphan every such bundle.
 BUNDLE_MARKER = ".kepler-bundle.json"
 
 #: The manifest this install accepts bundles from. Read as a data file, not

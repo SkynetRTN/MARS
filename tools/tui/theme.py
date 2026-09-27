@@ -27,6 +27,7 @@ __all__ = [
     "SOFT_APRICOT",
     "THEMES",
     "WARM_GOLD",
+    "waveform_color",
 ]
 
 #: The Skynet palette (beamer/beamercolorthemeskynet.sty).
@@ -74,3 +75,15 @@ MARS_LIGHT = Theme(
 )
 
 THEMES = (MARS_DARK, MARS_LIGHT)
+
+
+def waveform_color(dark: bool) -> str:
+    """The sonification preview's colour on a dark or a light ground.
+
+    A Rich ``Text`` style cannot name a theme variable, so the preview is
+    given a literal -- chosen here, per ground. Mist Blue on the light
+    theme's off-white is about 1.4:1 and all but invisible; Deep Night Blue
+    is the palette's legible blue there.
+    """
+
+    return MIST_BLUE if dark else DEEP_NIGHT_BLUE

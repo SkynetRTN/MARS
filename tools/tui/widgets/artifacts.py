@@ -22,6 +22,7 @@ from tools.models import ArtifactMetadata
 from tools.tui.render.capability import GraphicsTier
 from tools.tui.render.image import render_halfblocks
 from tools.tui.render.waveform import render_waveform
+from tools.tui.theme import waveform_color
 from tools.workspace import list_artifacts
 
 __all__ = ["ArtifactBrowser", "open_externally"]
@@ -131,7 +132,7 @@ class ArtifactBrowser(ModalScreen[None]):
         self.query_one("#artifact-path", Static).update(artifact.file.path)
         preview = self.query_one("#artifact-preview", Vertical)
         preview.remove_children()
-        preview.mount(_preview_widget(artifact, self.tier))
+        preview.mount(_preview_widget(artifact, self.tier, dark=self.app.current_theme.dark))
 
     def _selected_artifact(self) -> ArtifactMetadata | None:
         if self._selected_index is None:
@@ -176,7 +177,9 @@ def _native_image(path: Path) -> Widget:
     return Image(path)
 
 
-def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Widget:
+def _preview_widget(
+    artifact: ArtifactMetadata, tier: GraphicsTier, *, dark: bool = True
+) -> Widget:
     """Select a native or text preview without ever removing the path handle."""
 
     if not artifact.file.exists:
@@ -202,7 +205,7 @@ def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Widget:
             return Static(f"Unable to render image: {error}", markup=False)
     if artifact.file.suffix and artifact.file.suffix.lower() == ".wav":
         try:
-            return Static(render_waveform(path))
+            return Static(render_waveform(path, color=waveform_color(dark)))
         except _AUDIO_FAULTS as error:
             return Static(f"Unable to render waveform: {error}", markup=False)
     return Static(f"{artifact.artifact_type.capitalize()} artifact", markup=False)
