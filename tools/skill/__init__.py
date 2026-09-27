@@ -12,7 +12,7 @@ between the two.
 ships with an installed Kepler, where there is no checkout to read it from.
 Every other surface is rendered from it:
 
-- ``skills/kepler-tools/`` in the repository, for a coding agent working in a
+- ``skills/mars-tools/`` in the repository, for a coding agent working in a
   checkout and for a human reading it -- ``python -m tools.skill`` writes it,
   ``python -m tools.skill --check`` reports drift, and a test runs the check;
 - the MCP server (phase C5): :func:`served_brief` is its instructions and
@@ -53,7 +53,7 @@ __all__ = [
     "write_repository_copy",
 ]
 
-SKILL_NAME = "kepler-tools"
+SKILL_NAME = "mars-tools"
 
 #: What a skill loader shows a model when deciding whether to load the skill.
 SKILL_DESCRIPTION = (
@@ -75,7 +75,7 @@ _ENTRY = "SKILL.md"
 _BRIEF = "BRIEF.md"
 
 #: Resource URIs of the served documents are this prefix plus their source path.
-SERVED_URI_PREFIX = "kepler://skill/"
+SERVED_URI_PREFIX = "mars://skill/"
 
 #: Source documents the server does not publish: how to call the tools as
 #: Python functions from a checkout, which a user of the server never does.
@@ -105,7 +105,7 @@ def _banner(name: str) -> str:
 
 
 def render_repository_copy() -> dict[str, str]:
-    """The ``skills/kepler-tools/`` files, keyed like :func:`source_documents`."""
+    """The ``skills/mars-tools/`` files, keyed like :func:`source_documents`."""
     rendered = {}
     for name, text in source_documents().items():
         body = _banner(name) + text
@@ -143,7 +143,7 @@ def served_documents() -> dict[str, str]:
     """The documents the MCP server publishes as resources, keyed like the source.
 
     Everything but the brief (which is the instructions) and the checkout
-    reference, with relative links rewritten to ``kepler://skill/...`` URIs.
+    reference, with relative links rewritten to ``mars://skill/...`` URIs.
     """
 
     sources = source_documents()

@@ -66,7 +66,7 @@ def primary_optical_data_dir() -> Path:
     what ``KEPLER_OPTICAL_DATA_DIR`` is for.
 
     An installed wheel ships no frames: there the default is the fetched
-    optical bundle (``kepler-mcp fetch-data optical``) once it has verified,
+    optical bundle (``mars-mcp fetch-data optical``) once it has verified,
     and the empty bundled location until then.
     """
     from tools.config import BUNDLED_DATA_DIR, env_path, fetched_bundle
@@ -94,7 +94,7 @@ def optical_bundle_warning() -> ToolWarning | None:
         message=(
             "The optical frame library is an optional data bundle and is not "
             "installed here, so only archive downloads can be listed. Fetch it "
-            "with `kepler-mcp fetch-data optical`, or set "
+            "with `mars-mcp fetch-data optical`, or set "
             f"{OPTICAL_DATA_DIR_ENV} to a directory of FITS frames."
         ),
     )

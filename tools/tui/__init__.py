@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def launch() -> int:
-    """The ``kepler`` console script: load ``.env``, then start the console.
+    """The ``mars`` console script: load ``.env``, then start the console.
 
     ``tools.config`` fixes its settings at import (``KEPLER_ARTIFACT_DIR``,
     ``KEPLER_DATA_DIR``, ``KEPLER_ISOCHRONE_DIR``, ...), and the console's own

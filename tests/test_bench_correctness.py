@@ -924,7 +924,7 @@ def test_no_grader_can_reach_a_model_backend():
 
 
 def test_the_grade_verb_takes_no_model():
-    """`kepler-bench grade` is offline, free and repeatable. A flag that makes
+    """`mars-bench grade` is offline, free and repeatable. A flag that makes
     it spend money on a model would quietly undo all three."""
 
     from tools.bench.cli import build_parser

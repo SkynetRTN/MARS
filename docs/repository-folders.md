@@ -28,11 +28,11 @@ end-to-end validation.
 
 ## `skills/`
 
-`skills/kepler-tools/` is the rendered repository copy of the agent skill:
+`skills/mars-tools/` is the rendered repository copy of the agent skill:
 how to use Kepler's tools correctly (stage orders, identifier forms, period
 provenance, silently wrong results). It is **generated** from
 `tools/skill/source/` by `uv run python -m tools.skill`; edit the source, never
-this copy. `.claude/skills/kepler-tools` links to it, so a coding agent in a
+this copy. `.claude/skills/mars-tools` links to it, so a coding agent in a
 checkout loads it as a skill. A test fails if the copy is stale.
 
 ## `tools/`
@@ -88,7 +88,7 @@ Important files and subfolders:
   [installing.md](installing.md).
 - `skill/`: the agent skill's one source, `source/` (`SKILL.md`, `BRIEF.md`,
   and per-domain references), and the renderer (`python -m tools.skill`)
-  that writes the repository copy `skills/kepler-tools/`. The MCP server
+  that writes the repository copy `skills/mars-tools/`. The MCP server
   serves the brief as its instructions and the rest as resources.
 - `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
   recording (tool calls, cache hits, artifacts, turns) plus the shared cache

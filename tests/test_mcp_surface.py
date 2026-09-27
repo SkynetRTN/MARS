@@ -403,9 +403,9 @@ def test_the_entry_point_does_not_import_tools_config_before_pinning():
     assert result.stdout.strip() == "False"
 
 
-def test_kepler_mcp_is_a_declared_script():
+def test_mars_mcp_is_a_declared_script():
     text = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'kepler-mcp = "tools.mcp.__main__:main"' in text
+    assert 'mars-mcp = "tools.mcp.__main__:main"' in text
 
 
 # --- the adapter, through the SDK's in-process client ---------------------------
@@ -522,7 +522,7 @@ def test_an_unknown_resource_is_a_protocol_error():
     from mcp.shared.exceptions import MCPError
 
     async def session(client):
-        return await client.read_resource("kepler://skill/references/checkout.md")
+        return await client.read_resource("mars://skill/references/checkout.md")
 
     # In process, the SDK re-raises the handler's error, possibly inside an
     # exception group; over a transport the client receives it as a JSON-RPC
@@ -565,7 +565,7 @@ def test_a_group_filter_narrows_what_is_listed_and_what_is_callable():
 
 
 def test_self_test_passes_against_this_checkout(capfd):
-    """``kepler-mcp self-test`` launches the server over stdio and runs the chain.
+    """``mars-mcp self-test`` launches the server over stdio and runs the chain.
 
     ``capfd``, not ``capsys``: the SDK hands ``sys.stderr`` to the server
     subprocess, which needs a real file descriptor.
@@ -743,11 +743,14 @@ def test_the_server_never_uses_a_gui_matplotlib_backend():
 
 
 def test_the_missing_sdk_advice_never_names_the_pypi_project():
-    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project."""
+    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project.
+
+    Still pinned after the rename: `skynet-mars` is not on PyPI either.
+    """
     from tools.mcp.__main__ import _missing_sdk_message
 
     message = _missing_sdk_message()
-    assert sys.executable in message and "kepler[mcp] @" in message
+    assert sys.executable in message and "skynet-mars[mcp] @" in message
     assert "not on PyPI" in message
 
 

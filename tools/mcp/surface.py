@@ -43,7 +43,7 @@ __all__ = [
     "to_json_text",
 ]
 
-SERVER_NAME = "kepler"
+SERVER_NAME = "mars"
 
 #: Case-folded strings a model sends when it means JSON ``null`` -- the
 #: confirmed-live failure ``SYSTEM_PROMPT`` and the skill both warn about.
@@ -58,7 +58,7 @@ _STRINGY_NULLS = frozenset({"none", "null", "nil"})
 #: root is shared -- is added here instead.
 _ARTIFACT_NOTES = {
     "list_artifacts": (
-        " Served by kepler-mcp: the artifact directory is {root}, pinned when "
+        " Served by mars-mcp: the artifact directory is {root}, pinned when "
         "the server started (KEPLER_ARTIFACT_DIR, or a per-user default) and "
         "shared by every session on this machine. This lists only the files "
         "directly inside the directory given, and tools write into per-tool "
@@ -68,7 +68,7 @@ _ARTIFACT_NOTES = {
         "read the path a result named rather than the newest-looking file."
     ),
     "describe_artifact": (
-        " Served by kepler-mcp: tools write their artifacts under {root}, "
+        " Served by mars-mcp: tools write their artifacts under {root}, "
         "pinned when the server started. The paths are local to this machine "
         "and readable directly; pass the path a tool result named."
     ),
@@ -82,7 +82,7 @@ _ARTIFACT_NOTES = {
 _SERVED_CORRECTIONS = {
     "sonify_pulsar": (
         "the audio is never inlined.",
-        "served by kepler-mcp, the WAV also comes back inline as an audio block "
+        "served by mars-mcp, the WAV also comes back inline as an audio block "
         "when it is under the server's audio limit -- a host that cannot play "
         "it may save it to a file instead.",
     ),
@@ -90,7 +90,7 @@ _SERVED_CORRECTIONS = {
         "report their "
         "paths, do not describe their contents as if you had visually inspected "
         "them.",
-        "report their paths. Served by kepler-mcp, each plot under the server's "
+        "report their paths. Served by mars-mcp, each plot under the server's "
         "image limit also comes back inline as an image: describe only what an "
         "inlined image shows, and never the contents of one that was not inlined.",
     ),

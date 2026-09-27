@@ -1,6 +1,6 @@
-"""``kepler-mcp self-test``: prove an install works, the way a host would use it.
+"""``mars-mcp self-test``: prove an install works, the way a host would use it.
 
-Launches this interpreter's own ``kepler-mcp`` over stdio -- the transport a
+Launches this interpreter's own ``mars-mcp`` over stdio -- the transport a
 host uses -- and checks, through the protocol alone:
 
 1. every registered tool is served, with the skill brief as instructions and
@@ -138,7 +138,7 @@ def _server_environment(artifacts: str) -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     if argv:
-        print("usage: kepler-mcp self-test", file=sys.stderr)
+        print("usage: mars-mcp self-test", file=sys.stderr)
         return 2
     try:
         import anyio
@@ -154,9 +154,9 @@ def main(argv: list[str] | None = None) -> int:
     from tools import config
     from tools.mcp.bundles import load_manifest
 
-    print("kepler-mcp self-test", flush=True)
+    print("mars-mcp self-test", flush=True)
     status = 0
-    with tempfile.TemporaryDirectory(prefix="kepler-self-test-") as artifacts:
+    with tempfile.TemporaryDirectory(prefix="mars-self-test-") as artifacts:
         try:
             anyio.run(_run, _server_environment(artifacts))
         except* _Failed:

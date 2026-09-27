@@ -11,7 +11,7 @@ its own beyond two things the SDK's low-level server leaves to its caller:
   exception, the same as a fault in the agent loop.
 - **The skill** (C5): the instructions are ``surface.served_instructions()``
   -- the skill brief and this install's facts -- and the skill's documents are
-  resources, ``kepler://skill/...``, read on demand.
+  resources, ``mars://skill/...``, read on demand.
 - **One call at a time.** Tool calls are dispatched to a worker thread, so the
   event loop keeps answering the host, but under a lock: every Kepler tool was
   written and tested to be called sequentially, and the stdio transport has
@@ -51,7 +51,7 @@ __all__ = ["build_server", "serve_stdio"]
 
 def _package_version() -> str:
     try:
-        return version("kepler")
+        return version("skynet-mars")
     except PackageNotFoundError:
         return "0+unknown"
 
@@ -122,7 +122,7 @@ def build_server(
     listed nor callable.
 
     ``artifact_root`` defaults to ``tools.config.ARTIFACT_DIR`` as it stands
-    when the server is built -- after ``kepler-mcp`` has pinned it. It is what
+    when the server is built -- after ``mars-mcp`` has pinned it. It is what
     the workspace tools' descriptions name and the only directory media is
     inlined from. ``instructions`` defaults to the served skill brief plus the
     install facts.

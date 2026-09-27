@@ -1,4 +1,4 @@
-"""``python -m tools.skill`` renders ``skills/kepler-tools/``; ``--check`` reports drift."""
+"""``python -m tools.skill`` renders ``skills/mars-tools/``; ``--check`` reports drift."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not is_checkout():
         print(
-            "python -m tools.skill renders the repository copy, skills/kepler-tools/, "
+            "python -m tools.skill renders the repository copy, skills/mars-tools/, "
             "and only runs in a checkout: this is an installed package, and writing "
             "there would put files into site-packages.",
             file=sys.stderr,

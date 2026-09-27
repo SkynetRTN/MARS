@@ -190,7 +190,7 @@ A result's inline `preview` holds a few rows (ten by default). Its `count`, and
 the `row_count` on each `artifact`, say how many exist. When the question is
 about the whole set, read the file.
 
-- **Where they are.** Served by `kepler-mcp`, every artifact is under the
+- **Where they are.** Served by `mars-mcp`, every artifact is under the
   artifact directory the server pinned at startup — a per-user directory
   unless `KEPLER_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
   description names it. From a checkout it is `KEPLER_ARTIFACT_DIR`, or

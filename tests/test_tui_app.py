@@ -821,7 +821,7 @@ def test_main_builds_the_requested_backend_and_runs_the_app(monkeypatch):
     created: list[KeplerApp] = []
     monkeypatch.setattr(tui_main, "open_backend", lambda spec, **_: backend)
     monkeypatch.setattr(tui_main.KeplerApp, "run", lambda self: created.append(self))
-    monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "stub/model"])
+    monkeypatch.setattr(sys, "argv", ["mars", "--backend", "stub/model"])
 
     assert tui_main.main() == 0
     assert len(created) == 1
@@ -838,7 +838,7 @@ def test_main_shows_a_configuration_error_for_an_unavailable_backend(
             BackendUnavailableError("OPENAI_API_KEY")
         ),
     )
-    monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "openai/gpt-4.1"])
+    monkeypatch.setattr(sys, "argv", ["mars", "--backend", "openai/gpt-4.1"])
 
     assert tui_main.main() == 2
     assert "OPENAI_API_KEY" in capsys.readouterr().err
@@ -1008,11 +1008,11 @@ def test_launch_spec_prefers_the_flag_then_the_environment_then_the_default(
     assert tui_main.launch_spec(None) == "anthropic/claude-sonnet-5"
 
 
-def test_the_kepler_console_script_launches_this_module():
-    """``kepler`` is the console's entry point, and a bare ``kepler`` opens it.
+def test_the_mars_console_script_launches_this_module():
+    """``mars`` is the console's entry point, and a bare ``mars`` opens it.
 
     Pinned because the command is the only documented way in and nothing else
-    would notice it going missing: ``argparse`` already prints ``usage: kepler``
+    would notice it going missing: ``argparse`` already prints ``usage: mars``
     whether or not the script is registered, so a dropped entry produces a
     help text naming a command that does not exist.
     """
@@ -1025,16 +1025,16 @@ def test_the_kepler_console_script_launches_this_module():
         )
     )
 
-    assert pyproject["project"]["scripts"]["kepler"] == "tools.tui:launch"
+    assert pyproject["project"]["scripts"]["mars"] == "tools.tui:launch"
 
 
 def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
-    """No flag, no environment variable, no subcommand: ``kepler`` runs."""
+    """No flag, no environment variable, no subcommand: ``mars`` runs."""
 
     launched: dict[str, object] = {}
 
     monkeypatch.delenv("KEPLER_MODEL_BACKEND", raising=False)
-    monkeypatch.setattr(sys, "argv", ["kepler"])
+    monkeypatch.setattr(sys, "argv", ["mars"])
     monkeypatch.setattr(tui_main, "load_dotenv", lambda: ())
     monkeypatch.setattr(
         tui_main, "open_backend", lambda spec, **_: launched.setdefault("spec", spec)

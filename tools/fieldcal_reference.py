@@ -296,7 +296,7 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
                 message=f"The frame {field!r} was recorded against ({bundled}) is "
                 "in the optional optical data bundle, which is not installed, so "
                 "the solve is checked at the calc_solution level only. Fetch it "
-                "with `kepler-mcp fetch-data optical`; KEPLER_OPTICAL_DATA_DIR "
+                "with `mars-mcp fetch-data optical`; KEPLER_OPTICAL_DATA_DIR "
                 "does not supply these frames.",
             )
         ]

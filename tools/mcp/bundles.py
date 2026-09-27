@@ -21,7 +21,7 @@ checksum anywhere. Not gzipped: compressed output can differ between zlib
 versions, which would make the checksum irreproducible, and FITS barely
 compresses.
 
-**Fetching** (``kepler-mcp fetch-data``) downloads into
+**Fetching** (``mars-mcp fetch-data``) downloads into
 ``<kepler home>/bundles/.downloads/``, resuming a partial download with an HTTP
 Range request; checks size and SHA-256; extracts through tarfile's ``data``
 filter (no absolute paths, no ``..``, no links out of the tree) into a staging
@@ -452,11 +452,11 @@ def _checkout_note(name: str, target: Path) -> str:
 
 
 def fetch_main(argv: Iterable[str] | None = None) -> int:
-    """``kepler-mcp fetch-data``: install optional data bundles."""
+    """``mars-mcp fetch-data``: install optional data bundles."""
 
     manifest = load_manifest()
     parser = argparse.ArgumentParser(
-        prog="kepler-mcp fetch-data",
+        prog="mars-mcp fetch-data",
         description=(
             "Fetch Kepler's optional data bundles into "
             f"{config.BUNDLES_DIR}. Checksum-verified against this install's "
@@ -506,7 +506,7 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             print(f"  {_checkout_note(name, target)}")
     if status == 0:
         print(
-            "Restart any running kepler-mcp to use newly fetched bundles: the "
+            "Restart any running mars-mcp to use newly fetched bundles: the "
             "server reads its data locations when it starts."
         )
     return status

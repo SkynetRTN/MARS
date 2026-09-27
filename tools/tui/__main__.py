@@ -29,7 +29,7 @@ __all__ = ["main", "launch_spec"]
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kepler")
+    parser = argparse.ArgumentParser(prog="mars")
     parser.add_argument(
         "--backend",
         help=(

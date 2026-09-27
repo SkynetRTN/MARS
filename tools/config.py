@@ -164,7 +164,7 @@ def fetched_bundle(
     bundle, the Kepler home still held the previous release's bytes, and every
     reader used them and called them installed -- the wheel/bundle mismatch
     the manifest exists to prevent. A stale bundle now reads as not installed,
-    and ``kepler-mcp fetch-data`` replaces it.
+    and ``mars-mcp fetch-data`` replaces it.
     """
 
     directory = (BUNDLES_DIR if bundles_dir is None else bundles_dir) / name
@@ -227,7 +227,7 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 #
 # A KEPLER_DATA_DIR naming somewhere other than the package still moves it on
 # an install, as documented: that is a directory the user chose. Decided by the
-# value, not by whether the variable is set: kepler-mcp pins KEPLER_DATA_DIR to
+# value, not by whether the variable is set: mars-mcp pins KEPLER_DATA_DIR to
 # its resolved default before this module is imported, and testing for the
 # variable made every installed server download into site-packages.
 FITS_DOWNLOAD_DIR = env_path(
@@ -240,7 +240,7 @@ FITS_DOWNLOAD_DIR = env_path(
 # data.  Deliberately no default: silently looking in a repository-relative
 # directory would make a missing model look bundled and conceal setup errors.
 #
-# The one exception is an installed wheel's fetched bundle (``kepler-mcp
+# The one exception is an installed wheel's fetched bundle (``mars-mcp
 # fetch-data isochrones``), used only once it verified against this install's
 # manifest. Never in a checkout: there the grid stays the operator setting it
 # always was, so a developer's own ~/.local/share/kepler cannot change what a

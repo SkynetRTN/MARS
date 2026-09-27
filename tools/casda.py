@@ -44,7 +44,7 @@ def _opal_password_stored(username: str) -> bool:
     """Whether ``casda.login`` will find a password without prompting.
 
     astroquery prompts with ``getpass`` when the keyring has no password.
-    Under ``kepler-mcp`` there is no terminal -- stdin is the protocol
+    Under ``mars-mcp`` there is no terminal -- stdin is the protocol
     stream -- so the prompt either fails or blocks the server, holding the
     lock every other call waits on. The username check alone did not prevent
     that. A keyring that cannot be read counts as holding nothing.

@@ -21,7 +21,7 @@ code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
 `docs/tool-architecture.md` describe the current architecture.
 
 Using the tools, as opposed to working on this repository, is taught by the agent
-skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`:
+skill in `skills/mars-tools/`, rendered from its one source in `tools/skill/source/`:
 edit the source, then run `uv run python -m tools.skill`.
 
 ## The extraction contract (most important thing to know)
@@ -307,9 +307,9 @@ machine with no checkout. Its rules:
   (`tools.tui:launch`). `tools.config` re-exports the loader.
 - **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
   worst case, tested). Claude Code truncates a server's instructions at
-  about 2,000. Everything longer is a `kepler://skill/...` resource.
+  about 2,000. Everything longer is a `mars://skill/...` resource.
 - **The skill has one source**, `tools/skill/source/`. Edit it and run
-  `uv run python -m tools.skill`; `skills/kepler-tools/` is generated.
+  `uv run python -m tools.skill`; `skills/mars-tools/` is generated.
 
 **Bundled data and the Kepler home.** Tools read bundled fixtures only through
 `config.BUNDLED_DATA_DIR`, which is `tools/_data`: a committed symlink to

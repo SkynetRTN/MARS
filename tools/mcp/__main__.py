@@ -1,4 +1,4 @@
-"""``kepler-mcp``: serve Kepler's tools to a host over stdio.
+"""``mars-mcp``: serve Kepler's tools to a host over stdio.
 
 The order in :func:`main` is the point of this module. A checkout's ``.env``
 is loaded first, then the roots are pinned into the environment, and only then
@@ -17,25 +17,27 @@ import sys
 from tools.mcp.roots import pin_roots
 from tools.paths import pin_numba_cache
 
-log = logging.getLogger("kepler-mcp")
+log = logging.getLogger("mars-mcp")
 
 
 def _missing_sdk_message() -> str:
     """How to add the SDK -- never by package name alone.
 
-    Kepler is not on PyPI, and the PyPI project called ``kepler`` is
-    unrelated: ``pip install 'kepler[mcp]'`` installs it (and, with ``-U``,
-    replaces this install with it) instead of the SDK. So the advice names this
-    interpreter's own pip and the wheel the user installed from.
+    ``skynet-mars`` is not on PyPI, so ``pip install 'skynet-mars[mcp]'``
+    finds nothing -- or, should anyone register the name, something else --
+    instead of the SDK. (Before the rename the trap was live: the PyPI
+    project called ``kepler`` is unrelated, and ``-U`` replaced this install
+    with it.) So the advice names this interpreter's own pip and the wheel the
+    user installed from.
     """
 
     return (
-        "kepler-mcp needs its optional [mcp] dependencies. From a checkout, run "
+        "mars-mcp needs its optional [mcp] dependencies. From a checkout, run "
         "`uv sync --extra mcp`. From an install, reinstall the same wheel with the "
         f"extra, using this environment's pip: `{sys.executable} -m pip install "
-        "\"kepler[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
-        "Do not run `pip install kepler[mcp]`: Kepler is not on PyPI, and the "
-        "PyPI project named kepler is a different one."
+        "\"skynet-mars[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
+        "Do not run `pip install skynet-mars[mcp]`: skynet-mars is not on PyPI, "
+        "so pip would fetch nothing, or someone else's project."
     )
 
 
@@ -64,13 +66,13 @@ def main(argv: list[str] | None = None) -> int:
         return self_test(argv[1:])
 
     parser = argparse.ArgumentParser(
-        prog="kepler-mcp",
+        prog="mars-mcp",
         description=(
             "Serve Kepler's astronomy tools over MCP on stdio. A host launches "
             "this; it is not run by hand. Artifacts go to KEPLER_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
-            "stderr at startup. `kepler-mcp fetch-data` installs the optional "
-            "data bundles; `kepler-mcp self-test` checks this install."
+            "stderr at startup. `mars-mcp fetch-data` installs the optional "
+            "data bundles; `mars-mcp self-test` checks this install."
         ),
     )
     parser.add_argument(
@@ -85,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(
-        stream=sys.stderr, level=logging.INFO, format="kepler-mcp: %(message)s"
+        stream=sys.stderr, level=logging.INFO, format="mars-mcp: %(message)s"
     )
 
     # Every tool call runs on a worker thread, and on macOS matplotlib's

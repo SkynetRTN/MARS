@@ -725,10 +725,10 @@ served skill has two tiers:
   must survive truncation — plus the install facts. They are held under 1,900
   characters, worst case, by a test.
 - `SKILL.md` and the per-domain references are MCP resources,
-  `kepler://skill/...`, read on demand.
+  `mars://skill/...`, read on demand.
 
 `tools/skill/source/` is the one source. It renders the served text, and also
-`skills/kepler-tools/`, the repository copy that `.claude/skills/` links for
+`skills/mars-tools/`, the repository copy that `.claude/skills/` links for
 a coding agent in a checkout. `tests/test_skill_invariants.py` pins the
 load-bearing rules as phrases in both `SYSTEM_PROMPT` and the skill, so a
 correction to one that misses the other fails a test. The pulsar tools' own

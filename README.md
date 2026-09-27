@@ -239,7 +239,7 @@ Kepler/
     mcp/                         #   the MCP server (kepler-mcp) and data bundles
     skill/                       #   the agent skill's one source and renderer
     _data -> ../data             #   bundled data: a symlink here, core data in a wheel
-  skills/kepler-tools/           # the rendered agent skill (generated; see tools/skill)
+  skills/mars-tools/           # the rendered agent skill (generated; see tools/skill)
   algorithms/
     wcs/                         # Python WCS extraction from Skynet
     photometry/                  # Python photometry extraction from Skynet
@@ -322,8 +322,8 @@ kepler-env/bin/kepler-mcp self-test          # launches the server as a host wou
   five tool groups: `databases`, `optical`, `timeseries`, `hr`, `radio`.
 - **The skill.** The server brings its own usage guidance — stage orders,
   identifier forms, period provenance — as its instructions and as
-  `kepler://skill/...` resources. In a checkout, the same skill is
-  `skills/kepler-tools/`.
+  `mars://skill/...` resources. In a checkout, the same skill is
+  `skills/mars-tools/`.
 - **Where files go.** Artifacts and downloads go under a per-user Kepler home
   (`~/.local/share/kepler`, or `KEPLER_HOME`), never into the install.
 - **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two

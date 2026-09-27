@@ -3,8 +3,8 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kepler"
-version = "0.1.0rc2"
+name = "skynet-mars"
+version = "0.1.0rc3"
 description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -85,9 +85,13 @@ dependencies = [
 ]
 
 [project.scripts]
-kepler = "tools.tui:launch"
-kepler-bench = "tools.bench.cli:main"
-kepler-mcp = "tools.mcp.__main__:main"
+mars = "tools.tui:launch"
+mars-bench = "tools.bench.cli:main"
+mars-mcp = "tools.mcp.__main__:main"
+# Deprecated aliases, removed in the release after 0.1.0rc3 (tools/aliases.py).
+kepler = "tools.aliases:kepler"
+kepler-bench = "tools.aliases:kepler_bench"
+kepler-mcp = "tools.aliases:kepler_mcp"
 
 [project.optional-dependencies]
 mcp = [

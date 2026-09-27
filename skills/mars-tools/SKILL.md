@@ -1,5 +1,5 @@
 ---
-name: kepler-tools
+name: mars-tools
 description: How to use Kepler's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and the local pulsar, variable-star, optical photometry, plate-solving, HR-diagram and radio-source pipelines. Use when calling any Kepler tool, and before any pulsar period measurement, database name lookup or literature claim -- it covers the stage orders, identifier forms and silently wrong results the tool descriptions alone do not.
 ---
 
@@ -197,7 +197,7 @@ A result's inline `preview` holds a few rows (ten by default). Its `count`, and
 the `row_count` on each `artifact`, say how many exist. When the question is
 about the whole set, read the file.
 
-- **Where they are.** Served by `kepler-mcp`, every artifact is under the
+- **Where they are.** Served by `mars-mcp`, every artifact is under the
   artifact directory the server pinned at startup — a per-user directory
   unless `KEPLER_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
   description names it. From a checkout it is `KEPLER_ARTIFACT_DIR`, or

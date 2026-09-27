@@ -1,4 +1,4 @@
-"""``kepler-bench`` argument handling, chiefly the required token budget.
+"""``mars-bench`` argument handling, chiefly the required token budget.
 
 docs/benchmarking/harness.md sections 5.7 and 11.
 """

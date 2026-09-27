@@ -11,7 +11,7 @@ list; a test asserts the served names equal the registry's.
   plain ``uv run pytest`` tests it;
 - :mod:`tools.mcp.server` adapts it to the ``mcp`` SDK, the optional
   ``[mcp]`` group;
-- ``kepler-mcp`` (:mod:`tools.mcp.__main__`) is the entry point a host
+- ``mars-mcp`` (:mod:`tools.mcp.__main__`) is the entry point a host
   launches.
 
 It imports nothing from ``tools/agent/`` or ``tools/llm/``: the dependency runs

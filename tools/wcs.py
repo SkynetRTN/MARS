@@ -247,7 +247,7 @@ def _under_fixture_root(path: Path) -> bool:
     for every fixture. A safety net that a single environment variable can
     switch off is not one.
 
-    Fetched bundles are fixtures too: ``kepler-mcp fetch-data optical`` puts
+    Fetched bundles are fixtures too: ``mars-mcp fetch-data optical`` puts
     the same frames under ``config.BUNDLES_DIR``, checksum-verified, and a
     header written into one would silently break that verification.
     """

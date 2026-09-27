@@ -4,7 +4,8 @@
 distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
-questions in §6 are decided. No phase started; R4 waits for the logo files.
+questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
+the feature branch `mars-rebrand` (§5); **R1 is done** (2026-09-27).
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -15,11 +16,9 @@ code.
 
 > [!note] Written against `mcp-support`
 > This plan was measured and written on the `mcp-support` branch at
-> `b0388e0`, where the MCP tool-surface track is complete. It is committed to
-> `dev` ahead of that branch, so until `mcp-support` merges into `dev`, its
-> links into `../archive/` and its references to `tools/mcp/`, `tools/skill/`
-> and `tools/paths.py` describe code that is not on `dev` yet. The rollout
-> starts from the merged state.
+> `b0388e0`, where the MCP tool-surface track is complete. That branch has
+> since merged into `dev` (PR #88, `8ec0003`), and the rollout starts from
+> the merged state.
 
 ---
 
@@ -141,7 +140,8 @@ Its UNC-Chapel Hill palette is likewise separate from the Skynet palette.
 
 ## 5. Rollout
 
-Phases **R1–R6**, one PR each against `mcp-support`. Every phase ends with the
+Phases **R1–R6**, committed in order on the one feature branch
+`mars-rebrand`, cut from `dev` at `ec5b7e1`. Every phase ends with the
 default suite green on Python 3.13, with and without `[mcp]`.
 
 ### R1 — Identity: the distribution, commands, server and skill
@@ -156,6 +156,13 @@ default suite green on Python 3.13, with and without `[mcp]`.
 
 **Gate:** a wheel named `skynet_mars-…` installs, and `mars-mcp self-test`
 passes on it.
+
+**Done 2026-09-27.** The `skynet_mars-0.1.0rc3` wheel installed into a clean
+Python 3.13 environment, `mars-mcp self-test` passed, and each `kepler*`
+alias named its successor on stderr and ran it. The aliases live in
+`tools/aliases.py`. One departure: the skill source's three `kepler-mcp
+fetch-data` mentions became `mars-mcp`, so the skill does not teach a
+deprecated command; its prose is otherwise R3's.
 
 ### R2 — Environment and paths
 

@@ -294,7 +294,7 @@ def test_a_missing_frame_library_says_so(tmp_path, monkeypatch):
 
     assert targets.total_count == 0
     assert [w.code for w in targets.warnings] == ["bundle_not_installed"]
-    assert "kepler-mcp fetch-data optical" in targets.warnings[0].message
+    assert "mars-mcp fetch-data optical" in targets.warnings[0].message
     assert "bundle_not_installed" in [w.code for w in frames.warnings]
 
 
@@ -455,7 +455,7 @@ def _installed(tmp_path, mode, **environ):
 
 def test_an_installed_server_downloads_into_the_kepler_home(tmp_path):
     """Finding 1: pin_roots exports KEPLER_DATA_DIR, and config took any value
-    of it as the user's choice -- so every installed kepler-mcp downloaded into
+    of it as the user's choice -- so every installed mars-mcp downloaded into
     site-packages."""
     paths, core = _installed(tmp_path, "pin")
     home = (tmp_path / "home").resolve()

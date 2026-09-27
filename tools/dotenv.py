@@ -5,7 +5,7 @@ An entry point that loaded ``.env`` through ``tools.config`` had already
 fixed every import-time setting -- the artifact and data roots, the isochrone
 directory, preview rows, frame caps, the MCP tool groups -- from the
 environment *without* the file. The values were loaded, logged as read, and
-ignored. Importing this module resolves nothing, so ``kepler-mcp`` and the
+ignored. Importing this module resolves nothing, so ``mars-mcp`` and the
 console can load ``.env`` first. ``tools.config`` re-exports all of it.
 """
 
