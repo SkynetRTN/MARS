@@ -60,7 +60,7 @@ The host launches `kepler-mcp` over stdio. For Claude Code:
 {"mcpServers": {"kepler": {"command": "/path/to/kepler-env/bin/kepler-mcp"}}}
 ```
 
-`kepler-mcp --tools databases,timeseries` (or `KEPLER_MCP_TOOLS`) serves only
+`kepler-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
 those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
 is all 55 tools. At startup the server logs to stderr every root it resolved,
 each served group, and whether each data bundle is present. The same facts
@@ -68,17 +68,17 @@ reach the model in the server's instructions.
 
 ## Where things go
 
-Everything Kepler writes lives under one per-user directory, the **Kepler
-home**: `~/.local/share/kepler` on Linux (`$XDG_DATA_HOME` honoured),
-`~/Library/Application Support/kepler` on macOS, and `%LOCALAPPDATA%\kepler`
-on Windows. `KEPLER_HOME` moves it. Nothing is ever written into the installed
+Everything Kepler writes lives under one per-user directory, the **MARS
+home**: `~/.local/share/mars` on Linux (`$XDG_DATA_HOME` honoured),
+`~/Library/Application Support/mars` on macOS, and `%LOCALAPPDATA%\mars`
+on Windows. `MARS_HOME` moves it. Nothing is ever written into the installed
 package.
 
 | Directory | What | Override |
 | --- | --- | --- |
-| `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `KEPLER_ARTIFACT_DIR` |
-| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `KEPLER_FITS_DOWNLOAD_DIR`, or `KEPLER_DATA_DIR` (downloads then go to its `fits_downloads/`) |
-| `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `KEPLER_OPTICAL_DATA_DIR`, `KEPLER_ISOCHRONE_DIR` |
+| `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `MARS_ARTIFACT_DIR` |
+| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `MARS_FITS_DOWNLOAD_DIR`, or `MARS_DATA_DIR` (downloads then go to its `fits_downloads/`) |
+| `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `MARS_OPTICAL_DATA_DIR`, `MARS_ISOCHRONE_DIR` |
 | `<home>/numba-cache/` | numba's compiled-function cache, which numba would otherwise write into the installed package | `NUMBA_CACHE_DIR` |
 
 Artifacts are never overwritten, even by two servers sharing the directory:
@@ -90,6 +90,23 @@ inside the artifact directory, and one that climbs out of it (`..`) is refused.
 
 After `kepler-mcp fetch-data`, restart any running `kepler-mcp`: the server
 reads its data locations when it starts.
+
+### Upgrading from Kepler
+
+Kepler was renamed MARS in `0.1.0rc3`. For that one pre-release, what a
+Kepler install was configured with keeps working, and is removed in the
+release after it:
+
+- A `KEPLER_*` variable is read as its `MARS_*` twin when the twin is unset,
+  and ignored when it is set; the server logs a line naming both either way.
+  A `.env` still written with `KEPLER_*` is read the same way.
+- The `kepler`, `kepler-mcp` and `kepler-bench` commands run their MARS
+  successors, after saying so on stderr.
+- A Kepler home (`~/.local/share/kepler`, and its macOS and Windows
+  equivalents) is **not** used and **never moved**: its fetched bundles are
+  hundreds of megabytes of your disk. The first `mars-mcp` start that finds it
+  beside no MARS home says so once. Rename it to the MARS home to keep its
+  artifacts, downloads and bundles, or point `MARS_HOME` at it.
 
 ## The optional data bundles
 
@@ -103,7 +120,7 @@ package's own manifest (`tools/mcp/bundles.json`). An installed Kepler accepts
 only the exact bytes it was released with. A download that fails partway
 resumes from where it stopped when you run the command again. A bundle that is
 already installed and verified is left alone. `--from URL_OR_DIR` (or
-`KEPLER_BUNDLE_URL`) fetches from a mirror or a local directory instead.
+`MARS_BUNDLE_URL`) fetches from a mirror or a local directory instead.
 
 What needs which bundle:
 

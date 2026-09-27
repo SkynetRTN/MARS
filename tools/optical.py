@@ -11,7 +11,7 @@ data directory, punctuation-insensitive name matching, and ambiguity returned
 as a candidate list with a ``ToolError`` rather than raised.
 
 Two directories are searched: the bundled optical directory (or the
-``KEPLER_OPTICAL_DATA_DIR`` override), and the archive download directory
+``MARS_OPTICAL_DATA_DIR`` override), and the archive download directory
 ``tools.mast``/``tools.casda`` write into, once anything has been downloaded
 there. That second root is what joins **find data -> measure -> calibrate**:
 before it, a downloaded product was invisible to every tool that resolves a
@@ -46,7 +46,7 @@ __all__ = [
 
 #: Where frames are looked for. Overridable so a caller with their own archive
 #: does not have to move files into the repo.
-OPTICAL_DATA_DIR_ENV = "KEPLER_OPTICAL_DATA_DIR"
+OPTICAL_DATA_DIR_ENV = "MARS_OPTICAL_DATA_DIR"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -60,10 +60,10 @@ def primary_optical_data_dir() -> Path:
 
     Defaults under the bundled data (``config.BUNDLED_DATA_DIR``) rather than
     under ``config.DATA_DIR``. Out of the box those are the same directory; they part
-    company only when an operator sets ``KEPLER_DATA_DIR``, and that override
+    company only when an operator sets ``MARS_DATA_DIR``, and that override
     is about where downloads land and how far a recursive search may walk --
     not about relocating the bundled frame library. Relocating the library is
-    what ``KEPLER_OPTICAL_DATA_DIR`` is for.
+    what ``MARS_OPTICAL_DATA_DIR`` is for.
 
     An installed wheel ships no frames: there the default is the fetched
     optical bundle (``mars-mcp fetch-data optical``) once it has verified,
@@ -80,7 +80,7 @@ def primary_optical_data_dir() -> Path:
 def optical_bundle_warning() -> ToolWarning | None:
     """Say so when the frame library is an optional bundle that is not here.
 
-    Only for the default location: with ``KEPLER_OPTICAL_DATA_DIR`` set, a
+    Only for the default location: with ``MARS_OPTICAL_DATA_DIR`` set, a
     missing directory is that setting's problem and ``directory_not_found``
     already names it. An installed wheel ships no frames, so without this an
     empty listing would read like a real answer (C7, §3.5).
@@ -106,7 +106,7 @@ def bundled_frame_paths() -> list[Path]:
     For callers that want the *inventory* of the bundled library and nothing
     from the headers -- ``list_bundled_targets`` groups stems by the category
     token in the filename. Going through :func:`list_optical_frames` for that
-    would read every header and, past ``KEPLER_MAX_FRAMES``, silently truncate
+    would read every header and, past ``MARS_MAX_FRAMES``, silently truncate
     an index that advertises itself as the complete fixed set.
     """
     root = primary_optical_data_dir()
@@ -128,11 +128,11 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     It is recursive because astroquery does not write products flat: MAST
     products land under ``mastDownload/<mission>/<obs_id>/``. The primary root
     stays non-recursive -- ``data/optical`` is flat, and so is the
-    caller-supplied archive ``KEPLER_OPTICAL_DATA_DIR`` names.
+    caller-supplied archive ``MARS_OPTICAL_DATA_DIR`` names.
 
     **Recursion is bounded by the data directory.** A recursive walk is only
     safe while it is confined to a tree that holds astronomy data and nothing
-    else, and ``KEPLER_FITS_DOWNLOAD_DIR`` can name anywhere -- a home
+    else, and ``MARS_FITS_DOWNLOAD_DIR`` can name anywhere -- a home
     directory, a mount point, ``/``. So the download root is walked only when
     it resolves inside ``config.DATA_DIR``; outside it, the directory is still
     searched, but flat, and the listing says so. Downgrading rather than
@@ -141,10 +141,10 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
 
     Re-anchored in C7 for an installed wheel, not relaxed. There the data
     directory is the shipped core inside ``site-packages`` and the download
-    root defaults to ``<kepler home>/fits_downloads``, outside it -- so under
+    root defaults to ``<mars home>/fits_downloads``, outside it -- so under
     the old rule every installed Kepler searched its own downloads flat and
     never saw a MAST product. The one directory added is that Kepler-owned
-    download tree, ``config.KEPLER_HOME / "fits_downloads"``: a download root
+    download tree, ``config.MARS_HOME / "fits_downloads"``: a download root
     pointed anywhere else outside the data directory is still searched flat.
 
     ``tools.config`` values are read through the module rather than bound at
@@ -168,7 +168,7 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
         # resolve to itself and earn a walk of whatever it points at. Not the
         # whole home either: that admitted a download root of the home itself,
         # whose walk reads the artifacts and every fetched bundle.
-        home_downloads = config.KEPLER_HOME / "fits_downloads"
+        home_downloads = config.MARS_HOME / "fits_downloads"
         recursive = config.within(download_root, data_dir) or config.safe_resolve(
             download_root
         ).is_relative_to(home_downloads)
@@ -192,8 +192,8 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
                             # Installed: the data directory is the package, which
                             # the next upgrade replaces. Point at the Kepler home.
                             else f"point {config.FITS_DOWNLOAD_DIR_ENV} inside "
-                            f"{config.KEPLER_HOME}, or unset it to use "
-                            f"{config.KEPLER_HOME / 'fits_downloads'}."
+                            f"{config.MARS_HOME}, or unset it to use "
+                            f"{config.MARS_HOME / 'fits_downloads'}."
                         )
                     ),
                 )
@@ -270,8 +270,8 @@ def _iter_fits(
     cap would otherwise fill it entirely, and no archive download could ever
     be listed or resolved by name -- BL-11 again, quietly.
 
-    Nothing stops a caller pointing ``KEPLER_OPTICAL_DATA_DIR`` and
-    ``KEPLER_FITS_DOWNLOAD_DIR`` at the same directory, or nesting one inside
+    Nothing stops a caller pointing ``MARS_OPTICAL_DATA_DIR`` and
+    ``MARS_FITS_DOWNLOAD_DIR`` at the same directory, or nesting one inside
     the other, so identity is the file's ``(st_dev, st_ino)`` rather than the
     root it came from -- one ``stat`` per file, which also answers "is it a
     regular file". Resolving every path instead was a multi-syscall chain per

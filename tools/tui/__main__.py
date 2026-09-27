@@ -34,7 +34,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--backend",
         help=(
             "Backend to start on: a name (" + ", ".join(names()) + ") or a "
-            "provider/model spec. Defaults to KEPLER_MODEL_BACKEND, then to "
+            "provider/model spec. Defaults to MARS_MODEL_BACKEND, then to "
             f"{CHOICES[0].provider}. Switch at any time with /backend."
         ),
     )
@@ -56,7 +56,7 @@ def launch_spec(requested: str | None = None) -> str:
     """The ``provider/model`` spec the console starts on.
 
     Resolution order, and no other: the ``--backend`` flag, then
-    ``KEPLER_MODEL_BACKEND``, then the first offered choice. The flag accepts a
+    ``MARS_MODEL_BACKEND``, then the first offered choice. The flag accepts a
     bare name so ``kepler --backend ollama`` works; the environment variable
     does not, because it is the model port's own contract and is read
     identically by the model port's own factory and the benchmark harness.
@@ -69,7 +69,7 @@ def launch_spec(requested: str | None = None) -> str:
 
     if requested:
         return resolve_spec(requested)
-    configured = os.environ.get("KEPLER_MODEL_BACKEND")
+    configured = os.environ.get("MARS_MODEL_BACKEND")
     if configured:
         return configured
     first = CHOICES[0]

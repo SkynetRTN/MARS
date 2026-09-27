@@ -14,7 +14,7 @@ from tools import hr_diagram
 
 
 def test_operator_grid_setting_has_no_bundled_default():
-    assert config.ISOCHRONE_DIR_ENV == "KEPLER_ISOCHRONE_DIR"
+    assert config.ISOCHRONE_DIR_ENV == "MARS_ISOCHRONE_DIR"
     assert config.ISOCHRONE_DIR is None
 
 

@@ -54,7 +54,7 @@ async def _run(env: dict[str, str]) -> None:
         command=sys.executable,
         args=_server_arguments(),
         env=env,
-        cwd=env["KEPLER_ARTIFACT_DIR"],
+        cwd=env["MARS_ARTIFACT_DIR"],
     )
     # The transport is built here rather than by `Client(params)`, which uses
     # stdio_client's default `errlog` -- `sys.stderr` as it was when the SDK was
@@ -104,7 +104,7 @@ async def _run(env: dict[str, str]) -> None:
 #: So each is also *pinned* -- the group filter by ``--tools`` naming every
 #: group (a flag beats both the variable and the file), the scan directory by
 #: setting it to the bundled scans (the real environment beats the file).
-_NOT_INHERITED = ("KEPLER_MCP_TOOLS", "KEPLER_PULSAR_DATA_DIR")
+_NOT_INHERITED = ("MARS_MCP_TOOLS", "MARS_PULSAR_DATA_DIR")
 
 
 def _server_arguments() -> list[str]:
@@ -124,15 +124,22 @@ def _server_environment(artifacts: str) -> dict[str, str]:
     """
 
     import tools
+    from tools.compat import LEGACY_PREFIX
     from tools.paths import bundled_data_dir
 
-    env = {k: v for k, v in os.environ.items() if k not in _NOT_INHERITED}
+    # KEPLER_* too: this process already adopted them (tools.compat), and a
+    # child re-adopting one would print its deprecation line a second time.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _NOT_INHERITED and not k.startswith(LEGACY_PREFIX)
+    }
     package_root = str(Path(tools.__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(
         [package_root, *filter(None, [env.get("PYTHONPATH")])]
     )
-    env["KEPLER_ARTIFACT_DIR"] = artifacts
-    env["KEPLER_PULSAR_DATA_DIR"] = str(bundled_data_dir() / "pulsar")
+    env["MARS_ARTIFACT_DIR"] = artifacts
+    env["MARS_PULSAR_DATA_DIR"] = str(bundled_data_dir() / "pulsar")
     return env
 
 

@@ -10,7 +10,7 @@ Using the tools, as opposed to working on this repository, is taught by the agen
 
 - `uv sync`: create/update the Python environment (3.13 in CI, the newest Python every dependency ships wheels for; 3.12 is the floor in `pyproject.toml`) from `pyproject.toml` and `uv.lock`.
 - `uv run pytest`: the test suite (see Testing Guidelines below) — no network access by default.
-- `uv run kepler`: open the console, the optional agentic loop over the `tools` schemas. It needs a model backend — a key for the provider it opens on, or a local Ollama daemon, which needs none. `KEPLER_MODEL_BACKEND=provider/model` picks which one it starts on; `/backend` changes it inside the session.
+- `uv run kepler`: open the console, the optional agentic loop over the `tools` schemas. It needs a model backend — a key for the provider it opens on, or a local Ollama daemon, which needs none. `MARS_MODEL_BACKEND=provider/model` picks which one it starts on; `/backend` changes it inside the session.
 - `python3 -m compileall tools algorithms`: syntax smoke test.
 - `git diff --check`: catch trailing whitespace and patch formatting issues before review.
 
@@ -28,7 +28,7 @@ Use 4-space indentation for Python and keep public interfaces typed where practi
 gaps). It is algorithm-preservation testing, not general correctness
 testing: it pins bit-exact parity against recorded upstream output and pins
 known bugs rather than fixing them. Markers: `network` (needs
-`KEPLER_TEST_NETWORK=1`, never runs by default), `slow` (real-frame source
+`MARS_TEST_NETWORK=1`, never runs by default), `slow` (real-frame source
 extraction/photometry, included by default), `solver_data` (needs
 astrometry.net indexes or a local UCAC tree, self-skips when absent). Add the
 smallest relevant test when touching an executable path. Keep live remote

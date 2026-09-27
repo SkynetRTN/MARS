@@ -243,7 +243,7 @@ class RunRecord:
 
 @contextmanager
 def _task_env(env: Mapping[str, str]) -> Iterator[None]:
-    """Apply a task's ``KEPLER_*`` overrides for the duration of one run.
+    """Apply a task's ``MARS_*`` overrides for the duration of one run.
 
     ``tools.config`` resolves most settings at import, so the modules that
     read them are reloaded rather than trusted to re-read the environment.
@@ -336,7 +336,7 @@ def run_suite(
         env_overrides={
             key: value
             for key, value in sorted(os.environ.items())
-            if key.startswith("KEPLER_")
+            if key.startswith("MARS_")
         },
         # A factory is asked for one representative instance so the run
         # record can state the backend's identity and capabilities. The first

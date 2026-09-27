@@ -191,7 +191,7 @@ def test_the_optical_suite_runs_its_real_tools_and_its_real_warning_fires(
     artifact_root,
 ):
     """The strongest end-to-end evidence in this file: the task's env override
-    shrinks KEPLER_MAX_FRAMES, list_optical_frames really reads the bundled
+    shrinks MARS_MAX_FRAMES, list_optical_frames really reads the bundled
     library, and the listing_truncated warning the key names is the one the
     tool itself raised."""
 

@@ -30,7 +30,7 @@ EOF
   uncap value is `None` — the Python object, which is what JSON's `null`
   arrives as. The string `"None"` is still wrong, and omitting the argument
   still takes the capped default.
-- Artifacts are written under `KEPLER_ARTIFACT_DIR`, or `artifacts/` relative
+- Artifacts are written under `MARS_ARTIFACT_DIR`, or `artifacts/` relative
   to the directory Python was started in. Starting from the checkout root keeps
   them in one place.
 - Remote tools open real connections to the real services. `ADS_DEV_KEY` must

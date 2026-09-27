@@ -13,7 +13,7 @@ different time.
 Never runs by default -- live queries are inherently non-deterministic (catalog
 snapshots and cross-match results can drift between runs) -- see CLAUDE.md: "Keep
 live remote astronomy service calls out of default checks." Requires
-``KEPLER_TEST_NETWORK=1`` (and, to select only these, ``-m network``).
+``MARS_TEST_NETWORK=1`` (and, to select only these, ``-m network``).
 
 Only frames the tool can actually resolve are covered here --
 ``data/optical/``, not ``test_subjects/``, which nothing in ``tools/`` reads

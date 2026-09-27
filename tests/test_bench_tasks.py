@@ -124,8 +124,8 @@ def test_an_unknown_expect_section_is_an_error(tmp_path):
 
 
 def test_a_task_may_shape_keplers_own_configuration(tmp_path):
-    task = load_task(write(tmp_path, MINIMAL + "env:\n  KEPLER_MAX_FRAMES: '5'\n"))
-    assert task.env == {"KEPLER_MAX_FRAMES": "5"}
+    task = load_task(write(tmp_path, MINIMAL + "env:\n  MARS_MAX_FRAMES: '5'\n"))
+    assert task.env == {"MARS_MAX_FRAMES": "5"}
 
 
 @pytest.mark.parametrize(

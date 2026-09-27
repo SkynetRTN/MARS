@@ -38,11 +38,11 @@ against, 12 rows) -- so :func:`replay_field_calibration` can re-run the
 whole selection offline and :func:`replay_catalog_sources` can hand either
 the selected rows or the full response to a from-pixels solve.
 
-Only ``KEPLER_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
+Only ``MARS_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
 the bundled-frame and Afterglow web-table lookups always read the bundled data
 (``config.BUNDLED_DATA_DIR``: the repository's ``data/``, or in an installed
 wheel the checksum-verified optical bundle), because they only make sense
-against the shipped fixtures. ``KEPLER_OPTICAL_DATA_DIR`` does not move them.
+against the shipped fixtures. ``MARS_OPTICAL_DATA_DIR`` does not move them.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ __all__ = [
 
 #: Where the recorded solves are looked for. Overridable so a caller with
 #: their own set of recorded solves does not have to move files into the repo.
-FIELDCAL_DATA_DIR_ENV = "KEPLER_FIELDCAL_DATA_DIR"
+FIELDCAL_DATA_DIR_ENV = "MARS_FIELDCAL_DATA_DIR"
 
 #: The upstream diagnostic's own declared agreement threshold, in magnitudes.
 #: Used when a recorded solve does not carry its own ``parity_zp_tolerance``.
@@ -265,7 +265,7 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
 
     # Pinned to the frames the references were recorded against: the bundled
     # library in a checkout, or -- in an installed wheel, which ships none --
-    # the checksum-verified optical bundle. Never KEPLER_OPTICAL_DATA_DIR: that
+    # the checksum-verified optical bundle. Never MARS_OPTICAL_DATA_DIR: that
     # override names an operator's own archive, and a same-named file there is
     # not the frame this ground truth describes.
     from tools.config import BUNDLED_DATA_DIR, fetched_bundle
@@ -287,7 +287,7 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
         return str(candidate), []
     if not library.is_dir():
         # Its own advice, not the frame listing's: these frames come only from
-        # the bundled library, so KEPLER_OPTICAL_DATA_DIR -- which the listing
+        # the bundled library, so MARS_OPTICAL_DATA_DIR -- which the listing
         # offers as an alternative, and which silences its warning when set --
         # is no remedy here.
         return None, [
@@ -296,7 +296,7 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
                 message=f"The frame {field!r} was recorded against ({bundled}) is "
                 "in the optional optical data bundle, which is not installed, so "
                 "the solve is checked at the calc_solution level only. Fetch it "
-                "with `mars-mcp fetch-data optical`; KEPLER_OPTICAL_DATA_DIR "
+                "with `mars-mcp fetch-data optical`; MARS_OPTICAL_DATA_DIR "
                 "does not supply these frames.",
             )
         ]
@@ -357,7 +357,7 @@ def list_zeropoint_references(
 ) -> list[ZeropointReference]:
     """Every recorded zero-point solve on local disk.
 
-    Reads ``<KEPLER_FIELDCAL_DATA_DIR>/zp_solutions/*/`` (default
+    Reads ``<MARS_FIELDCAL_DATA_DIR>/zp_solutions/*/`` (default
     ``data/fieldcal/zp_solutions/``). Returns an empty list -- not an
     error -- when the directory is absent.
     """
@@ -376,7 +376,7 @@ def load_zeropoint_reference(
     A missing data directory or an unknown field is returned as an
     ``errors``-populated :class:`~tools.models.ZeropointReference`, never
     raised; the error message names the candidates or the
-    ``KEPLER_FIELDCAL_DATA_DIR`` override.
+    ``MARS_FIELDCAL_DATA_DIR`` override.
     """
     solutions_dir = _solutions_dir(directory)
     if not solutions_dir.is_dir():
@@ -442,7 +442,7 @@ def load_ocl_reference(frame_stem: str) -> dict:
     (only the ten M15 OCL frames were swept) comes back as a ``dict`` carrying
     a ``not_found`` entry under ``errors``, never raised.
 
-    Reads the bundled fixtures directly; ``KEPLER_FIELDCAL_DATA_DIR`` does not
+    Reads the bundled fixtures directly; ``MARS_FIELDCAL_DATA_DIR`` does not
     relocate them.
     """
     from tools.config import BUNDLED_DATA_DIR

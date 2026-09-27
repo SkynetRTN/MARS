@@ -23,7 +23,7 @@ So a value check names its source instead, and the loader resolves it:
     recorded zero-point solve. Independent ground truth that predates the
     benchmark and is not written by it. Resolved at load time, and confined to
     the **repository's own** ``data/`` tree: pinned like ``tools.wcs``'s
-    fixture guard rather than following ``KEPLER_DATA_DIR``, because an answer
+    fixture guard rather than following ``MARS_DATA_DIR``, because an answer
     key that moved with an operator's environment variable would not be a
     fixed reference at all.
 ``tool_result``

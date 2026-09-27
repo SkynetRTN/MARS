@@ -247,16 +247,16 @@ def test_the_fixture_guard_covers_fetched_bundles():
 
     assert _under_fixture_root(config.BUNDLES_DIR / "optical" / "m15.fits")
     assert _under_fixture_root(config.BUNDLED_DATA_DIR / "optical" / "m15.fits")
-    assert not _under_fixture_root(config.KEPLER_HOME / "fits_downloads" / "hst.fits")
+    assert not _under_fixture_root(config.MARS_HOME / "fits_downloads" / "hst.fits")
 
 
 def test_the_kepler_owned_download_root_is_walked(tmp_path, monkeypatch):
     from tools.optical import _optical_data_roots
 
-    home = tmp_path / "kepler"
+    home = tmp_path / "mars"
     download = home / "fits_downloads"
     download.mkdir(parents=True)
-    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "MARS_HOME", home)
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", download)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
 
@@ -271,7 +271,7 @@ def test_any_other_download_root_outside_the_data_dir_is_still_searched_flat(tmp
 
     elsewhere = tmp_path / "mnt" / "archive"
     elsewhere.mkdir(parents=True)
-    monkeypatch.setattr(config, "KEPLER_HOME", tmp_path / "kepler")
+    monkeypatch.setattr(config, "MARS_HOME", tmp_path / "mars")
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", elsewhere)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
 
@@ -285,7 +285,7 @@ def test_a_missing_frame_library_says_so(tmp_path, monkeypatch):
     from tools.optical import list_optical_frames
     from tools.photometry import list_photometry_targets
 
-    monkeypatch.delenv("KEPLER_OPTICAL_DATA_DIR", raising=False)
+    monkeypatch.delenv("MARS_OPTICAL_DATA_DIR", raising=False)
     monkeypatch.setattr(config, "BUNDLED_DATA_DIR", tmp_path / "core")
     monkeypatch.setattr(config, "BUNDLES_DIR", tmp_path / "bundles")
 
@@ -376,13 +376,13 @@ def test_a_symlinked_kepler_download_root_is_not_walked(tmp_path, monkeypatch):
     """Finding 7: fits_downloads -> / resolved to itself and was walked recursively."""
     from tools.optical import _optical_data_roots
 
-    home = tmp_path / "kepler"
+    home = tmp_path / "mars"
     home.mkdir()
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     download = home / "fits_downloads"
     download.symlink_to(outside)
-    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "MARS_HOME", home)
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", download)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
 
@@ -393,11 +393,11 @@ def test_a_symlinked_kepler_download_root_is_not_walked(tmp_path, monkeypatch):
 
 
 def test_a_checkout_never_defaults_to_a_fetched_isochrone_grid(tmp_path):
-    """Finding 10: a fetched grid in ~/.local/share/kepler leaked into checkouts."""
+    """Finding 10: a fetched grid in the per-user home leaked into checkouts."""
     home = tmp_path / "home"
     code = (
         "import json, os, pathlib\n"
-        "home = pathlib.Path(os.environ['KEPLER_HOME'])\n"
+        "home = pathlib.Path(os.environ['MARS_HOME'])\n"
         "from tools import config\n"
         "print(config.ISOCHRONE_DIR)\n"
     )
@@ -405,8 +405,8 @@ def test_a_checkout_never_defaults_to_a_fetched_isochrone_grid(tmp_path):
     bundle.mkdir(parents=True)
     sha = json.loads(config.BUNDLE_MANIFEST.read_text())["bundles"]["isochrones"]["sha256"]
     (bundle / config.BUNDLE_MARKER).write_text(json.dumps({"sha256": sha}))
-    env = {k: v for k, v in __import__("os").environ.items() if k != "KEPLER_ISOCHRONE_DIR"}
-    env["KEPLER_HOME"] = str(home)
+    env = {k: v for k, v in __import__("os").environ.items() if k != "MARS_ISOCHRONE_DIR"}
+    env["MARS_HOME"] = str(home)
     result = __import__("subprocess").run(
         [__import__("sys").executable, "-c", code], cwd=_REPO_ROOT, env=env,
         capture_output=True, text=True, check=True,
@@ -430,7 +430,7 @@ print(json.dumps({
     "downloads": str(config.FITS_DOWNLOAD_DIR),
     "artifacts": str(config.ARTIFACT_DIR),
     "data": str(config.DATA_DIR),
-    "home": str(config.KEPLER_HOME),
+    "home": str(config.MARS_HOME),
 }))
 """
 
@@ -444,8 +444,8 @@ def _installed(tmp_path, mode, **environ):
 
     core = tmp_path / "site-packages" / "tools" / "_data"
     core.mkdir(parents=True, exist_ok=True)
-    env = {k: v for k, v in os.environ.items() if not k.startswith("KEPLER_")}
-    env.update(KEPLER_HOME=str(tmp_path / "home"), **environ)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MARS_")}
+    env.update(MARS_HOME=str(tmp_path / "home"), **environ)
     result = subprocess.run(
         [sys.executable, "-c", _INSTALLED_PROBE, str(core), mode],
         cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
@@ -453,8 +453,8 @@ def _installed(tmp_path, mode, **environ):
     return json.loads(result.stdout), core.resolve()
 
 
-def test_an_installed_server_downloads_into_the_kepler_home(tmp_path):
-    """Finding 1: pin_roots exports KEPLER_DATA_DIR, and config took any value
+def test_an_installed_server_downloads_into_the_mars_home(tmp_path):
+    """Finding 1: pin_roots exports MARS_DATA_DIR, and config took any value
     of it as the user's choice -- so every installed mars-mcp downloaded into
     site-packages."""
     paths, core = _installed(tmp_path, "pin")
@@ -467,11 +467,11 @@ def test_an_installed_server_downloads_into_the_kepler_home(tmp_path):
 
 def test_an_installed_data_dir_the_user_chose_still_moves_downloads(tmp_path):
     chosen = tmp_path / "survey"
-    paths, _ = _installed(tmp_path, "pin", KEPLER_DATA_DIR=str(chosen))
+    paths, _ = _installed(tmp_path, "pin", MARS_DATA_DIR=str(chosen))
     assert paths["downloads"] == str(chosen.resolve() / "fits_downloads")
 
 
-def test_an_installed_console_writes_artifacts_into_the_kepler_home(tmp_path):
+def test_an_installed_console_writes_artifacts_into_the_mars_home(tmp_path):
     """Without pin_roots, as the console runs: not ./artifacts."""
     paths, _ = _installed(tmp_path, "console")
     assert paths["artifacts"] == str((tmp_path / "home").resolve() / "artifacts")
@@ -503,13 +503,13 @@ def test_is_checkout_by_what_a_checkout_has(tmp_path):
     assert is_checkout(repo / "tools" / "_data")  # link lost, repository kept
 
 
-def test_the_kepler_home_itself_is_not_walked(tmp_path, monkeypatch):
+def test_the_mars_home_itself_is_not_walked(tmp_path, monkeypatch):
     """Finding 14: bounding by the whole home walked artifacts/ and bundles/."""
     from tools.optical import _optical_data_roots
 
-    home = tmp_path / "kepler"
+    home = tmp_path / "mars"
     (home / "bundles").mkdir(parents=True)
-    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "MARS_HOME", home)
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", home)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
 
@@ -524,12 +524,12 @@ def test_a_symlinked_home_download_root_is_not_walked(tmp_path, monkeypatch):
 
     from tools.optical import _optical_data_roots
 
-    home = tmp_path / "kepler"
+    home = tmp_path / "mars"
     home.mkdir()
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     os.symlink(elsewhere, home / "fits_downloads")
-    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "MARS_HOME", home)
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", home / "fits_downloads")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
 
@@ -559,20 +559,20 @@ def test_a_checkout_is_told_a_fetched_grid_needs_its_setting(tmp_path, monkeypat
     monkeypatch.setattr(bundles, "fetch_bundle", lambda name, **kwargs: (tmp_path / name, True))
 
     assert bundles.fetch_main(["isochrones"]) == 0
-    assert f"KEPLER_ISOCHRONE_DIR={tmp_path / 'isochrones'}" in capsys.readouterr().out
+    assert f"MARS_ISOCHRONE_DIR={tmp_path / 'isochrones'}" in capsys.readouterr().out
 
 
-def test_numba_caches_into_the_kepler_home_only_on_an_install(tmp_path, monkeypatch):
+def test_numba_caches_into_the_mars_home_only_on_an_install(tmp_path, monkeypatch):
     from tools import paths
 
-    environ = {"KEPLER_HOME": str(tmp_path)}
+    environ = {"MARS_HOME": str(tmp_path)}
     paths.pin_numba_cache(environ)
     assert "NUMBA_CACHE_DIR" not in environ  # a checkout: numba's own default
 
     monkeypatch.setattr(paths, "is_checkout", lambda link=paths.BUNDLED_DATA_LINK: False)
     paths.pin_numba_cache(environ)
     assert environ["NUMBA_CACHE_DIR"] == str(tmp_path / "numba-cache")
-    mine = {"KEPLER_HOME": str(tmp_path), "NUMBA_CACHE_DIR": "/cache"}
+    mine = {"MARS_HOME": str(tmp_path), "NUMBA_CACHE_DIR": "/cache"}
     paths.pin_numba_cache(mine)
     assert mine["NUMBA_CACHE_DIR"] == "/cache"
 
@@ -580,7 +580,7 @@ def test_numba_caches_into_the_kepler_home_only_on_an_install(tmp_path, monkeypa
 # --- the third review -----------------------------------------------------------------
 
 
-def test_fetch_data_reads_dotenv_before_it_reads_the_kepler_home(tmp_path):
+def test_fetch_data_reads_dotenv_before_it_reads_the_mars_home(tmp_path):
     """A checkout's .env could move the home for the server but not for
     fetch-data, which dispatched before .env was loaded."""
     import os
@@ -588,7 +588,7 @@ def test_fetch_data_reads_dotenv_before_it_reads_the_kepler_home(tmp_path):
     import sys
 
     env_file = tmp_path / ".env"
-    env_file.write_text(f"KEPLER_HOME={tmp_path / 'from-dotenv'}\n")
+    env_file.write_text(f"MARS_HOME={tmp_path / 'from-dotenv'}\n")
     probe = (
         "import sys, pathlib\n"
         "import tools.dotenv as d\n"
@@ -596,9 +596,9 @@ def test_fetch_data_reads_dotenv_before_it_reads_the_kepler_home(tmp_path):
         "from tools.mcp.__main__ import main\n"
         "assert main(['fetch-data', '--list']) == 0\n"
         "from tools import config\n"
-        "print('HOME', config.KEPLER_HOME)\n"
+        "print('HOME', config.MARS_HOME)\n"
     )
-    env = {k: v for k, v in os.environ.items() if not k.startswith("KEPLER_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MARS_")}
     result = subprocess.run(
         [sys.executable, "-c", probe, str(env_file)], cwd=_REPO_ROOT, env=env,
         capture_output=True, text=True, check=True,

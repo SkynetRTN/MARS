@@ -192,8 +192,8 @@ about the whole set, read the file.
 
 - **Where they are.** Served by `mars-mcp`, every artifact is under the
   artifact directory the server pinned at startup — a per-user directory
-  unless `KEPLER_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
-  description names it. From a checkout it is `KEPLER_ARTIFACT_DIR`, or
+  unless `MARS_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
+  description names it. From a checkout it is `MARS_ARTIFACT_DIR`, or
   `artifacts/` in the directory Python started in. Either way the paths are
   local files you can read directly.
 - **How they are laid out.** Each tool writes into its own subdirectory

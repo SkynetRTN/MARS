@@ -103,8 +103,8 @@ The first local, no-network tools are:
   through the same registry every image tool already takes a path from.
   Both bounds on that search are operator settings rather than tool
   parameters: the download root is walked recursively only while it resolves
-  inside `KEPLER_DATA_DIR` (outside it, searched flat with a
-  `download_root_outside_data_dir` warning), and `KEPLER_MAX_FRAMES`
+  inside `MARS_DATA_DIR` (outside it, searched flat with a
+  `download_root_outside_data_dir` warning), and `MARS_MAX_FRAMES`
   (default 200) caps how many frames one listing reads headers for from each
   root, with a `listing_truncated` warning naming the total when it bites.
   `search_mast(download=true)` reports the directories products landed in, so
@@ -463,8 +463,8 @@ is unchanged without them:
 - A backend is named by a `provider/model` spec, split on the **first slash
   only** (`ollama/llama3.1:8b`, `openai/meta-llama/Llama-3-8b`). Recognized
   providers: `anthropic`, `openai`, `ollama`, `gemini`. `build_backend(spec)`
-  constructs one; `spec` defaults to `KEPLER_MODEL_BACKEND`.
-- Environment: `KEPLER_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
+  constructs one; `spec` defaults to `MARS_MODEL_BACKEND`.
+- Environment: `MARS_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY` / `OPENAI_BASE_URL`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`. A
   provider key from the environment reaches only that provider's default host;
   a non-default base URL needs a key passed explicitly with it.
@@ -674,7 +674,7 @@ measure and drive models through Kepler's own loop. A third-party host's
 session is not graded by anything, because MCP gives the loop to the host.
 
 **Shape.** One entry point, `kepler-mcp`. A launch-time filter,
-`--tools databases,optical,timeseries,hr,radio` (or `KEPLER_MCP_TOOLS`),
+`--tools databases,optical,timeseries,hr,radio` (or `MARS_MCP_TOOLS`),
 serves a subset. The groups are declared by tool module in
 `tools/mcp/groups.py`, a test asserts they partition the registry, and the
 filter narrows what is callable as well as what is listed. One server, not
@@ -683,7 +683,7 @@ argument validation that makes the schemas worth having.
 
 | Module | Owns |
 | --- | --- |
-| `roots` | Pins `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
+| `roots` | Pins `MARS_ARTIFACT_DIR` and `MARS_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
 | `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
 | `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
 | `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
@@ -713,7 +713,7 @@ host's launch directory: a host launches the server wherever it likes, and a
 launch-directory default would drop an untracked `artifacts/` into the user's
 repository. Everything Kepler writes is under the per-user **Kepler home**
 (`tools/paths.py`: `~/.local/share/kepler`, macOS Application Support,
-`%LOCALAPPDATA%`, or `KEPLER_HOME`), and the server logs every root at
+`%LOCALAPPDATA%`, or `MARS_HOME`), and the server logs every root at
 startup.
 
 **The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the

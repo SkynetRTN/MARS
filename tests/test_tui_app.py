@@ -1000,11 +1000,11 @@ def test_a_switch_is_refused_while_a_turn_is_still_running(monkeypatch):
 def test_launch_spec_prefers_the_flag_then_the_environment_then_the_default(
     monkeypatch,
 ):
-    monkeypatch.setenv("KEPLER_MODEL_BACKEND", "gemini/gemini-2.5-pro")
+    monkeypatch.setenv("MARS_MODEL_BACKEND", "gemini/gemini-2.5-pro")
     assert tui_main.launch_spec("ollama") == "ollama/qwen3.8:27b-mlx"
     assert tui_main.launch_spec(None) == "gemini/gemini-2.5-pro"
 
-    monkeypatch.delenv("KEPLER_MODEL_BACKEND")
+    monkeypatch.delenv("MARS_MODEL_BACKEND")
     assert tui_main.launch_spec(None) == "anthropic/claude-sonnet-5"
 
 
@@ -1033,7 +1033,7 @@ def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
 
     launched: dict[str, object] = {}
 
-    monkeypatch.delenv("KEPLER_MODEL_BACKEND", raising=False)
+    monkeypatch.delenv("MARS_MODEL_BACKEND", raising=False)
     monkeypatch.setattr(sys, "argv", ["mars"])
     monkeypatch.setattr(tui_main, "load_dotenv", lambda: ())
     monkeypatch.setattr(

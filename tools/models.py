@@ -584,7 +584,7 @@ class OpticalFrame(KeplerToolModel):
 class OpticalFrameList(KeplerToolModel):
     """Frames found locally, plus where they were looked for.
 
-    ``search_root`` is the primary root -- the ``KEPLER_OPTICAL_DATA_DIR``
+    ``search_root`` is the primary root -- the ``MARS_OPTICAL_DATA_DIR``
     override or the bundled optical directory -- and reports it whether or not
     that directory exists. ``search_roots`` is every root actually inspected,
     which additionally carries the archive download root once something has

@@ -132,14 +132,14 @@ addopts = "-ra --strict-markers"
 markers = [
     # Reaches a remote astronomy service. Never runs by default -- see CLAUDE.md:
     # "Keep live remote astronomy service calls out of default checks." Requires
-    # both `-m network` and KEPLER_TEST_NETWORK=1.
+    # both `-m network` and MARS_TEST_NETWORK=1.
     "network: hits a live catalog service (opt-in, non-deterministic)",
     # Needs astrometry.net index files or a local UCAC4/UCAC5 catalog that are
     # not in this repo. Skips itself when the data is absent.
     "solver_data: needs astrometry index / ATLAS catalog data not in the repo",
     "slow: runs full source extraction + photometry over a real frame",
     # Reaches a live model-provider API. Never runs by default, mirroring
-    # `network`: requires both `-m model_api` and KEPLER_TEST_MODEL_API=1.
+    # `network`: requires both `-m model_api` and MARS_TEST_MODEL_API=1.
     "model_api: hits a live model provider (opt-in, costs tokens/money)",
     # Needs a local Ollama daemon with the reference model pulled. Skips itself
     # when the daemon is unreachable.

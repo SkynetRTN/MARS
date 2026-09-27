@@ -30,8 +30,8 @@ archive download root, already matched by the depth-independent
 `data/` is also a **boundary**: `tools/optical.py` walks the download root
 recursively (astroquery nests MAST products under
 `mastDownload/<mission>/<obs_id>/`) and will only do so while that root
-resolves inside this directory. `KEPLER_DATA_DIR` moves the root and the
-boundary together; `KEPLER_OPTICAL_DATA_DIR` moves the frame library alone.
+resolves inside this directory. `MARS_DATA_DIR` moves the root and the
+boundary together; `MARS_OPTICAL_DATA_DIR` moves the frame library alone.
 
 **Total size: ~175 MB in git**, essentially all of it the 39 plain-git FITS
 frames, plus **93 MB of Git LFS objects** — the three NGC 5286 B frames. That is
@@ -373,7 +373,7 @@ scan.
 
 The file sits in this directory rather than at a path the tool hardcodes,
 because the curation belongs to the scans it describes: point
-`KEPLER_PULSAR_DATA_DIR` at another archive and that archive's own
+`MARS_PULSAR_DATA_DIR` at another archive and that archive's own
 `curated_periods.json` is the one consulted.
 
 That closes an offline gap rather than adding a convenience: a blind period

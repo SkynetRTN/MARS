@@ -144,7 +144,7 @@ Validation is designed to protect extraction fidelity and make routine checks
 safe to run locally:
 
 - The default suite is offline, deterministic, and keyless. Network tests are
-  explicitly marked and require `KEPLER_TEST_NETWORK=1`; solver-data tests
+  explicitly marked and require `MARS_TEST_NETWORK=1`; solver-data tests
   self-skip when their local catalogs are unavailable.
 - Tests use 42 real PROMPT/Skynet optical frames and four recorded Skynet
   zero-point solves. Preservation tests compare selected behavior bit-for-bit,

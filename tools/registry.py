@@ -537,7 +537,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "fit_and_compare_hr_diagram",
         "description": (
             "Load a local Girardi isochrone near the cluster's published age (requires "
-            "KEPLER_ISOCHRONE_DIR), fit distance and "
+            "MARS_ISOCHRONE_DIR), fit distance and "
             "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
             "the fitted isochrone overlaid. Returns the fitted values, the literature "
             "values, and their percent/absolute differences, plus the saved PNG artifact."
@@ -1174,7 +1174,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "directory": {
                     "type": "string",
                     "description": "Directory to search. Defaults to "
-                    "KEPLER_OPTICAL_DATA_DIR (or the bundled data/optical) "
+                    "MARS_OPTICAL_DATA_DIR (or the bundled data/optical) "
                     "plus the archive download directory, so anything fetched by "
                     "search_mast/search_casda is listed too. Passing a directory "
                     "searches only that one, flat -- so to reach a product past "
@@ -1362,7 +1362,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "properties": {
                 "directory": {
                     "type": "string",
-                    "description": "Directory to list. Defaults to KEPLER_ARTIFACT_DIR.",
+                    "description": "Directory to list. Defaults to MARS_ARTIFACT_DIR.",
                 }
             },
         },

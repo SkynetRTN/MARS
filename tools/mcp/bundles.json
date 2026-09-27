@@ -23,7 +23,7 @@
       "sha256": "12f8359efc78669abbb5006cb25a98ede05115699312fbc7922c90240cec3ec3",
       "files": 4307,
       "url": "https://github.com/archon774/skynet-mars/releases/download/data/kepler-isochrones-12f8359efc78.tar",
-      "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (KEPLER_ISOCHRONE_DIR)."
+      "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (MARS_ISOCHRONE_DIR)."
     }
   }
 }

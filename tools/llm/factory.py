@@ -48,7 +48,7 @@ def build_backend(
     transport: Any = None,
     thinking_budget: int | None = None,
 ) -> ModelBackend:
-    """Construct the backend named by ``spec`` (or ``KEPLER_MODEL_BACKEND``).
+    """Construct the backend named by ``spec`` (or ``MARS_MODEL_BACKEND``).
 
     ``thinking_budget`` asks the provider to reveal its reasoning and bounds
     what it may spend on it. Only Anthropic takes a budget: the others either
@@ -57,10 +57,10 @@ def build_backend(
     to know which provider it landed on to ask for the same thing.
     """
 
-    spec = spec or os.environ.get("KEPLER_MODEL_BACKEND")
+    spec = spec or os.environ.get("MARS_MODEL_BACKEND")
     if not spec:
         raise ValueError(
-            "no backend spec given and KEPLER_MODEL_BACKEND is not set"
+            "no backend spec given and MARS_MODEL_BACKEND is not set"
         )
     provider, model = parse_spec(spec)
 

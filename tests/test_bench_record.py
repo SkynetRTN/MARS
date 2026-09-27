@@ -80,7 +80,7 @@ def test_the_scan_covers_operator_added_variables_by_suffix():
         {
             "OBSERVATORY_ARCHIVE_TOKEN": "t" * 40,
             "MY_SERVICE_PASSWORD": "p" * 20,
-            "KEPLER_DATA_DIR": "/srv/data",
+            "MARS_DATA_DIR": "/srv/data",
         }
     )
     assert set(found) == {"OBSERVATORY_ARCHIVE_TOKEN", "MY_SERVICE_PASSWORD"}

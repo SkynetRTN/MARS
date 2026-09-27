@@ -164,7 +164,7 @@ identical function any other caller would import and run.
   `tools/agent/` loop under it, run a bounded tool-use loop over eight remote
   astronomy databases — Anthropic by default, or an OpenAI-compatible, Ollama,
   or Gemini backend, chosen with `/backend` in the session or with
-  `KEPLER_MODEL_BACKEND` before it starts.
+  `MARS_MODEL_BACKEND` before it starts.
   The registered `tools.photometry` wrapper runs the local FITS photometry
   pipeline without a separate model client. See [The Agent](#the-agent).
 - **Explicit extraction and port contracts.** Severed dependencies in the
@@ -325,7 +325,7 @@ kepler-env/bin/kepler-mcp self-test          # launches the server as a host wou
   `mars://skill/...` resources. In a checkout, the same skill is
   `skills/mars-tools/`.
 - **Where files go.** Artifacts and downloads go under a per-user Kepler home
-  (`~/.local/share/kepler`, or `KEPLER_HOME`), never into the install.
+  (`~/.local/share/kepler`, or `MARS_HOME`), never into the install.
 - **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two
   dependencies compile from source.
 
@@ -550,9 +550,9 @@ requires solver binaries and local catalog data.
 ### Model Backend Configuration
 
 The agent loop's model backend is chosen by a `provider/model` spec, split on
-the first slash only. With `KEPLER_MODEL_BACKEND` unset it uses Anthropic.
+the first slash only. With `MARS_MODEL_BACKEND` unset it uses Anthropic.
 
-- `KEPLER_MODEL_BACKEND`: e.g. `anthropic/claude-sonnet-5`, `openai/gpt-4.1`,
+- `MARS_MODEL_BACKEND`: e.g. `anthropic/claude-sonnet-5`, `openai/gpt-4.1`,
   `ollama/qwen3.8:27b-mlx`, `gemini/gemini-2.5-pro`.
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`: the provider key.
 - `OPENAI_BASE_URL`: an OpenAI-compatible endpoint. A non-default base URL
@@ -565,7 +565,7 @@ the first slash only. With `KEPLER_MODEL_BACKEND` unset it uses Anthropic.
   bounded at five seconds.
 
 ```bash
-KEPLER_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run kepler
+MARS_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run kepler
 ```
 
 `.env` at the repository root is read at launch and on every `/backend`, so a

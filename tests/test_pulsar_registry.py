@@ -265,7 +265,7 @@ def test_a_row_without_a_period_is_dropped_rather_than_carried(
 def test_the_curation_is_read_from_beside_the_scans(tmp_path: Path) -> None:
     """An operator's own archive gets their curation, not this repository's.
 
-    ``KEPLER_PULSAR_DATA_DIR`` points the tools at another archive. If the map
+    ``MARS_PULSAR_DATA_DIR`` points the tools at another archive. If the map
     were pinned to a fixed repo path, these five periods would be name-matched
     onto that archive's files and stamped with a ``period_source`` naming a
     document that describes different observations.

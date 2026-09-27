@@ -4,7 +4,7 @@ Two rules shape everything here, both from ``CLAUDE.md``:
 
 * **Default checks stay deterministic and bounded.** Nothing in this suite opens
   a socket unless it is marked ``network``, and nothing marked ``network`` runs
-  without ``KEPLER_TEST_NETWORK=1``.
+  without ``MARS_TEST_NETWORK=1``.
 * **The Python folders are byte-preserving extractions.** So the fixtures are
   real Skynet frames and real recorded Skynet solver output, not synthesised
   arrays — see ``data/README.md``.
@@ -479,14 +479,14 @@ def pytest_collection_modifyitems(config, items):
     live call by accident in CI; requiring the environment variable too makes
     the opt-in explicit, as CLAUDE.md asks for remote calls.
     """
-    net_on = os.environ.get("KEPLER_TEST_NETWORK") == "1"
-    model_on = os.environ.get("KEPLER_TEST_MODEL_API") == "1"
+    net_on = os.environ.get("MARS_TEST_NETWORK") == "1"
+    model_on = os.environ.get("MARS_TEST_MODEL_API") == "1"
 
     net_skip = pytest.mark.skip(
-        reason="live catalog query; set KEPLER_TEST_NETWORK=1 to run"
+        reason="live catalog query; set MARS_TEST_NETWORK=1 to run"
     )
     model_skip = pytest.mark.skip(
-        reason="live model provider; set KEPLER_TEST_MODEL_API=1 to run"
+        reason="live model provider; set MARS_TEST_MODEL_API=1 to run"
     )
     for item in items:
         if not net_on and "network" in item.keywords:

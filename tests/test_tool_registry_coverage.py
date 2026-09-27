@@ -48,6 +48,9 @@ NOT_TOOL_MODULES = {
     # The deprecated kepler, kepler-mcp and kepler-bench commands, each
     # forwarding to its MARS name; removed in the release after 0.1.0rc3.
     "tools.aliases",
+    # KEPLER_* variables and the kepler home, honoured for the same one
+    # pre-release; removed with tools.aliases.
+    "tools.compat",
 }
 
 

@@ -22,10 +22,10 @@ versions, which would make the checksum irreproducible, and FITS barely
 compresses.
 
 **Fetching** (``mars-mcp fetch-data``) downloads into
-``<kepler home>/bundles/.downloads/``, resuming a partial download with an HTTP
+``<mars home>/bundles/.downloads/``, resuming a partial download with an HTTP
 Range request; checks size and SHA-256; extracts through tarfile's ``data``
 filter (no absolute paths, no ``..``, no links out of the tree) into a staging
-directory; and swaps that into ``<kepler home>/bundles/<name>/``, writing the
+directory; and swaps that into ``<mars home>/bundles/<name>/``, writing the
 completion marker last. ``tools.config.fetched_bundle`` reads a bundle only
 once that marker exists. A second fetch of a verified bundle does nothing.
 Nothing is ever written into the installed package.
@@ -75,7 +75,7 @@ RELEASE_DOWNLOADS = "https://github.com/archon774/skynet-mars/releases/download"
 
 #: Overrides where bundles are fetched from: a URL prefix, or a local directory
 #: holding the archives (for testing, and for an offline mirror).
-BUNDLE_URL_ENV = "KEPLER_BUNDLE_URL"
+BUNDLE_URL_ENV = "MARS_BUNDLE_URL"
 
 MANIFEST_PATH = Path(__file__).parent / "bundles.json"
 
@@ -444,7 +444,7 @@ def _checkout_note(name: str, target: Path) -> str:
     if name == "isochrones":
         return (
             "This is a checkout, which never reads a fetched grid on its own: set "
-            f"KEPLER_ISOCHRONE_DIR={target} to fit against this one."
+            f"MARS_ISOCHRONE_DIR={target} to fit against this one."
         )
     if (config.BUNDLED_DATA_DIR / name).is_dir():
         return f"This is a checkout: it reads its own data/{name}, not this fetched copy."

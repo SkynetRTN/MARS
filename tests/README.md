@@ -63,7 +63,7 @@ Three consequences shape everything here:
 - `slow` — runs source extraction or photometry over a real frame. Included by
   default; `-m "not slow"` skips them.
 - `network` — reaches a live catalog service. **Never runs by default.** Needs
-  both `-m network` and `KEPLER_TEST_NETWORK=1`, per CLAUDE.md's rule that
+  both `-m network` and `MARS_TEST_NETWORK=1`, per CLAUDE.md's rule that
   default checks stay deterministic and bounded.
 - `solver_data` — needs astrometry.net index files covering a ~10 arcmin field,
   or a local UCAC4/UCAC5 tree, plus the corresponding environment setting.
@@ -75,7 +75,7 @@ Three consequences shape everything here:
 
 `.github/workflows/ci.yml` runs `uv run --locked pytest` as a required job.
 The default suite remains deterministic: network-marked tests are skipped unless
-`KEPLER_TEST_NETWORK=1` is set explicitly.
+`MARS_TEST_NETWORK=1` is set explicitly.
 
 ## Defects recorded here
 

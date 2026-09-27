@@ -86,7 +86,7 @@ exist.
 The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
 parity against recorded Skynet output and pins known bugs rather than fixing them. See
 `tests/README.md`. Nothing in it opens a socket unless marked `network`, which also
-requires `KEPLER_TEST_NETWORK=1`.
+requires `MARS_TEST_NETWORK=1`.
 
 There is **no linter or formatter configured**. Match the surrounding file's style.
 
@@ -319,7 +319,7 @@ the core data (`pulsar/`, `fieldcal/`, `afterglow/`, `variable_star/`) that
 package-data ships. Never add a path of the form
 `Path(__file__).parents[1] / "data"`: under a wheel it names a directory that
 does not exist. An installed Kepler writes only under the per-user Kepler
-home (`tools/paths.py`; `KEPLER_HOME`):
+home (`tools/paths.py`; `MARS_HOME`):
 
 - `artifacts/`, the default for the MCP server and an installed console;
 - `fits_downloads/`;
@@ -364,9 +364,9 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   their own configuration assign `query.config.settings`. Note that enabling the
   cache snaps query regions to a fixed grid, which is observable near a field
   edge (`docs/extraction.md`, Query §5.1).
-- `tools/config.py` — `KEPLER_DATA_DIR` (default `<repo>/data`) is the data
+- `tools/config.py` — `MARS_DATA_DIR` (default `<repo>/data`) is the data
   root: the fixture frames, the recorded reference solves, and the archive
-  download root `KEPLER_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
+  download root `MARS_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
   that `tools/mast.py` and `tools/casda.py` write into.
 
   It is also a **boundary**. `tools/optical.py` walks the download root
@@ -375,11 +375,11 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   resolves *inside* the data root; outside it the directory is searched flat
   and the listing carries a `download_root_outside_data_dir` warning.
   Containment is decided on the resolved path, so a symlink out of the tree
-  does not buy a walk of wherever it lands. Overriding `KEPLER_DATA_DIR` moves
+  does not buy a walk of wherever it lands. Overriding `MARS_DATA_DIR` moves
   the download root and the boundary, not the bundled frame library — that has
-  its own override, `KEPLER_OPTICAL_DATA_DIR`.
+  its own override, `MARS_OPTICAL_DATA_DIR`.
 
-  `KEPLER_MAX_FRAMES` (default 200, must be ≥ 1) bounds how many frames one
+  `MARS_MAX_FRAMES` (default 200, must be ≥ 1) bounds how many frames one
   `list_optical_frames` call reads headers for and returns **per root**; over
   the cap the listing carries a `listing_truncated` warning naming the total.
   Per root, not overall, because roots are ordered primary-first and an
@@ -457,7 +457,7 @@ provenance and parity details.
   matched by the depth-independent `fits_downloads/` pattern.
 - ADS-backed tools require `ADS_DEV_KEY`; the optional agent loop — the
   `kepler` console and `tools/agent/` under it — requires a model backend.
-  `ANTHROPIC_API_KEY` by default, or `KEPLER_MODEL_BACKEND=provider/model`
+  `ANTHROPIC_API_KEY` by default, or `MARS_MODEL_BACKEND=provider/model`
   plus that provider's key, or a local Ollama daemon, which needs none. The
   backend is selectable inside the session with `/backend`, so an unset
   variable is a question of which one it opens on, not whether it runs. Remote

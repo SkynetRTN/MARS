@@ -52,6 +52,14 @@ def main(argv: list[str] | None = None) -> int:
     from tools.dotenv import DOTENV_PATH, load_dotenv
 
     loaded = load_dotenv()
+    # Before anything reads a setting or writes into the home (tools.compat).
+    from tools.compat import adopt_legacy_environment, legacy_home_notice
+
+    for legacy in adopt_legacy_environment():
+        print(f"mars-mcp: {legacy.message()}", file=sys.stderr)
+    notice = legacy_home_notice()
+    if notice:
+        print(f"mars-mcp: {notice}", file=sys.stderr)
     pin_numba_cache()
 
     if argv[:1] == ["fetch-data"]:
@@ -69,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="mars-mcp",
         description=(
             "Serve Kepler's astronomy tools over MCP on stdio. A host launches "
-            "this; it is not run by hand. Artifacts go to KEPLER_ARTIFACT_DIR, "
+            "this; it is not run by hand. Artifacts go to MARS_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
             "stderr at startup. `mars-mcp fetch-data` installs the optional "
             "data bundles; `mars-mcp self-test` checks this install."
@@ -80,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="GROUPS",
         help=(
             "Serve only these comma-separated tool groups (default: all 55 tools; "
-            "also KEPLER_MCP_TOOLS). Groups: databases, optical, timeseries, hr, "
+            "also MARS_MCP_TOOLS). Groups: databases, optical, timeseries, hr, "
             "radio."
         ),
     )
@@ -132,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("download root: %s", config.FITS_DOWNLOAD_DIR)
     log.info(
         "isochrone grid: %s",
-        config.ISOCHRONE_DIR or "not set (KEPLER_ISOCHRONE_DIR); the isochrone fit is unavailable",
+        config.ISOCHRONE_DIR or "not set (MARS_ISOCHRONE_DIR); the isochrone fit is unavailable",
     )
     if loaded:
         log.info("read from %s: %s", DOTENV_PATH, ", ".join(loaded))

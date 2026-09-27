@@ -5,7 +5,7 @@ distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
 questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
-the feature branch `mars-rebrand` (§5); **R1 is done** (2026-09-27).
+the feature branch `mars-rebrand` (§5); **R1 and R2 are done** (2026-09-27).
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -177,6 +177,18 @@ deprecated command; its prose is otherwise R3's.
 
 **Gate:** an install with only `KEPLER_*` set behaves as it did (per §6.3),
 and one with `MARS_*` set ignores `KEPLER_*`.
+
+**Done 2026-09-27.** `tools/compat.py` adopts each `KEPLER_X` into an unset
+`MARS_X` right after `.env` loads in every entry point (and silently when
+`tools.config` is imported), so every reader knows only `MARS_*`. Each is
+reported on stderr, adopted or ignored. The notice about a leftover `kepler`
+home is given until a `mars` home exists, which the first `mars-mcp` start
+creates. On an installed wheel with only `KEPLER_HOME` set, `mars-mcp
+self-test` passed and used that home. Two things kept their names on purpose:
+the fetched-bundle marker `.kepler-bundle.json`, an on-disk format a moved
+Kepler home still carries, and the three `KEPLER_ISOCHRONE_DIR` messages in
+`algorithms/hrdiagram_py/`, which are R3's (the one phase that edits
+`algorithms/`).
 
 ### R3 — Code identifiers and prose
 

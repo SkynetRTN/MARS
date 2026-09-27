@@ -164,7 +164,7 @@ def search_casda(
         casda.login(username=CASDA_OPAL_USERNAME)
         url_list = casda.stage_data(table)
         # The literal "fits_downloads" this used to pass ignored
-        # KEPLER_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
+        # MARS_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
         # one directory and a frame registry searching another. Same directory
         # as tools.mast now, which is the one tools.optical searches.
         # Read through the module for the same reason tools.mast does.

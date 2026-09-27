@@ -6,13 +6,18 @@ import json
 import os
 from pathlib import Path
 
-from tools.paths import bundled_data_dir, is_checkout, kepler_home
+from tools.compat import adopt_legacy_environment
+from tools.paths import bundled_data_dir, is_checkout, mars_home
 
-ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
-DATA_DIR_ENV = "KEPLER_DATA_DIR"
-FITS_DOWNLOAD_DIR_ENV = "KEPLER_FITS_DOWNLOAD_DIR"
-ISOCHRONE_DIR_ENV = "KEPLER_ISOCHRONE_DIR"
-MAX_FRAMES_ENV = "KEPLER_MAX_FRAMES"
+# Kepler's KEPLER_* names, honoured until the release after 0.1.0rc3. The entry
+# points adopt them first and say so; this is for library use, and is silent.
+adopt_legacy_environment()
+
+ARTIFACT_DIR_ENV = "MARS_ARTIFACT_DIR"
+DATA_DIR_ENV = "MARS_DATA_DIR"
+FITS_DOWNLOAD_DIR_ENV = "MARS_FITS_DOWNLOAD_DIR"
+ISOCHRONE_DIR_ENV = "MARS_ISOCHRONE_DIR"
+MAX_FRAMES_ENV = "MARS_MAX_FRAMES"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -133,13 +138,15 @@ def is_lfs_pointer(path: Path) -> bool:
 # through a path of its own relative to the source tree.
 BUNDLED_DATA_DIR = bundled_data_dir()
 
-# The per-user directory Kepler owns (tools.paths.kepler_home). Holds the MCP
+# The per-user directory Kepler owns (tools.paths.mars_home). Holds the MCP
 # server's default artifact root, an installed Kepler's archive downloads, and
 # fetched data bundles under bundles/<name>/.
-KEPLER_HOME = kepler_home().resolve()
-BUNDLES_DIR = KEPLER_HOME / "bundles"
+MARS_HOME = mars_home().resolve()
+BUNDLES_DIR = MARS_HOME / "bundles"
 
 #: Written into a fetched bundle's directory only after its archive verified.
+#: Kept from before the MARS rename: it is an on-disk format, and a bundle
+#: fetched by Kepler and moved into the MARS home must still be recognised.
 BUNDLE_MARKER = ".kepler-bundle.json"
 
 #: The manifest this install accepts bundles from. Read as a data file, not
@@ -190,7 +197,7 @@ def fetched_bundle(
 # an untracked artifacts/ into whatever directory it was started from.
 ARTIFACT_DIR = (
     env_path(ARTIFACT_DIR_ENV)
-    or (Path("artifacts") if is_checkout() else KEPLER_HOME / "artifacts")
+    or (Path("artifacts") if is_checkout() else MARS_HOME / "artifacts")
 ).resolve()
 # The repository's data root: where general data for this repo lives -- the
 # bundled fixture frames and recorded reference solves, and now the archive
@@ -204,7 +211,7 @@ ARTIFACT_DIR = (
 #
 # Overriding this moves the download root and the recursion boundary. It does
 # *not* move the frame library, which has its own override
-# (KEPLER_OPTICAL_DATA_DIR); by default both live under this directory.
+# (MARS_OPTICAL_DATA_DIR); by default both live under this directory.
 DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 
 # Defaults inside DATA_DIR rather than beside the working directory. A bare
@@ -225,16 +232,16 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # by the next upgrade. An install downloads into the per-user Kepler home
 # instead. A checkout is unchanged.
 #
-# A KEPLER_DATA_DIR naming somewhere other than the package still moves it on
+# A MARS_DATA_DIR naming somewhere other than the package still moves it on
 # an install, as documented: that is a directory the user chose. Decided by the
-# value, not by whether the variable is set: mars-mcp pins KEPLER_DATA_DIR to
+# value, not by whether the variable is set: mars-mcp pins MARS_DATA_DIR to
 # its resolved default before this module is imported, and testing for the
 # variable made every installed server download into site-packages.
 FITS_DOWNLOAD_DIR = env_path(
     FITS_DOWNLOAD_DIR_ENV,
     DATA_DIR / "fits_downloads"
     if is_checkout() or DATA_DIR != BUNDLED_DATA_DIR
-    else KEPLER_HOME / "fits_downloads",
+    else MARS_HOME / "fits_downloads",
 ).resolve()
 # The legacy Girardi model is a substantial operator dependency, not Kepler
 # data.  Deliberately no default: silently looking in a repository-relative
@@ -243,13 +250,13 @@ FITS_DOWNLOAD_DIR = env_path(
 # The one exception is an installed wheel's fetched bundle (``mars-mcp
 # fetch-data isochrones``), used only once it verified against this install's
 # manifest. Never in a checkout: there the grid stays the operator setting it
-# always was, so a developer's own ~/.local/share/kepler cannot change what a
+# always was, so a developer's own ~/.local/share/mars cannot change what a
 # checkout's HR fit or its tests see. Fixed at import, like every setting here;
 # a server started before a fetch sees the grid after a restart.
 ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV) or (
     None if is_checkout() else fetched_bundle("isochrones")
 )
-PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
+PREVIEW_ROWS = int(env_value("MARS_PREVIEW_ROWS", "10") or "10")
 # How many frames one list_optical_frames call reads headers for and returns.
 # Not a tool parameter: the cap exists so a bulk archive download cannot make a
 # single listing read thousands of FITS headers and serialise them all into a
@@ -257,9 +264,9 @@ PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
 # Callers that genuinely want more raise it here; the listing says when it
 # truncated rather than dropping frames silently.
 DEFAULT_MAX_FRAMES = env_positive_int(MAX_FRAMES_ENV, 200)
-DEFAULT_MAX_CATALOGS = int(env_value("KEPLER_MAX_CATALOGS", "20") or "20")
+DEFAULT_MAX_CATALOGS = int(env_value("MARS_MAX_CATALOGS", "20") or "20")
 DEFAULT_MAX_OBSERVATIONS = int(
-    env_value("KEPLER_MAX_OBSERVATIONS", "25") or "25"
+    env_value("MARS_MAX_OBSERVATIONS", "25") or "25"
 )
 CASDA_OPAL_USERNAME = env_value("CASDA_OPAL_USERNAME")
 

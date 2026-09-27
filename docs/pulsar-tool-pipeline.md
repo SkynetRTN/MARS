@@ -8,14 +8,14 @@ map from each stage to the extracted Astromancer code that backs it.
 
 A discovery step sits in front of stage 1: `list_pulsar_scans` and
 `resolve_pulsar_scan` (`tools.pulsar`, both registered) turn a source name into a
-scan path under `data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` —
+scan path under `data/pulsar/` — override with `MARS_PULSAR_DATA_DIR` —
 returning `ToolError`s for misses and ambiguity rather than raising. It is
 optional; every stage below also accepts a bare file path.
 
 It also reports the **curated literature period** for a scan
 (`curated_period_s`, with `curated_difficulty` and `period_source` alongside),
 read from a `curated_periods.json` **beside the scans themselves** — so
-`KEPLER_PULSAR_DATA_DIR` points at another archive and that archive's own
+`MARS_PULSAR_DATA_DIR` points at another archive and that archive's own
 curation is what applies to it. Pinning the map to a fixed repository path
 would name-match these five periods onto someone else's files and stamp them
 with a `period_source` describing observations they are not.
@@ -261,7 +261,7 @@ Maxima with its harmonic comb at P/2, P/3, P/4… receding to the left.
 ## 5. Where the output goes
 
 Every stage writes into `<artifact dir>/pulsar/`, where the artifact directory
-is `$KEPLER_ARTIFACT_DIR` if set and `./artifacts` otherwise, **resolved to an
+is `$MARS_ARTIFACT_DIR` if set and `./artifacts` otherwise, **resolved to an
 absolute path at import**. Returned `artifact.path` values are therefore always
 absolute — a caller can change directory or hand the path to another process.
 

@@ -44,7 +44,7 @@ Important files and subfolders:
 - `config.py`: small environment-backed settings helpers for the tool layer,
   including `BUNDLED_DATA_DIR` -- the one way tools read bundled data.
 - `paths.py`: the per-user Kepler home (`~/.local/share/kepler`, or
-  `KEPLER_HOME`) and `tools/_data`. Resolves nothing at import.
+  `MARS_HOME`) and `tools/_data`. Resolves nothing at import.
 - `_data`: in a checkout, a committed symlink to `data/`; in a wheel, the
   core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
   package-data ships.

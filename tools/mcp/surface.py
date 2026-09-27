@@ -59,7 +59,7 @@ _STRINGY_NULLS = frozenset({"none", "null", "nil"})
 _ARTIFACT_NOTES = {
     "list_artifacts": (
         " Served by mars-mcp: the artifact directory is {root}, pinned when "
-        "the server started (KEPLER_ARTIFACT_DIR, or a per-user default) and "
+        "the server started (MARS_ARTIFACT_DIR, or a per-user default) and "
         "shared by every session on this machine. This lists only the files "
         "directly inside the directory given, and tools write into per-tool "
         "subdirectories of it (pulsar/, vizier/, simbad/, ...): pass one as "

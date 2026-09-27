@@ -2,7 +2,7 @@
 
 Phase 2b of docs/archive/model-backends.md. The offline tests run by default;
 the live measurement is marked ``ollama`` and is deselected unless
-KEPLER_TEST_MODEL_API=1 and the daemon is reachable.
+MARS_TEST_MODEL_API=1 and the daemon is reachable.
 """
 
 from __future__ import annotations

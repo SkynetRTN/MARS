@@ -247,7 +247,7 @@ def test_a_failing_fact_does_not_stop_the_server(tmp_path, monkeypatch):
 def test_install_facts_are_the_tools_own_answers(tmp_path, monkeypatch):
     """Finding 8: the facts looked in their own places and disagreed with the tools.
 
-    With KEPLER_DATA_DIR moved (it moves only downloads), the tools still see
+    With MARS_DATA_DIR moved (it moves only downloads), the tools still see
     the scans and references; so must the facts. An index path holding no
     index files is not "plate solving configured".
     """
@@ -314,7 +314,7 @@ def test_an_unknown_group_names_the_valid_ones():
 
 
 def test_the_environment_selects_groups():
-    assert groups.groups_from_environment({"KEPLER_MCP_TOOLS": "radio"}) == ("radio",)
+    assert groups.groups_from_environment({"MARS_MCP_TOOLS": "radio"}) == ("radio",)
     assert groups.groups_from_environment({}) is None
 
 
@@ -345,12 +345,12 @@ def test_roots_names_the_same_variables_as_tools_config():
 @pytest.mark.parametrize(
     ("platform", "environ", "expected"),
     [
-        ("linux", {}, "home/.local/share/kepler/artifacts"),
-        ("linux", {"XDG_DATA_HOME": "/xdg"}, "/xdg/kepler/artifacts"),
-        ("linux", {"XDG_DATA_HOME": "relative"}, "home/.local/share/kepler/artifacts"),
-        ("darwin", {}, "home/Library/Application Support/kepler/artifacts"),
-        ("win32", {"LOCALAPPDATA": "/local"}, "/local/kepler/artifacts"),
-        ("win32", {}, "home/AppData/Local/kepler/artifacts"),
+        ("linux", {}, "home/.local/share/mars/artifacts"),
+        ("linux", {"XDG_DATA_HOME": "/xdg"}, "/xdg/mars/artifacts"),
+        ("linux", {"XDG_DATA_HOME": "relative"}, "home/.local/share/mars/artifacts"),
+        ("darwin", {}, "home/Library/Application Support/mars/artifacts"),
+        ("win32", {"LOCALAPPDATA": "/local"}, "/local/mars/artifacts"),
+        ("win32", {}, "home/AppData/Local/mars/artifacts"),
     ],
 )
 def test_user_artifact_dir_per_platform(platform, environ, expected):
@@ -359,9 +359,9 @@ def test_user_artifact_dir_per_platform(platform, environ, expected):
 
 
 def test_pin_roots_defaults_to_the_per_user_directory(tmp_path, monkeypatch):
-    target = tmp_path / "user" / "kepler" / "artifacts"
+    target = tmp_path / "user" / "mars" / "artifacts"
     monkeypatch.setattr(roots, "user_artifact_dir", lambda environ: target)
-    environ = {"KEPLER_ARTIFACT_DIR": "  "}
+    environ = {"MARS_ARTIFACT_DIR": "  "}
 
     pinned = roots.pin_roots(environ)
 
@@ -370,21 +370,21 @@ def test_pin_roots_defaults_to_the_per_user_directory(tmp_path, monkeypatch):
     assert pinned.data_dir == roots.default_data_dir()
     assert pinned.data_source == "package default"
     assert environ == {
-        "KEPLER_ARTIFACT_DIR": str(target),
-        "KEPLER_DATA_DIR": str(roots.default_data_dir()),
+        "MARS_ARTIFACT_DIR": str(target),
+        "MARS_DATA_DIR": str(roots.default_data_dir()),
     }
 
 
 def test_pin_roots_keeps_an_explicit_value_and_makes_it_absolute(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    environ = {"KEPLER_ARTIFACT_DIR": "out", "KEPLER_DATA_DIR": "data"}
+    environ = {"MARS_ARTIFACT_DIR": "out", "MARS_DATA_DIR": "data"}
 
     pinned = roots.pin_roots(environ)
 
     assert pinned.artifact_dir == tmp_path / "out"
-    assert pinned.artifact_source == "KEPLER_ARTIFACT_DIR"
+    assert pinned.artifact_source == "MARS_ARTIFACT_DIR"
     assert pinned.data_dir == tmp_path / "data"
-    assert environ["KEPLER_ARTIFACT_DIR"] == str(tmp_path / "out")
+    assert environ["MARS_ARTIFACT_DIR"] == str(tmp_path / "out")
 
 
 def test_the_entry_point_does_not_import_tools_config_before_pinning():
@@ -709,7 +709,7 @@ def test_the_entry_point_loads_dotenv_before_anything_reads_configuration(tmp_pa
         "print('tools.config' in sys.modules)\n"
     )
     env_file = tmp_path / ".env"
-    env_file.write_text("KEPLER_MCP_TOOLS=hr\n")
+    env_file.write_text("MARS_MCP_TOOLS=hr\n")
     result = subprocess.run(
         [sys.executable, "-c", probe, str(env_file)], cwd=_REPO_ROOT,
         capture_output=True, text=True, check=True,
@@ -773,10 +773,10 @@ def test_self_test_reports_failure_rather_than_a_traceback(capfd, monkeypatch):
 def test_self_test_ignores_the_callers_tool_filter(monkeypatch):
     from tools.mcp import selftest
 
-    monkeypatch.setenv("KEPLER_MCP_TOOLS", "databases")
-    monkeypatch.setenv("KEPLER_PULSAR_DATA_DIR", "/nowhere")
+    monkeypatch.setenv("MARS_MCP_TOOLS", "databases")
+    monkeypatch.setenv("MARS_PULSAR_DATA_DIR", "/nowhere")
     env = selftest._server_environment("/tmp/artifacts")
-    assert "KEPLER_MCP_TOOLS" not in env
+    assert "MARS_MCP_TOOLS" not in env
     assert env["PYTHONPATH"].split(os.pathsep)[0] == str(_REPO_ROOT)
 
 
@@ -786,7 +786,7 @@ def test_self_test_pins_what_a_dotenv_could_set_again():
     from tools.mcp import selftest
 
     env = selftest._server_environment("/tmp/artifacts")
-    assert env["KEPLER_PULSAR_DATA_DIR"] == str(config.BUNDLED_DATA_DIR / "pulsar")
+    assert env["MARS_PULSAR_DATA_DIR"] == str(config.BUNDLED_DATA_DIR / "pulsar")
     arguments = selftest._server_arguments()
     assert arguments[:3] == ["-m", "tools.mcp", "--tools"]
     assert set(arguments[3].split(",")) == {group.name for group in groups.GROUPS}

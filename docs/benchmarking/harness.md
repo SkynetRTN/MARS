@@ -545,7 +545,7 @@ Per `(backend, task, repeat)` the harness writes:
 
 And once per run, **`run.json`**: run id, UTC start/end, backend specs with
 capabilities, suite id and the SHA-256 of every task file, fixture file
-SHA-256s, `KEPLER_*` environment overrides in force, temperature, seed,
+SHA-256s, `MARS_*` environment overrides in force, temperature, seed,
 repeats, `max_turns`, the token budget, the host, the `git rev-parse HEAD` of
 the repository and whether `benchmarks/` was dirty at launch. **A run that cannot state its inputs is not a benchmark** — the
 harness refuses to start if it cannot read the corpus hashes, and stamps
@@ -603,8 +603,8 @@ prompt: >
 # parameter -- a run that reaches it is incomplete, not failed.
 fixtures: [search_simbad, search_ned]   # relative names under the fixture root
 miss_policy: error                      # optional per-task override
-env:                                    # optional; KEPLER_* only (B7)
-  KEPLER_MAX_FRAMES: "5"
+env:                                    # optional; MARS_* only (B7)
+  MARS_MAX_FRAMES: "5"
 enable: []                              # opt-in for blocked tools, e.g. solve_astrometry
 
 expect:
@@ -663,7 +663,7 @@ resolves it (`tools/bench/sources.py`):
 Three source kinds, all model-independent: `fixture` (a field of the recorded
 archive response), `dataset` (a field of a repository data file — independent
 ground truth that predates this benchmark, resolved against the repository's
-own `data/` tree rather than `KEPLER_DATA_DIR`), and `tool_result` (the value a
+own `data/` tree rather than `MARS_DATA_DIR`), and `tool_result` (the value a
 deterministic Kepler tool returned on the run being graded — the fidelity
 case). A literal `expected:` fails to load.
 
@@ -731,8 +731,8 @@ is enforced by the loader.
   segment, or an absolute prefix is rejected before resolution; the resolved
   path is then re-checked for containment under the fixture root with
   `tools.config.within` (S6). Same for `content_ref`.
-- `env:` keys must match `^KEPLER_[A-Z0-9_]+$` (B7). A task can shrink
-  `KEPLER_MAX_FRAMES` to exercise the truncation warning; it cannot set
+- `env:` keys must match `^MARS_[A-Z0-9_]+$` (B7). A task can shrink
+  `MARS_MAX_FRAMES` to exercise the truncation warning; it cannot set
   `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, or `PATH`.
 - `id` must match `^[a-z0-9][a-z0-9_-]{0,63}$` — it becomes an artifact
   subdirectory name, and `scoped_artifacts` will reject anything else anyway.
@@ -1458,7 +1458,7 @@ limit, and a confident one is the failure.
 | id | Prompt | What it discriminates |
 | --- | --- | --- |
 | `optical-ambiguous-band` | "Describe the pointing of the M31 frame." | `data/optical/` holds `m31_galaxy_r_000.fits` and `m31_galaxy_v_000.fits`, so `resolve_optical_frame` returns `ambiguous`; the answer must surface it and pick a band explicitly or ask — never guess |
-| `optical-listing-truncated` | "What optical frames are available here?" with `env: {KEPLER_MAX_FRAMES: "5"}` | the listing carries `listing_truncated`; `must_disclose` on that warning, and the answer must not present five frames as the whole library |
+| `optical-listing-truncated` | "What optical frames are available here?" with `env: {MARS_MAX_FRAMES: "5"}` | the listing carries `listing_truncated`; `must_disclose` on that warning, and the answer must not present five frames as the whole library |
 
 The offline-zeropoint schema probe that used to sit here moved to the
 `fieldcal` suite (9.2), where it is graded against the recorded solve instead
@@ -1492,7 +1492,7 @@ a named test, not advice.
 | **B4** | Every run states its inputs | `harness.py` | `run.json` carries every knob; `corpus_dirty` is surfaced, never suppressed |
 | **B5** | The token budget is checked before dispatch | `harness.py` | a run crossing the budget stops with `budget_exceeded` and keeps partial results |
 | **B6** | Report strings are escaped | `report.py` | model- and fixture-derived text is untrusted by construction; if an HTML report is ever added, every such string is escaped |
-| **B7** | A task's `env` is `KEPLER_*` only | `tasks.py` | a task setting a credential or `PATH` is rejected at load |
+| **B7** | A task's `env` is `MARS_*` only | `tasks.py` | a task setting a credential or `PATH` is rejected at load |
 
 B1 deserves its emphasis. The registry went from 49 tools to 55 in four days
 while the port was being written. Without a closed plane, the first new remote
@@ -1594,7 +1594,7 @@ keys, no daemon, no new CI job.
 | `tests/test_bench_generalize.py` | the Beta-Binomial fit: two corpora with an identical total and different spreads get different predictive intervals, and `expected_rate` is not read as `predictive_interval` |
 
 Live provider runs stay behind the existing `model_api` marker plus
-`KEPLER_TEST_MODEL_API=1`; the `pulsar` and `optical` suites' own end-to-end
+`MARS_TEST_MODEL_API=1`; the `pulsar` and `optical` suites' own end-to-end
 tests carry `slow`. **No new markers and no dependency changes.**
 
 ---

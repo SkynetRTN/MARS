@@ -173,6 +173,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from tools.compat import adopt_legacy_environment
+
+    for legacy in adopt_legacy_environment():
+        print(f"mars-bench: {legacy.message()}", file=sys.stderr)
     args = build_parser().parse_args(argv)
     if args.verb == "run":
         return _run(args)

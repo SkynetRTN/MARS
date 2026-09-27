@@ -389,7 +389,7 @@ def test_live_apass_query_returns_sources_with_magnitudes():
     """Smoke test against the real VizieR service.
 
     Never runs by default: needs both ``-m network`` and
-    ``KEPLER_TEST_NETWORK=1``. Kept small — a 5 arcmin cone on a well-populated
+    ``MARS_TEST_NETWORK=1``. Kept small — a 5 arcmin cone on a well-populated
     field — because it is a connectivity and shape check, not a science test.
     """
     sources = query_catalogs(

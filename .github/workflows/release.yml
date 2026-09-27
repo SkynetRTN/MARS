@@ -116,7 +116,7 @@ jobs:
       - name: Self-test through the protocol
         env:
           MPLBACKEND: Agg
-          KEPLER_HOME: ${{ runner.temp }}/kepler-home
+          MARS_HOME: ${{ runner.temp }}/kepler-home
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/kepler/bin/mars-mcp" self-test

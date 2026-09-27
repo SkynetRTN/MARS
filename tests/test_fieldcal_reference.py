@@ -110,7 +110,7 @@ def test_an_unknown_field_returns_the_candidates_not_an_exception():
 def test_a_missing_directory_returns_an_error_naming_the_env_override():
     reference = load_zeropoint_reference("ngc5128_b_002", "/nonexistent/fieldcal")
     assert [e.code for e in reference.errors] == ["directory_not_found"]
-    assert "KEPLER_FIELDCAL_DATA_DIR" in reference.errors[0].message
+    assert "MARS_FIELDCAL_DATA_DIR" in reference.errors[0].message
 
 
 def test_replay_returns_the_recorded_catalog_rows():
@@ -355,7 +355,7 @@ def test_the_selection_replay_reports_a_field_it_cannot_run(lfs_frames):
 
 @float32_mag_errors
 def test_a_malformed_response_fixture_is_reported_not_raised(tmp_path):
-    """A hand-made fixture under KEPLER_FIELDCAL_DATA_DIR that does not parse
+    """A hand-made fixture under MARS_FIELDCAL_DATA_DIR that does not parse
     must surface as fixture_missing from a registered tool, not as a
     traceback -- nothing guards dispatch in the agent loop."""
     import shutil
@@ -639,7 +639,7 @@ def test_calibrate_zeropoint_keeps_its_warnings_on_an_error_return(tmp_path, mon
         field_dir,
     )
     (field_dir / "vsx_response.json").unlink()
-    monkeypatch.setenv("KEPLER_FIELDCAL_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MARS_FIELDCAL_DATA_DIR", str(tmp_path))
 
     comparison = calibrate_zeropoint(
         tmp_path / "no_such_frame.fits", catalog_fixture="full_response", compare_to="ngc5128_b_002"
@@ -733,11 +733,11 @@ def test_the_bundled_ocl_frames_join_back_to_the_recorded_sweep():
 
 
 def test_the_replay_ignores_an_operator_frame_library(tmp_path, monkeypatch):
-    """Code review, finding 9: KEPLER_OPTICAL_DATA_DIR made the ground-truth
+    """Code review, finding 9: MARS_OPTICAL_DATA_DIR made the ground-truth
     replay look for its recorded frame in an operator's archive."""
     from tools import fieldcal_reference
 
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(tmp_path))
     (tmp_path / "ngc5128_galaxy_b_001.fits").write_bytes(b"not the recorded frame")
 
     path, warnings = fieldcal_reference._frame_path("ngc5128_b_002")
@@ -759,13 +759,13 @@ def test_the_web_table_zero_point_does_not_need_the_optical_library(tmp_path, mo
     monkeypatch.setattr(config, "fetched_bundle", lambda name, **kwargs: None)
     # Set, and irrelevant: the replay's frames never come from this override,
     # so the fetch advice must not be withheld because of it.
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path / "my-archive"))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(tmp_path / "my-archive"))
 
     reference = load_zeropoint_reference("ngc5128_b_002")
 
     assert reference.frame_path is None
     assert reference.web_table_zero_point is not None
     (absent,) = [w for w in reference.warnings if w.code == "bundle_not_installed"]
-    # Third review: it offered KEPLER_OPTICAL_DATA_DIR, which never helps here.
+    # Third review: it offered MARS_OPTICAL_DATA_DIR, which never helps here.
     assert "fetch-data optical" in absent.message
     assert "does not supply these frames" in absent.message
