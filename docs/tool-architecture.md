@@ -762,8 +762,8 @@ with `docs/releasing.md` as the policy. It:
 
 - checks the tag against the version;
 - rebuilds `data/optical/` against the pinned manifest;
-- installs the wheel on clean runners with no checkout, on Python 3.12 and
-  3.13, and runs `mars-mcp self-test`;
+- installs the wheel on clean runners with no checkout, on Python 3.13, and
+  runs `mars-mcp self-test`;
 - checks the `data` release by GitHub's asset digests;
 - then publishes — the only job with write permission.
 

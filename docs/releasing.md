@@ -35,8 +35,8 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
    - fails unless the wheel carries its core data (all five pulsar scans);
    - classifies the version with `packaging.version`, so every PEP 440
      pre-release spelling publishes as a pre-release.
-2. **verify** runs on a clean runner **with no checkout**, on Python 3.12 (the
-   floor) and 3.13, the newest Python every dependency ships wheels for. It
+2. **verify** runs on a clean runner **with no checkout**, on Python 3.13 --
+   MARS's version, and the newest Python every dependency ships wheels for. It
    installs the wheel with `[mcp]` and runs
    `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
@@ -169,8 +169,8 @@ outside the repository, so run it by hand.
 
 ## Testing a release
 
-On a machine with no checkout (and a C compiler unless it is Python 3.12 or
-3.13 on x86_64 Linux, macOS or Windows; see `installing.md`):
+On a machine with no checkout (and a C compiler unless it is Python 3.13 on
+x86_64 Linux, macOS or Windows; see `installing.md`):
 
 ```bash
 python3.13 -m venv mars-env

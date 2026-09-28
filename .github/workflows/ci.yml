@@ -35,10 +35,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.12 is pyproject.toml's floor and a classifier PyPI shows, so it is
-        # tested, not assumed: Path.resolve() alone behaves differently there.
-        # 3.13 is the newest Python every dependency ships wheels for.
-        python: ["3.12", "3.13"]
+        # Python 3.13 is MARS's version: pyproject.toml's floor, the one
+        # classifier PyPI shows, and the newest Python every dependency ships
+        # wheels for (docs/installing.md). It is the only one tested.
+        python: ["3.13"]
     env:
       UV_PYTHON: ${{ matrix.python }}
     steps:

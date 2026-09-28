@@ -7,7 +7,7 @@ name = "skynet-mars"
 version = "0.1.0rc3"
 description = "MARS, the MCP Astronomy Research Suite: astronomy tools for LLM agents and Python, built on algorithms extracted from Skynet."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 # Copyright the Skynet Robotic Telescope Network; the licence of the Skynet
 # projects MARS grew from (README.md, License).
 license = "GPL-3.0-only"
@@ -25,7 +25,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]

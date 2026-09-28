@@ -98,9 +98,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.12 is pyproject.toml's floor; 3.13 is what CI runs -- the newest
+        # Python 3.13, MARS's version: the floor, and what CI runs -- the newest
         # Python every dependency ships wheels for (docs/installing.md).
-        python: ["3.12", "3.13"]
+        python: ["3.13"]
     steps:
       # No checkout: the wheel must work on a machine that has none.
       - uses: actions/setup-python@v6
