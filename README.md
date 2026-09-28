@@ -27,6 +27,7 @@ systems.
 - [Architecture & Further Reading](#architecture--further-reading)
 - [Development Notes](#development-notes)
 - [Contributing](#contributing)
+- [License](#license)
 
 ## Overview
 
@@ -680,3 +681,27 @@ See `CONTRIBUTING.md` for the current contribution guidance and `AGENTS.md`
 for repository guidelines aimed at agentic contributors. `.github/CODEOWNERS`
 marks the repository as maintainer-owned; changes to `main` require Code
 Owner review.
+
+## License
+
+MARS is licensed under the **GNU General Public License v3.0 only**
+(`GPL-3.0-only`); the full text is [`LICENSE`](LICENSE). It is the licence
+of its GPL-3.0 upstream, and the one its sibling Skycat uses.
+
+The code under `algorithms/` comes from three places (provenance per file in
+[`docs/extraction.md`](docs/extraction.md)):
+
+- **[Astromancer](https://github.com/SkynetRTN/astromancer)**, GPL-3.0 — the
+  Python ports in `algorithms/pulsar/`, `algorithms/variable_star/` and
+  `algorithms/hrdiagram_py/`. Their GPL-3.0 terms are why MARS as a whole is
+  GPL-3.0.
+- **Afterglow Core**, Apache-2.0 — parts of the query layer in
+  `algorithms/query/`. Apache-2.0 code may be combined into a GPL-3.0 work.
+- **Skynet** (`skylib` and the optical processing in `skynet-db`) — the
+  extractions in `algorithms/skylib_lite/`, `wcs/`, `photometry/`,
+  `fieldcal/` and `catalogs/`. `skylib` declares no licence of its own; these
+  extractions are distributed here under this project's licence.
+
+Files that carry their own third-party notice — for example the BSD-3-Clause
+header in `algorithms/skylib_lite/util/overlap.py` — keep it, and those terms
+apply to those files as well.
