@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/assets/mars-banner.png" alt="MARS — MCP Astronomy Research Suite" width="880">
+  <img src="https://raw.githubusercontent.com/SkynetRTN/MARS/dev/docs/assets/mars-banner.png" alt="MARS — MCP Astronomy Research Suite" width="880">
 </p>
 
 <p align="center">
   <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/python-3.13-blue" alt="Python 3.13">
 </p>
 
 An agentic, tool-enabled system for automated astronomy — an LLM agent,
@@ -327,8 +327,8 @@ mars-env/bin/mars-mcp self-test          # launches the server as a host would, 
 - **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two
   dependencies compile from source.
 
-[`docs/installing.md`](docs/installing.md) covers all of this, and
-[`docs/releasing.md`](docs/releasing.md) how releases are cut.
+[`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/installing.md) covers all of this, and
+[`docs/releasing.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/releasing.md) how releases are cut.
 
 ### Running the Console
 
@@ -687,11 +687,11 @@ Owner review.
 Copyright (C) 2026 Skynet Robotic Telescope Network.
 
 MARS is licensed under the **GNU General Public License v3.0 only**
-(`GPL-3.0-only`); the full text is [`LICENSE`](LICENSE). It is the licence of
+(`GPL-3.0-only`); the full text is [`LICENSE`](https://github.com/SkynetRTN/MARS/blob/dev/LICENSE). It is the licence of
 the Skynet projects it grew from: Astromancer and Skycat carry the same text.
 
 The code under `algorithms/` comes from three places (provenance per file in
-[`docs/extraction.md`](docs/extraction.md)):
+[`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/extraction.md)):
 
 - **Skynet**, by the same group as MARS: `skylib` and the optical processing
   in `skynet-db`, extracted into `algorithms/skylib_lite/`, `wcs/`,

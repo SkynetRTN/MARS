@@ -3,8 +3,14 @@ name: Release
 # Builds, verifies and publishes a MARS release from a `v<version>` tag, and
 # checks that the optional data bundles it pins are published. The policy --
 # what a tag, a pre-release and a data bundle version mean -- is
-# docs/releasing.md. workflow_dispatch runs everything but `publish`, as a
-# dry run.
+# docs/releasing.md. workflow_dispatch runs everything but the publishing
+# jobs, as a dry run.
+#
+# Publishing is three steps, in order: the GitHub release (`publish`),
+# TestPyPI (`publish-testpypi`, then `verify-testpypi` installs what the index
+# serves), and PyPI (`publish-pypi`). The two index jobs use PyPI trusted
+# publishing -- no token is stored anywhere -- from the `testpypi` and `pypi`
+# environments, which the maintainer configures (docs/releasing.md).
 
 on:
   push:
@@ -24,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       # lfs: true -- the manifest check below rebuilds data/optical/, and three
       # of its frames are Git LFS objects. The build refuses LFS pointers, so a
@@ -59,18 +66,14 @@ jobs:
           uv build --out-dir dist
           cd dist && sha256sum -- *.whl *.tar.gz > SHA256SUMS && cat SHA256SUMS
 
-      # The core data reaches the wheel through the tools/_data symlink. A tree
-      # without that symlink (a clone made with core.symlinks=false) builds a
-      # wheel with no data at all, silently; refuse to publish one.
-      - name: Check the wheel carries its core data
-        run: |
-          wheel=$(ls dist/*.whl)
-          count=$(python -m zipfile -l "$wheel" | grep -c 'tools/_data/pulsar/.*\.cal\.txt' || true)
-          echo "pulsar scans in the wheel: $count"
-          if [ "$count" -lt 5 ]; then
-            echo "::error::the wheel is missing its core data (tools/_data); build from a checkout with symlinks"
-            exit 1
-          fi
+      - name: Check the metadata renders as PyPI will show it
+        run: uvx twine@6 check --strict dist/*.whl dist/*.tar.gz
+
+      # The core data reaches the wheel through the tools/_data symlink: a tree
+      # without it (a clone made with core.symlinks=false) builds a wheel with
+      # no data at all, silently. The same check CI runs on every pull request.
+      - name: Check what the wheel carries
+        run: python .github/scripts/check_dist.py dist/*.whl
 
       # PEP 440 decides what a pre-release is, not a pattern: 0.1.0rc1, 1.0b2,
       # 2.0.dev3 and their other spellings are all pre-releases.
@@ -78,7 +81,9 @@ jobs:
         id: version
         run: |
           prerelease=$(uv run --locked python -c 'import tomllib; from packaging.version import Version; print(str(Version(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]).is_prerelease).lower())')
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
           echo "prerelease=$prerelease" | tee -a "$GITHUB_OUTPUT"
+          echo "version=$version" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v5
         with:
@@ -93,9 +98,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.12 is pyproject.toml's floor; 3.13 is what CI runs -- the newest
+        # Python 3.13, MARS's version: the floor, and what CI runs -- the newest
         # Python every dependency ships wheels for (docs/installing.md).
-        python: ["3.12", "3.13"]
+        python: ["3.13"]
     steps:
       # No checkout: the wheel must work on a machine that has none.
       - uses: actions/setup-python@v6
@@ -178,3 +183,107 @@ jobs:
           gh release create "$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
             --notes "Install and register: docs/installing.md. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
+
+  # PyPI versions are permanent -- a file, once uploaded, can never be
+  # replaced -- so every release goes to TestPyPI first and is installed from
+  # there before PyPI is touched.
+  publish-testpypi:
+    name: publish to TestPyPI
+    if: github.event_name == 'push'
+    needs: [build, verify, data]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/skynet-mars/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+
+      # The index takes distributions only; SHA256SUMS is for the GitHub release.
+      - name: Keep only the distributions
+        run: rm -f dist/SHA256SUMS
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+
+  verify-testpypi:
+    name: verify the TestPyPI upload
+    needs: [build, publish-testpypi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+
+      # --no-deps, and dependencies then from PyPI only: on TestPyPI anyone can
+      # register a name, so resolving the pinned dependencies there would
+      # install whatever sits under those names. The index can take a minute
+      # to serve a new file, hence the retries.
+      - name: Download the upload and compare it with the build
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if python -m pip download --quiet --no-deps --only-binary :all: \
+                --index-url https://test.pypi.org/simple/ \
+                --dest served "skynet-mars==$VERSION"; then
+              break
+            fi
+            echo "not served yet (attempt $attempt)"; sleep 30
+          done
+          cmp dist/*.whl served/*.whl
+          echo "TestPyPI serves the wheel this workflow built, byte for byte"
+
+      - name: Install it, with dependencies from PyPI, and self-test
+        env:
+          MPLBACKEND: Agg
+          MARS_HOME: ${{ runner.temp }}/mars-home
+        run: |
+          python -m venv "$RUNNER_TEMP/mars"
+          wheel=$(ls served/*.whl)
+          "$RUNNER_TEMP/mars/bin/pip" install --quiet "${wheel}[mcp]"
+          cd "$RUNNER_TEMP" && "$RUNNER_TEMP/mars/bin/mars-mcp" self-test
+
+  # The `pypi` environment is where the maintainer requires a reviewer, so
+  # nothing reaches PyPI without a person approving that run.
+  publish-pypi:
+    name: publish to PyPI
+    needs: [build, verify-testpypi]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/skynet-mars/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/check_dist.py
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+
+      - name: Refuse a wheel that declares no licence
+        run: python3 .github/scripts/check_dist.py --require-license dist/*.whl
+
+      - name: Keep only the distributions
+        run: rm -f dist/SHA256SUMS
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/

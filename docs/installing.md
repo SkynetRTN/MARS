@@ -32,8 +32,9 @@ missing:
 | `photutils` 3.0.0 | Linux x86_64, macOS, Windows | **Linux aarch64** (ARM servers, Raspberry Pi, Docker on Apple Silicon) |
 
 **Python 3.13 is MARS's target** — what CI and the release workflow run,
-and the newest Python every dependency ships wheels for. Python 3.12 or 3.13
-on x86_64 Linux, macOS or Windows needs no compiler. Anywhere else, install
+and the newest Python every dependency ships wheels for; it is the version
+`skynet-mars` requires and tests. Python 3.13 on x86_64 Linux, macOS or
+Windows needs no compiler. Anywhere else, install
 one first: `apt-get install gcc` on Debian or Ubuntu, `dnf
 install gcc` on Fedora, or the Xcode command-line tools on macOS. Without one,
 pip fails with `Failed building wheel for sep` (or `photutils`) and

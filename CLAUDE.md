@@ -73,10 +73,9 @@ git diff --check                         # whitespace check
 
 CI (`.github/workflows/ci.yml`) runs on **Python 3.13** -- the newest Python
 every dependency ships wheels for (`sep` has none for 3.14; see
-`docs/installing.md`); `pyproject.toml` keeps
-3.12 as the floor, so code still has to work there (`Path.resolve()` raises
-`RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
-`tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
+`docs/installing.md`), and it is also `pyproject.toml`'s floor: MARS
+supports Python 3.13 and tests nothing else. Resolve paths for containment
+checks through `tools.config.within`/`safe_resolve`. It gates three jobs: `compileall` over
 `tools algorithms tests`, `uv run --locked --extra mcp pytest` (after the MCP
 tests alone without the extra), and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
@@ -97,8 +96,11 @@ names is **path-scoped to exact files** (never directory wildcards) — referenc
 from a file outside that list needs a new allowlist entry. A `paths` entry
 disables secret detection for the whole file, so keep each one specific.
 
-`pyproject.toml` pins every dependency with `==`. Adding one means editing the pin and
-re-running `uv lock`.
+`pyproject.toml` declares only what MARS imports, each bounded with `~=` to the
+tested major, so a PyPI install can share an environment; exact versions live
+in `uv.lock`, which CI syncs with `--locked`. Adding a dependency means adding
+its bound and re-running `uv lock`. Test-only tools go in the `dev` dependency
+group, never in `dependencies` (`tests/test_packaging_metadata.py`).
 
 ## Python domain boundaries
 
