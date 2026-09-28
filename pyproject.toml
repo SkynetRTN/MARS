@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "skynet-mars"
 version = "0.1.0rc3"
-description = "Early-stage astronomy tool collection and extracted algorithm modules."
+description = "MARS, the MCP Astronomy Research Suite: astronomy tools for LLM agents and Python, built on algorithms extracted from Skynet."
 readme = "README.md"
 requires-python = ">=3.12"
 # Copyright the Skynet Robotic Telescope Network; the licence of the Skynet
@@ -17,6 +17,18 @@ license-files = ["LICENSE"]
 # Skynet Robotic Telescope Network's (README.md, License).
 authors = [{ name = "James Atkisson", email = "james@atkisson.net" }]
 maintainers = [{ name = "SkynetRTN" }]
+keywords = ["astronomy", "mcp", "llm", "agents", "photometry", "pulsar", "skynet"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
 dependencies = [
     "ads==0.12.7",
     "annotated-types==0.8.0",
@@ -92,6 +104,13 @@ dependencies = [
     "webencodings==0.5.1",
     "Werkzeug==3.1.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/archon774/MARS"
+Repository = "https://github.com/archon774/MARS"
+Issues = "https://github.com/archon774/MARS/issues"
+Releases = "https://github.com/archon774/MARS/releases"
+Documentation = "https://github.com/archon774/MARS/tree/main/docs"
 
 [project.scripts]
 mars = "tools.tui:launch"
