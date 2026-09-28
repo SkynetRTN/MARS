@@ -1,5 +1,29 @@
 # Renaming Kepler to MARS
 
+> [!NOTE] Archived 2026-09-28
+> This track is complete and this document is a record, not a plan. Phases
+> R1–R6 renamed Kepler to **MARS — MCP Astronomy Research Suite**: the
+> distribution `skynet-mars`, the commands `mars`, `mars-mcp` and
+> `mars-bench`, `MARS_*` variables, the `mars` home, the repository
+> `archon774/skynet-mars`, the logo and the console's Skynet palette. It
+> merged into `dev` as PR #89 (`a4474c8`), and **`v0.1.0rc3` is published**
+> from it. The compatibility shims of §6.3 served that one pre-release and
+> were removed afterwards (`ce36f19`), as §6.3 decided.
+>
+> **Completion audit, 2026-09-28**, re-verified rather than taken from the
+> record:
+> - the default suite is green with and without `[mcp]` (2,799 passed, 44
+>   skipped, after the shims and their tests were removed);
+> - `tests/test_rebrand_guard.py` passes over the code and the current
+>   documentation, with four lines that name the old name on purpose;
+> - the release gate (R5) ran in clean containers, for `v0.1.0rc3` and for
+>   `kepler 0.1.0rc1` through the old repository URL;
+> - the R4 icon gate is answered by recording which hosts ignore `icons` (R4).
+>
+> **Corrected at archive:** the status line below says "Proposal"; the track
+> finished as recorded here. §6.3's shims are gone: a `KEPLER_*` variable is
+> now ignored, and `docs/installing.md` describes the manual move.
+
 **Status:** Proposal, 2026-09-25. Names decided by the maintainer: the
 distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
@@ -9,7 +33,7 @@ the feature branch `mars-rebrand` (§5). **All six phases are done**: R1–R4
 and R6 on 2026-09-27, merged to `dev` as PR #89 (`a4474c8`), and R5 on
 2026-09-28, when `v0.1.0rc3` was published.
 **Prerequisites:** The MCP tool-surface track, complete and archived
-(`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
+(`mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
 docs — carrying the new name before a wider release.
 
@@ -258,8 +282,13 @@ server's icon (or the PR records which hosts ignore `icons`).
 - The server introduces itself as `mars`, titled *MARS — MCP Astronomy
   Research Suite*, with both icons as `data:` URIs (a stdio server has no URL
   to serve), shipped in the wheel. A test reads them from a real handshake.
-  **Not yet seen in a host's UI**; which hosts display `icons` is still to be
-  recorded.
+  **Hosts, researched 2026-09-28:** VS Code (Copilot, from 1.107) renders
+  server icons and accepts `data:` URIs; Claude Code, claude.ai and Claude
+  Desktop connectors, and Cursor ignore `serverInfo.icons` (each has an open
+  issue or a staff reply saying so); Codex CLI is unconfirmed. The icons
+  follow the spec's most portable form, PNG `data:` URIs with `mimeType` and
+  `sizes`, so nothing on this side needs to change. Not seen rendered here:
+  this machine has no VS Code.
 - Current documents say MARS and spell it out once; records carry a dated
   note under their titles instead of being rewritten. The guard now covers
   the documentation, with the records, the "Upgrading from Kepler" section of
@@ -339,7 +368,7 @@ All decided by the maintainer on 2026-09-25.
 
    All of it is removed in the release after `0.1.0rc3`. Only the
    compatibility shims are allowlisted by R3's guard, and each carries its
-   removal version.
+   removal version. *(Done 2026-09-28, `ce36f19`, once `0.1.0rc3` was out.)*
 4. **The first MARS version is `0.1.0rc3`**, continuing the series: the next
    candidate of the same software, under its new name. Testers compare it
    directly with `0.1.0rc2`. *(Corrected 2026-09-26: this said `0.1.0rc2`,

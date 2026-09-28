@@ -1,6 +1,6 @@
 """R3's guard: the project is MARS, and "Kepler" survives only where it must.
 
-``docs/working/mars-rebrand.md`` §5 (R3). A case-insensitive search of the
+``docs/archive/mars-rebrand.md`` §5 (R3). A case-insensitive search of the
 code trees may find ``kepler`` only in the places below. Each is there on
 purpose, and none is the project's name for itself:
 
@@ -54,11 +54,11 @@ SCOPE = (
 #: Whole files that must name the old name: this guard, which quotes it.
 SHIMS = frozenset({"tests/test_rebrand_guard.py"})
 
-#: Records, kept as written under a dated note (docs/working/mars-rebrand.md
+#: Records, kept as written under a dated note (docs/archive/mars-rebrand.md
 #: §2), and the rebrand plan itself.
 RECORDS = frozenset(
     {
-        "docs/working/mars-rebrand.md",
+        "docs/archive/mars-rebrand.md",
         "docs/archive/mcp-tool-surface.md",
         "docs/archive/model-backends.md",
         "docs/archive/optical-tools.md",
@@ -103,7 +103,7 @@ UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
 
 #: Single lines that name the old name on purpose, by file.
 OLD_NAME_LINES = {
-    "docs/working/README.md": r"Renaming Kepler to MARS",
+    "docs/archive/README.md": r"Kepler renamed MARS \(MCP Astronomy Research Suite\)",
     "tools/config.py": r"^#: fetched by Kepler and moved into",
     "tools/mcp/__main__.py": r"project called ``kepler``",
     "tests/test_mcp_surface.py": r"pip install 'kepler\[mcp\]'",
