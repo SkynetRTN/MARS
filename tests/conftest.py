@@ -1,13 +1,13 @@
-"""Shared fixtures for Kepler's algorithm tests.
+"""Shared fixtures for MARS's algorithm tests.
 
 Two rules shape everything here, both from ``CLAUDE.md``:
 
 * **Default checks stay deterministic and bounded.** Nothing in this suite opens
   a socket unless it is marked ``network``, and nothing marked ``network`` runs
-  without ``KEPLER_TEST_NETWORK=1``.
+  without ``MARS_TEST_NETWORK=1``.
 * **The Python folders are byte-preserving extractions.** So the fixtures are
   real Skynet frames and real recorded Skynet solver output, not synthesised
-  arrays — see ``test_data/README.md``.
+  arrays — see ``data/README.md``.
 
 Fixtures that need data the repo cannot carry (astrometry.net indexes, a local
 UCAC catalog) skip themselves rather than failing, mirroring how the upstream
@@ -26,12 +26,14 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from tools.config import is_lfs_pointer
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEST_DATA = REPO_ROOT / "test_data"
-OPTICAL = TEST_DATA / "optical"
-ZP_SOLUTIONS = TEST_DATA / "fieldcal" / "zp_solutions"
-AFTERGLOW = TEST_DATA / "afterglow"
-PULSAR = TEST_DATA / "pulsar"
+DATA_ROOT = REPO_ROOT / "data"
+OPTICAL = DATA_ROOT / "optical"
+ZP_SOLUTIONS = DATA_ROOT / "fieldcal" / "zp_solutions"
+AFTERGLOW = DATA_ROOT / "afterglow"
+PULSAR = DATA_ROOT / "pulsar"
 
 #: Short aliases for the pulsar scans, keyed by the source they point at.
 #: ``b0329`` is the loud one — the brightest pulsar in the northern sky, and
@@ -44,7 +46,28 @@ PULSAR_SCANS: dict[str, str] = {
     "b2045": "Skynet_60902_psr_b2045_16_138488_88426.A.cal.txt",
 }
 
-#: Reference periods (s), from ``test_data/pulsar/Curated pulsars.docx`` — the
+#: The curated tables, read from ``data/pulsar/curated_periods.json``
+#: rather than restated here, so the tool layer and the suite compare against
+#: one copy of each number (BL-8). The reasoning below is not in the JSON.
+#:
+#: Guarded the same way ``_discover_frames`` and ``_require`` are: this file is
+#: conftest, so an unguarded read would make a missing or malformed fixture
+#: uncollect the whole suite -- every WCS, photometry, fieldcal and LLM test --
+#: rather than skipping the pulsar tests that actually need it. Consumers guard
+#: on ``PULSAR_PERIODS_S`` being empty.
+def _load_curated_pulsars() -> dict[str, dict]:
+    try:
+        payload = json.loads(
+            (PULSAR / "curated_periods.json").read_text(encoding="utf-8")
+        )
+        return payload["pulsars"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+_CURATED_PULSARS: dict[str, dict] = _load_curated_pulsars()
+
+#: Reference periods (s), from ``data/pulsar/Curated pulsars.docx`` — the
 #: curation shipped alongside the scans, column "Period(Literature)". That
 #: document is the intended verification reference for this data set, so it is
 #: what the tests compare against.
@@ -52,11 +75,7 @@ PULSAR_SCANS: dict[str, str] = {
 #: Independent of anything in the code: the scans carry no period in-file, so a
 #: successful fold is a real detection rather than a fit to a known answer.
 PULSAR_PERIODS_S: dict[str, float] = {
-    "b0329": 0.7145197,
-    "b1133": 1.187913066,
-    "b1933": 0.358738411,
-    "b2021": 0.529196918,
-    "b2045": 1.961572304,
+    key: entry["period_s"] for key, entry in _CURATED_PULSARS.items()
 }
 
 #: The live ATNF Pulsar Catalogue values, retrieved 2026-08-11 via
@@ -78,11 +97,7 @@ PULSAR_PERIODS_S: dict[str, float] = {
 #: both B1133**+**16 and B2045**−**16 as ``_16``, so the declination sign
 #: cannot be read off the filename.
 PULSAR_ATNF: dict[str, dict[str, float]] = {
-    "b0329": {"p0": 0.714519699725801, "dm": 26.7641, "s1400": 203.0},
-    "b1133": {"p0": 1.1879172746306204, "dm": 4.8407, "s1400": 20.0},
-    "b1933": {"p0": 0.3587451401989297, "dm": 158.6394, "s1400": 58.0},
-    "b2021": {"p0": 0.5291969178083342, "dm": 22.5497, "s1400": 27.0},
-    "b2045": {"p0": 1.9615846233291023, "dm": 11.456, "s1400": 22.0},
+    key: dict(entry["atnf"]) for key, entry in _CURATED_PULSARS.items()
 }
 
 #: Difficulty rating and archival observation number, from the same curated
@@ -90,15 +105,23 @@ PULSAR_ATNF: dict[str, dict[str, float]] = {
 #: to detect, and it is an independent check on the pipeline: what the code
 #: measures should track what the curator expected.
 PULSAR_DIFFICULTY: dict[str, dict[str, object]] = {
-    "b0329": {"obs": 81239, "rank": 0, "label": "Easy"},
-    "b2021": {"obs": 63183, "rank": 1, "label": "Lightly Challenging"},
-    "b1133": {"obs": 79294, "rank": 1, "label": "Lightly Challenging"},
-    "b1933": {"obs": 74403, "rank": 3, "label": "More Challenging"},
-    "b2045": {"obs": 71350, "rank": 4, "label": "Most Challenging"},
+    key: {
+        "obs": entry["observation"],
+        "rank": entry["difficulty_rank"],
+        "label": entry["difficulty"],
+    }
+    for key, entry in _CURATED_PULSARS.items()
 }
 
+#: Guard for tests that read the tables above without going through
+#: ``pulsar_path`` (which skips on its own when the scans are absent).
+requires_curated_periods = pytest.mark.skipif(
+    not _CURATED_PULSARS,
+    reason="missing fixture data/pulsar/curated_periods.json — see data/README.md",
+)
+
 #: Short aliases for the frames individual tests single out, each chosen for a
-#: specific header or geometry property. See ``test_data/README.md``.
+#: specific header or geometry property. See ``data/README.md``.
 FRAMES: dict[str, str] = {
     # WCS written as PC + CDELT rather than CD.
     "nsv2849": "nsv2849_star_v_000.fits",
@@ -116,15 +139,21 @@ FRAMES: dict[str, str] = {
     # Southern field at dec -69, where cos(dec) stops being negligible.
     "ngc2070": "ngc2070_nebula_v_000.fits",
     # The exact frame behind the recorded NGC 5128 solve and the Afterglow
-    # API response in test_data/afterglow/.
+    # API response in data/afterglow/.
     "ngc5128_b": "ngc5128_galaxy_b_001.fits",
+    # The three frames behind the recorded NGC 5286 B solves (P8). Git LFS
+    # objects, and the only multi-HDU frames in the tree: four Afterglow-aligned
+    # exposures each, of which MARS reads only the primary.
+    "ngc5286_b_000": "ngc5286_globular_b_000.fits",
+    "ngc5286_b_001": "ngc5286_globular_b_001.fits",
+    "ngc5286_b_002": "ngc5286_globular_b_002.fits",
     # 1600x1200 from a third instrument, with FOCALLEN and a WCS.
     "ngc1982": "ngc1982_nebula_r_000.fits",
 }
 
 
 def _discover_frames() -> list[str]:
-    """Every frame filename in ``test_data/optical``, sorted.
+    """Every frame filename in ``data/optical``, sorted.
 
     Discovered rather than listed so that adding a frame to the directory
     extends the sweep tests automatically — several tests parametrize over the
@@ -156,15 +185,70 @@ ZP_CASES: tuple[str, ...] = (
 def _require(path: Path) -> Path:
     if not path.exists():
         pytest.skip(
-            f"missing fixture {path.relative_to(REPO_ROOT)} — see test_data/README.md "
+            f"missing fixture {path.relative_to(REPO_ROOT)} — see data/README.md "
             f"for how to re-sync it from the Skynet pipeline data repository"
+        )
+    if is_lfs_pointer(path):
+        pytest.skip(
+            f"{path.relative_to(REPO_ROOT)} is an unfetched Git LFS pointer — run "
+            "`git lfs install && git lfs pull` to fetch it (data/README.md)"
         )
     return path
 
 
+@pytest.fixture(autouse=True)
+def download_root(tmp_path, monkeypatch):
+    """Point the archive download root at an empty tmp path for every test.
+
+    ``fits_downloads/`` is gitignored but real: a developer who has ever run
+    ``search_mast(..., download=True)`` has one in the working tree. It is now
+    a genuine second search root for ``tools.optical``, so without this any
+    test that resolves a frame -- test_optical_registry, test_fieldcal_reference,
+    test_photometry_tool_smoke -- depends on untracked local state. A
+    downloaded frame whose name normalizes to contain a probed name turns a
+    clean resolve into an ``ambiguous`` error.
+
+    ``DATA_DIR`` is patched alongside it, not just the download root:
+    ``tools.optical`` only *walks* the download root while it resolves inside
+    ``config.DATA_DIR``, so a download root sandboxed to tmp while the data
+    root still pointed at the repository would be searched flat -- and every
+    nested-product case would quietly stop being exercised while still passing.
+
+    Patched on ``tools.config`` rather than the environment because both are
+    computed at import.
+    """
+    from tools import config
+
+    root = tmp_path / "fits_downloads"
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", root)
+    return root
+
+
+#: The frames stored as Git LFS objects rather than in the git tree itself
+#: (P8). Everything else under ``data/optical`` is plain git, so these are the
+#: only fixtures a clone can be missing while still looking complete.
+LFS_FRAMES: tuple[str, ...] = (
+    "ngc5286_globular_b_000.fits",
+    "ngc5286_globular_b_001.fits",
+    "ngc5286_globular_b_002.fits",
+)
+
+
 @pytest.fixture(scope="session")
-def test_data_dir() -> Path:
-    return _require(TEST_DATA)
+def lfs_frames() -> list[Path]:
+    """The LFS-tracked frames, skipping the test unless all are fetched.
+
+    For tests that assert over the *whole* fixture tree -- counts, filter
+    tallies -- where a partial checkout would otherwise read as a real
+    mismatch. Individual frame tests get the same skip from ``frame_path``.
+    """
+    return [_require(OPTICAL / name) for name in LFS_FRAMES]
+
+
+@pytest.fixture(scope="session")
+def data_dir() -> Path:
+    return _require(DATA_ROOT)
 
 
 @pytest.fixture(scope="session")
@@ -213,7 +297,7 @@ def frame_image(frame_path):
     Cached because pixel-level tests are the slowest thing in the suite, and
     ``sep`` needs native byte order — these frames are big-endian on disk
     (``>f4``), as FITS always is. Only the frames a test actually asks for are
-    read; the 39-frame directory is never loaded wholesale.
+    read; the 42-frame directory is never loaded wholesale.
     """
     cache: dict[str, tuple[np.ndarray, fits.Header]] = {}
 
@@ -293,9 +377,9 @@ def afterglow_web_zero_points() -> dict[str, tuple[float, float]]:
 
     Independent ground truth: these came out of the hosted Afterglow
     field-calibration service, not out of Skynet's local pipeline, so agreement
-    between them and Kepler's solver is a cross-implementation check rather than
+    between them and MARS's solver is a cross-implementation check rather than
     a self-comparison. 73 subjects; six of the eight frames in
-    ``test_data/optical`` appear.
+    ``data/optical`` appear.
     """
     path = _require(AFTERGLOW / "afterglow_web_values_master.csv")
     with open(path, newline="") as fh:
@@ -329,9 +413,9 @@ def afterglow_photometry_rows() -> list[dict]:
 
 
 @pytest.fixture(scope="session")
-def ocl_filter_report(test_data_dir) -> dict:
+def ocl_filter_report(data_dir) -> dict:
     """Skynet's Open/Clear/Lum substitute-filter trial report."""
-    with open(_require(test_data_dir / "fieldcal" / "ocl_filter_report.json")) as fh:
+    with open(_require(data_dir / "fieldcal" / "ocl_filter_report.json")) as fh:
         return json.load(fh)
 
 
@@ -389,15 +473,25 @@ def atlas_catalog_root() -> str | None:
 
 
 def pytest_collection_modifyitems(config, items):
-    """Deselect ``network`` tests unless ``KEPLER_TEST_NETWORK=1``.
+    """Deselect the opt-in live markers unless their environment gate is set.
 
-    A marker alone would still let ``-m network`` fire live queries by accident
-    in CI; requiring the environment variable too makes the opt-in explicit, as
-    CLAUDE.md asks for remote astronomy calls.
+    A marker alone would still let ``-m network`` (or ``-m model_api``) fire a
+    live call by accident in CI; requiring the environment variable too makes
+    the opt-in explicit, as CLAUDE.md asks for remote calls.
     """
-    if os.environ.get("KEPLER_TEST_NETWORK") == "1":
-        return
-    skip = pytest.mark.skip(reason="live catalog query; set KEPLER_TEST_NETWORK=1 to run")
+    net_on = os.environ.get("MARS_TEST_NETWORK") == "1"
+    model_on = os.environ.get("MARS_TEST_MODEL_API") == "1"
+
+    net_skip = pytest.mark.skip(
+        reason="live catalog query; set MARS_TEST_NETWORK=1 to run"
+    )
+    model_skip = pytest.mark.skip(
+        reason="live model provider; set MARS_TEST_MODEL_API=1 to run"
+    )
     for item in items:
-        if "network" in item.keywords:
-            item.add_marker(skip)
+        if not net_on and "network" in item.keywords:
+            item.add_marker(net_skip)
+        if not model_on and (
+            "model_api" in item.keywords or "ollama" in item.keywords
+        ):
+            item.add_marker(model_skip)

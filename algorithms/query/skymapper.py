@@ -42,7 +42,7 @@ class SkyMapperQueryBackend(VizierCatalog):
         PRESERVED BEHAVIOUR: when the caller supplies a ``constraints`` dict,
         this mutates it in place. A caller reusing one dict across catalogs will
         find ``flags`` added to it after querying SkyMapper. Upstream did the
-        same, and Kepler's query runner passes a fresh dict per call, so nothing
+        same, and MARS's query runner passes a fresh dict per call, so nothing
         in-tree is affected.
         """
         if constraints is None:

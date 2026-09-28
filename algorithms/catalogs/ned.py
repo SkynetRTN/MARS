@@ -1,4 +1,4 @@
-"""Kepler: NASA/IPAC Extragalactic Database (NED) table vocabulary.
+"""MARS: NASA/IPAC Extragalactic Database (NED) table vocabulary.
 
 NED serves per-object data through several distinct tables rather than one
 flat row. This module is the lookup table for that vocabulary -- which

@@ -1,6 +1,6 @@
-"""Kepler: remote catalog access.
+"""MARS: remote catalog access.
 
-Where ``algorithms.catalogs`` declares what Kepler knows about each catalog, this
+Where ``algorithms.catalogs`` declares what MARS knows about each catalog, this
 package goes and gets the rows. It owns every network call in the catalog path.
 
 Start here:
@@ -32,7 +32,7 @@ pulls in astroquery and installs the cache patch described in ``cache.py``.
 Importing ``algorithms.query.selection`` or ``algorithms.query.geometry`` does not —
 filter matching and geometry work on declarations alone.
 
-Nothing here is imported at Kepler start-up, and no module makes a network call
+Nothing here is imported at MARS start-up, and no module makes a network call
 at import time.
 """
 

@@ -1,6 +1,6 @@
-"""Kepler: the reference-magnitude catalog subset (``CATALOG_OPTIONS``).
+"""MARS: the reference-magnitude catalog subset (``CATALOG_OPTIONS``).
 
-Kepler carries *two* catalog registries and field calibration reads both:
+MARS carries *two* catalog registries and field calibration reads both:
 
 * ``catalogs/__init__.py`` exposes ``CATALOGS`` — all 11 catalogs, used for
   querying and for filter-aware catalog selection;

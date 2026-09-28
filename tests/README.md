@@ -8,7 +8,7 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 
 ## What this suite is for
 
-Kepler's Python folders are **byte-preserving extractions** from Skynet (see
+MARS's Python folders are **byte-preserving extractions** from Skynet (see
 `CLAUDE.md`, "The extraction contract"). So these are not tests of whether the
 algorithms are *right* — that question was settled upstream. They test whether
 the algorithms still do **exactly what they did before the extraction**,
@@ -20,8 +20,8 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 
 Three consequences shape everything here:
 
-1. **Real data, not synthetic.** Fixtures are 39 real PROMPT/Skynet frames and
-   four complete recorded Skynet zero-point solves. See `test_data/README.md`.
+1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
+   four complete recorded Skynet zero-point solves. See `data/README.md`.
 2. **Recorded output, not recomputed expectations.** The centrepiece,
    `test_fieldcal_solution.py`, feeds `calc_solution` the exact rows Skynet fed
    it and compares against the exact numbers Skynet returned — bit-for-bit on
@@ -39,7 +39,8 @@ Three consequences shape everything here:
 | `test_fieldcal_solution.py` | **`calc_solution` bit-exact parity** against four recorded Skynet fits |
 | `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms, the `eval` guardrail |
-| `test_fieldcal_pipeline.py` | The `deps` seam, source matching, end-to-end calibration on a real frame |
+| `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
+| `test_fieldcal_reference.py` | The recorded ground truth as tool results (`tools/fieldcal_reference.py`), the offline replays, and the end-to-end **selection** replay: NGC 5128 B's 35 calibration stars re-chosen from the recorded 132-row APASS cone (45 candidates once clipped to the frame, minus the recorded VSX variables) with bit-exact reference magnitudes and solution, under a `socket.connect` guard |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |
@@ -47,30 +48,34 @@ Three consequences shape everything here:
 | `test_photometry_extraction.py` | SEP extraction on real frames, crop regions, WCS construction |
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
-| `test_wcs_headers.py` | Pixel scale and pointing across all 39 real headers |
+| `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_skylib_stats.py` | `chauvenet` and the statistics under the zero-point solve |
 | `test_skylib_geometry.py` | Pixel/aperture overlap, spherical angles, orientation decomposition |
 | `test_skylib_fits.py` | Gain, exposure, observation time, field of view |
 | `test_skylib_exposure.py` | Exposure-time calculators |
+| `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
+| `test_photometry_registry_smoke.py` | `tools/photometry.py`'s `list_photometry_targets`/`run_photometry_on_target` -- bundled-target resolution, fast offline runs, exposure-time consistency, and the sky-position/source-table fields that bridge into `tools.hr_diagram`. |
+| `test_radio_sources.py` | `algorithms/radio/`'s spectral-index/log-parabola fitting (injected-value recovery) and RA/Dec-column-guessing catalog matching, plus `tools/radio_sources.py`'s offline/error paths. New capability, no upstream to match -- see `docs/extraction.md`, "Radio Sources (Python)". |
 
 ## Markers
 
 - `slow` — runs source extraction or photometry over a real frame. Included by
   default; `-m "not slow"` skips them.
 - `network` — reaches a live catalog service. **Never runs by default.** Needs
-  both `-m network` and `KEPLER_TEST_NETWORK=1`, per CLAUDE.md's rule that
+  both `-m network` and `MARS_TEST_NETWORK=1`, per CLAUDE.md's rule that
   default checks stay deterministic and bounded.
 - `solver_data` — needs astrometry.net index files covering a ~10 arcmin field,
-  or a local UCAC4/UCAC5 tree. Skips itself when the data is absent, which it
-  normally is: the commonly packaged 4107-4119 index set starts at 22 arcmin
-  and cannot solve these frames.
+  or a local UCAC4/UCAC5 tree, plus the corresponding environment setting.
+  Tests skip themselves when the configured data is absent. The commonly
+  packaged 4107-4119 index set starts at 22 arcmin and cannot solve these
+  frames.
 
 ## CI
 
 `.github/workflows/ci.yml` runs `uv run --locked pytest` as a required job.
 The default suite remains deterministic: network-marked tests are skipped unless
-`KEPLER_TEST_NETWORK=1` is set explicitly.
+`MARS_TEST_NETWORK=1` is set explicitly.
 
 ## Defects recorded here
 
@@ -91,9 +96,9 @@ changed — which may be the intent, but is never an accident.
 | `photometry/source_extraction.py` | Any crop that narrows the **columns** raises `ValueError: array is not C-contiguous` inside `sep`. `_crop_data` returns a numpy view; row-only slices stay contiguous, column slices do not. `_ensure_native_contiguous` exists in the sibling `photometry.py` and was never applied here. | `test_photometry_extraction.py` |
 | `query/geometry.py` | `clip_sources_to_box` **silently returns zero sources** near a pole. Once `sin(w/2)/cos(dec) > 1` the `arcsin` yields NaN, every subsequent comparison against NaN is `False` — including the pole and RA-wrap guards — and execution falls through to a filter that rejects everything. At dec 89.5 a 60-arcmin box is already enough. The failure surfaces as "no catalog sources", not as an error. | `test_query_geometry.py` |
 | `wcs/header_utils.py` | `_parse_ra_dec_values` **raises** on the comma decimal separators three fixture frames use (`'00:42:44,3'`), and `guess_icrs_radec_from_header` does not catch it. Latent only because those frames are solved, so `CRVAL` answers at step 1. An unsolved frame from the same telescope — exactly the case a solver hint exists for — would raise. | `test_wcs_headers.py` |
-| `wcs/wcs.py` | `_clear_wcs_solution_fields` clears `ra`/`dec`/`pixel_scale`/`rotation` while the solve writes `ra_deg`/`dec_deg`/`pixel_scale_arcsec_per_px`/`rotation_deg`. The four clears are no-ops and stale astrometry survives a failed solve. Documented in `wcs/EXTRACTION.md` §5.2; `WcsSolution` is deliberately **not** a `slots` dataclass so this stays a silent no-op rather than an `AttributeError`. | `test_wcs_solution.py` |
+| `wcs/wcs.py` | `_clear_wcs_solution_fields` clears `ra`/`dec`/`pixel_scale`/`rotation` while the solve writes `ra_deg`/`dec_deg`/`pixel_scale_arcsec_per_px`/`rotation_deg`. The four clears are no-ops and stale astrometry survives a failed solve. Documented in `docs/extraction.md`, WCS §5.2; `WcsSolution` is deliberately **not** a `slots` dataclass so this stays a silent no-op rather than an `AttributeError`. | `test_wcs_solution.py` |
 | `wcs/wcs.py` | A header rewrite clears `RADESYS` but **not** `EQUINOX` or `RADECSYS`, so a stale frame declaration can outlive the solution it described — a ~0.6° error if a B1950 `EQUINOX` survives onto an ICRS solve. Latent: no fixture frame carries either keyword. | `test_wcs_solution.py` |
-| `fieldcal/solution.py` | `calc_solution` raises `ValueError: math domain error` on perfectly zero-scatter input, via float cancellation in the weighted-error term at `solution.py:141`. Unreachable with real photometry; very reachable from a tidy synthetic fixture. Pinned against a real frame because the cancellation depends on the exact magnitudes. | `test_fieldcal_solution.py` |
+| `fieldcal/solution.py` | `calc_solution` raises `ValueError` on perfectly zero-scatter input, via float cancellation in the weighted-error term at `solution.py:141` (the exception text differs by Python version). Unreachable with real photometry; very reachable from a tidy synthetic fixture. Pinned against a real frame because the cancellation depends on the exact magnitudes. | `test_fieldcal_solution.py` |
 
 ### Divergences and dead code
 
@@ -102,7 +107,7 @@ changed — which may be the intent, but is never an accident.
 | `catalogs/` + `fieldcal/ref_mag.py` | OCL (Open/Clear/Lum) filters resolve for catalog **selection** but not for **strict** reference-magnitude resolution — the two read different registries, and only `CATALOGS` carries `_OCL_TO_V`. Unfiltered frames still calibrate against V, but by the non-legacy preferred-band fallback rather than the declared mapping. `strict_filter_parity=True` calibrates nothing for them. The recorded OCL policy (`ocl_filter_report.json`) is a three-way V/r'/R trial the fixed fallback cannot express. | `test_query_selection.py` |
 | `wcs/header_utils.py` | `estimate_pixel_scale_arcsec_per_pix` documents a three-step preference order but has steps 1 (WCS) and 3 (optics) **commented out** upstream. Only direct keywords are consulted, so a header with a good CD matrix and no `SECPIX` returns `None`. | `test_wcs_headers.py` |
 | `query/geometry.py` | The `ra_max >= ra_min + 24` "whole sky" branch is **unreachable**: `arcsin` caps at 90°, so the RA half-width never exceeds 6 h and the span never reaches 24. Beyond that point the NaN path above takes over. | `test_query_geometry.py` |
-| `query/geometry.py` | `combined_bounding_box` is a working function that upstream guarded off with `if False:`; nothing in Kepler calls it. Kept as code because the reason it was disabled was never recorded. | `test_query_geometry.py` |
+| `query/geometry.py` | `combined_bounding_box` is a working function that upstream guarded off with `if False:`; nothing in MARS calls it. Kept as code because the reason it was disabled was never recorded. | `test_query_geometry.py` |
 | `query/geometry.py` | Two footprint implementations disagree by design: `boxes_from_wcs` projects corners and tracks rotation; `image_boxes_from_wcs` multiplies pixel scale by axis length and is **blind to rotation**. 2.6% apart on a 1.6° frame, and growing with angle. | `test_query_geometry.py` |
 | `catalogs/vsx_catalog.py` | VSX declares all 35 of its bands as the empty **string** `''`, where every other catalog uses a list of column names. Both are falsy so readers keying on `set(catalog.mags)` are unaffected — but anything indexing the value breaks, and `_filter_variable_stars` swallows exceptions, so it would silently disable variable-star rejection. | `test_catalogs_registries.py` |
 | `catalogs/catalog_options.py` | `_MutatingCatalog` merges `filter_lookup` into the **class** dict, where `catalogs.catalog.Catalog` rebinds an instance copy. Preserved as an upstream difference; safe only because both classes are private and instantiated once. | `test_catalogs_registries.py` |
@@ -125,11 +130,11 @@ Gaps are listed so they are visible rather than assumed.
 
 | Area | Why not, and what it would take |
 | --- | --- |
-| **TypeScript** — `algorithms/lightcurve/`, `periodogram/`, `hrdiagram/` | `package.json` provides `tsc --noEmit` typechecking only; there is **no test runner**. Covering the Lomb-Scargle core, period folding, field-star removal and `computePlotDelta` needs a runner (vitest or jest) added as a devDependency — a tooling decision left to a maintainer. The FITS fixtures here do not apply to light curves; those algorithms would need their own recorded Astromancer inputs and outputs. |
-| **`solve_wcs` end to end** | Marked `solver_data` and skips. `solve-field` is on PATH but the packaged 4107-4119 index set starts at 22 arcmin, and these frames are ~10 arcmin — so the blind solve returns no solution rather than failing. Needs the 4200-series indexes, or a local UCAC4/UCAC5 tree with `ATLAS_CATALOG_ROOT` set. The test asserts the recovered centre and parity against the frame's own solution once data is available. |
+| **`tools/hr_diagram.py`'s VizieR-backed steps** | `crossmatch_gaia` / `crossmatch_gaia_by_position` (Gaia DR3 via `I/355/gaiadr3`) and `get_literature_cluster_params` (Cantat-Gaudin & Anders 2020 via a name-resolved `target=` query) go through `tools.vizier.search_vizier`. Confirmed working manually against NGC 6124 and, for the catalog-only path, a globular cluster (via an ad hoc script no longer in the tree; see `docs/extraction.md`, "HR Diagram (Python)") — but there is still no `network`-marked automated test for any of these steps, so a future regression would not be caught by CI. |
+| **`solve_wcs` end to end** | `tools.wcs.solve_astrometry` is covered for configuration, immutable result handling, structured failures, header short-circuiting, guarded writes, and the explicit search bounds (validation, forwarding to both backend requests, the parity default and the ATLAS narrowing pinned, the no-hint refusal). `solver_data`-marked tests reach the real backend when explicitly configured. The packaged 4107-4119 indexes start at 22 arcmin while these frames are ~10 arcmin, so the blind astrometry.net solve returns no solution rather than failing. With a 4200-series set (`ANET_INDEX_PATH` naming the directories that hold the index files directly) the bounded solver-data test solves the M15 fixture in ~14 s. The P9 ATLAS test requires the external `ATLAS_CATALOG_ROOT` / `ATLAS_CATALOG` dependency and validates a real UCAC lookup plus recorded bounded-attempt diagnostics, without asserting blind-triangle convergence. |
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
-| **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The row mappers (`table_to_sources` on Landolt, USNO, VSX) are covered structurally via the MRO contract but not executed against real provider rows — that needs recorded VizieR responses, which this repository does not carry. |
-| **`fieldcal/batch_wcs_photometry_zeropoint_export.py`** | A batch driver over the whole pipeline; every stage it calls is covered individually, but the driver itself needs the solver data above to run. |
+| **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The APASS and VSX row mappers *are* executed against real provider rows — the recorded responses under `data/fieldcal/zp_solutions/ngc5128_b_002/` (`test_fieldcal_reference.py`) — but Landolt and USNO's `table_to_sources` overrides are still covered only structurally via the MRO contract; they would need recorded responses of their own. |
+| **`tools/radio_sources.py`'s VizieR/NED-backed steps** | `identify_radio_sources`'s catalog cross-match and `analyze_source_spectrum`/`plot_field_sed`'s name-based NED lookup. Confirmed working manually end to end against a synthetic FITS frame pointed at 3C 48 (real detection, real VizieR radio-catalog match, real 85-point NED spectrum, plausible spectral index -- see `docs/extraction.md`, "Radio Sources (Python)") — but there is no `network`-marked automated test for either step, so a future regression would not be caught by CI. |
 | **Broader `tools/` coverage** | The Claude photometry tool has no-network smoke coverage here. The rest of `tools/` still warrants focused tests over the public tool schemas and runner behavior. |
 
 ## Adding tests

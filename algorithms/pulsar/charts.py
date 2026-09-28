@@ -1,7 +1,7 @@
 """Chart specifications for the pulsar plots — what Astromancer draws.
 
-PORTED from ``algorithms/lightcurve/pulsar/pulsar-charts.spec.ts``, itself
-extracted from Astromancer's three Highcharts components and the
+PORTED from ``git-history:algorithms/lightcurve/pulsar/pulsar-charts.spec.ts``,
+itself extracted from Astromancer's three Highcharts components and the
 ``PulsarChartInfo`` / ``PulsarPeriodogram`` / ``PulsarPeriodFolding`` defaults.
 
 This module is **specification, not rendering**: series identity, axis
@@ -67,7 +67,7 @@ class ChartSpec:
 
 
 #: ``PulsarChartInfo.getDefaultChartInfo()`` plus the component's series
-#: literal. The label order matches Kepler's ingest: ``source1`` carries the
+#: literal. The label order matches MARS's ingest: ``source1`` carries the
 #: file's XX1 column and is labelled "Polarization XX", so the plot shows XX
 #: where the file says XX. Both are transposed the same way -- see
 #: ``algorithms/pulsar/ingest.py::CAL_COLUMNS``.

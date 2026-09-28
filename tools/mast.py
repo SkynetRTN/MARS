@@ -1,4 +1,4 @@
-"""Kepler: MAST archive search and product retrieval.
+"""MARS: MAST archive search and product retrieval.
 
 The old code sliced ``obs_table[:5]`` and ``data_products[:15]`` -- arbitrary
 caps, not service limits. This tool removes both: ``query_object`` and
@@ -21,14 +21,16 @@ the kind of well-studied object callers ask about most.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional, Union
 
 from astroquery.exceptions import InvalidQueryError
 from astroquery.mast import Observations
 
 from tools import artifacts
-from tools.config import DEFAULT_MAX_OBSERVATIONS, FITS_DOWNLOAD_DIR, PREVIEW_ROWS
-from tools.models import ToolResult, coerce_optional_int
+from tools import config
+from tools.config import DEFAULT_MAX_OBSERVATIONS, PREVIEW_ROWS
+from tools.models import ToolResult, ToolWarning, coerce_optional_int
 
 __all__ = ["search_mast"]
 
@@ -57,7 +59,12 @@ def search_mast(
     products). ``mrp_only``/``extension``/``product_type`` narrow the product
     list via ``filter_products`` (e.g. ``product_type="SCIENCE"``) rather than
     downloading indiscriminately. ``download=True`` fetches the filtered
-    products into ``fits_downloads/``.
+    products into the archive download directory under ``data/``, which the
+    local frame registry (``tools.optical``) also searches, so a downloaded
+    frame is immediately resolvable by name or path for the image tools.
+    Bear in mind that one ``list_optical_frames`` call reads a bounded number
+    of frames, so a bulk download is better narrowed with the product filters
+    above than sorted out afterwards.
     """
     if not name or not name.strip():
         return ToolResult(
@@ -86,14 +93,17 @@ def search_mast(
 
     obs_artifact = artifacts.write_table(obs_table, f"mast_{name}_observations", subdir="mast")
 
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
     obs_for_products = obs_table
     if max_observations is not None and len(obs_table) > max_observations:
         obs_for_products = obs_table[:max_observations]
         warnings.append(
-            f"matched {len(obs_table)} observations, fetched products for "
-            f"{max_observations}; raise max_observations, or set it to JSON "
-            "null for no cap, for the rest"
+            ToolWarning(
+                code="observations_capped",
+                message=f"matched {len(obs_table)} observations, fetched products "
+                f"for {max_observations}; raise max_observations, or set it to "
+                "JSON null for no cap, for the rest",
+            )
         )
 
     try:
@@ -114,7 +124,13 @@ def search_mast(
             preview=artifacts.preview_rows(obs_table, PREVIEW_ROWS),
             columns=[str(c) for c in obs_table.colnames],
             artifacts=[obs_artifact],
-            warnings=warnings + ["no data products found for the fetched observations"],
+            warnings=warnings
+            + [
+                ToolWarning(
+                    code="no_products_for_observations",
+                    message="no data products found for the fetched observations",
+                )
+            ],
         )
     except Exception as exc:
         return ToolResult(
@@ -136,16 +152,46 @@ def search_mast(
 
     if download:
         if len(products) == 0:
-            warnings.append("no products matched the given filters; nothing downloaded")
+            warnings.append(
+                ToolWarning(
+                    code="no_products_matched",
+                    message="no products matched the given filters; nothing downloaded",
+                )
+            )
         else:
-            FITS_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            # Read through the module, not a from-import bound at import
+            # time: tools.optical resolves its download root the same way, and
+            # if these two disagree the frame registry searches one directory
+            # while the download lands in another -- which is BL-11 again.
+            download_dir = config.FITS_DOWNLOAD_DIR
+            download_dir.mkdir(parents=True, exist_ok=True)
             manifest = Observations.download_products(
-                products, download_dir=str(FITS_DOWNLOAD_DIR)
+                products, download_dir=str(download_dir)
             )
             local_paths = (
                 list(manifest["Local Path"]) if "Local Path" in manifest.colnames else []
             )
-            warnings.append(f"downloaded {len(local_paths)} file(s) to {FITS_DOWNLOAD_DIR}")
+            # Name the directories the files actually landed in. astroquery
+            # nests them under mastDownload/<mission>/<obs_id>/, and once a
+            # bulk download outgrows list_optical_frames' cap, directory=
+            # naming one of these leaves is how a caller reaches a specific
+            # product -- nothing else reports the leaf.
+            leaves = sorted({str(Path(str(p)).parent) for p in local_paths if p})
+            shown = ", ".join(leaves[:5]) + (
+                f" (+{len(leaves) - 5} more)" if len(leaves) > 5 else ""
+            )
+            warnings.append(
+                ToolWarning(
+                    code="products_downloaded",
+                    message=f"downloaded {len(local_paths)} file(s) to {download_dir}"
+                    + (f" under: {shown}" if leaves else "")
+                    + "; they now resolve through the local frame registry -- call "
+                    "list_optical_frames or resolve_optical_frame to pick one up, "
+                    "then the image tools take it by path. A listing reads a bounded "
+                    "number of frames, so after a large download pass directory= "
+                    "naming one of the directories above",
+                )
+            )
 
     return ToolResult(
         status="ok" if len(obs_for_products) == len(obs_table) else "partial",

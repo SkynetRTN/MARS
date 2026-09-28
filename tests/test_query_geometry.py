@@ -3,7 +3,7 @@
 This is the module that decides *which patch of sky gets queried*, so an error
 here does not raise — it fetches the wrong stars and the zero-point solve
 quietly calibrates against them. Everything is exercised against the real
-headers in ``test_data/optical``, because the interesting cases are exactly the
+headers in ``data/optical``, because the interesting cases are exactly the
 ones real detectors produce: rotation, negative parity, and southern fields
 where the cos(dec) narrowing stops being a rounding detail.
 
@@ -457,7 +457,7 @@ def test_combined_bounding_box_encloses_two_adjacent_fields():
     """Still a working function even though upstream guarded its call site off.
 
     Kept as code rather than a comment because the reason it was disabled was
-    never recorded. Nothing in Kepler calls it; turning it on is a behaviour
+    never recorded. Nothing in MARS calls it; turning it on is a behaviour
     change needing its own validation.
     """
     boxes = [(180.0, 10.0, 0.2, 0.2), (180.2, 10.0, 0.2, 0.2)]

@@ -1,6 +1,6 @@
 # Algorithm Extraction Records
 
-This document consolidates the extraction records for every algorithm package under `algorithms/`.
+This document consolidates the extraction records for every algorithm package under `algorithms/` in MARS (MCP Astronomy Research Suite).
 The records were previously kept as one `EXTRACTION.md` file per package; this is now the authoritative master record.
 
 Internal section references such as `§5.2` are local to the package section they appear in unless they explicitly name another section.
@@ -12,6 +12,8 @@ Internal section references such as `§5.2` are local to the package section the
 - [Catalogs](#catalogs)
 - [Query](#query)
 - [HR Diagram / Isochrone Matching](#hr-diagram-isochrone-matching)
+- [HR Diagram (Python)](#hr-diagram-python)
+- [Radio Sources (Python)](#radio-sources-python)
 - [Light Curve](#light-curve)
 - [Pulsar Sonification](#pulsar-sonification)
 - [Periodogram](#periodogram)
@@ -71,6 +73,8 @@ algorithms/wcs/
 ├── header_utils.py          pixel-scale + RA/Dec guesses from FITS keywords
 ├── config.py                SEAM: backend configuration (was Dynaconf)
 └── state.py                 SEAM: plain objects for the ORM rows
+                             (deleted since, by the stateless rollout S0–S6;
+                             solve output is algorithms/wcs/results.py now)
 algorithms/skylib_lite/
 ├── astrometry/              the whole solver stack
 │   ├── main.py, types.py
@@ -213,37 +217,51 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
 - **Was:** `from skynet_db.config import settings` — a Dynaconf instance layered
   over `config/settings.toml` + `config/environments/dev.local.toml` with a
   `SKYNET_` env-var prefix.
-- **Now:** `wcs/config.py` exposes a `SolverSettings` object with the same four
-  attribute names the builders read (`ANET_INDEX_PATH`, `ATLAS_CATALOG_ROOT`,
-  `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S`), sourced from the environment.
-- **Behaviour:** unchanged. `build_anet_config` / `build_atlas_config` read these
-  only through `getattr(cfg, NAME, None)`, and both already handle `None` (anet
-  logs a warning and disables itself; atlas returns `None`). Callers with their
-  own config can pass any object to the builders or reassign `wcs.settings`.
+- **Now:** `wcs/config.py` exposes a pure `SolverSettings` object with the five
+  attribute names the builders read (`ANET_INDEX_PATH`, `ANET_TIMEOUT_S`,
+  `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S`). `tools.wcs`
+  reads environment configuration and passes an isolated per-call settings
+  object to `solve_wcs`; a direct algorithm call with no settings has no
+  configured backend. Optional caller-owned attempt/failure lists expose
+  backend diagnostics alongside the explicit `WcsSolveResult` output.
+- **Behaviour:** the extracted solver logic is unchanged. `build_anet_config` /
+  `build_atlas_config` read configuration only through
+  `getattr(cfg, NAME, None)`, and both already handle `None` (anet
+  logs a warning and disables itself; atlas returns `None`). `ANET_TIMEOUT_S`
+  is new caller-facing plumbing to the vendored backend's existing
+  `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
+  object to the builders or pass it to `solve_wcs`.
+- **Search bounds (P6, 2026-09-12):** `wcs/config.py` also carries
+  `WcsSearchBounds(radius_deg, min_scale_arcsec, max_scale_arcsec)`, passed as
+  `solve_wcs(..., search_bounds=)`. Upstream exposed none of these — its
+  `PlateSolveSettings` comment says why — and the default is untouched: each
+  field that is `None` keeps the value of the freshly built
+  `WcsCalibrationSettings()`, and the overrides land on that object exactly
+  where `solve_settings` already writes `sip_order`/`crpix_center`, *before*
+  upstream's own `radius > 0` / `min_scale < max_scale` checks. Two
+  post-extraction behaviours follow, both unreachable from the defaults:
+  a radius below 180 with no pointing hint raises `SearchRadiusWithoutHint`
+  before any backend runs (astrometry.net would otherwise read the missing
+  hint as `float(None)`), and an explicit scale window is used verbatim by the
+  ATLAS branch instead of being intersected with its header-derived
+  half/double narrowing, which could invert the range when the header scale is
+  what the caller is overriding. The effective radius, window, and hint centre
+  are reported on `WcsSolveMetadata.search_*` on every return path, and the
+  window ATLAS was actually given on `search_atlas_*` when that branch ran.
+  Every such line in `wcs.py` is commented `P6`.
 
-##### 5.2 ORM rows — `state.py`
+##### 5.2 ORM rows — removed
 - **Was:** `from skynet_db.models import ObservationAssetProcessingRun`
   (SQLAlchemy), whose `ensure_wcs_solution()` creates and `session.add()`s an
   `ObservationTaskAssetProcessingRunWcsSolution` row.
-- **Now:** `state.ProcessingRun` / `state.WcsSolution`, plain dataclasses. The
-  25 solution columns are reproduced 1:1 in name, order and `None` default; the
-  `processing_run_id` primary key, the relationship and the `session.add()` are
-  dropped as persistence-only. `ProcessingRun` keeps only the three members the
-  solve touches (`id`, `observation_asset_id`, `wcs_solution`).
-- **Preserved quirk:** `wcs._clear_wcs_solution_fields()` resets attribute names
-  that do **not** all match the mapped columns — it clears `ra`, `dec`,
-  `pixel_scale` and `rotation`, whereas the solve writes `ra_deg`, `dec_deg`,
-  `pixel_scale_arcsec_per_px` and `rotation_deg`. On a SQLAlchemy instance,
-  `setattr` of an unmapped name silently creates a throwaway instance
-  attribute, so upstream those four clears are no-ops and the corresponding
-  columns retain their previous values after a failed solve. `WcsSolution` is a
-  plain (non-`slots`) dataclass **specifically so this reproduces exactly**
-  rather than raising `AttributeError`. Not fixed — reported here.
+- **Now:** WCS solving returns frozen `WcsSolveResult` and `WcsSolveMetadata`
+  values. A failed solve has no previous mutable row to clear, so dimensions and
+  source count describe that call only.
 
-##### 5.3 Clock — `state.now()`
+##### 5.3 Clock
 - **Was:** `from ..common import now`
   (`skynet_db.runners.observation_asset_processing.common`).
-- **Now:** the same one-line `datetime.now(timezone.utc)`, in `state.py`.
+- **Now:** successful result metadata records UTC time directly; no state module remains.
 
 ##### 5.4 Pydantic base — `schemas.py`
 - **Was:** `from skynet_sdk.schemas import SkynetBaseModel`.
@@ -302,7 +320,7 @@ is still needed elsewhere, so treat it as required.
 |---|---|
 | `solve-field` binary (astrometry.net) | the anet backend. Resolved via explicit config → `SKYLIB_ASTROMETRYNET_SOLVE_FIELD` / `SKYLIB_ANET_SOLVE_FIELD` → `PATH`. Absent ⇒ `is_available()` is `False` and the solve falls through to ATLAS. |
 | astrometry.net index files | `ANET_INDEX_PATH`, or `SKYLIB_ASTROMETRYNET_INDEX_PATH` / `SKYLIB_ANET_INDEX_ROOT`. Recognized layouts: `index-*.fits`, `<prefix>-index-*.fits` (UCAC5), suffixless `index-NNN` (TYCHO2). |
-| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. `ATLAS_CATALOG_ROOT` (or `SKYLIB_UCAC5_ROOT`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. |
+| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. Set `ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` (`ucac4` or `ucac5`; default `ucac5`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. UCAC4 expects `Z000.UC4` through `Z179.UC4` at its root. This is an operator-owned, multi-gigabyte dependency: the supplied UCAC5 tree is 5.3 GB, while a complete native UCAC4 tree is approximately 8.5 GB; neither is vendored. |
 | `ngc2000.dat` | bundled at `skylib/astrometry/anet/ngc2000.dat`; drives globular-cluster core masking in `solve_field_glob`. Loaded by path relative to `engine.py`, so it must stay beside it. |
 
 Both backends degrade to "unavailable" rather than failing, so the package
@@ -328,7 +346,7 @@ data installed.
    `skylib.util.stats.chauvenet`.
 
 3. **`source_extraction.py` was taken whole**, though only
-   `build_wcs_from_header`, `get_source_xy` and `perform_source_extraction` are
+   `build_wcs_from_header`, `get_source_xy` and `run_source_extraction` are
    imported by `wcs.py`. Splitting it would have meant editing `__all__` and
    fragmenting a cohesive module; `get_source_radec` came along unused.
 
@@ -339,7 +357,7 @@ data installed.
    Note this is the **anet path only** — the ATLAS backend runs its own
    self-contained scipy extractor
    (`skylib/astrometry/atlas/extract/sources.py`). If the photometry and
-   fieldcal extractions land in sibling Kepler folders, this module will be
+   fieldcal extractions land in sibling MARS folders, this module will be
    duplicated across them; consolidating it into a shared package is a
    repo-level decision outside this extraction's scope.
 
@@ -353,8 +371,11 @@ data installed.
 
 7. **The `_clear_wcs_solution_fields` name mismatch was preserved, not fixed**
    (§5.2). It is an upstream behaviour that a plain-dataclass port could easily
-   have converted into a crash or a silent behaviour change; `state.py` is
-   shaped to reproduce it.
+   have converted into a crash or a silent behaviour change; `state.py` was
+   shaped to reproduce it. *Superseded:* the stateless rollout (S0–S6) deleted
+   both, and `_clear_wcs_solution_fields` is now on the forbidden-API list in
+   `tests/test_repository_shape.py`. The extraction-time decision above stands
+   as a record of what was extracted, not of what the tree holds today.
 
 ---
 
@@ -371,11 +392,31 @@ data installed.
 - Spot-checked behaviour: `WCS_REGEX` keyword matching, `_angular_sep_deg`,
   `_parse_ra_hours` / `_parse_dec_deg` sexagesimal parsing, `decompose_linear`,
   `wcs_from_similarity` → `_wcs_parity` round trip, `WcsCalibrationSettings` /
-  `PlateSolveSettings` defaults, `build_anet_config` / `build_atlas_config`
-  returning `None` when unconfigured, and `_clear_wcs_solution_fields` against
-  `state.WcsSolution`.
+  `PlateSolveSettings` defaults and `build_anet_config` /
+  `build_atlas_config` returning `None` when unconfigured.
 - **Not** run: an end-to-end solve. That needs `solve-field` plus astrometry.net
   index files or a UCAC catalog on disk, none of which are present here.
+- *Addendum, 2026-09-12 (P6):* an end-to-end astrometry.net solve has now run
+  on the development host. With `ANET_INDEX_PATH` naming the three leaf
+  directories under `/srv/agents/catalogs/astrometry` (`2MASS_ANET/4200`,
+  `TYCHO2/indices`, `UCAC5`, `os.pathsep`-joined — the root itself holds no
+  index files and is rejected), `tools.wcs.solve_astrometry` on
+  `data/optical/m15_globular_open_000.fits` with
+  `search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8` solved in
+  ~14 s: CRVAL (322.481, 12.195), 0.594 arcsec/px against the header's
+  `SECPIX` 0.586, parity accepted; the unbounded default reached the same
+  solution in ~285 s. `solve_field_glob` then re-solved with the cluster core
+  masked, at its own field-sized radius around that solution.
+- *Addendum, 2026-09-13 (P9):* ATLAS now has an opt-in, no-network validation
+  route in
+  `tests/test_wcs_solution.py::test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window`.
+  With `ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5` and
+  `ATLAS_CATALOG=ucac5`, it builds the real reader, queries the M15 footprint
+  and records the real blind-attempt diagnostics for the explicit
+  0.58--0.59 arcsec/px window. Its deliberately empty image returns the
+  expected `no_sources` outcome after a non-empty lookup, so the check validates
+  dependency loading and search configuration without claiming blind-triangle
+  convergence; the tool retains astrometry.net as the blind solving route.
 
 ## Photometry
 
@@ -495,11 +536,11 @@ Every seam is marked in the source with `# EXTRACTED: was <original symbol>`.
 | # | File | Cut | Consequence |
 |---|---|---|---|
 | 1 | `photometry.py`, `source_extraction.py` | `from skylib...` (installed package) -> `from algorithms.skylib_lite...` (shared vendored copy) | None. Same code. |
-| 2 | `source_extraction.py` | `from skynet_db.models import ObservationAssetProcessingRun`; the `processing_run:` annotation on `perform_source_extraction` | None. The body already read the run duck-typed (`getattr(processing_run, "observation_asset_id", None)`); only the SQLAlchemy type annotation was dropped. |
-| 3 | `photometry.py` | Same ORM import + annotation on `perform_photometry` | None on the returned values. |
+| 2 | `source_extraction.py` | Upstream ORM-shaped extraction adapter | Removed. Callers use `run_source_extraction(..., file_id=...)`. |
+| 3 | `photometry.py` | Upstream ORM-shaped photometry adapter | Removed. Callers explicitly compose detections, WCS, background, and RMS into `run_photometry`. |
 | 4 | `photometry.py` | `from .wcs import build_wcs_from_header` -> `from .source_extraction import build_wcs_from_header` | None. Not a reimplementation: `wcs.py` itself does `from .source_extraction import build_wcs_from_header`, so this is the identical function imported from its point of definition. Avoids dragging in the astrometry.net/ATLAS plate-solving stage (which belongs to `algorithms/wcs/`). |
-| 5 | `photometry.py` | `build_wcs_for_processing_run(processing_run, header)` → `build_wcs_from_header(header)` | **Behavioral.** The original (`optical_data_processing/wcs.py:151`) is `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`. The first term is kept; the second reconstructs a WCS from the plate solution persisted on the ORM row. If the FITS header carries no celestial WCS, `wcs` is now `None` where Skynet could still have recovered one from the database. Affects `perform_photometry()` only — `run_photometry()`, the numeric entry point, is untouched. |
-| 6 | `photometry.py` | `processing_run.ensure_photometry()` / `photometry_state.zero_point_mag = ...` | None on the returned values. Pure ORM job-state persistence; `settings.zero_point_mag` is already folded into each magnitude by `PhotometryData.from_source_and_row()`. |
+| 5 | `photometry.py` | Persisted-run WCS reconstruction | Removed. Callers pass a header-derived or solve-result WCS explicitly. |
+| 6 | `photometry.py` | ORM photometry-state persistence | Removed. `settings.zero_point_mag` is already folded into each returned magnitude. |
 | 7 | `schemas.py` | `from skynet_sdk.schemas import SkynetBaseModel` → local base class | See below. |
 
 ##### Seam 7 in detail
@@ -553,7 +594,7 @@ dependency, and removing them would have been a rewrite.
 | `optical_data_processing/test-photometry.py` (110 lines) | See §5. |
 | `skylib/calibration/{bias,dark,flat,cosmic,cosmetic}.py` | Pre-photometry image calibration; not reachable from the photometry path. |
 | `skylib/{astrometry,catalogs,combine,color,enhancement,ephem,io,quality,sonification}/` | Unrelated to photometry. |
-| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other Skynet stages / other Kepler modules. |
+| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other Skynet stages / other MARS modules. |
 | `skynet_db.models`, `skynet_db.config`, `runners/utils.py`, `runners/common` job machinery | ORM, S3, job-state. The seams above. |
 
 ---
@@ -620,7 +661,7 @@ It lives at `field_cal.py:612`:
 cal_phot_settings = phot_settings.model_copy(update={"apcorr_tol": 0.0})
 ```
 
-Whoever extracts Kepler `fieldcal/` must carry that line across. Its effect is
+Whoever extracts MARS `fieldcal/` must carry that line across. Its effect is
 here, in `skylib/photometry/aperture.py`: `apcorr_tol > 0` gates both the
 growth-curve aperture-correction block (line 426) and the annulus-parameter setup
 (lines 276, 374), so `0` disables aperture correction entirely.
@@ -808,14 +849,13 @@ unless noted. `OPD/` abbreviates
 
 ##### Core algorithm
 
-| Kepler file | Lines | Source | Source lines | Fidelity |
+| MARS file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
-| `field_cal.py` | 735 | `OPD/field_cal.py` | 701 (all) | Verbatim. Diff vs original is imports + 4 `deps.` call seams + 2 type annotations + the added parity annotation at the `apcorr_tol` line. No logic touched. |
+| `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
 | `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
-| `batch_wcs_photometry_zeropoint_export.py` | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Verbatim except the repo-root discovery seam (§4.6). |
-| `deps.py` | 130 | — | — | **New file.** Seam module only; contains no math. |
+| batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
 | `__init__.py` | 58 | — | — | **New file.** Public API surface. |
 
 ##### Catalog metadata — MOVED OUT
@@ -832,8 +872,9 @@ have since been extracted into `algorithms/query/`, so the network path
 described in §4.4 is no longer inert.
 
 Field calibration now reads catalog metadata by importing `algorithms.catalogs`
-directly (pure data, no network stack) and reaches the network through
-`deps.query_catalogs`.
+directly (pure data, no network stack) and does not reach the network at all:
+the stateless rollout removed `deps.query_catalogs` along with the rest of
+`algorithms/fieldcal/deps.py`, and the caller passes `catalog_sources` in.
 
 ##### Vendored skylib subset (`algorithms/skylib_lite/`)
 
@@ -866,8 +907,8 @@ the WCS, photometry, and field-calibration folders. They now share the single
 | `skynet_db.models.File`, S3 asset download (`_download_to_path`), `write_image_product_fits`, `get_worker_tmp_file_path` (`utils.py`) | Object storage / temp-file plumbing. Never reached from field calibration. |
 | `skynet_sdk.schemas.SkynetBaseModel` registry (`model_registry`, `register_union`, `rebuild_all_models`) | FastAPI/SDK schema-generation infrastructure. |
 | The other ~700 lines of `utils.py` (header parsing, pixel-scale estimation, RA/Dec guessing, trig helpers, DB session use) | Not field calibration. Only `calc_solution` and `resolve_ref_mag_for_filter` are reached. Its VizieR cache pruning, `query_catalogs_for_image` and WCS box helpers went to `algorithms/query/` — see the Query section of this document. |
-| `OPD/photometry.py`, `OPD/source_extraction.py` | Photometry / SEP extraction — `algorithms/photometry/`. Reached via `deps`. |
-| `OPD/wcs.py` (astrometry.net / ATLAS plate solving, 36 KB) | Plate solving — `algorithms/wcs/`. Reached via `deps`. |
+| `OPD/photometry.py`, `OPD/source_extraction.py` | Photometry / SEP extraction — `algorithms/photometry/`. Reached at extraction time via the since-deleted `deps` seam; callers now pass `detected_sources`/settings in. |
+| `OPD/wcs.py` (astrometry.net / ATLAS plate solving, 36 KB) | Plate solving — `algorithms/wcs/`. Reached at extraction time via the since-deleted `deps` seam; callers now pass `wcs=` in. |
 | `OPD/catalogs/*`, the SDSS SQL backend | Catalogs and their query backends — now `algorithms/catalogs/` and `algorithms/query/`. See §6. |
 | `common/schemas.py`: `WcsCalibrationSettings`, `Photometry`, `ImageProperties` | Not field-cal settings or results. |
 | `skylib` beyond `util/{stats,angle,fits}.py` | Not reached from field calibration. |
@@ -893,37 +934,13 @@ behaviourally load-bearing:**
   re-hydrates matched sources through `model_dump()`, so this is inside the
   numeric path. Verified still active: `PhotometryData(mag=nan).model_dump()["mag"] is None`.
 
-##### 4.2 `ObservationAssetProcessingRun` → duck-typed `Any`
+##### 4.2 `ObservationAssetProcessingRun` → explicit values
 
-Two sites: `field_cal.perform_field_calibration` and
-`field_cal._filter_variable_stars`.
+The maintained calibration API receives WCS, supplied catalog and variable rows,
+and optional provenance `file_id` directly. The upstream row remains provenance
+only; MARS does not recreate it.
 
-Only `.id` (source-ID prefix + logging) and `.observation_asset_id` (used as
-`file_id`) are read. `schemas.ProcessingRunRef` is a concrete stand-in for
-standalone callers. The third upstream site was the catalog query entry point,
-which never read the parameter at all; `algorithms/query/runner.py` drops it (§4.4).
-
-##### 4.3 Cross-domain callables → `algorithms/fieldcal/deps.py`
-
-| `deps` name | Was | Belongs in |
-|---|---|---|
-| `run_photometry` | `from .photometry import run_photometry` | `algorithms/photometry/` |
-| `run_source_extraction` | `from .source_extraction import run_source_extraction` | `algorithms/photometry/` |
-| `get_source_radec` | `from .source_extraction import get_source_radec` | `algorithms/photometry/` |
-| `build_wcs_for_processing_run` | `from .wcs import build_wcs_for_processing_run` | `algorithms/wcs/` |
-| `solve_wcs` | `from .wcs import solve_wcs` (batch driver only) | `algorithms/wcs/` |
-
-Unassigned, each raises `FieldCalDependencyError` naming the original symbol.
-Call sites use `deps.<name>(...)` rather than a `from .deps import <name>`
-binding so late assignment works.
-
-One behavioural note on `build_wcs_for_processing_run`: the Skynet original is
-`build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`.
-The second branch reconstructs a WCS from persisted DB rows and is ORM
-persistence — it is not reproduced. A header-only implementation gives the
-behaviour field calibration actually depends on.
-
-##### 4.4 Catalog ownership → `algorithms/catalogs/` and `algorithms/query/`
+##### 4.3 Catalog ownership → `algorithms/catalogs/` and `algorithms/query/`
 
 Originally this extraction copied catalog metadata into `fieldcal/catalogs/` and
 severed the query backends, so `query_box` / `query_circ` / `query_objects` /
@@ -936,14 +953,11 @@ What changed in `fieldcal`:
 |---|---|
 | `from .catalogs import CATALOGS` | `from algorithms.catalogs import CATALOGS` |
 | `from .catalog_plugins import CATALOG_OPTIONS` | `from algorithms.catalogs import CATALOG_OPTIONS` |
-| `from .catalog_query import query_catalogs_for_processing_run` | `deps.query_catalogs(...)` |
+| `from .catalog_query import query_catalogs_for_processing_run` | `tools.photometry` resolves rows before calling field calibration |
 | `fieldcal.schemas` defined `CatalogSource`, `Mag`, ... | re-exported from `algorithms.catalogs.schemas` |
 
-`deps.query_catalogs` is the one new seam, and unlike the other entries in
-`deps.py` it has a **working default** — it lazily imports
-`algorithms.query.runner.query_catalogs` on first call. So catalog fetching needs
-no wiring, and `import algorithms.fieldcal` still pulls in no astroquery.
-Override it to route queries elsewhere.
+The deterministic algorithm package does not query catalogs. `tools.photometry`
+selects catalogs and queries them for each public tool call.
 
 Two consequences worth noting:
 
@@ -962,19 +976,17 @@ The three magnitude-math overrides — `LandoltCatalog.table_to_sources`,
 throughout and are now live: the first two reach the real VizieR row mapper
 through `super()` via the MRO that `algorithms/query/binding.py` constructs.
 
-##### 4.5 `skylib` absolute imports → shared `skylib_lite` imports
+##### 4.4 `skylib` absolute imports → shared `skylib_lite` imports
 
 `from skylib.util.{stats,angle,fits} import ...` →
 `from algorithms.skylib_lite.util.{stats,angle,fits} import ...`. Mirrors the
 pattern used by `algorithms/photometry/` and `algorithms/wcs/`.
 
-##### 4.6 Repo-root discovery (batch driver)
+##### 4.5 Batch driver
 
-`_find_repo_root()` walked ancestors looking for `packages/py/skynet-db`, then
-derived `../skynet-data/pipeline_data`. That marker cannot exist in Kepler, so
-the walk was replaced with `$KEPLER_PIPELINE_DATA_DIR` (default
-`./pipeline_data`). Only *where the driver looks for data* changed; the batch
-logic and every calibration setting literal are untouched.
+The upstream exporter is deliberately not maintained. MARS tools execute one
+known input per call and return structured results rather than iterating a
+directory, persisting run state, or aggregating CSV output.
 
 ---
 
@@ -1121,7 +1133,7 @@ _Former source: `algorithms/catalogs/EXTRACTION.md`._
 
 #### 1. What this package is
 
-`catalogs/` is Kepler's answer to "what do we know about each photometric
+`catalogs/` is MARS's answer to "what do we know about each photometric
 catalog": band tables, colour transforms, VizieR table IDs, row limits, column
 mappings, and the photometric conversions three catalogs apply to their rows.
 
@@ -1143,7 +1155,7 @@ Both are reproduced, because the drift is load-bearing (§4).
 
 From `skynet/packages/py/skynet-db/skynet_db/runners/observation_asset_processing/optical_data_processing/catalogs/`:
 
-| Kepler file | Upstream file | Lines | Fidelity |
+| MARS file | Upstream file | Lines | Fidelity |
 |---|---|---|---|
 | `catalog.py` | `catalog.py` | 45 | Attribute set and `filter_lookup` merge preserved; docstrings rewritten, `table_to_sources` declared |
 | `apass_catalog.py` | `apass_catalog.py` | 37 | Metadata verbatim |
@@ -1168,29 +1180,29 @@ From `skynet/packages/py/skynet-db/skynet_db/runners/observation_asset_processin
 
 ##### Schemas and vocabulary
 
-| Kepler file | Upstream | Notes |
+| MARS file | Upstream | Notes |
 |---|---|---|
 | `schemas.py` | `skynet_db/runners/common/schemas.py` (331) — catalog subset | Field names, aliases and the NaN-stripping serializer preserved |
 | `simbad.py` | `skynet/apps/public-api/public_api/services/target_search.py` lines 27–234 | 206-entry otype table, verbatim |
 
 Afterglow's `afterglow_core/models/catalogs.py` and
 `afterglow_core/resources/catalog_plugins/*` are the common ancestor of the
-Skynet copies. Where the two disagreed, Kepler takes Skynet's — it is the
+Skynet copies. Where the two disagreed, MARS takes Skynet's — it is the
 de-Flasked, more recently maintained fork — except where noted in
 the Query section of this document, §3.
 
 #### 3. What was renamed, and why
 
-Kepler is a separate service. It records where code came from in these markers,
+MARS is a separate service. It records where code came from in these markers,
 but does not present itself as Skynet or Afterglow, so identity-bearing names
 were changed. Behaviour was not.
 
 | Was | Now | Where |
 |---|---|---|
-| `SkynetBaseModel` | `KeplerBaseModel` | `schemas.py`; `fieldcal/schemas.py` aliases it |
+| `SkynetBaseModel` | `MARSBaseModel` | `schemas.py`; `fieldcal/schemas.py` aliases it |
 | `Catalog` (Pydantic settings record) | `CatalogMeta` | `schemas.py` — freed the name for the plugin base class |
-| `"""Afterglow Core: …"""` headers | `"""Kepler: …"""` | all eleven plugins |
-| `# n_max to Skynet filter names` | `# VSX n_max band code -> Kepler band name` | `vsx_catalog.py` |
+| `"""Afterglow Core: …"""` headers | `"""MARS: …"""` | all eleven plugins |
+| `# n_max to Skynet filter names` | `# VSX n_max band code -> MARS band name` | `vsx_catalog.py` |
 
 Numeric content — every colour transform, coefficient, band table, row limit and
 VizieR ID — is untouched.
@@ -1275,6 +1287,14 @@ Offline, against synthetic astropy tables — no live provider calls:
 
 Not verified: any live VizieR or SkyServer response. See the Query section of this document, §6.
 
+*Update 2026-09-13 (P7):* the APASS and VSX mappings now also run, in the
+default suite, over **real VizieR responses** — recorded once and shipped as
+`data/fieldcal/zp_solutions/ngc5128_b_002/{apass,vsx}_response.json`, rebuilt
+as astropy tables with the dtypes astroquery 0.4.11 returned. The apostrophe
+columns (`g'mag`, `e_g'mag`, …) arrive spelled with the apostrophe from that
+astroquery version, and the `recno` column the APASS declaration requests is
+not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only.
+
 ## Query
 
 _Former source: `algorithms/query/EXTRACTION.md`._
@@ -1283,7 +1303,7 @@ _Former source: `algorithms/query/EXTRACTION.md`._
 
 #### 1. What this package is
 
-`query/` is Kepler's remote catalog access layer. It owns every network call in
+`query/` is MARS's remote catalog access layer. It owns every network call in
 the catalog path: the VizieR engine, SDSS's SkyServer SQL backend, SIMBAD
 identifier resolution, the astroquery response cache, and the orchestration that
 turns "these catalogs, this field, this filter" into a list of `CatalogSource`.
@@ -1293,7 +1313,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 
 #### 2. Files copied — exact provenance
 
-| Kepler file | Upstream source | Lines | Fidelity |
+| MARS file | Upstream source | Lines | Fidelity |
 |---|---|---|---|
 | `vizier.py` | `afterglow_core/resources/catalog_plugins/vizier_catalogs.py` | 373 | Engine verbatim; Flask config → `config.py`; cache patch → `cache.py`; custom-catalog loop → a function |
 | `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 | SQL generation byte-identical |
@@ -1317,7 +1337,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 
 #### 3. Where the two upstreams disagreed
 
-Afterglow and Skynet's copies had drifted. Per file, Kepler took:
+Afterglow and Skynet's copies had drifted. Per file, MARS took:
 
 | Piece | Taken from | Why |
 |---|---|---|
@@ -1334,13 +1354,13 @@ Afterglow and Skynet's copies had drifted. Per file, Kepler took:
 
 Afterglow read `VIZIER_SERVER`, `VIZIER_CACHE` and `VIZIER_CACHE_AGE` from Flask
 config, which made importing the catalog plugins require an application context.
-Kepler reads the environment. Defaults reproduce upstream values. No effect on
+MARS reads the environment. Defaults reproduce upstream values. No effect on
 query results.
 
 ##### 4.2 Import-time monkey-patch → explicit call
 
 Afterglow patched `astroquery.query.to_cache` and `AstroQuery` as a bare side
-effect of module import. Kepler moves it to
+effect of module import. MARS moves it to
 `cache.install_cache_error_suppression()`, which `vizier.py` calls on import —
 so the default behaviour is unchanged, but the patch is greppable and a caller
 can opt out. Patching a third-party module's globals should not be invisible.
@@ -1348,7 +1368,7 @@ can opt out. Patching a third-party module's globals should not be invisible.
 ##### 4.3 `CUSTOM_VIZIER_CATALOGS` loop → `build_custom_vizier_catalog()`
 
 Afterglow built custom catalog classes in an import-time `for` loop over Flask
-config, wrapped in `try/except Exception` that logged and continued. Kepler
+config, wrapped in `try/except Exception` that logged and continued. MARS
 exposes the same class construction as a function that raises. A misconfigured
 catalog should be visible where it is registered, not absent at query time.
 
@@ -1356,7 +1376,7 @@ catalog should be visible where it is registered, not absent at query time.
 
 `query_catalogs_for_processing_run` took an `ObservationAssetProcessingRun`
 SQLAlchemy row as its first argument and never read it — it was there for
-call-site symmetry. Kepler's `query_catalogs` omits it rather than carry a
+call-site symmetry. MARS's `query_catalogs` omits it rather than carry a
 duck-typed placeholder. `fieldcal` call sites updated.
 
 ##### 4.5 SIMBAD resolver: local-database branches severed
@@ -1379,7 +1399,7 @@ and cached on first use.
 ##### 4.6 `AfterglowError` → `UnknownCatalogError(ValueError)`
 
 `afterglow_core/errors/catalog.py` defined `UnknownCatalogError` as an
-HTTP-404-carrying `AfterglowError`. Kepler is a library here, so it subclasses
+HTTP-404-carrying `AfterglowError`. MARS is a library here, so it subclasses
 `ValueError` — which keeps the `raise ValueError('Unknown catalog "…"')` that the
 query runner used catchable the same way. Callers needing a 404 map it at their
 edge.
@@ -1394,7 +1414,7 @@ service infrastructure and was left behind.
 
 ##### 4.8 Class renames
 
-`AfterglowSDSS` → `KeplerSDSS`. Generated SQL unchanged. See
+`AfterglowSDSS` → `MARSSDSS`. Generated SQL unchanged. See
 the Catalogs section of this document, §3 for the rest.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
@@ -1414,7 +1434,7 @@ The identifier filter skips NumPy exports and `str` methods but not Python
 builtins, so Landolt's sexagesimal-parsing expressions contribute `'int'` and
 `'float'` as VizieR column names. VizieR ignores unknown columns, so the query
 still returns correct data — which is why it survived upstream unnoticed.
-Left as-is: filtering builtins changes the request Kepler sends and needs
+Left as-is: filtering builtins changes the request MARS sends and needs
 validation against a live VizieR.
 
 ##### 5.3 `build_custom_vizier_catalog`'s character class is wrong
@@ -1424,7 +1444,7 @@ the generated name is never parsed. Preserved.
 
 ##### 5.4 Rows with no magnitudes are dropped
 
-`table_to_sources` appends a source only `if source.mags`. A source Kepler cannot
+`table_to_sources` appends a source only `if source.mags`. A source MARS cannot
 photometer is not useful, and field calibration depends on the filtering.
 `len(table)` and `len(sources)` differ routinely.
 
@@ -1442,7 +1462,7 @@ indistinguishable from an empty field.
 
 It calls `constraints.setdefault('flags', '0')` on the dict it was handed. A
 caller reusing one dict across catalogs finds `flags` added after querying
-SkyMapper. Upstream did the same; Kepler's runner passes a fresh dict per call.
+SkyMapper. Upstream did the same; MARS's runner passes a fresh dict per call.
 
 ##### 5.8 SDSS ignores `constraints`
 
@@ -1455,7 +1475,7 @@ pass a shared constraints dict to a catalog list including SDSS.
 ##### 5.9 `combined_bounding_box` is disabled upstream
 
 Afterglow guarded the call with `if False:` and fell through to querying each
-field separately. The reason was never recorded. Kepler keeps it as a working,
+field separately. The reason was never recorded. MARS keeps it as a working,
 tested function that nothing calls. Enabling it is a behaviour change needing its
 own validation.
 
@@ -1504,14 +1524,28 @@ real VizieR, SkyServer or SIMBAD traffic, so response-shape assumptions —
 astroquery's apostrophe/underscore column renaming in particular — remain
 untested against current provider behaviour.
 
+*Update 2026-09-13 (P7):* partly superseded. `tests/test_query_live.py` has
+since been run live (2026-08-12, 37 frames), and the recorded APASS and VSX
+responses described in the Catalogs section above now exercise the VizieR row
+mapping and `clip_sources_to_wcs` against real provider rows offline. The
+apostrophe columns came back *with* the apostrophe (astroquery 0.4.11), so the
+`_row_value` underscore retry was not needed for these two tables. SkyServer
+and SIMBAD responses remain unverified.
+
 ## HR Diagram / Isochrone Matching
 
 _Former source: `algorithms/hrdiagram/EXTRACTION.md`._
 
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its computational surface now lives in
+> `algorithms/hrdiagram_py/`; the deleted files remain available in git
+> history.
+
 ### HR Diagram / Isochrone Matching — extraction record
 
 Algorithmic TypeScript lifted out of the **Astromancer** "cluster" tool
-(`/home/claude/astromancer`, Angular 16) into `algorithms/hrdiagram/`.
+(`/home/claude/astromancer`, Angular 16) into the now-retired
+`algorithms/hrdiagram/` extraction.
 
 This is an **extraction, not a port**. Function bodies, comments, constants and
 the author's quirks (including several bugs, flagged below) are preserved as
@@ -1659,7 +1693,7 @@ pop-ups), `archive-feetching/*` (fetch dialogs).
 |---|---|---|
 | `drawStar(ctx, …)` | `result/result.utils.ts` | Canvas2D star-polygon rasteriser. Pure rendering. |
 | `downloadCsv(cols, data, name)` | `result/result.utils.ts` | `Blob` + `<a download>` browser file save. Pure IO. |
-| `lombScargle`, `lombScargleWithError`, `ArrMath`, `floatMod`, `UpdateSource` | `shared/data/utils.ts` | Periodogram / light-curve math, unreachable from the cluster tool. Already extracted under `algorithms/periodogram/core/` and `algorithms/lightcurve/shared/`. |
+| `lombScargle`, `lombScargleWithError`, `ArrMath`, `floatMod`, `UpdateSource` | `shared/data/utils.ts` | Periodogram / light-curve math, unreachable from the cluster tool. Historically extracted under `algorithms/periodogram/core/` and `algorithms/lightcurve/shared/`; the live ports are Python. |
 | `fetchCatalog`, `fetchFieldStarRemoval`, `getCatalogResults`, `getFSRResults`, `initValues`, `downloadSources` | `cluster-data.service.ts` | HTTP job submission/polling, response callbacks, localStorage job replay, CSV download. See §5 for the response contracts. |
 | `setHighChart` / `getHighCharts` / `highCharts[]` | `cluster-isochrone.service.ts` | A registry of live chart handles used only for PNG export. |
 | `downloadSummary`, `downloadData`, `downloadPlots`, `downloadFsrPlots`, `downloadPlotData`, `submitData` | `result-summary.component.ts` | Export handlers and an Astronomicon `POST`. `downloadPlotData` in particular reads points back out of the Highcharts series — it is a chart reader, not a producer. |
@@ -1758,8 +1792,8 @@ requested filter triple** — i.e. the server does the grid interpolation and th
 synthetic photometry. `iSkip` marks an index where the evolutionary track is
 discontinuous and the polyline must be broken.
 
-**Consequence:** `hrdiagram/` reproduces the client-side transform faithfully,
-but a standalone system needs its own isochrone source (e.g. PARSEC / MIST
+**Consequence:** the former `hrdiagram/` extraction reproduced the client-side
+transform faithfully, but a standalone system needs its own isochrone source (e.g. PARSEC / MIST
 grids) plus the interpolation and bolometric-correction step that the
 astromancer backend performs. That backend is not in this repository.
 
@@ -1871,21 +1905,241 @@ Faithfulness was chosen over correctness. Each is flagged inline at its site.
 - **The cluster centre is an element-wise median** of member RA and Dec
   independently — not a spherical mean. Fine for compact clusters, wrong near
   the poles or across the RA=0 wrap.
-- **No compiler was available in this environment** (`node`/`tsc` absent), so
-  the extracted files have been reviewed by hand but not type-checked. Imports
-  and paths were verified manually.
+- **No compiler was available in the original extraction environment**
+  (`node`/`tsc` absent), so the initial files were reviewed by hand. A later
+  root toolchain typechecked them successfully before the extraction retired.
+
+## HR Diagram (Python)
+
+### A parity port + new capability, not a byte-preserving extraction
+
+`algorithms/hrdiagram_py/` began as a **separate package from the former
+`algorithms/hrdiagram` TypeScript extraction**. It retains the `_py` suffix to
+avoid disruptive import churn after that extraction retired. It is not
+governed by the byte-preservation contract the rest of this document records:
+it is a deliberate Python *port* of Astromancer's CM/HR transform, plus real
+new capability Astromancer never had.
+
+`hrfit.py` carries the parity-sensitive core, ported from
+`isochrone-matching/isochrone-plot.util.ts::computePlotDelta` and
+`cluster.util.ts::getExtinction`. Two differences from Astromancer are
+permanent, deliberate deviations rather than defects reproduced for parity
+(contrast with the retired extraction's catalogued defects above, which the
+legacy parity surface reproduces):
+
+- `get_extinction` uses the caller's `rv` throughout, rather than Astromancer's
+  hard-coded leading factor of 3.1 (that extraction's defect #1).
+- `isochrone_cmd` does not reproduce Astromancer's off-by-one isochrone splice
+  index (that extraction's defect #3).
+
+It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
+`fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting
+only, with no equivalent.
+
+### Structure
+
+```text
+algorithms/hrdiagram_py/
+├── hrfit.py            CM<->HR transform, CCM extinction, isochrone loading, the optimizer
+├── observations.py     FITS frame -> detected sources (calls algorithms.photometry/algorithms.wcs)
+├── matching.py          detected sources <-> a fetched comparison-catalog table, by sky position
+├── literature.py        a fetched cluster-catalog row -> age/distance/E(B-V)
+├── membership.py         field-star removal (parallax window + elliptical PM cut, see below)
+└── isochrones.py        PARSEC isochrone fetch (stev.oapd.inaf.it) + fit_and_compare
+```
+
+`observations.py`/`matching.py`/`literature.py` are original orchestration
+written for this package, not extracted or ported from either upstream
+system. `membership.py` is mostly the same -- except for one function,
+`_elliptical_pm_mask`, marked `# PORTED:` inline: a faithful translation of
+Astromancer's real field-star-removal acceptance test,
+`updateClusterFieldSources`
+(`git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:87-128`,
+elliptical in (pm_ra, pm_dec)), including its documented "correct by
+accident" NaN behaviour for a star outside the semi-major axis (defect #8
+above). `select_cluster_members` sizes that ellipse's semi-axes per source --
+`max(pm_sigma * that star's own PM error, a distance-aware velocity-
+dispersion floor)`, the same pattern its parallax gate already used -- which
+is original code layered on top of the ported test, not something upstream's
+manual slider-driven tool needed (a human just looked at a histogram).
+Confirmed live before this was written: a fixed absolute PM tolerance
+(the previous, unported circular cut) kept only 8 of 305 Gaia sources for the
+Pleiades (128 pc) while the same tolerance was comfortably generous for NGC
+6124 (654 pc) -- angular PM dispersion for a fixed physical velocity
+dispersion scales as 1/distance, so no single fixed mas/yr number can be
+right for both. `isochrones.py` is the one module here that still makes its
+own network call (the PARSEC CMD service has no existing MARS tool
+wrapping it); Gaia DR3 and cluster-parameter catalog fetching are
+deliberately **not** implemented here. Both go through
+`tools.hr_diagram`, one layer up, which calls the existing
+`tools.vizier.search_vizier` against VizieR's Gaia DR3 mirror
+(`I/355/gaiadr3`) and against the Cantat-Gaudin & Anders (2020) cluster
+catalog (`J/A+A/640/A1/table1`) -- reused wholesale rather than reimplemented,
+since `search_vizier` already supports unbounded, all-column, position- or
+name-resolved VizieR queries. `algorithms/hrdiagram_py/` never imports
+`tools.*` -- consistent with `docs/tool-architecture.md`'s "Astropy-native
+inside, JSON-and-artifact-native outside" rule -- even though `isochrones.py`
+itself still talks to the network directly for the one service no tool wraps.
+
+`tools/hr_diagram.py`, one layer up, additionally exposes a catalog-only
+entry point (`crossmatch_gaia_by_position`, `run_full_hr_pipeline_from_catalog`)
+that skips FITS/detection entirely and pulls Gaia DR3 directly around a
+cluster's own resolved position -- for a plain "HR diagram for cluster X"
+request with no FITS file. See that module's own docstring for the
+distinction from `tools.photometry` (which reports one frame's own calibrated
+photometry and has no Gaia crossmatch or isochrone fit of its own).
+
+### Verification performed
+
+`tests/test_hrdiagram_py.py` fits a synthetic cluster with a known injected
+distance and E(B-V) and checks both are recovered, and that the isochrone
+line stays in native (unsorted-by-magnitude) order at the turnoff. No network
+access -- the isochrone there is hand-built, not fetched from PARSEC.
+
+Confirmed live, manually, against NGC 6124 (not an automated test -- there is
+no `network`-marked test for this path yet): `tools.vizier.search_vizier`'s
+`target=`-based name resolution correctly found the Cantat-Gaudin & Anders
+(2020) row for "NGC 6124" and separately fetched Gaia DR3 (`I/355/gaiadr3`)
+sources within 20'; `algorithms.hrdiagram_py.membership.select_cluster_members`
+removed field-star contamination; `isochrones.fit_and_compare` and the
+`tools.hr_diagram.fit_and_compare_hr_diagram` / `run_full_hr_pipeline_from_catalog`
+wrappers completed a full PARSEC fetch-and-fit, recovering a distance within
+a percent of the literature value. E(B-V) and age diverged more -- likely a
+real age/reddening degeneracy over a magnitude-limited bright subset, though
+this has not been separately re-isolated from the isochrone-quality fix below.
+
+That work surfaced and fixed three real bugs, none previously exercised
+against a real PARSEC response:
+
+- The download-link regex required a quoted `href="..."`; the service
+  actually emits it unquoted (`href=../tmp/output....dat.gz>`), so every
+  fetch failed with "no download link" before this fix. (`isochrones.py`)
+- The link was resolved against `post_url` (the form's own POST target),
+  one directory level too deep; it must resolve against `base` (the
+  original GET URL) or the request 404s. (`isochrones.py`)
+- **`isochrone_cmd` plotted and fit the raw PARSEC/COLIBRI table verbatim,
+  including thermally-pulsing AGB rows (`label` column >= 8).** Astromancer
+  never hits this because its backend hands the frontend an already-clean
+  `{data, iSkip}` track (see "ISOCHRONE DATA" in the TypeScript section
+  above) -- a single scalar splice index that presumes exactly one clean
+  discontinuity, not hundreds of oscillating points. A raw PARSEC download
+  has no such guarantee: once a track enters TP-AGB, `Mini` stops advancing
+  (PARSEC's dust/mass-loss model breaks down there) while synthetic Gaia
+  BP/RP swing by tens of magnitudes pulse to pulse. Plotted in native order,
+  that reads as a scribbled "wedge" spanning (BP-RP, M_G) out to (18, 34)
+  dominating the CMD; fed into `_weighted_cost` unfiltered, it also hands the
+  distance/E(B-V) optimizer a field of spurious nearest-point attractors near
+  the real main sequence. Fixed by dropping `label > 7` rows in
+  `isochrone_cmd` by default (`max_label=7`; pass `max_label=None` for the
+  old unfiltered behaviour). Regression-tested in `tests/test_hrdiagram_py.py`
+  with a hand-built table carrying an injected TP-AGB-style `label` column,
+  since the real trigger (an actual PARSEC download) is network-gated.
+  Verified once against a second, much older/more metal-poor real cluster (a
+  globular, via the Harris 2010 catalog rather than Cantat-Gaudin, using an ad
+  hoc script no longer in the tree) whose CMD has a real, well-populated RGB
+  and horizontal branch: the fix preserves those genuine features (`label`
+  3-5) while still dropping the TP-AGB tail.
+
+The `query_object`-based assumption that matches are ordered by increasing
+separation held for the clusters tested so far but is still not exhaustively
+verified -- see `tools/hr_diagram.py`'s docstrings.
+
+## Radio Sources (Python)
+
+### New first-party capability, replacing two non-functional scratch scripts
+
+`algorithms/radio/` and `tools/radio_sources.py` replace `Spectral_Plot.py` and
+`Best_Fit_Analysis.py` (two root-level scratch scripts, neither of which ran
+as committed -- both had code after their function definitions indented as if
+inside the function but actually at module scope, referencing undefined
+names, so importing either raised `NameError` immediately). No upstream
+Skynet/Astromancer equivalent exists; this is genuinely new capability, not
+an extraction or port.
+
+`Best_Fit_Analysis.py`'s model comparison also had a real methodological bug
+kept as a documented lesson, not reproduced: it compared R^2 across three
+models fit to *different* target transforms (raw intensity, log-log OLS, and
+intensity vs. log frequency) and picked the highest -- R^2 values from
+different target spaces are not commensurable, so "highest R^2 wins" did not
+mean what it looked like it meant. `algorithms/radio/spectral_fitting.py`
+fits every candidate model against the same target (`log10(flux)`), so
+comparing their R^2 is valid.
+
+### Structure
+
+```text
+algorithms/radio/
+├── spectral_fitting.py   power-law + log-parabola flux-vs-frequency fitting
+└── matching.py           RA/Dec-column guessing + flat-sky catalog cross-match
+tools/
+└── radio_sources.py      identify_radio_sources, analyze_source_spectrum, plot_field_sed
+```
+
+`plot_field_sed` is the main entry point: it chains `identify_radio_sources`
+(FITS source extraction via `algorithms.photometry`, then a single
+`tools.vizier.search_vizier(category="radio")` cone search cross-matched
+against every detected source by position) with `analyze_source_spectrum`'s
+NED-based path (`tools.ned.search_ned(name, table="photometry")`, whose
+already-homogenized `Frequency`/`Flux Density` columns are used directly
+rather than hand-parsing raw per-catalog VizieR flux columns, which differ in
+name and unit survey to survey) for every identified source, drawing them all
+on one labeled SED plot.
+
+### Verification performed
+
+`tests/test_radio_sources.py` covers the fitting math (injected spectral
+index and curvature recovery, no network), the matching utilities (including
+a sexagesimal-coordinate-column case -- see below), and the tool functions'
+offline/error paths (missing WCS, no detected sources, missing input).
+
+Confirmed live, manually, in two stages:
+
+- A synthetic FITS map (a single Gaussian source plus noise, real WCS)
+  pointed at Cas A's position was run through `identify_radio_sources`. This
+  surfaced and fixed a real bug: `algorithms/radio/matching.py`'s RA/Dec
+  column guesser matched a catalog whose `RA`/`DEC` columns held sexagesimal
+  strings (`"23 23 25.32"`) rather than decimal degrees under those same
+  conventional names, which crashed the float conversion. Fixed by falling
+  back to `astropy.coordinates.Angle` parsing before giving up on a catalog
+  (`_coerce_degrees`).
+- The same synthetic-FITS approach pointed at 3C 48 (a compact, well-
+  catalogued quasar -- Cas A itself is a poor test target here, being an
+  extended SNR that point-source radio catalogs only match in resolved
+  knots, not as a single named entity) ran the full `plot_field_sed` chain
+  end to end live: detected the source, cross-matched it against a real
+  VizieR radio catalog, resolved the match to "3C 48.0", fetched 85 real
+  NED radio-band flux measurements, and fit a spectral index of -0.585 --
+  consistent with 3C 48's known compact-steep-spectrum classification. The
+  log-parabola fit did show a marginally higher R^2 (0.456 vs. 0.443) from
+  3C 48's real spectral curvature, but stayed under `analyze_spectrum`'s
+  curvature-margin threshold, so `power_law` was correctly reported as
+  `best_model` rather than over-fitting the extra parameter to real-world
+  scatter across 85 points from heterogeneous literature sources.
+
+Not exhaustively verified: NED name resolution for a matched catalog's own
+designation is best-effort (`_ned_lookup_candidates` only handles NVSS's own
+bare-coordinate naming convention specifically, confirmed live to need a
+`"NVSS J"` prefix); other radio surveys' designation conventions (B1950-epoch
+names, 4C/3C-style catalog numbers, etc.) are tried as published and may not
+always resolve. A source identified spatially but whose designation NED
+cannot resolve is reported in `warnings` as skipped, not as a tool error.
 
 ## Light Curve
 
 _Former source: `algorithms/lightcurve/EXTRACTION.md`._
 
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its pulsar and variable-star computations now live in
+> `algorithms/pulsar/` and `algorithms/variable_star/`; the deleted files remain
+> available in git history.
+
 ### Light Curve extraction from Astromancer
 
 Algorithmic TypeScript for the **light curve** and **period folding** stages of
-Astromancer's two light-curve tools, extracted into Kepler.
+Astromancer's two light-curve tools, extracted into MARS.
 
 - **Source repo:** `/home/claude/astromancer` (Angular 16 / TypeScript). Read-only for this task; nothing there was modified.
-- **Destination:** `/home/claude/Kepler/algorithms/lightcurve/`
+- **Historical destination:** `/home/claude/Kepler/algorithms/lightcurve/`
 - **Nature of the work:** extraction, not a port. Algorithms and comments are
   preserved verbatim. Angular decorators, DI, RxJS, `localStorage` and Highcharts
   handles were cut; every cut is marked in-file with an `// EXTRACTED:` comment.
@@ -2337,12 +2591,9 @@ class extracted here.
   comments are unchanged.
 - The only signature changes are the closure-capture → parameter conversions
   listed in §4, each marked in-file.
-- **Not type-checked.** No Node, npm or `tsc` is available in this environment
-  (`/home/claude/astromancer/node_modules` has no `.bin/tsc`, and `node` is not
-  on `PATH`). The files are self-consistent by inspection and the import graph is
-  closed within `lightcurve/`, but they have not been fed to a compiler. Running
-  `tsc --noEmit` over `lightcurve/` is the obvious next step once a toolchain is
-  available.
+- **At extraction time, not typechecked.** No Node, npm or `tsc` was available
+  in that environment. A later root toolchain typechecked the closed import
+  graph successfully before the extraction retired.
 - No test files were extracted; the 16 Astromancer spec files are TestBed stubs
   that assert only `expect(component).toBeTruthy()`.
 
@@ -2356,7 +2607,7 @@ Renders a pulsar light curve as audio. This is the backing algorithm for
 
 - **Source repo:** `/home/claude/astromancer` (read-only; untouched)
 - **Extracted:** 2026-08-11
-- **Extracted to:** `algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts`
+- **Historical extraction:** `algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts`
 - **Ported to:** `algorithms/pulsar/` (Python) — see §5
 
 ### 1. Why this arrived late
@@ -2427,19 +2678,19 @@ than looped on a sample index.
 
 ### 5. The Python port — `algorithms/pulsar/`
 
-Every other Python folder under `algorithms/` is a byte-preserving extraction
-from Skynet. **`algorithms/pulsar/` is not**: it is a language port of the
-TypeScript above, and it is marked `# PORTED:` rather than `# EXTRACTED:` so
-the extraction-marker index stays meaningful.
+`algorithms/pulsar/` is a language port of the Astromancer TypeScript above,
+alongside the `algorithms/variable_star/` and `algorithms/hrdiagram_py/` ports.
+It is marked `# PORTED:` rather than `# EXTRACTED:` so the extraction-marker
+index stays meaningful.
 
 The port exists because the upstream sonifier cannot be executed headless — it
-is welded to `Blob`, `document` and `AudioContext` — and Kepler's tool surface
+is welded to `Blob`, `document` and `AudioContext` — and MARS's tool surface
 is Python. Note this is a **narrower** case than the one
-`docs/tool-architecture.md` rejected when it said "TypeScript stays
-TypeScript": that rejection was about `lomb-scargle.ts`, which is byte-identical
-to upstream and where a port would make future divergence undetectable. Here
-the TypeScript is extracted *and* kept under `tsc --noEmit`, so the two can be
-diffed against each other.
+`docs/tool-architecture.md` once rejected when it said "TypeScript stays
+TypeScript": that rejection was about `lomb-scargle.ts`, which was
+byte-identical to upstream. The intermediate extraction was kept and
+typechecked while the port was established; it retired after Python parity
+tests covered the live surface and remains available in git history.
 
 | Python | Ported from |
 | --- | --- |
@@ -2463,7 +2714,7 @@ The four tools that sit on these are documented in
 ### 6. Deliberate divergences in the port (do not "fix")
 
 1. **The noise carrier is seeded.** Upstream calls `Math.random()`, which is
-   unseedable. Kepler's default checks must be deterministic (`CLAUDE.md`), so
+   unseedable. MARS's default checks must be deterministic (`CLAUDE.md`), so
    the carrier comes from `numpy.random.default_rng(seed)`, defaulting to 0.
    Same distribution, reproducible draw. Pass `seed=None` for upstream's
    behaviour.
@@ -2524,8 +2775,8 @@ The four tools that sit on these are documented in
 
 ### 8. Verification performed
 
-- `npx tsc -p tsconfig.json --noEmit` — clean, with the new file in the
-  include set (confirmed via `--listFiles`).
+- Before retirement, `npx tsc -p tsconfig.json --noEmit` was clean, with the
+  new file in the include set (confirmed via `--listFiles`).
 - `tests/test_pulsar_sonification.py` — 47 tests, all local and deterministic.
   Arithmetic identity with the TypeScript is checked where the TypeScript is
   short enough to work out by hand (`interpolateLinear` weights and length,
@@ -2533,7 +2784,7 @@ The four tools that sit on these are documented in
   in §7 is pinned with its reason.
 - **The output is a pulsar, not just a file.** Folding the ingested B0329+54
   scan at its curated literature period (0.7145197 s, from
-  `test_data/pulsar/Curated pulsars.docx` — the scans carry no period in-file)
+  `data/pulsar/Curated pulsars.docx` — the scans carry no period in-file)
   gives a **316 sigma** pulse confined to a few percent of the period. Folding the *rendered WAV's*
   amplitude envelope at that period times the reported `playback_stretch`
   recovers the pulse train from the audio itself. B1133+16 folds at 20 sigma;
@@ -2548,9 +2799,9 @@ The four tools that sit on these are documented in
 
 The three Highcharts components were originally left behind as UI. That held
 while nothing rendered; `tools.pulsar.plot_pulsar` now does, so the parts that
-decide **what** is drawn are extracted into
-`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
-`algorithms/pulsar/charts.py`.
+decide **what** is drawn were extracted, ported to
+`algorithms/pulsar/charts.py`, and pinned by Python tests. The intermediate
+TypeScript file remains in git history.
 
 | Upstream | Lines | Extracted |
 | --- | --- | --- |
@@ -2577,9 +2828,9 @@ Both entry points are extracted and both are ported; the pipeline in
 narrower:
 
 - **`sonificationBrowser` is not ported.** It exists to drive an
-  `AudioContext`, which a file-writing tool has no use for. It remains
-  extracted in TypeScript, including its three documented divergences from the
-  saved-WAV path (§7.6).
+  `AudioContext`, which a file-writing tool has no use for. Its retired
+  TypeScript extraction remains available in git history, including its three
+  documented divergences from the saved-WAV path (§7.6).
 - **No period uncertainty.** `compute_pulsar_periodogram` reports a grid peak,
   not a fitted period with an error bar. Upstream has none either. Refine by
   re-running with narrow bounds and more steps.
@@ -2597,6 +2848,11 @@ on the B0329+54 fixture) rather than exactly 1.0.
 ## Periodogram
 
 _Former source: `algorithms/periodogram/EXTRACTION.md`._
+
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its live computations now reside in `algorithms/pulsar/` and
+> `algorithms/variable_star/`; the deleted files remain available in git
+> history.
 
 ### Periodogram extraction
 
@@ -2898,11 +3154,10 @@ Target language level: the code uses `**`, optional chaining, and
 
 #### Known limitations of this extraction
 
-- **Not compiled or type-checked.** No Node/npm/tsc is available in this
-  environment (`node`, `npm`, `npx`, `tsc` all absent; astromancer has no
-  `node_modules`). The verbatim core was verified by `diff`; the
-  parameter-threaded driver functions have been reviewed by eye but not
-  compiled. Worth a `tsc --noEmit` pass on a machine with a toolchain.
+- **At extraction time, not compiled or typechecked.** No Node/npm/tsc was
+  available in that environment. The verbatim core was verified by `diff`, and
+  a later root toolchain typechecked the extraction successfully before it
+  retired.
 - **No tests.** The astromancer `*.spec.ts` files are Angular TestBed
   scaffolding with no algorithmic assertions, so there was nothing to bring.
 - The `AgentVault` shared memory at `/srv/agent-vault` referenced in the

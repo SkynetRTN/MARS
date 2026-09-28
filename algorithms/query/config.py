@@ -4,7 +4,7 @@ EXTRACTED seam. Two upstream configuration systems collapse into this module.
 Afterglow read ``VIZIER_SERVER``, ``VIZIER_CACHE`` and ``VIZIER_CACHE_AGE`` from
 Flask's ``current_app.config``, which meant importing this package required an
 application context. Skynet replaced that with a five-line module of literals.
-Kepler is neither a Flask app nor a single deployment, so the values come from
+MARS is neither a Flask app nor a single deployment, so the values come from
 the environment with the upstream defaults preserved.
 
 Nothing here changes query results. The server choice affects latency and
@@ -47,7 +47,7 @@ class QuerySettings:
     * ``VIZIER_SERVER`` — VizieR mirror hostname. Upstream disagreed on the
       default: Afterglow used ``vizier.cfa.harvard.edu``, Skynet moved to
       ``vizier.cds.unistra.fr`` (the CDS home site) and left the Harvard mirror
-      commented out. Kepler follows the newer choice.
+      commented out. MARS follows the newer choice.
     * ``VIZIER_CACHE_ENABLED`` — whether astroquery caches responses on disk.
       When on, the backends also round query centres and sizes to a fixed
       granularity so that near-identical fields hit the same cache entry; see

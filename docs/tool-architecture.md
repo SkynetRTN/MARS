@@ -1,9 +1,9 @@
-# Kepler Tool Collection Architecture
+# MARS Tool Collection Architecture
 
 Date: 2026-08-10
 Status: active architecture
 
-Kepler is an astronomy tool collection for Python callers, scripts, notebooks,
+MARS (MCP Astronomy Research Suite) is an astronomy tool collection for Python callers, scripts, notebooks,
 agents, and future CLI/application surfaces. It is not an orchestration
 framework. The public tool layer should expose small, ordinary Python functions
 that prepare inputs, call the extracted algorithms, and return compact typed
@@ -32,14 +32,21 @@ tools/
   ned.py              # NED historical table tools
   vizier.py           # broad VizieR catalog search tools
   atnf.py             # ATNF pulsar catalog tools
-  pulsar.py           # 4-stage pulsar pipeline: light curve, periodogram, fold, sonify
+  pulsar.py           # pulsar pipeline: scan resolution, light curve, periodogram, fold, sonify, plot
+  photometry.py       # local aperture photometry over the bundled FITS library
+  hr_diagram.py       # FITS-to-HR-diagram pipeline orchestration (plus a catalog-only entry point)
+  radio_sources.py    # radio FITS -> catalog-identified sources -> labeled SED plot
   ads.py              # ADS literature search/review tools
   mast.py             # MAST archive/product tools
   mpc.py              # Minor Planet Center observation tools
   casda.py            # CASDA archive tools
   resolve.py          # SIMBAD-backed target resolution
   registry.py         # optional agent/tool schema registry
-  runner.py           # optional Anthropic agent loop
+  sessions.py         # per-run session manifest recording + the loop's cache-key helper
+  agent/              # headless agent loop: run_session, events, the moved SYSTEM_PROMPT
+  llm/                # provider-neutral model port -- see section 10
+  tui/                # the `mars` console over the loop -- see section 10.2
+  bench/              # model benchmark harness -- see section 10.1
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
   config.py           # small environment-backed settings helpers
@@ -53,13 +60,12 @@ algorithms/
   skylib_lite/          # shared vendored Skylib subset
   catalogs/             # Python catalog/provider declarations, no network calls
   query/                # Python remote catalog access
+  hrdiagram_py/         # Python HR-diagram pipeline: parity port + optimizer, not an extraction
+  radio/                # Python radio spectral-index fitting + catalog cross-matching, new capability
 
   pulsar/               # Python pulsar pipeline: ingest, periodogram, folding,
                         #   sonification (a PORT, not an extraction)
-
-  lightcurve/           # TypeScript light-curve algorithms
-  periodogram/          # TypeScript periodogram algorithms
-  hrdiagram/            # TypeScript HR-diagram algorithms
+  variable_star/        # Python variable-star light curve, periodogram, folding
 docs/
 ```
 
@@ -70,6 +76,14 @@ package data such as
 ---
 
 ## 2. Public Tool Layer
+
+**One public tool call is MARS's execution boundary.** No run, stage, session,
+or batch object spans two calls; no tool writes state another tool reads. A
+caller that needs a value from an earlier step passes it in, or passes the
+artifact path the earlier call returned. The processing-run architecture that
+used to carry that state was removed by the stateless rollout (S0–S6), along
+with `algorithms/fieldcal/deps.py` — cross-domain values are explicit function
+arguments now, not injected module-level names.
 
 Tools are the public surface. They should stay thin:
 
@@ -82,14 +96,47 @@ Tools are the public surface. They should stay thin:
 
 The first local, no-network tools are:
 
+- `tools.optical.list_optical_frames(directory=None, image_filter=None)` /
+  `tools.optical.resolve_optical_frame(name, directory=None)` -- Stage 0 for
+  image work. Searches the primary optical root *and* the archive download
+  root, so a product fetched by `tools.mast`/`tools.casda` resolves by name
+  through the same registry every image tool already takes a path from.
+  Both bounds on that search are operator settings rather than tool
+  parameters: the download root is walked recursively only while it resolves
+  inside `MARS_DATA_DIR` (outside it, searched flat with a
+  `download_root_outside_data_dir` warning), and `MARS_MAX_FRAMES`
+  (default 200) caps how many frames one listing reads headers for from each
+  root, with a `listing_truncated` warning naming the total when it bites.
+  `search_mast(download=true)` reports the directories products landed in, so
+  `directory=` can reach a specific product past the cap.
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.photometry.calibrate_zeropoint(path, catalog_sources=None, catalog_fixture=None, catalogs=None, compare_to=None)`
+  -- extraction -> photometry -> catalog match -> reference magnitude ->
+  `calc_solution`. Local only when `catalog_sources` is injected or
+  `catalog_fixture` names a recorded input (`"selected_rows"`, the matched
+  APASS rows; `"full_response"`, the recorded response for the whole field
+  plus its VSX filter); without either the calibration-input helper queries
+  a reference catalog over the network.
+- `tools.fieldcal_reference.list_zeropoint_references()` /
+  `load_zeropoint_reference(field)` / `compare_zeropoint_to_reference(...)` /
+  `replay_field_calibration(field)` -- the four recorded Skynet zero-point
+  solves, the offline replay inputs (`replay_catalog_sources`,
+  `replay_variable_sources`) that drive a real solve against them, and the
+  end-to-end selection replay that re-chooses NGC 5128 B's 35 calibration
+  stars from the recorded 132-row APASS cone (45 candidates once clipped to
+  the frame, as the live query path clips) and reproduces the recorded
+  solve bit for bit.
+- `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`
 - `tools.pulsar.fold_pulsar_lightcurve(path, period_s, ...)`
 - `tools.pulsar.sonify_pulsar(path, period_s=None, ...)`
+- `tools.pulsar.plot_pulsar(...)`
+- `tools.photometry.list_photometry_targets()`
+- `tools.photometry.run_photometry_on_target(target, ...)`
 - `tools.workspace.list_artifacts(directory=None)`
 - `tools.workspace.describe_artifact(path)`
 
@@ -111,18 +158,81 @@ live calls in default validation:
 - `tools.mpc.search_mpc(designation)`
 - `tools.casda.search_casda(...)`
 
+`tools.hr_diagram` composes several of the above (`tools.vizier.search_vizier`
+for both Gaia DR3 and cluster-literature lookups) with the pure
+`algorithms.hrdiagram_py` package rather than adding a new query layer:
+
+- `tools.hr_diagram.extract_photometry_from_fits(fits_path)`
+- `tools.hr_diagram.crossmatch_gaia(csv_path, ...)`
+- `tools.hr_diagram.crossmatch_gaia_by_position(cluster_name, ...)` -- no FITS frame; fetches
+  Gaia DR3 directly around the cluster's own resolved position
+- `tools.hr_diagram.get_literature_cluster_params(cluster_name)`
+- `tools.hr_diagram.select_cluster_members(csv_path, cluster_name, ...)`
+- `tools.hr_diagram.fit_and_compare_hr_diagram(members_csv_path, cluster_name, ...)`
+- `tools.hr_diagram.run_full_hr_pipeline(fits_path, cluster_name, ...)`
+- `tools.hr_diagram.run_full_hr_pipeline_from_catalog(cluster_name, ...)` -- the
+  `run_full_hr_pipeline` composite with `extract_photometry_from_fits` +
+  `crossmatch_gaia` swapped for `crossmatch_gaia_by_position`, so a plain "HR
+  diagram for cluster X" request needs no FITS file at all
+
+`tools.photometry` is a thin wrapper reusing `tools.claude_photometry_haiku_tool`'s
+already-tested pipeline directly (not a reimplementation), so a tool-use call
+produces exactly what the standalone CLI script produces. It intentionally
+does not share extraction settings with `tools.hr_diagram.extract_photometry_from_fits`:
+the two need different things from `algorithms.photometry` (a calibrated
+zero point and fixed apertures here; cheap "auto" Kron-like apertures and no
+zero point there, since the HR-diagram pipeline discards the frame's own
+magnitude once Gaia's is fetched). `run_photometry_on_target(...,
+write_source_table=True)` writes a CSV in the `ra_deg`/`dec_deg` column shape
+`tools.hr_diagram.crossmatch_gaia` expects, as the one deliberate bridge
+between the two.
+
+`tools.radio_sources` composes `algorithms.photometry` (source extraction, its
+own settings again -- neither a Gaia handoff nor an optical zero point apply
+to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
+`tools.vizier.search_vizier(category="radio")`, and `tools.ned.search_ned`:
+
+- `tools.radio_sources.plot_field_sed(fits_path, ...)` -- the main entry point:
+  identify sources in a radio FITS frame against VizieR's radio catalogs, then
+  plot every identified source's spectral energy distribution (from NED)
+  together on one labeled plot, each with its own fitted spectral index.
+- `tools.radio_sources.identify_radio_sources(fits_path, ...)` -- the spatial
+  half alone: detected sources cross-matched against radio catalogs by
+  position, with no plot.
+- `tools.radio_sources.analyze_source_spectrum(name=..., csv_path=..., frequencies_hz=..., fluxes_jy=...)`
+  -- the spectral half alone, for one already-identified/named source.
+
+`tools.wcs.solve_astrometry(path, *, index_path=None, write_header=False,
+timeout_s=None, force=False, search_radius_deg=None, min_scale_arcsec=None,
+max_scale_arcsec=None)` wraps the extracted plate solver with its required
+per-call backend configuration, structured unavailable and no-solution outcomes,
+attempted-backend reporting, and guarded FITS-header persistence. A single tool
+call is MARS's execution boundary: no run or stage state is retained between
+calls.
+
+The three search bounds are opt-in (P6). Unset, the solve is the extracted
+all-sky search over 0.1–60 arcsec/px; set, they are validated at the tool
+boundary (`invalid_search_bounds`), reach the algorithm as one
+`algorithms.wcs.config.WcsSearchBounds`, and the result's `search` reports the
+radius, scale window, and pointing centre astrometry.net was asked to search,
+with `explicit` naming which bounds the caller set and, when the ATLAS
+backend ran, the narrower window it was given (`atlas_*`; ATLAS takes no
+radius). A radius below 180
+is centred on the frame's own pointing hint; a frame that yields none gets
+`search_radius_without_hint`, not a silent all-sky search. On the development
+host, against its 4200-series indexes, the M15 fixture solves in ~14 s at
+`search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8` and in
+~285 s all-sky, to the same solution.
+
 Next Python tools should follow the same pattern before adding new layers:
 
-- `solve_astrometry(path, settings=None)`
 - `extract_sources(path, settings=None)`
 - `measure_photometry(path, sources, settings=None)`
-- `calibrate_zeropoint(path, settings=None)`
 - `search_catalog(catalog, region, limit=50)`
 - `search_catalogs_for_image(path, limit=50)`
 
-TypeScript-backed tools should come after the TypeScript package/runtime story
-is explicit. Their first wrapper should be simple: JSON in, existing algorithm
-execution, compact JSON/artifact summary out.
+`calibrate_zeropoint` and `solve_astrometry` were on this list and have since
+landed; both are above.
 
 ---
 
@@ -143,10 +253,10 @@ Current algorithm ownership:
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
-| `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | The one **port** rather than extraction under `algorithms/`; marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
-| `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding, and pulsar sonification | Typechecked by the root `tsconfig.json`. |
-| `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
-| `algorithms.hrdiagram` | Framework-free TypeScript cluster/HR-diagram transforms | No runtime wrapper yet. |
+| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of Astromancer's TypeScript plus a new optimizer, not a byte-preserving extraction. The historical `_py` suffix avoids a disruptive package rename after the TypeScript extraction was retired. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
+| `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
+| `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | An Astromancer Python **port**, marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
+| `algorithms.variable_star` | Variable-star source ingestion, differential light curves, error-weighted Lomb-Scargle periodograms, and phase folding | Exact-parity Python port of the Astromancer algorithms. |
 
 ---
 
@@ -156,7 +266,7 @@ Keep shared Python models small until a tool needs more:
 
 - warning/error records;
 - file and artifact metadata;
-- runner session manifests;
+- agent session manifests;
 - table summaries;
 - WCS summaries;
 - catalog summaries;
@@ -186,10 +296,17 @@ Important modeling rules:
 - Measurements preserve uncertainty, method, calibration assumptions, and source.
 - Artifacts include local path, MIME type, size, created time, and producing tool.
 - Agent-loop artifacts are session-scoped under
-  `artifacts/sessions/<session_id>/...`; the runner writes
+  `artifacts/sessions/<session_id>/...`; the engine writes
   `session_manifest.json` in that directory with the ordered tool-call trace,
-  cache hits, warning/error summaries, and artifact paths, but not full tool
-  payloads.
+  cache hits, warning/error summaries, and artifact paths. To resume safely,
+  current manifests also retain the complete neutral conversation, including
+  prompts and tool arguments/results; the diagnostic trace itself still omits
+  full result payloads. These are local, sensitive session records: on POSIX,
+  each session directory is owner-only (`0700`) and its manifest is `0600`.
+  Resume accepts at most a 1 MiB manifest and a 256 KiB history (128 messages,
+  256 blocks, 64 KiB per field); content is not redacted because the provider
+  protocol needs the exact prior exchange. Remove the session artifact
+  directory when that retention is no longer appropriate.
 
 ---
 
@@ -270,15 +387,17 @@ Runtime behavior should be bounded:
 - credentials redacted from logs and outputs;
 - recursive local file scans avoided by default;
 - large payloads returned as artifacts plus summaries.
-- `tools.runner` persists a session manifest when it starts, after each tool
-  call, and at terminal states (`end_turn`, `max_turns`, or an exception), so
-  another caller can inspect the exact session context without re-running
-  remote queries.
+- `tools.agent` persists a session manifest when a session starts, after each
+  tool call, and at terminal states (`end_turn`, `max_turns`, `interrupted`, or
+  an exception), so another caller can inspect the exact session context
+  without re-running remote queries. The console resumes a session from one.
 
 Serving is optional. A Python caller must be able to import and call every tool
 without running a server. If a serving surface is added later, generate it from
 the same tool functions and models rather than designing the package around a
-server.
+server. `tools/mcp/` is that surface (section 10.3): generated from the registry,
+behind an optional dependency group, on no import path a plain Python caller
+touches.
 
 ---
 
@@ -295,9 +414,6 @@ requires FITS data, solver binaries, local catalog data, and native astronomy
 dependencies. Those checks should be targeted to the PR that changes the
 behavior and should not become a broad architecture gate.
 
-TypeScript algorithms currently have no build manifest. Add `package.json` and
-`tsconfig.json` only when the TypeScript package/runtime shape is being defined.
-
 ---
 
 ## 9. Non-Goals
@@ -307,4 +423,355 @@ TypeScript algorithms currently have no build manifest. Add `package.json` and
 - No broad numerical remediation in architecture PRs.
 - No remote-provider live tests in default checks.
 - No large model tree before public tools need it.
-- No TypeScript runtime redesign before TypeScript-backed tools are in scope.
+
+---
+
+## 10. The Agent Loop and Model Port
+
+Serving/agent-loop code stays optional (section 7): every tool is callable
+from plain Python without any of this. When an agent loop *is* wanted, it is
+built in two layers.
+
+`tools/agent/` is the headless loop. `run_session()` drives a model backend
+over the tool registry and yields a stream of twelve event types
+(`SessionStarted`, `TurnStarted`, `TextDelta`, `ThinkingDelta`, `UserMessage`,
+`ToolCallProposed`/`Started`/`Finished`/`Denied`, `ProtocolFault`,
+`TurnFinished`, `SessionFinished`); a `Decision` flows back in through an
+approver callable. It imports no UI toolkit. `SYSTEM_PROMPT` lives in
+`tools/agent/prompt.py`.
+
+`ThinkingDelta` is never merged into `TextDelta`. A model's working is a
+different kind of claim from its answer — it may contradict the answer — and a
+consumer that rendered them alike would let a discarded hypothesis read as a
+finding.
+
+Three optional callables let an interactive caller stay in a run, and the loop
+is unchanged without them:
+
+| Hook | When | What it does |
+| --- | --- | --- |
+| `on_delta` | Inside `complete()`, per chunk | Receives `TextDelta` and `ThinkingDelta` as they stream, **instead of** their being emitted afterwards. A generator cannot yield from a callback, so without it the engine buffers and emits on return. Either way a delta is delivered exactly once. |
+| `pending_input` | Top of every turn | Drained; what it returns is merged into the **trailing user message**, which is the one carrying the tool results. Two consecutive user messages are not a shape every provider accepts, and a note is an addition to what the user last said, not a turn of its own. `UserMessage` announces the turn it landed in. |
+| `should_stop` | Top of every turn, and before each tool call | Ends the session with outcome `interrupted`. A pending tool call takes the denial path with an `interrupted` result rather than being abandoned: every `tool_use` needs a `tool_result` or the conversation cannot be sent again. A hook that raises is read as "keep going". |
+
+`tools/llm/` is the provider-neutral **model port**. Two rules govern it:
+
+> The core owns the loop; adapters own the dialect.
+>
+> Replay the tools, never the model.
+
+- A backend is named by a `provider/model` spec, split on the **first slash
+  only** (`ollama/llama3.1:8b`, `openai/meta-llama/Llama-3-8b`). Recognized
+  providers: `anthropic`, `openai`, `ollama`, `gemini`. `build_backend(spec)`
+  constructs one; `spec` defaults to `MARS_MODEL_BACKEND`.
+- Environment: `MARS_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY` / `OPENAI_BASE_URL`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`. A
+  provider key from the environment reaches only that provider's default host;
+  a non-default base URL needs a key passed explicitly with it.
+- `complete()` is the **only required method** of a `ModelBackend`, and it is
+  non-streaming. Streaming is a capability flag with a one-shot fallback.
+  Schema translation into a backend's dialect and pre-dispatch argument
+  validation are the caller's job (`tools/llm/schema.py`,
+  `tools/llm/validation.py`), so adapters never import `tools/registry.py`.
+- Zero new third-party dependencies: the `anthropic` SDK is reused; the OpenAI,
+  Ollama, and Gemini adapters are raw `httpx`.
+
+### 10.1 The Benchmark Harness
+
+`tools/bench/` answers two questions about swapping one model for another on
+this tool surface: **which model is actually better, and at what** (answer
+correctness), and **at what cost in work** (efficiency). Everything else it
+reports exists to explain one of those. The full architecture is
+`docs/benchmarking/harness.md`.
+
+**It adds nothing to the tool surface.** It owns no tool, registers nothing,
+and is listed in `tests/test_tool_registry_coverage.py::NOT_TOOL_MODULES`
+beside `tools.llm` and `tools.agent`. It *reads* `tools/registry.py`'s schemas
+and substitutes `run_session()`'s `tool_functions=` mapping; the engine needs
+no change to provide that seam. The dependency runs one way:
+`tools.bench` → `tools.agent` → `tools.llm` → `tools.registry`. Nothing under
+`algorithms/` or `tools/llm/` imports it.
+
+**The tool surface is three surfaces, and the harness treats each
+differently** (`tools/bench/plane.py::TOOL_CLASSES`):
+
+| Class | Count | Treatment |
+| --- | --- | --- |
+| **L** — local, deterministic | 26 | **Run live.** They read the bundled fixture tree and compute. Replaying `compute_pulsar_periodogram` would let the task author, not the data, decide whether a model's mistake is visible. |
+| **R** — remote | 22 | **Always replayed** from a recorded fixture. Never executed in a run. |
+| **M** — local code behind a network-capable argument | 7 | **Decided per call** from the call's own arguments. A task must pin the offline path (`use_field_cal=false`; `catalog_fixture` *and* `compare_to` together) or the tool is replayed. |
+
+The classification is **per tool, never per module**: `get_literature_cluster_params`
+returns Cantat-Gaudin & Anders (2020) parameters and looks local, but
+`algorithms/hrdiagram_py/literature.py` fetches them through `search_vizier`.
+`tools.hr_diagram` alone spans all three classes.
+
+**The plane is closed.** A registered tool with no classification raises rather
+than defaulting, and a test asserts `set(TOOL_CLASSES) == set(TOOL_FUNCTIONS)`.
+Every default would be wrong: defaulting to live opens a socket mid-run,
+defaulting to replay measures a fixture miss instead of the tool. **A new
+registry tool must be classified in the same commit that adds it.**
+
+**Four verbs over a directory on disk** (`mars-bench`, a console script
+beside `mars`): `run` produces evidence, `grade` produces
+verdicts, `compare` produces the matrix, and `record` captures a fixture for
+human review. Grading is separate from running because the first version of any
+grader is wrong and re-grading must not cost a re-spend. `--max-tokens` is
+required for any live backend, with no default.
+
+**Inputs are tracked under `benchmarks/`; output goes under `artifacts/`,**
+which `.gitignore` already covers. Naming the input directory `data/` would put
+it in the fixture tree; putting output in it would make every run a dirty
+working tree.
+
+Nothing added here opens a socket under a plain `uv run pytest`, and that is a
+test rather than a convention: the smoke suite runs end to end with both sides
+replayed, under a socket guard, in milliseconds. There is **no CI benchmark
+job** — CI stays offline, deterministic, and keyless.
+
+### 10.2 The MARS Console
+
+`tools/tui/` is the Textual console over the same loop, and the repository's
+one model-driven entry point: `mars`, with **no required arguments**, because
+everything it needs is chosen inside the session. It is the only package
+permitted new dependencies -- `textual` and `textual-image` are the two it
+added, over the already-pinned `pillow` and `rich`. `tools/agent/` and
+`tools/llm/` stay zero-new-dependency, which is what keeps the loop callable
+from plain Python.
+
+**Threading.** The engine is synchronous, so the console runs it in a Textual
+thread worker and posts each event to the UI thread as a message. Approval runs
+the other way: the worker posts a request carrying a `threading.Event`, blocks
+on it, and the UI thread sets it when the modal is answered. Nothing about the
+engine knows a UI exists.
+
+**Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
+`ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
+and `policy_approver`. A denied call never dispatches: it returns an error
+result to the model and the loop continues. The default everywhere else is
+`auto_approve`, so a plain-Python caller behaves exactly as before.
+
+Two properties of the ask itself:
+
+- **Risk can live in an argument, not only in a tool.** `search_mast` and
+  `search_casda` return a table when asked to search and pull the matched
+  products into the data tree when asked to download — 121,515 of them for
+  Cassiopeia A. `DOWNLOAD_FLAGS` tags the call rather than the tool, so an
+  ordinary search stays unprompted and a fetch asks.
+- **The modal shows the arguments.** Approving `search_vizier` says nothing
+  about what it would query, and the transcript node carrying the arguments is
+  behind the modal. They are rendered as bounded plain text.
+- **Quitting answers every pending ask with `DENY`.** A thread worker blocked
+  on a decision cannot be cancelled — it waits on an event only the interface
+  sets — and Python joins its executor threads at exit, so an unreleased
+  modal turns a quit into a hung process rather than a closed one.
+
+**Slash commands** (`tools/tui/commands.py`) are UI-level and never reach the
+model — a mistyped command would otherwise cost a turn and pollute the
+transcript. The registry is declarative (name, aliases, help, handler, optional
+argument completer), so `/help` is generated from it rather than maintained. A
+doubled leading slash escapes to a literal one. Typing `/` lists every command;
+Tab completes one match whole and several only as far as they agree, the shell
+rule, because guessing between equal candidates puts a command nobody asked for
+into the prompt. A completer is handed every argument word typed so far, which
+is what lets `/backend` answer with providers for the first argument and with a
+host's models for the second. The module imports no Textual, so all of it is
+testable without a terminal.
+
+**Backend selection** (`tools/tui/backends.py`) is live: `/backend` lists what
+is offered and switches the running session, retitling the header. Three rules
+make that safe to offer mid-session.
+
+- **Probe before swap, in two steps.** Anthropic fails at construction when its
+  key is missing; Ollama does not. A backend pointed at a stopped daemon builds
+  perfectly and raises a connection error several seconds into the first
+  question, and *a daemon that is up is not a daemon that has your model* —
+  an unknown one answers with a 404 from `/v1/chat/completions` at the same
+  point. So `open_backend` checks the service and then the model, and the
+  session's backend is replaced only after both pass. A failed listing is `()`,
+  meaning "could not ask", never "holds nothing".
+- **A bare provider name asks rather than assumes.** `/backend ollama` opens a
+  picker of what the daemon reports, marking the running model and the default;
+  naming a model outright switches directly. A host that cannot be asked offers
+  nothing and the switch proceeds to the default, because an unanswerable
+  question must not stop the switch that was asked for.
+- **Never mid-turn.** `run_session()` was handed the backend by value when the
+  turn started; swapping it would retitle the header for a turn the old backend
+  is still finishing.
+
+A question *about* a daemon is not timed like a turn: `OLLAMA_TIMEOUT_S`
+defaults to 600 s because a local turn is bounded by the host's hardware, while
+`is_available()` and `installed_models()` use a five-second probe timeout. One
+Tab against a host that accepts connections and then says nothing would
+otherwise freeze the interface for ten minutes.
+
+**The interactive turn.** The console is where the three engine hooks above are
+used, and the properties they buy are all the same property: the person
+watching a run is the one best placed to correct it.
+
+- What you typed stays in the transcript; an answer read without the question
+  that produced it is a different claim.
+- Reasoning is rendered where the provider reveals it, in its own muted block
+  per turn, never styled like the answer. The console asks for it by default
+  (`--thinking-budget`, 4096 tokens, `0` to switch it off) — everywhere else
+  thinking stays off, because asking for it costs `temperature` and with it the
+  benchmark's determinism claim.
+- The prompt never closes. What is typed mid-turn is queued, marked queued
+  until the engine reports it delivered, and merged into the next turn; a note
+  the session ended before taking goes back into the prompt rather than the
+  void.
+- Escape stops the turn at its next safe point, and says so rather than
+  pretending it stopped instantly.
+
+**Artifact rendering** probes the terminal once at startup —
+`KITTY_WINDOW_ID`/`TERM`, then `TERM_PROGRAM`, then a Sixel device-attributes
+query under a short timeout — and picks a `GraphicsTier` of `KITTY`, `ITERM2`,
+`SIXEL` or `HALFBLOCK`. Half-blocks are the floor and always work, so a
+terminal that cannot be probed loses resolution rather than the picture. The
+native-protocol library is imported **on use, not at import**: it measures the
+terminal's cell size at import time and divides by the reported column count,
+so a tty that reports no size at all — a pty opened by a wrapper — killed the
+console before it drew anything.
+
+**Three traps worth keeping written down.**
+
+- A `_leading_underscore` method on a Textual subclass is in *Textual's*
+  namespace, not a private one of ours. `ToolNode` built its renderable in a
+  method called `_render_content`, which is also Textual's per-repaint hook:
+  every tool call painted as a blank row while `state`, `content` and
+  `render()` all stayed correct. Tests that assert widget state cannot catch
+  that; one that asserts `render_line(0)` can.
+- **A `Static` given a plain string parses it as content markup.** Anything
+  carrying model output, a tool's error text, or a path sets `markup=False`;
+  everything else passes a Rich `Text`, which is never parsed. Both halves
+  matter: markup would let a model mint a clickable `[@click=…]` action link
+  in the transcript, and it silently eats ordinary astronomy text, since
+  `The [OIII] line` renders as `The  line`.
+- Textual 8's `Static` exposes `content`, not `renderable`.
+
+**A preview fails the way its library fails, not the way it looks like it
+does.** Pillow's `DecompressionBombError`, `wave.Error` and `struct.error` are
+all bare `Exception`s rather than the `OSError`/`ValueError` a reader assumes,
+so a catch list written from the obvious guess let a large PNG, or any
+non-WAV file named `.wav`, raise out of an event handler. And a preview reads
+only the frames it draws: sampling a decoded file instead cost 0.75 s and
+~300 MB on the bundled 10 MB example, on the UI thread.
+
+**Testing.** Everything above runs under `uv run pytest` with no terminal:
+Textual's headless pilot drives keypresses and asserts widget state, the
+capability probe runs against faked environments, and the half-block renderer
+is pinned byte-for-byte against a committed 4×4 PNG.
+
+### 10.3 The MCP Server and the Agent Skill
+
+`tools/mcp/` serves the registry to a coding agent's own console — Claude
+Code, Codex, Cursor — over MCP on stdio, from a machine where **this
+repository is not checked out**. It is the serving surface section 7 allows:
+generated from `TOOL_SCHEMAS` and `TOOL_FUNCTIONS`, never the reverse. It is a
+fourth consumer of the registry, beside the loop (10), the harness (10.1) and
+the console (10.2), and it retires none of them. The console and harness
+measure and drive models through MARS's own loop. A third-party host's
+session is not graded by anything, because MCP gives the loop to the host.
+
+**Shape.** One entry point, `mars-mcp`. A launch-time filter,
+`--tools databases,optical,timeseries,hr,radio` (or `MARS_MCP_TOOLS`),
+serves a subset. The groups are declared by tool module in
+`tools/mcp/groups.py`, a test asserts they partition the registry, and the
+filter narrows what is callable as well as what is listed. One server, not
+five: a dispatcher with a `database` enum would discard the per-database
+argument validation that makes the schemas worth having.
+
+| Module | Owns |
+| --- | --- |
+| `roots` | Pins `MARS_ARTIFACT_DIR` and `MARS_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
+| `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
+| `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
+| `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
+| `install` | The facts about this install that the instructions carry: artifact root, which data bundles are present, whether plate solving is configured, and whether `ADS_DEV_KEY` is set (never its value). |
+| `bundles` | Builds and fetches the optional data bundles (below). |
+| `selftest` | `mars-mcp self-test`: launches the installed server over stdio and detects B0329+54 from a measured period through the protocol. |
+
+**Results.** Every result is `structuredContent` plus the same JSON as text,
+serialised so NaN becomes `null`. `isError` follows the loop's
+`status == "error"`. A failed validation (`invalid_input`), an unknown tool
+(`unknown_tool`) or a raising tool (`tool_exception`) is that call's error
+result, never a dead session. The artifact path contract stands unchanged,
+because the caller shares the filesystem. On top of it, a PNG or WAV artifact
+also comes back **inline** as an image or audio block (5 MB and 16 MB limits, measured base64-encoded),
+read only from inside the pinned artifact root. No `outputSchema` is declared:
+clients validate against one, and a NaN-as-`null` in a `number` field would
+then fail on a user's machine.
+
+Two registry descriptions are extended at serve time rather than edited.
+`list_artifacts`/`describe_artifact` name the pinned root, and say that
+`list_artifacts` lists direct children while tools write into per-tool
+subdirectories. `sonify_pulsar`'s "the audio is never inlined" is replaced,
+and a test pins the registry original.
+
+**Where things go.** Artifacts default to a **per-user directory**, not the
+host's launch directory: a host launches the server wherever it likes, and a
+launch-directory default would drop an untracked `artifacts/` into the user's
+repository. Everything MARS writes is under the per-user **MARS home**
+(`tools/paths.py`: `~/.local/share/mars`, macOS Application Support,
+`%LOCALAPPDATA%`, or `MARS_HOME`), and the server logs every root at
+startup.
+
+**The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the
+loop, so the server carries its guidance. **Claude Code delivers only about
+the first 2,000 characters of a server's instructions** (measured), so the
+served skill has two tiers:
+
+- The instructions are `tools/skill/source/BRIEF.md` — the six rules that
+  must survive truncation — plus the install facts. They are held under 1,900
+  characters, worst case, by a test.
+- `SKILL.md` and the per-domain references are MCP resources,
+  `mars://skill/...`, read on demand.
+
+`tools/skill/source/` is the one source. It renders the served text, and also
+`skills/mars-tools/`, the repository copy that `.claude/skills/` links for
+a coding agent in a checkout. `tests/test_skill_invariants.py` pins the
+load-bearing rules as phrases in both `SYSTEM_PROMPT` and the skill, so a
+correction to one that misses the other fails a test. The pulsar tools' own
+descriptions carry measure-first as well, so that rule depends on neither
+tier.
+
+**Packaging.** A wheel carries the code (about 4 MB) and the **core data**
+(about 7 MB: pulsar scans, zero-point references, Afterglow fixtures) at
+`tools/_data`. In a checkout that path is a committed symlink to `data/`.
+`config.BUNDLED_DATA_DIR` is how every tool reads bundled data, so a checkout
+and a wheel find the same files the same way.
+
+Two larger **optional bundles** are fetched with `mars-mcp fetch-data`: the
+optical frame library (269 MB) and the Girardi isochrone grid (282 MB).
+
+- Each is a deterministic, content-addressed plain `.tar` on the repository's
+  standing `data` GitHub release.
+- `tools/mcp/bundles.json` ships in the wheel and pins each archive's size and
+  SHA-256, so a wheel accepts only its own bundles.
+- Downloads resume by HTTP Range, and extraction goes through tarfile's `data`
+  filter.
+- Absent, a tool says so (`bundle_not_installed`). An empty listing is never
+  presented as the answer.
+
+The fixture-write guard, the download root and `tools.optical`'s recursion
+boundary are **re-anchored** for an installed layout, never weakened. Nothing
+is written into the installed package.
+
+**Releases.** `.github/workflows/release.yml` publishes a `v<version>` tag,
+with `docs/releasing.md` as the policy. It:
+
+- checks the tag against the version;
+- rebuilds `data/optical/` against the pinned manifest;
+- installs the wheel on clean runners with no checkout, on Python 3.13, and
+  runs `mars-mcp self-test`;
+- checks the `data` release by GitHub's asset digests;
+- then publishes — the only job with write permission.
+
+Python 3.13 is the target because it is the newest Python every dependency
+ships wheels for. `sep` has none for 3.14, and `photutils` none for Linux
+aarch64. Installing and registering is `docs/installing.md`.
+
+**Dependency direction.** `tools/mcp → tools/registry`, plus
+`tools/mcp/groups → tools/bench/plane` (import-light by design). `tools/mcp`
+imports **nothing** from `tools/agent/` or `tools/llm/`, and nothing under
+`algorithms/` imports `tools/mcp`. A test asserts both.

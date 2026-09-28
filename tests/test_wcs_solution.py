@@ -11,26 +11,28 @@ wide-field index set. So ``solve_wcs`` is exercised only behind the
 * **solution acceptance** — the parity and pointing checks that decide whether a
   candidate solution is written into the header at all;
 * **header write-back** — which keywords are cleared, which survive;
-* **``_clear_wcs_solution_fields``**, whose attribute-name mismatch is a
-  documented parity quirk (``algorithms/wcs/EXTRACTION.md`` §5.2) and is
-  asserted here so it cannot be "tidied up" by accident.
+* **stateless solve results** — a no-solution call returns dimensions and source
+  count without retaining output from any prior call.
 """
 
 from __future__ import annotations
 
 import math
+import os
+from pathlib import Path
 
 import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from algorithms.wcs.state import ProcessingRun, WcsSolution, now
+import algorithms.wcs.wcs as wcs_module
+from algorithms.wcs.results import WcsSolveMetadata, WcsSolveResult
+from algorithms.wcs.config import SolverSettings
 from algorithms.wcs.wcs import (
     WCS_REGEX,
     _accept_solution,
     _angular_sep_deg,
-    _clear_wcs_solution_fields,
     _parse_dec_deg,
     _parse_ra_hours,
     _solve_request_parity_from_expected,
@@ -38,7 +40,7 @@ from algorithms.wcs.wcs import (
     _wcs_matrix,
     _wcs_parity,
     _write_wcs_to_header,
-    build_wcs_for_processing_run,
+    solve_wcs,
 )
 
 from .conftest import ALL_FRAMES
@@ -52,6 +54,74 @@ PC_FRAMES = [
 NEGATIVE_PARITY_FRAMES = [
     "m31_galaxy_v_000.fits", "m31_galaxy_r_000.fits", "ngc7048_pn_r_000.fits",
 ]
+
+
+def test_no_solution_result_is_frozen_and_keeps_per_call_measurements():
+    """A failed solve must not rely on stale fields from an earlier solve."""
+    metadata = WcsSolveMetadata(width_px=1056, height_px=1027, n_field=100)
+    result = WcsSolveResult(wcs=None, catalog_sources=(), metadata=metadata)
+
+    assert result.wcs is None
+    assert result.catalog_sources == ()
+    assert result.metadata.width_px == 1056
+    assert result.metadata.height_px == 1027
+    assert result.metadata.n_field == 100
+    with pytest.raises(Exception):
+        result.metadata.n_field = 0
+
+
+def test_solve_wcs_returns_per_call_result_without_a_processing_run(
+    monkeypatch, frame_header_copy, tmp_path
+):
+    """Removing run state must retain dimensions and source count on a miss."""
+    detected_sources = [object(), object()]
+    monkeypatch.setattr(
+        "algorithms.wcs.wcs.run_source_extraction",
+        lambda data, header, settings, *, file_id=None: (detected_sources, None, None),
+    )
+    header = frame_header_copy("m15_open")
+    data = np.zeros((1027, 1056), dtype=np.float32)
+
+    result = solve_wcs(
+        header,
+        data,
+        tmp_path,
+        file_id=73,
+        solver_settings=SolverSettings(anet_index_path="", atlas_catalog_root=""),
+    )
+
+    assert result.wcs is None
+    assert result.catalog_sources == ()
+    assert result.metadata.width_px == 1056
+    assert result.metadata.height_px == 1027
+    assert result.metadata.n_field == 2
+
+
+def test_solve_wcs_without_settings_does_not_use_global_solver_configuration(
+    monkeypatch, frame_header_copy, tmp_path
+):
+    """An algorithm call with no configuration has no enabled solver backends."""
+    config_inputs = []
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: ([], None, None),
+    )
+    monkeypatch.setattr(
+        wcs_module,
+        "build_anet_config",
+        lambda config: config_inputs.append(config) or None,
+    )
+    monkeypatch.setattr(wcs_module, "build_atlas_config", lambda config: None)
+
+    result = solve_wcs(
+        frame_header_copy("m15_open"),
+        np.zeros((1027, 1056), dtype=np.float32),
+        tmp_path,
+    )
+
+    assert result.wcs is None
+    assert config_inputs == [None]
 
 
 # ---------------------------------------------------------------------------
@@ -339,13 +409,36 @@ def test_equinox_and_radecsys_survive_a_rewrite(frame_header_copy, frame_header)
 
 
 def test_no_fixture_frame_carries_a_stale_frame_keyword(frame_header):
-    """Bound the exposure of the gap above."""
+    """Bound the exposure of the gap above.
+
+    The gap is that ``_write_wcs_to_header`` leaves ``EQUINOX``/``RADECSYS``
+    alone, so a pre-J2000 frame keyword would survive a solve that writes ICRS
+    and leave the header self-contradictory. What makes that harmless here is
+    that no bundled frame carries a *stale* one.
+
+    ``EQUINOX`` is no longer simply absent, and ``RADESYS`` is no longer always
+    ICRS: two of the NGC 5286 B stacks declare ``RADESYS = 'FK5'`` with
+    ``EQUINOX = 2000.0``. That pair is self-consistent and J2000-equivalent —
+    FK5 J2000 differs from ICRS by tens of milliarcseconds, four orders of
+    magnitude below these frames' 0.4"/px — so it is not the failure this
+    bounds. The stale case is a *pre-J2000* frame, ``FK4`` or ``EQUINOX 1950``,
+    surviving a solve that writes ICRS.
+
+    Stated as that property rather than by excluding the three frames, which
+    would have retired the check for exactly the frames that newly needed it.
+    Across the tree: 36 ICRS with no equinox, 4 declaring neither, 2 FK5 J2000.
+    """
     for frame in ALL_FRAMES:
         header = frame_header(frame)
-        assert "EQUINOX" not in header, frame
+        # RADECSYS is the deprecated spelling; nothing should introduce one.
         assert "RADECSYS" not in header, frame
+        if "EQUINOX" in header:
+            assert float(header["EQUINOX"]) == 2000.0, frame
         if "RADESYS" in header:
-            assert header["RADESYS"] == "ICRS", frame
+            assert header["RADESYS"] in ("ICRS", "FK5"), frame
+            # FK5 is only unambiguous with an equinox, and it must be J2000.
+            if header["RADESYS"] == "FK5":
+                assert float(header["EQUINOX"]) == 2000.0, frame
 
 
 def test_write_back_replaces_stale_wcs_keywords(frame_header_copy, frame_header):
@@ -478,85 +571,6 @@ def test_written_header_round_trips_through_a_fits_file(tmp_path, frame_header_c
 
 
 # ---------------------------------------------------------------------------
-# The documented _clear_wcs_solution_fields quirk
-# ---------------------------------------------------------------------------
-
-def test_clearing_resets_the_fields_whose_names_actually_match():
-    solution = WcsSolution(
-        found_solution=1, crpix1=1.0, crpix2=2.0, crval1=3.0, crval2=4.0,
-        cd11=5.0, cd12=6.0, cd21=7.0, cd22=8.0, date_solved=now(),
-    )
-    _clear_wcs_solution_fields(solution)
-
-    assert solution.found_solution == 0
-    for attr in ("crpix1", "crpix2", "crval1", "crval2",
-                 "cd11", "cd12", "cd21", "cd22", "date_solved"):
-        assert getattr(solution, attr) is None, attr
-
-
-def test_clearing_silently_misses_four_mapped_columns():
-    """PRESERVED QUIRK — ``algorithms/wcs/EXTRACTION.md`` §5.2.
-
-    ``_clear_wcs_solution_fields`` clears the names ``ra``, ``dec``,
-    ``pixel_scale`` and ``rotation``. The solve writes ``ra_deg``, ``dec_deg``,
-    ``pixel_scale_arcsec_per_px`` and ``rotation_deg``. On a SQLAlchemy instance
-    ``setattr`` of an unmapped name silently creates a plain attribute, so
-    upstream those four clears are no-ops and the real columns keep their
-    previous values after a *failed* solve — stale astrometry presented as
-    current.
-
-    ``WcsSolution`` is a plain, non-``slots`` dataclass specifically so this
-    reproduces rather than raising ``AttributeError``. Adding ``slots=True``
-    would turn a silent no-op into a crash, which is why that is called out in
-    CLAUDE.md as something not to "fix".
-    """
-    solution = WcsSolution(
-        found_solution=1,
-        ra_deg=180.0, dec_deg=10.0,
-        pixel_scale_arcsec_per_px=0.61, rotation_deg=2.2,
-    )
-    _clear_wcs_solution_fields(solution)
-
-    # The stale values survive, exactly as upstream.
-    assert solution.ra_deg == 180.0
-    assert solution.dec_deg == 10.0
-    assert solution.pixel_scale_arcsec_per_px == 0.61
-    assert solution.rotation_deg == 2.2
-
-    # ...and four junk attributes are created instead.
-    for orphan in ("ra", "dec", "pixel_scale", "rotation"):
-        assert getattr(solution, orphan) is None
-        assert orphan not in WcsSolution.__dataclass_fields__
-
-
-def test_wcs_solution_is_not_a_slots_dataclass():
-    """Guard the mechanism, not just the symptom.
-
-    ``slots=True`` would make the four unmapped clears raise instead of being
-    silent, changing behaviour on every failed solve.
-    """
-    assert not hasattr(WcsSolution, "__slots__")
-    solution = WcsSolution()
-    solution.some_name_not_declared_anywhere = 1  # must not raise
-
-
-# ---------------------------------------------------------------------------
-# WCS construction for a processing run
-# ---------------------------------------------------------------------------
-
-def test_processing_run_wcs_comes_from_the_header_when_present(frame_header):
-    run = ProcessingRun()
-    wcs = build_wcs_for_processing_run(run, frame_header("ngc3628"))
-    assert wcs is not None
-    assert wcs.has_celestial
-
-
-def test_processing_run_wcs_is_none_for_an_unsolved_header(frame_header):
-    run = ProcessingRun()
-    assert build_wcs_for_processing_run(run, frame_header("m15_open")) is None
-
-
-# ---------------------------------------------------------------------------
 # FITS keyword parsing
 # ---------------------------------------------------------------------------
 
@@ -582,6 +596,71 @@ def test_unparseable_keywords_return_none():
 # ---------------------------------------------------------------------------
 # The solve itself — opt-in
 # ---------------------------------------------------------------------------
+
+
+def _atlas_operator_settings_or_skip():
+    """Validate and load the operator-owned ATLAS configuration for P9."""
+    from algorithms.wcs.config import SolverSettings
+    from tools.wcs import _atlas_catalog_problem
+
+    catalog_root = os.environ.get("ATLAS_CATALOG_ROOT")
+    catalog = (os.environ.get("ATLAS_CATALOG") or "ucac5").strip().lower()
+    if not catalog_root:
+        pytest.skip(
+            "set ATLAS_CATALOG_ROOT to a UCAC4/UCAC5 tree and "
+            "ATLAS_CATALOG to ucac4 or ucac5"
+        )
+
+    root = Path(catalog_root)
+    settings = SolverSettings(atlas_catalog_root=root, atlas_catalog=catalog)
+    problem = _atlas_catalog_problem(settings)
+    if problem is not None:
+        pytest.skip(
+            f"ATLAS preflight failed: {problem}. Set ATLAS_CATALOG_ROOT to the "
+            "documented UCAC4/UCAC5 layout."
+        )
+    return settings
+
+
+@pytest.mark.solver_data
+def test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window(
+    frame_header_copy, tmp_path
+):
+    """P9: exercise the real ATLAS lookup without claiming a blind solve.
+
+    A zero-source M15 image makes the public solver's ATLAS fallback return its
+    normalized ``no_sources`` diagnostic after catalog lookup. That keeps this
+    operator-only check bounded while proving that the configured UCAC tree,
+    M15 pointing, and explicit 0.58--0.59 arcsec/pixel window all reach ATLAS.
+    """
+    from algorithms.wcs.config import WcsSearchBounds
+    from algorithms.wcs.wcs import solve_wcs
+
+    atlas_settings = _atlas_operator_settings_or_skip()
+    header = frame_header_copy("m15_open")
+    attempts: list[str] = []
+    result = solve_wcs(
+        header,
+        np.zeros((1027, 1056), dtype=np.float32),
+        tmp_path,
+        solver_settings=atlas_settings,
+        search_bounds=WcsSearchBounds(
+            radius_deg=1.0,
+            min_scale_arcsec=0.58,
+            max_scale_arcsec=0.59,
+        ),
+        solver_attempts=attempts,
+    )
+
+    assert attempts == ["atlas"]
+    assert result.wcs is None
+    assert result.metadata.search_atlas_min_scale_arcsec == 0.58
+    assert result.metadata.search_atlas_max_scale_arcsec == 0.59
+    assert result.metadata.atlas_source_count == 0
+    assert result.metadata.atlas_catalog_count > 0
+    assert result.metadata.atlas_failure_reason == "no_sources"
+    assert result.metadata.atlas_accepted is False
+
 
 @pytest.mark.solver_data
 def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_available, tmp_path):
@@ -609,8 +688,8 @@ def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_availab
         if WCS_REGEX.match(key):
             del stripped[key]
 
-    run = ProcessingRun()
-    solved, _ = solve_wcs(run, stripped, np.array(data), str(tmp_path))
+    result = solve_wcs(stripped, np.array(data), tmp_path)
+    solved = result.wcs
     if solved is None:
         pytest.skip("no solution — index files likely do not cover this field scale")
 
@@ -622,3 +701,274 @@ def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_availab
     )
     assert sep < 0.01
     assert _wcs_parity(solved) == _wcs_parity(expected)
+
+
+# ---------------------------------------------------------------------------
+# Explicit search bounds (P6)
+# ---------------------------------------------------------------------------
+#
+# Upstream never exposed the search radius or scale window: ``solve_wcs`` built
+# a fresh ``WcsCalibrationSettings()`` and searched all-sky over 0.1–60 arcsec/px
+# every time. That default is parity and must survive untouched; the bounds are
+# an opt-in seam layered on top of it, applied exactly where ``solve_settings``
+# already overrides ``sip_order``. These tests drive the solve up to the backend
+# request and read what it would have been asked to search.
+
+M15_HINT_RA_DEG = 322.4929
+M15_HINT_DEC_DEG = 12.1669
+M15_SECPIX = 0.5864922312362758
+
+_POINTING_KEYWORDS = ("OBJRA", "TELRA", "RA", "OBJDEC", "TELDEC", "DEC")
+
+
+@pytest.fixture
+def anet_request_capture(monkeypatch, tmp_path):
+    """Drive ``solve_wcs`` to the astrometry.net request and capture it.
+
+    Source extraction is replaced by two synthetic detections so no ``sep`` run
+    is needed, the backend is declared available, and the subprocess driver is
+    replaced by a recorder that returns no solution.
+    """
+    from algorithms.wcs.schemas import SourceExtractionData
+
+    captured: dict = {}
+    sources = [
+        SourceExtractionData(x=100.0, y=200.0, flux=1000.0),
+        SourceExtractionData(x=300.0, y=400.0, flux=500.0),
+    ]
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: (list(sources), None, None),
+    )
+    monkeypatch.setattr(
+        wcs_module.AstrometryNetBackend, "is_available", lambda self: True
+    )
+
+    def record(request, config):
+        captured["request"] = request
+        return None
+
+    monkeypatch.setattr(wcs_module, "anet_solve_field_glob", record)
+
+    def run(header, **kwargs):
+        attempts = captured.setdefault("attempts", [])
+        return solve_wcs(
+            header,
+            np.zeros((1027, 1056), dtype=np.float32),
+            tmp_path,
+            solver_settings=SolverSettings(anet_index_path=str(tmp_path)),
+            solver_attempts=attempts,
+            **kwargs,
+        )
+
+    captured["run"] = run
+    return captured
+
+
+@pytest.fixture
+def atlas_request_capture(monkeypatch, tmp_path):
+    """Drive ``solve_wcs`` to the ATLAS request with astrometry.net disabled."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: ([], None, None),
+    )
+
+    def record(self, request, config):
+        captured["request"] = request
+        return None
+
+    monkeypatch.setattr(wcs_module.AtlasBackend, "solve", record)
+
+    def run(header, **kwargs):
+        return solve_wcs(
+            header,
+            np.zeros((64, 64), dtype=np.float32),
+            tmp_path,
+            solver_settings=SolverSettings(atlas_catalog_root=str(tmp_path)),
+            **kwargs,
+        )
+
+    captured["run"] = run
+    return captured
+
+
+@pytest.mark.parametrize("bounds", [None, "empty"])
+def test_the_default_search_is_all_sky_over_the_extracted_scale_window(
+    anet_request_capture, frame_header_copy, bounds
+):
+    """No override, or an override that sets nothing, is the parity search."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    search_bounds = WcsSearchBounds() if bounds == "empty" else None
+
+    result = anet_request_capture["run"](
+        frame_header_copy("m15_open"), search_bounds=search_bounds
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 180
+    assert request.min_scale == 0.1
+    assert request.max_scale == 60
+    assert result.metadata.search_radius_deg == 180
+    assert result.metadata.search_min_scale_arcsec == 0.1
+    assert result.metadata.search_max_scale_arcsec == 60
+
+
+def test_explicit_search_bounds_reach_the_astrometry_net_request(
+    anet_request_capture, frame_header_copy
+):
+    from algorithms.wcs.config import WcsSearchBounds
+
+    result = anet_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(
+            radius_deg=2.0, min_scale_arcsec=0.4, max_scale_arcsec=0.8
+        ),
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 2.0
+    assert request.min_scale == 0.4
+    assert request.max_scale == 0.8
+    # The radius is anchored on the frame's own pointing hint, and the result
+    # says where that anchor was.
+    assert request.ra_hours * 15.0 == pytest.approx(M15_HINT_RA_DEG, abs=1e-3)
+    assert request.dec_degs == pytest.approx(M15_HINT_DEC_DEG, abs=1e-3)
+    assert result.metadata.search_radius_deg == 2.0
+    assert result.metadata.search_min_scale_arcsec == 0.4
+    assert result.metadata.search_max_scale_arcsec == 0.8
+    assert result.metadata.search_center_ra_deg == pytest.approx(M15_HINT_RA_DEG, abs=1e-3)
+    assert result.metadata.search_center_dec_deg == pytest.approx(M15_HINT_DEC_DEG, abs=1e-3)
+
+
+def test_a_single_explicit_bound_leaves_the_others_at_their_defaults(
+    anet_request_capture, frame_header_copy
+):
+    from algorithms.wcs.config import WcsSearchBounds
+
+    anet_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(max_scale_arcsec=1.0),
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 180
+    assert request.min_scale == 0.1
+    assert request.max_scale == 1.0
+
+
+def test_a_bounded_radius_needs_a_pointing_hint(
+    anet_request_capture, frame_header_copy
+):
+    """astrometry.net centres ``--radius`` on ``--ra/--dec``, which the backend
+    only passes when it has a hint. A radius with nothing to anchor it would
+    otherwise reach the backend as ``float(None)``; refuse it before any backend
+    runs, rather than silently widening back to all-sky.
+    """
+    from algorithms.wcs.config import WcsSearchBounds
+    from algorithms.wcs.wcs import SearchRadiusWithoutHint
+
+    header = frame_header_copy("m15_open")
+    for key in _POINTING_KEYWORDS:
+        del header[key]
+
+    with pytest.raises(SearchRadiusWithoutHint):
+        anet_request_capture["run"](header, search_bounds=WcsSearchBounds(radius_deg=2.0))
+
+    assert "request" not in anet_request_capture
+    assert anet_request_capture["attempts"] == []
+
+
+def test_an_all_sky_radius_does_not_need_a_pointing_hint(
+    anet_request_capture, frame_header_copy
+):
+    """Parity: the default search never needed a hint, and still must not."""
+    header = frame_header_copy("m15_open")
+    for key in _POINTING_KEYWORDS:
+        del header[key]
+
+    result = anet_request_capture["run"](header)
+
+    assert anet_request_capture["request"].radius == 180
+    assert result.metadata.search_center_ra_deg is None
+    assert result.metadata.search_center_dec_deg is None
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"radius_deg": 0.0},
+        {"radius_deg": -1.0},
+        {"min_scale_arcsec": 2.0, "max_scale_arcsec": 1.0},
+        {"min_scale_arcsec": 1.0, "max_scale_arcsec": 1.0},
+        {"min_scale_arcsec": 70.0},
+        {"max_scale_arcsec": 0.05},
+    ],
+)
+def test_out_of_range_bounds_trip_the_extracted_settings_validation(
+    anet_request_capture, frame_header_copy, bounds
+):
+    """The overrides land on ``WcsCalibrationSettings`` before upstream's own
+    range checks run, so those checks cover them with no new validation code."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    with pytest.raises(ValueError):
+        anet_request_capture["run"](
+            frame_header_copy("m15_open"), search_bounds=WcsSearchBounds(**bounds)
+        )
+
+    assert "request" not in anet_request_capture
+
+
+def test_the_default_atlas_window_narrows_around_the_header_pixel_scale(
+    atlas_request_capture, frame_header_copy
+):
+    """Parity pin for the ATLAS branch: with no override it halves/doubles the
+    header's pixel-scale estimate to bound the triangle search."""
+    result = atlas_request_capture["run"](frame_header_copy("m15_open"))
+
+    request = atlas_request_capture["request"]
+    assert request.min_scale == pytest.approx(M15_SECPIX * 0.5)
+    assert request.max_scale == pytest.approx(M15_SECPIX * 2.0)
+    assert request.radius == 180
+    # The requested window and the one ATLAS was given differ, and the result
+    # reports both rather than claiming ATLAS searched 0.1-60.
+    assert result.metadata.search_min_scale_arcsec == 0.1
+    assert result.metadata.search_max_scale_arcsec == 60
+    assert result.metadata.search_atlas_min_scale_arcsec == pytest.approx(M15_SECPIX * 0.5)
+    assert result.metadata.search_atlas_max_scale_arcsec == pytest.approx(M15_SECPIX * 2.0)
+
+
+def test_explicit_scale_bounds_bypass_the_atlas_hint_narrowing(
+    atlas_request_capture, frame_header_copy
+):
+    """An observer overriding the window is doing so because the header's
+    scale cannot be trusted; intersecting with the header-derived window would
+    hand ATLAS an inverted or empty range. Explicit bounds are used verbatim."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    result = atlas_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(
+            radius_deg=1.5, min_scale_arcsec=2.0, max_scale_arcsec=3.0
+        ),
+    )
+
+    request = atlas_request_capture["request"]
+    assert request.min_scale == 2.0
+    assert request.max_scale == 3.0
+    assert request.radius == 1.5
+    assert result.metadata.search_atlas_min_scale_arcsec == 2.0
+    assert result.metadata.search_atlas_max_scale_arcsec == 3.0
+
+
+def test_the_atlas_window_is_absent_when_atlas_never_ran(
+    anet_request_capture, frame_header_copy
+):
+    result = anet_request_capture["run"](frame_header_copy("m15_open"))
+
+    assert result.metadata.search_atlas_min_scale_arcsec is None
+    assert result.metadata.search_atlas_max_scale_arcsec is None

@@ -1,6 +1,6 @@
 # Repository Folder Guide
 
-This guide explains the current source folders in Kepler. It documents the
+This guide explains the current source folders in MARS (MCP Astronomy Research Suite). It documents the
 repository as it exists now: root-level tool modules, distinguished extracted
 algorithm modules, and planning material for future tool work.
 
@@ -16,11 +16,24 @@ Repository automation and ownership policy.
 - `workflows/ci.yml` runs the current lightweight Python/repository-shape checks.
 - `workflows/secret-scan.yml` runs gitleaks against the tree and history.
 - `workflows/workflow-safety.yml` runs actionlint and zizmor against workflows.
+- `workflows/release.yml` builds, verifies (a clean install on Python 3.13
+  running `mars-mcp self-test`) and publishes a release from a
+  `v<version>` tag, and checks the standing `data` release holds the pinned
+  bundles. Policy: [releasing.md](releasing.md).
 
 Keep workflow changes narrow and security-conscious. The current checks are
 deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
+
+## `skills/`
+
+`skills/mars-tools/` is the rendered repository copy of the agent skill:
+how to use MARS's tools correctly (stage orders, identifier forms, period
+provenance, silently wrong results). It is **generated** from
+`tools/skill/source/` by `uv run python -m tools.skill`; edit the source, never
+this copy. `.claude/skills/mars-tools` links to it, so a coding agent in a
+checkout loads it as a skill. A test fails if the copy is stale.
 
 ## `tools/`
 
@@ -28,14 +41,61 @@ Important files and subfolders:
 
 - `models.py`: small shared result, warning/error, WCS, catalog, zero-point,
   remote query, and artifact summary models.
-- `config.py`: small environment-backed settings helpers for the tool layer.
+- `config.py`: small environment-backed settings helpers for the tool layer,
+  including `BUNDLED_DATA_DIR` -- the one way tools read bundled data.
+- `paths.py`: the per-user MARS home (`~/.local/share/mars`, or
+  `MARS_HOME`) and `tools/_data`. Resolves nothing at import.
+- `_data`: in a checkout, a committed symlink to `data/`; in a wheel, the
+  core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
+  package-data ships.
 - `artifacts.py`: local artifact description and listing helpers.
-- `astrometry.py`, `calibration.py`, `catalogs.py`, `pulsar.py`,
-  `workspace.py`: local plain Python user-facing tool wrappers.
+- `astrometry.py`, `calibration.py`, `catalogs.py`, `fieldcal_reference.py`,
+  `optical.py`, `pulsar.py`, `photometry.py`, `variable_star.py`,
+  `workspace.py`: local plain Python user-facing tool wrappers
+  (`fieldcal_reference.py` is the recorded zero-point ground truth and its
+  offline replays, `optical.py` the bundled-frame registry).
 - `simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `ads.py`, `mast.py`,
   `mpc.py`, `casda.py`, `resolve.py`: split remote database/archive tools.
-- `registry.py`, `runner.py`: optional agent schema registry and Anthropic
-  runner over the same ordinary Python tool functions.
+- `hr_diagram.py`: FITS-to-HR-diagram pipeline orchestration, backed by
+  `algorithms.hrdiagram_py` plus `tools.vizier.search_vizier` for the Gaia
+  DR3 and cluster-literature catalog lookups.
+- `radio_sources.py`: radio FITS -> catalog-identified sources -> labeled SED
+  plot, backed by `algorithms.radio` plus `tools.vizier.search_vizier` and
+  `tools.ned.search_ned`.
+- `registry.py`: the optional agent schema registry over the same ordinary
+  Python tool functions.
+- `agent/`: the headless agent loop -- `run_session()`, the twelve event
+  dataclasses, the approval policy, and `SYSTEM_PROMPT`. It imports no UI
+  toolkit and no provider SDK.
+- `llm/`: the provider-neutral model port -- neutral types, the
+  `ModelBackend` protocol, schema translation, pre-dispatch validation, the
+  `provider/model` spec factory, and adapters for Anthropic, OpenAI-compatible
+  servers, Ollama and Gemini.
+- `tui/`: the Textual `mars` console over the loop -- application shell,
+  slash commands and their completion, backend and model selection,
+  transcript, artifact and session browsers.
+- `bench/`: the model benchmark harness (`mars-bench`). It owns no tool.
+- `mcp/`: the MCP server (`mars-mcp`) -- a fourth consumer of the registry,
+  served over stdio to a coding agent's console on a machine with no
+  checkout. `roots` pins the artifact and data roots before `tools.config`
+  loads; `surface` decides what is served with no SDK import; `server` is the
+  only `mcp` SDK import (optional `[mcp]` group); `groups` holds the five
+  tool groups and the derived annotations; `install` states the install's
+  data and credentials; `bundles` (with `bundles.json`) builds and fetches the
+  optional data bundles; `selftest` is `mars-mcp self-test`. Imports
+  nothing from `agent/` or `llm/`. See
+  [tool-architecture.md](tool-architecture.md) section 10.3 and
+  [installing.md](installing.md).
+- `skill/`: the agent skill's one source, `source/` (`SKILL.md`, `BRIEF.md`,
+  and per-domain references), and the renderer (`python -m tools.skill`)
+  that writes the repository copy `skills/mars-tools/`. The MCP server
+  serves the brief as its instructions and the rest as resources.
+- `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
+  recording (tool calls, cache hits, artifacts, turns) plus the shared cache
+  key used both by the loop's in-memory repeat-call cache and by the
+  manifest's own cache-hit bookkeeping. Manifests are written under
+  `artifacts/sessions/<session_id>/session_manifest.json`; `list_session_manifests`
+  and `read_session_manifest` read them back.
 
 Current tools:
 
@@ -44,14 +104,24 @@ Current tools:
 - `catalogs.list_photometric_catalogs()`: list local catalog declarations
   without querying remote services.
 - `catalogs.resolve_reference_band(catalog, image_filter)`: summarize the local
-  filter-to-reference-band mapping Kepler would use.
+  filter-to-reference-band mapping MARS would use.
 - `calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`:
   solve a zero point from local measurement and catalog-source records.
-- `pulsar.load_pulsar_lightcurve(path)`, `pulsar.compute_pulsar_periodogram(path)`,
+- `pulsar.resolve_pulsar_scan(...)` / `pulsar.list_pulsar_scans(...)`,
+  `pulsar.load_pulsar_lightcurve(path)`, `pulsar.compute_pulsar_periodogram(path)`,
   `pulsar.fold_pulsar_lightcurve(path, period_s)` and
-  `pulsar.sonify_pulsar(path, period_s=None)`: the four-stage pulsar pipeline,
-  local only, each stage's artifact feeding the next. See
+  `pulsar.sonify_pulsar(path, period_s=None)`: the pulsar pipeline, local
+  only, each stage's artifact feeding the next. `pulsar.plot_pulsar(...)`
+  renders any stage's artifact as a PNG. See
   [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md).
+- `photometry.list_photometry_targets()` and
+  `photometry.run_photometry_on_target(target, ...)`: local aperture
+  photometry (source extraction, optional live zero-point verification) over
+  a fixed bundled FITS library -- a thin wrapper reusing
+  `tools.claude_photometry_haiku_tool`'s pipeline, not a reimplementation.
+  Not a substitute for the HR-diagram pipeline below (no Gaia crossmatch, no
+  isochrone fit); `run_photometry_on_target(..., write_source_table=True)`
+  writes a CSV that bridges into it (see `hr_diagram.crossmatch_gaia` below).
 - `workspace.list_artifacts(directory=None)` and
   `workspace.describe_artifact(path)`: inspect local artifact files.
 - `resolve.resolve_target(name)`: resolve a target through SIMBAD.
@@ -59,6 +129,25 @@ Current tools:
   `ads.*`, `mast.search_mast`, `mpc.search_mpc`, and `casda.search_casda`:
   query remote astronomy databases and archives, returning bounded previews
   plus local artifact paths for complete tables or reviews.
+- `hr_diagram.extract_photometry_from_fits`, `crossmatch_gaia`,
+  `get_literature_cluster_params`, `select_cluster_members`,
+  `fit_and_compare_hr_diagram`, `run_full_hr_pipeline`: FITS frame -> HR
+  diagram -> literature comparison, chained through
+  `algorithms.hrdiagram_py` and `tools.vizier.search_vizier`. Deliberately
+  cheaper, uncalibrated source extraction than `photometry.py` above -- the
+  frame's own magnitude is discarded once Gaia's is fetched.
+- `hr_diagram.crossmatch_gaia_by_position`, `run_full_hr_pipeline_from_catalog`:
+  the same HR-diagram pipeline with no FITS frame required -- Gaia DR3 is
+  fetched directly around the cluster's own resolved position instead of
+  matched against a frame's detected sources. Prefer this path whenever the
+  user has not supplied a FITS file.
+- `radio_sources.plot_field_sed(fits_path, ...)`: the main radio entry point --
+  identifies sources in a radio FITS frame against VizieR's radio catalogs
+  (`identify_radio_sources`), then plots every identified source's spectral
+  energy distribution from NED on one labeled plot, each with its own fitted
+  spectral index (`analyze_source_spectrum`, callable standalone for one
+  already-named source). Replaces the non-functional `Spectral_Plot.py` /
+  `Best_Fit_Analysis.py` scratch scripts.
 
 ## `algorithms/`
 
@@ -71,14 +160,14 @@ Important files and subfolders:
   packages.
 - `algorithms/skylib_lite/`: consolidated local subset of Skynet's `skylib` used
   by the extracted Python algorithms.
-- `algorithms/lightcurve/`, `algorithms/periodogram/`, `algorithms/hrdiagram/`:
-  extracted TypeScript algorithm packages.
+- `algorithms/pulsar/`, `algorithms/variable_star/`,
+  `algorithms/hrdiagram_py/`: Python ports of Astromancer algorithms.
 
 ## `algorithms/catalogs/`
 
 Extracted Python catalog declarations from Skynet and Afterglow.
 
-What Kepler knows about catalogs and provider vocabularies, and nothing about
+What MARS knows about catalogs and provider vocabularies, and nothing about
 reaching them: no module here imports `astroquery`, `psrqpy`, or opens a
 socket. Photometric catalog declarations cover eleven catalogs — APASS,
 Landolt, PanSTARRS, SDSS, SkyMapper, Stetson, 2MASS, Tycho-2, UCAC5, USNO-B1,
@@ -111,17 +200,28 @@ Current caveats:
 
 ## `docs/`
 
-Project documentation and planning material.
+Project documentation. The top level holds the reference documents; three
+subdirectories hold everything else. See [`README.md`](README.md) for the full
+map and the document lifecycle.
 
-- `tool-architecture.md` is the master package architecture document: public
-  tools, algorithm ownership, future services, runtime policy, and
-  `skylib_lite` consolidation.
-- `extraction.md` is the master extraction record for every algorithm package
+- `tool-architecture.md` — the master package architecture: public tools,
+  algorithm ownership, shared models, `skylib_lite` consolidation, runtime and
+  validation policy.
+- `extraction.md` — the master extraction record for every algorithm package
   under `algorithms/`.
-- `repository-folders.md` is this current-state folder guide.
-
-Docs in this folder should distinguish clearly between the repository's current
-extracted-code state and the planned package architecture.
+- `repository-folders.md` — this current-state folder guide.
+- `pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the extracted
+  Astromancer code behind each stage.
+- `installing.md` — installing MARS with no checkout, registering
+  `mars-mcp` with a host, and the optional data bundles.
+- `releasing.md` — version and tag policy, the release workflow, and the
+  standing `data` release.
+- `analysis/` — point-in-time review and external-research output (dated).
+- `benchmarking/` — the model benchmark: harness design, sweep results, the
+  generated report, and the figures.
+- `archive/` — completed track documents, kept as records.
+- `working/` — plans under active development. Empty today.
+- `examples/` — committed sample output.
 
 ## `algorithms/fieldcal/`
 
@@ -130,9 +230,9 @@ Extracted Python photometric field-calibration code from Skynet.
 Primary responsibilities:
 
 - Match catalog sources to detected image sources.
-- Reject known variable stars through the VSX path when wired.
+- Reject known variable stars from the variable-source rows the caller supplies.
 - Resolve reference magnitudes for the image filter.
-- Run aperture photometry on matched sources through injected dependencies.
+- Run aperture photometry on matched sources.
 - Solve the photometric zero point with Chauvenet rejection.
 - Write `PHOT_M0`, `PHOT_M0E`, and `PHOT_CAL` into the FITS header when possible.
 
@@ -142,8 +242,6 @@ Important files and subfolders:
   `perform_field_calibration`.
 - `solution.py`: zero-point solver, exposed as `calc_solution`.
 - `ref_mag.py`: reference-magnitude/filter-resolution logic.
-- `deps.py`: seam for cross-domain dependencies owned by `algorithms.wcs`,
-  `algorithms.photometry`, and `algorithms.query`.
 - `algorithms.skylib_lite`: shared vendored utility subset used by calibration.
 - [extraction.md](extraction.md), Field Calibration: provenance, severed Skynet
   dependencies, known parity behavior, dependency notes, and verification.
@@ -153,85 +251,82 @@ Current caveats:
 - Field calibration does not own catalogs. Band tables and colour transforms
   live in `algorithms.catalogs`; catalog selection and querying live in
   `algorithms.query`.
-- `algorithms.fieldcal.deps` must be wired before `perform_field_calibration` can
-  call WCS, source extraction, or photometry. `deps.query_catalogs` is the
-  exception: it defaults to `algorithms.query` and needs no wiring.
+- `perform_field_calibration` receives WCS, catalog rows, optional variable-star
+  rows, and optional detected sources explicitly. Tools perform catalog queries.
 - `numba` and `scipy` are required for real numeric execution.
 
-## `algorithms/hrdiagram/`
+## `algorithms/hrdiagram_py/`
 
-Extracted TypeScript algorithms from Astromancer's cluster/HR-diagram tool.
+A Python parity **port** of Astromancer's cluster/HR-diagram computations, plus
+a real optimizer Astromancer never had. It retains the historical `_py` suffix
+to avoid a disruptive package rename after the TypeScript extraction was
+retired. See [extraction.md](extraction.md), "HR Diagram (Python)".
 
-Primary responsibilities:
+Important files:
 
-- Represent cluster sources, photometry, filters, and isochrone parameters.
-- Split cluster members from field stars with field-star-removal parameters.
-- Generate color-magnitude and HR-diagram data.
-- Apply extinction and distance offsets to observed stars or model isochrones.
-- Compute cluster result summaries such as half-light radius, physical radius,
-  galactic coordinates, velocity dispersion, and virial mass.
+- `hrfit.py`: the CM<->HR transform (`computePlotDelta`/`getExtinction`
+  ported from `isochrone-matching/isochrone-plot.util.ts` /
+  `cluster.util.ts`), CCM extinction, isochrone loading, and the
+  distance/E(B-V)/age optimizer (`fit_distance_reddening`, `fit_cluster`) --
+  a new capability, Astromancer's own tool is manual/by-eye only.
+  `isochrone_cmd` drops PARSEC/COLIBRI thermally-pulsing-AGB rows (`label`
+  column > 7) by default -- a raw PARSEC download's dust/mass-loss modelling
+  breaks down there, and left in, it both scribbles the plotted track and
+  biases the optimizer's nearest-point cost.
+- `observations.py`: FITS frame -> detected sources, via `algorithms.photometry`.
+  Cheap "auto" Kron-like apertures, no zero-point solve -- the frame's own
+  magnitude is discarded once Gaia's is fetched.
+- `matching.py`: detected sources <-> a fetched comparison-catalog table, by
+  sky position (mutual nearest-neighbour).
+- `literature.py`: a fetched cluster-catalog row (Cantat-Gaudin & Anders 2020)
+  -> age/distance/E(B-V). Open clusters only.
+- `membership.py`: field-star removal -- a per-source error-scaled parallax
+  window, and Astromancer's own elliptical proper-motion acceptance region
+  (ported from `cluster-data.service.util.ts::updateClusterFieldSources`,
+  with each source's own ellipse semi-axes sized from its proper-motion error
+  and a distance-aware velocity-dispersion floor -- the ellipse's *shape*
+  alone doesn't help without that, since a circle and a fixed-radius ellipse
+  reject the same points).
+- `isochrones.py`: the one module here with its own network call -- fetches
+  PARSEC isochrones from stev.oapd.inaf.it directly, since no existing tool
+  wraps that service.
 
-Important files and subfolders:
+`algorithms/hrdiagram_py/` never imports `tools.*`; all network I/O besides
+the PARSEC fetch above (Gaia DR3, cluster-literature lookups) lives one layer
+up in `tools/hr_diagram.py`, via `tools.vizier.search_vizier`.
 
-- `cluster.util.ts`: shared cluster domain types, filter tables, and extinction
-  logic.
-- `fsr/`: field-star-removal utilities and histogram/CMD helpers.
-- `photometry/`: in-memory cluster source handling and source partitioning.
-- `isochrone-matching/`: fitted-parameter state and plot transforms.
-- `result/`: cluster-summary and projection calculations.
-- `shared/`: angle conversion helpers.
-- `storage/`: storage-shape interfaces retained from Astromancer.
-- [extraction.md](extraction.md), HR Diagram / Isochrone Matching: extraction
-  boundaries, framework seams, and dropped UI code.
+## `algorithms/radio/`
 
-Current caveats:
+New first-party capability -- no upstream Skynet/Astromancer equivalent, so
+there is no parity to preserve here.
 
-- There is no TypeScript package manifest or build config in this repository.
-- Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
-  export handlers were removed.
+Important files:
 
-## `algorithms/lightcurve/`
+- `spectral_fitting.py`: pure-numpy flux-vs-frequency model fitting --
+  `fit_power_law` (log-log OLS, the standard `S_nu ~ nu**spectral_index`
+  radio spectral index), `fit_log_parabola` (quadratic in log-log space, for
+  spectral curvature/turnover), and `analyze_spectrum`, which fits both and
+  reports whichever the data actually supports. Every candidate model is fit
+  against the same target (`log10(flux)`), so their R^2 values are directly
+  comparable -- unlike an earlier draft of this fit, which compared R^2
+  across models fit to different targets and was fixed here, not preserved.
+- `matching.py`: `guess_radec_columns` (tries common VizieR RA/Dec
+  column-name conventions, since a `category="radio"` catalog search returns
+  one differently-shaped table per matched survey) and
+  `match_sources_to_catalog` (flat-sky KD-tree nearest-neighbour, not
+  mutual -- catalog density varies too much between radio surveys for a
+  mutual-nearest-neighbour requirement to be appropriate the way it is for
+  `algorithms/hrdiagram_py/matching.py`'s Gaia-specific version).
 
-Extracted TypeScript algorithms from Astromancer's pulsar and variable-star
-light-curve tools.
-
-Primary responsibilities:
-
-- Parse and transform pulsar light-curve data.
-- Merge variable-star source rows by MJD.
-- Maintain pulsar and variable light-curve data models.
-- Perform pulsar background subtraction, binning, calibration transforms, and
-  folding-related computations.
-- Perform variable-star differential photometry and period-folding transforms.
-
-Important files and subfolders:
-
-- `pulsar/`: pulsar data types, ingest logic, light-curve algorithms,
-  period-folding functions, and sonification.
-- `variable/`: variable-star data types, ingest logic, light-curve algorithms,
-  and period-folding functions.
-- `shared/`: small shared helpers such as `floatMod` and the common data
-  interface.
-- [extraction.md](extraction.md), Light Curve: source provenance and
-  Angular/RxJS/Highcharts seams.
-
-Current caveats:
-
-- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
-  no build, bundle, or runtime — nothing executes this TypeScript.
-- Browser/UI concerns were removed except where browser APIs carried the
-  original ingest algorithm.
-- Periodogram logic lives separately in `algorithms/periodogram/`.
-- The runnable sonification is the Python port in `algorithms/pulsar/`; the
-  TypeScript here is the provenance record it was ported from.
+`algorithms/radio/` never imports `tools.*`; VizieR/NED network I/O lives one
+layer up in `tools/radio_sources.py`.
 
 ## `algorithms/pulsar/`
 
-Python pulsar time-series ingest and sonification. **The one folder under
-`algorithms/` that is a port rather than an extraction** — it carries the
-Astromancer TypeScript sonifier into Python because that code is welded to
-`Blob`, `document` and `AudioContext` and cannot run headless. Seams are marked
-`# PORTED:`, not `# EXTRACTED:`.
+Python pulsar time-series ingest and sonification. One of the Astromancer
+Python ports under `algorithms/`, it carries the TypeScript sonifier into
+Python because that code is welded to `Blob`, `document` and `AudioContext`
+and cannot run headless. Seams are marked `# PORTED:`, not `# EXTRACTED:`.
 
 One module per pipeline stage, in the order they must run.
 
@@ -257,7 +352,7 @@ Important files and subfolders:
   `duplicate_if_needed`, `difference_and_sum`, `fold_lightcurve`.
 - `sonification.py`: `interpolate_linear`, `window_sonification_input`,
   `folded_sonification_input`, `sonify`, `write_wav`.
-- [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md): the stage-by-stage
+- [Pulsar Tool Pipeline](pulsar-tool-pipeline.md): the stage-by-stage
   architecture and the extracted Astromancer code behind each stage.
 - [extraction.md](extraction.md), Pulsar Sonification: provenance, the seams
   cut, the port's deliberate divergences, and the preserved upstream quirks.
@@ -277,35 +372,18 @@ Current caveats:
 - No dedispersion, no barycentric correction, no period uncertainty. Upstream
   has none of these either.
 
-## `algorithms/periodogram/`
+## `algorithms/variable_star/`
 
-Extracted TypeScript periodogram algorithms from Astromancer.
+Exact-parity Python ports of Astromancer's variable-star computations.
 
-Primary responsibilities:
+Important files:
 
-- Compute Lomb-Scargle periodograms.
-- Preserve the pulsar and variable-star periodogram differences.
-- Detect local maxima and compute confidence thresholds for pulsar periodograms.
-- Derive pulsar Nyquist-based search ranges and folding-range links.
-
-Important files and subfolders:
-
-- `core/lomb-scargle.ts`: shared Lomb-Scargle implementation and numeric
-  helpers.
-- `core/peak-detection.ts`: local maxima and confidence-threshold helpers.
-- `pulsar/`: pulsar periodogram models, compute wrapper, range defaults, and
-  folding link.
-- `variable/`: variable-star periodogram model and compute wrapper.
-- [extraction.md](extraction.md), Periodogram: source provenance, algorithm
-  notes, and recent bug-fix context.
-
-Current caveats:
-
-- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
-  no build, bundle, or runtime — nothing executes this TypeScript.
-- Highcharts rendering fixes and UI storage paths are documented but not
-  extracted.
-- Period folding itself is owned by `algorithms/lightcurve/`.
+- `lightcurve.py`: source-row merging, differential magnitudes, and propagated
+  errors.
+- `periodogram.py`: the error-weighted Lomb-Scargle calculation and fixed grid.
+- `folding.py`: phase folding, display duplication, and error-bar alignment.
+- [extraction.md](extraction.md), Light Curve and Periodogram: upstream source
+  provenance, preserved quirks, and the retired TypeScript extraction record.
 
 ## `algorithms/skylib_lite/`
 
@@ -345,7 +423,7 @@ Important files:
 
 - `source_extraction.py`: FITS-header WCS construction and source
   extraction entry points.
-- `photometry.py`: `run_photometry` and `perform_photometry`.
+- `photometry.py`: `run_photometry` over explicit detections and optional WCS/background inputs.
 - `schemas.py`: Pydantic settings and data models.
 - `algorithms.skylib_lite`: vendored algorithmic core for aperture photometry,
   exact aperture overlap, centroiding, background estimation, and statistics.
@@ -418,7 +496,9 @@ Important files and subfolders:
 - `header_utils.py`: pixel-scale and RA/Dec guessing from FITS headers.
 - `schemas.py`: WCS settings and data models.
 - `config.py`: environment-backed solver configuration seam.
-- `state.py`: dataclass stand-ins for the Skynet ORM rows touched by WCS.
+- `results.py`: `WcsSolveMetadata` and `WcsSolveResult`, the frozen dataclasses
+  a solve returns. Replaced `state.py` (ORM-row stand-ins), which the stateless
+  rollout deleted along with persistence.
 - `algorithms.skylib_lite`: vendored astrometry stack, including astrometry.net and
   ATLAS backends.
 - [extraction.md](extraction.md), WCS: full provenance, backend requirements,

@@ -1,6 +1,6 @@
 """SDSS query backend.
 
-SDSS is the exception among Kepler's catalogs: it is not served through VizieR
+SDSS is the exception among MARS's catalogs: it is not served through VizieR
 but through SkyServer, which takes SQL. astroquery's ``SDSSClass`` can build
 cone-search SQL but not the rectangular queries the image-footprint path needs,
 and its default query does not filter on data quality. So the payload is built
@@ -14,7 +14,7 @@ and dropping them would quietly widen the source list with unreliable rows.
 
 EXTRACTED FROM:
 ``afterglow-core/afterglow_core/resources/catalog_plugins/sdss_catalog.py``
-(lines 19-100 and the three query overrides) and its Skynet counterpart. Kepler
+(lines 19-100 and the three query overrides) and its Skynet counterpart. MARS
 takes Skynet's ``_args_to_payload`` signature — Afterglow passed ``radius=None``
 through to ``super()``, which newer astroquery rejects.
 """
@@ -33,15 +33,15 @@ from algorithms.catalogs.schemas import CatalogSource
 
 from .vizier import VizierCatalog, _round_for_cache
 
-__all__ = ["KeplerSDSS", "SDSSQueryBackend"]
+__all__ = ["MARSSDSS", "SDSSQueryBackend"]
 
 logger = logging.getLogger(__name__)
 
 
-class KeplerSDSS(SDSSClass):
-    """``SDSSClass`` that builds Kepler's SkyServer SQL.
+class MARSSDSS(SDSSClass):
+    """``SDSSClass`` that builds MARS's SkyServer SQL.
 
-    EXTRACTED: was ``AfterglowSDSS``. Renamed — Kepler is not Afterglow — but
+    EXTRACTED: was ``AfterglowSDSS``. Renamed — MARS is not Afterglow — but
     the generated SQL is unchanged, because the quality predicates in it are
     what make SDSS photometry usable for zero-point solves.
     """
@@ -57,7 +57,7 @@ class KeplerSDSS(SDSSClass):
         """Return the SkyServer request payload.
 
         A two-element ``radius`` tuple means a rectangular region — that is
-        Kepler's extension to the astroquery signature, and it is how the
+        MARS's extension to the astroquery signature, and it is how the
         image-footprint path asks for a box. Anything else is a cone search and
         goes through SkyServer's ``fGetNearbyObjEq``.
 
@@ -141,7 +141,7 @@ class KeplerSDSS(SDSSClass):
 #: Module-level template instance. ``SDSSClass`` is stateless for our purposes;
 #: the query methods below call it to get a fresh instance per query, matching
 #: upstream.
-SDSS = KeplerSDSS()
+SDSS = MARSSDSS()
 
 
 class SDSSQueryBackend(VizierCatalog):

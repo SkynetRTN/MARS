@@ -1,18 +1,33 @@
-# Local astronomy data, downloads, and generated artifacts
+# Local-only demo script, never for the public repo
+dan_demo.py
+
+# Local astronomy data, downloads, and generated artifacts.
+# `fits_downloads/` has no leading slash, so it matches at any depth -- it
+# covers the archive download root in its current home under `data/` as well
+# as a stale one left at the repository root.
 fits_downloads/
 downloads/
 artifacts/
 cache/
 .cache/
-data/
 work/
 staging/
 *.manifest.json
+isochrone_cache/
+
+# NOTE: never re-add a bare `data/` here. `data/` is the repository's tracked
+# fixture tree (39 FITS frames plus recorded reference solves, ~175 MB); the
+# pattern would ignore all of it, and a fixture added later would silently
+# fail to be committed. The one thing under it that must stay untracked is the
+# archive download root, already covered by `fits_downloads/` above.
 
 # Local credentials and environment overrides
 .env
 .env.*
 !.env.example
+
+# Git worktrees created for isolated feature work.
+.worktrees/
 
 # Python build/test output
 __pycache__/
@@ -35,12 +50,6 @@ dist/
 .coverage.*
 coverage.xml
 htmlcov/
-
-# JavaScript / TypeScript build output
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Notebook checkpoints
 .ipynb_checkpoints/

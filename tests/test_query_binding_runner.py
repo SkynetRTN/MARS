@@ -336,7 +336,7 @@ def test_explicit_arguments_beat_the_environment(monkeypatch):
 
 
 def test_default_vizier_server_is_the_cds_mirror(monkeypatch):
-    """Afterglow used the Harvard mirror; Skynet moved to CDS and Kepler follows."""
+    """Afterglow used the Harvard mirror; Skynet moved to CDS and MARS follows."""
     from algorithms.query.config import QuerySettings
 
     monkeypatch.delenv("VIZIER_SERVER", raising=False)
@@ -369,7 +369,7 @@ def test_malformed_cache_age_falls_back_to_the_default(monkeypatch):
 def test_enabling_the_cache_snaps_query_regions_to_a_grid():
     """Documented consequence: the cache is not transparent near a field edge.
 
-    ``algorithms/query/EXTRACTION.md`` §5.1 records that enabling the cache
+    ``docs/extraction.md``, Query §5.1 records that enabling the cache
     rounds the query region to a fixed grid so near-identical fields share an
     entry — which means turning it on can change which sources come back. Pinned
     as a fact about the setting, since the default is *enabled*.
@@ -389,7 +389,7 @@ def test_live_apass_query_returns_sources_with_magnitudes():
     """Smoke test against the real VizieR service.
 
     Never runs by default: needs both ``-m network`` and
-    ``KEPLER_TEST_NETWORK=1``. Kept small — a 5 arcmin cone on a well-populated
+    ``MARS_TEST_NETWORK=1``. Kept small — a 5 arcmin cone on a well-populated
     field — because it is a connectivity and shape check, not a science test.
     """
     sources = query_catalogs(

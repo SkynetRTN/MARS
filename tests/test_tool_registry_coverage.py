@@ -1,0 +1,81 @@
+"""The registry is the agent's whole world; anything absent does not exist.
+
+BL-2: before this test, every module in tools/ that reads local data -- except
+tools.pulsar -- was unregistered, so an agent loop could query eight remote
+archives but could not open any of the bundled FITS frames.
+"""
+
+from __future__ import annotations
+
+from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+
+#: Modules that are infrastructure, not a public tool surface.
+NOT_TOOL_MODULES = {
+    "tools.artifacts",
+    # The declared ToolError/ToolWarning code vocabulary. Two dicts and a
+    # docstring; tests/test_tool_codes.py is what keeps it honest.
+    "tools.codes",
+    "tools.config",
+    "tools.models",
+    "tools.registry",
+    "tools.sessions",
+    # A reusable pipeline; its public surface is re-exported through
+    # tools.optical and tools.photometry instead.
+    "tools.photometry_pipeline",
+    # The provider-neutral model port -- a backend interface for the agent
+    # loop, not a callable tool. pkgutil.iter_modules yields it as a package.
+    "tools.llm",
+    # The headless agent loop (run_session, events, the moved SYSTEM_PROMPT).
+    # Infrastructure the runner shim and the console consume, not a tool.
+    "tools.agent",
+    # The Textual research console consumes the agent loop; it is not a tool.
+    "tools.tui",
+    # The model benchmark harness. It *reads* the registry and substitutes
+    # run_session's tool_functions mapping; it owns no tool and adds nothing
+    # to the tool surface. pkgutil.iter_modules yields it as a package.
+    "tools.bench",
+    # The agent skill's single source and its renderer: Markdown plus the code
+    # that renders skills/mars-tools/ from it. Guidance, not a tool.
+    "tools.skill",
+    # The MCP server: a fourth consumer of the registry, serving it over stdio.
+    # It reads TOOL_SCHEMAS/TOOL_FUNCTIONS and owns no tool of its own.
+    "tools.mcp",
+    # Where bundled data and the per-user MARS home are. Paths, no tool.
+    "tools.paths",
+    # The .env loader, kept apart from tools.config so an entry point can load
+    # .env before any setting is fixed at import. Re-exported by tools.config.
+    "tools.dotenv",
+}
+
+
+def _tool_modules() -> set[str]:
+    import pkgutil
+
+    import tools
+
+    return {
+        f"tools.{module.name}"
+        for module in pkgutil.iter_modules(tools.__path__)
+    } - NOT_TOOL_MODULES
+
+
+def test_every_public_tool_module_is_represented_in_the_registry():
+    registered = {fn.__module__ for fn in TOOL_FUNCTIONS.values()}
+    assert _tool_modules() - registered == set()
+
+
+def test_schemas_and_functions_agree():
+    assert {s["name"] for s in TOOL_SCHEMAS} == set(TOOL_FUNCTIONS)
+
+
+def test_the_local_no_network_tools_are_reachable():
+    """docs/tool-architecture.md 2 calls these the first local tools."""
+    for name in (
+        "describe_image_wcs",
+        "list_photometric_catalogs",
+        "resolve_reference_band",
+        "solve_zeropoint_from_measurements",
+        "list_artifacts",
+        "describe_artifact",
+    ):
+        assert name in TOOL_FUNCTIONS, name

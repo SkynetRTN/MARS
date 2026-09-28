@@ -1,4 +1,4 @@
-"""Kepler: ATNF Pulsar Catalogue parameter vocabulary.
+"""MARS: ATNF Pulsar Catalogue parameter vocabulary.
 
 ``psrqpy`` (the package ``tools.atnf`` queries the ATNF catalogue
 through) already carries its own complete parameter list in

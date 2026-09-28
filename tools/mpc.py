@@ -1,4 +1,4 @@
-"""Kepler: Minor Planet Center observation history.
+"""MARS: Minor Planet Center observation history.
 
 The old code tried an ephemeris lookup first (5 points, forward-looking) and
 fell back to observations only on failure -- conflating two different

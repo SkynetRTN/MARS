@@ -3,13 +3,13 @@
 # EXTRACTED from skynet/packages/py/skynet-db/skynet_db/runners/common/schemas.py
 # (331 lines). Only the photometry / source-extraction settings and data objects
 # are kept here. Left behind in Skynet, because they belong to other processing
-# stages and other Kepler modules:
+# stages and other MARS modules:
 #   - Mag                            (unused by the photometry path)
-#   - WcsCalibrationSettings         -> astrometry / Kepler wcs/
+#   - WcsCalibrationSettings         -> astrometry / MARS wcs/
 #   - ICatalogSource, CatalogSource,
-#     Catalog                        -> Kepler catalogs/
+#     Catalog                        -> MARS catalogs/
 #   - PhotometricCalibrationSettings,
-#     FieldCalResult                 -> Kepler fieldcal/
+#     FieldCalResult                 -> MARS fieldcal/
 #   - ImageProperties                (image reduction bookkeeping)
 # Class bodies below are verbatim; only the base-model import was severed.
 

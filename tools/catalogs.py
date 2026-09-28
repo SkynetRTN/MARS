@@ -111,7 +111,7 @@ def list_photometric_catalogs() -> list[CatalogSummary]:
 
 
 def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceBandResolution:
-    """Resolve the catalog band or expression Kepler would use for an image filter."""
+    """Resolve the catalog band or expression MARS would use for an image filter."""
 
     catalog_name = str(catalog).strip()
     warnings: list[ToolWarning] = []

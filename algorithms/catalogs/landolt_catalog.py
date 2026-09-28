@@ -1,5 +1,5 @@
 """
-Kepler: Landolt catalog of UBVRI photometric standards
+MARS: Landolt catalog of UBVRI photometric standards
 accessed via VizieR
 """
 
@@ -9,7 +9,7 @@ from numpy import hypot, sqrt
 from astropy.table import Table
 
 from .schemas import CatalogSource, Mag
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In MARS the
 # VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
 # import time by ``query/binding.py``, so this module stays declaration-only and
 # carries no network dependency.

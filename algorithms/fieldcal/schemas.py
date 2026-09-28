@@ -24,18 +24,18 @@ from algorithms.catalogs.schemas import (
     IAstrometry,
     ICatalogSource,
     IPhotometry,
-    KeplerBaseModel,
+    MARSBaseModel,
     Mag,
 )
 
-# ``KeplerBaseModel``, ``Mag``, ``IPhotometry``, ``IAstrometry``,
+# ``MARSBaseModel``, ``Mag``, ``IPhotometry``, ``IAstrometry``,
 # ``ICatalogSource`` and ``CatalogSource`` are defined in ``catalogs/schemas.py``
 # and imported above: they are the catalog data contract, and field calibration
 # has to compare against the same classes a ``query/`` backend produces rather
 # than local twins. Everything below is calibration state, which fieldcal owns.
 
 
-class IAperture(KeplerBaseModel):
+class IAperture(MARSBaseModel):
     aper_a: Optional[float] = None
     aper_b: Optional[float] = None
     aper_theta: Optional[float] = None
@@ -47,7 +47,7 @@ class IAperture(KeplerBaseModel):
     annulus_theta_out: Optional[float] = None
 
 
-class PhotometrySettings(KeplerBaseModel):
+class PhotometrySettings(MARSBaseModel):
     # Mirrors PhotSettings defaults from legacy
     mode: str = "aperture"
     a: Optional[float] = None
@@ -67,7 +67,7 @@ class PhotometrySettings(KeplerBaseModel):
     reject_bkg_outliers: bool = False
 
 
-class ISourceMeta(KeplerBaseModel):
+class ISourceMeta(MARSBaseModel):
     file_id: Optional[int] = None
     time: Optional[datetime] = None
     filter: Optional[str] = None
@@ -75,16 +75,16 @@ class ISourceMeta(KeplerBaseModel):
     exp_length: Optional[float] = None
 
 
-class IFwhm(KeplerBaseModel):
+class IFwhm(MARSBaseModel):
     fwhm_x: Optional[float] = None
     fwhm_y: Optional[float] = None
     theta: Optional[float] = None
 
 
-class ISourceId(KeplerBaseModel):
+class ISourceId(MARSBaseModel):
     id: Optional[str] = None
 
-class SourceExtractionSettings(KeplerBaseModel):
+class SourceExtractionSettings(MARSBaseModel):
     x: int = Field(1)
     y: int = Field(1)
     width: int = Field(0)
@@ -197,7 +197,7 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
 # Catalogs
 # ============================================================================
 
-# Catalog schemas are owned by Kepler's ``catalogs`` package, not by field
+# Catalog schemas are owned by MARS's ``catalogs`` package, not by field
 # calibration -- a ``CatalogSource`` handed back by a ``query/`` backend has to
 # be the same class this module's matching code compares against, and a
 # structurally identical local copy would not be. Re-exported under the names
@@ -211,14 +211,13 @@ Catalog = CatalogMeta
 # Photometric Calibration (formerly "FieldCal")
 # ============================================================================
 
-class PhotometricCalibrationSettings(KeplerBaseModel):
+class PhotometricCalibrationSettings(MARSBaseModel):
     """
     Settings used to perform photometric (field) calibration / zero-point solve.
     """
     id: Optional[int] = None
     user_id: Optional[int] = None
     name: Optional[str] = None
-    catalog_sources: List[CatalogSource] = Field(default_factory=list)
     catalogs: List[str] = Field(default_factory=lambda: ["APASS"])
     custom_filter_lookup: Dict[str, Dict[str, str]] = Field(default_factory=dict)
     source_inclusion_percent: Optional[float] = 100
@@ -236,7 +235,7 @@ class PhotometricCalibrationSettings(KeplerBaseModel):
     strict_filter_parity: bool = False
 # (Ports legacy FieldCal fields 1:1.)  # :contentReference[oaicite:4]{index=4}
 
-class FieldCalResult(KeplerBaseModel):
+class FieldCalResult(MARSBaseModel):
     """
     Result of photometric calibration for a single file.
     """
@@ -248,30 +247,3 @@ class FieldCalResult(KeplerBaseModel):
     limmag5: Optional[float] = None
     rej_percent: Optional[float] = None
 # (Ports legacy FieldCalResult fields.)  # :contentReference[oaicite:5]{index=5}
-
-
-# ============================================================================
-# EXTRACTED: stand-in for the Skynet ORM row
-# ============================================================================
-
-class ProcessingRunRef(KeplerBaseModel):
-    """EXTRACTED: stand-in for ``skynet_db.models.ObservationAssetProcessingRun``.
-
-    Field calibration reads exactly two attributes off the processing-run
-    object it is handed:
-
-      * ``.id``                   — used only to build the unique source-ID
-                                    prefix in ``_ensure_unique_source_ids`` and
-                                    for log lines;
-      * ``.observation_asset_id`` — used as ``file_id`` on emitted sources.
-
-    Everything else on the SQLAlchemy row (session binding, S3 asset locators,
-    job state, WCS solution rows) is persistence/job-runner infrastructure and
-    is not used by the calibration algorithm.  ``perform_field_calibration``
-    duck-types this parameter, so any object exposing those two attributes
-    works; this model is provided so standalone callers have something concrete
-    to construct.
-    """
-
-    id: Optional[int] = None
-    observation_asset_id: Optional[int] = None

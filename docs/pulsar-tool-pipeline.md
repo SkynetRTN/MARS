@@ -6,6 +6,29 @@ Status: active architecture
 Four tools, one per stage, in the order they must run. This document is the
 map from each stage to the extracted Astromancer code that backs it.
 
+A discovery step sits in front of stage 1: `list_pulsar_scans` and
+`resolve_pulsar_scan` (`tools.pulsar`, both registered) turn a source name into a
+scan path under `data/pulsar/` — override with `MARS_PULSAR_DATA_DIR` —
+returning `ToolError`s for misses and ambiguity rather than raising. It is
+optional; every stage below also accepts a bare file path.
+
+It also reports the **curated literature period** for a scan
+(`curated_period_s`, with `curated_difficulty` and `period_source` alongside),
+read from a `curated_periods.json` **beside the scans themselves** — so
+`MARS_PULSAR_DATA_DIR` points at another archive and that archive's own
+curation is what applies to it. Pinning the map to a fixed repository path
+would name-match these five periods onto someone else's files and stamp them
+with a `period_source` describing observations they are not.
+
+**It is a check on a measured period, not an input to the pipeline** — see §4,
+*Measure first, check second*. Offline it replaces a network call to ATNF for
+that check; it does not replace stage 2. A scan the curation does not cover
+reports `null` — not recorded, never a substituted number — and a map that is
+missing, unreadable or malformed is a `curated_periods_unavailable` warning
+carried on both the listing and each scan, not an import error. Rows are
+validated one by one, so a row without a numeric `period_s` is dropped rather
+than yielding a `period_source` that cites a curation for a number it lacks.
+
 ```text
    raw scan (.cal.txt)
           │
@@ -52,33 +75,34 @@ marking it as wrong. That is why:
   `peak_confidence`, but that is **not** the validity check — see §4, where
   four of five bundled scans return a confident artifact;
 - `sonify_pulsar` warns (`unfolded_rendering`) when called without a period;
-- every stage's schema says to prefer `search_atnf` for a known source, whose
-  catalogued period beats anything a 60-second scan can measure.
+- every stage's schema says to compare the measured period against a reference —
+  stage 0's `curated_period_s` for a bundled scan, `search_atnf` for anything
+  else — and to retune rather than substitute when the two disagree.
 
-Stage 4 can run without stage 2, and stage 3 can take a period from
-`search_atnf` instead. Those are the two legitimate shortcuts; both are
-documented on the tools themselves.
+Stage 4 can run without stage 2, and stage 3 can take a reference period from
+stage 0's `curated_period_s` or from `search_atnf` instead of a measured one.
+Both are documented on the tools themselves — the second is a fallback with a
+reporting obligation attached, not a shortcut.
 
 ---
 
 ## 2. Stage → algorithm → upstream
 
-Every stage calls a Python module under `algorithms/pulsar/`, which is a port
-of a TypeScript extraction under `algorithms/lightcurve/` or
-`algorithms/periodogram/`, which was extracted from Astromancer. Full
-provenance and the preserved-quirk list live in `docs/extraction.md`
-(Pulsar Sonification; Light Curve; Periodogram).
+Every stage calls a Python module under `algorithms/pulsar/`, ported from
+Astromancer. Full provenance, the retired intermediate TypeScript extraction,
+and the preserved-quirk list live in `docs/extraction.md` (Pulsar
+Sonification; Light Curve; Periodogram) and repository history.
 
-| Stage | Tool | Python algorithm | Extracted TypeScript | Astromancer origin |
-| --- | --- | --- | --- | --- |
-| 1 | `load_pulsar_lightcurve` | `algorithms/pulsar/ingest.py` | `lightcurve/pulsar/pulsar-lightcurve.ingest.ts`, `…algorithms.ts` | `pulsar-light-curve.component.ts::uploadHandler`; `pulsar.service.ts::median`, `backgroundSubtraction` |
-| 2 | `compute_pulsar_periodogram` | `algorithms/pulsar/periodogram.py` | `periodogram/core/lomb-scargle.ts`, `periodogram/core/peak-detection.ts`, `periodogram/pulsar/pulsar-periodogram-range.ts` | `shared/data/utils.ts::lombScargle`; `pulsar-periodogram-highcharts.component.ts::findLocalMax`, `addConfidenceLines` |
-| 3 | `fold_pulsar_lightcurve` | `algorithms/pulsar/folding.py` | `lightcurve/pulsar/pulsar-period-folding.algorithms.ts`, `…lightcurve.algorithms.ts`, `lightcurve/shared/numeric-utils.ts` | `pulsar.service.ts::getPeriodFoldingChartData`, `binData`; `pulsar-period-folding-highchart.component.ts::foldAndBin` |
-| 4 | `sonify_pulsar` | `algorithms/pulsar/sonification.py` | `lightcurve/pulsar/pulsar-sonification.algorithms.ts` | `pulsar.service.ts::sonification`; `pulsar-period-folding-form.component.ts`, `pulsar-light-curve-sonifier.component.ts` |
+| Stage | Tool | Python algorithm | Astromancer origin |
+| --- | --- | --- | --- |
+| 1 | `load_pulsar_lightcurve` | `algorithms/pulsar/ingest.py` | `pulsar-light-curve.component.ts::uploadHandler`; `pulsar.service.ts::median`, `backgroundSubtraction` |
+| 2 | `compute_pulsar_periodogram` | `algorithms/pulsar/periodogram.py` | `shared/data/utils.ts::lombScargle`; `pulsar-periodogram-highcharts.component.ts::findLocalMax`, `addConfidenceLines` |
+| 3 | `fold_pulsar_lightcurve` | `algorithms/pulsar/folding.py` | `pulsar.service.ts::getPeriodFoldingChartData`, `binData`; `pulsar-period-folding-highchart.component.ts::foldAndBin` |
+| 4 | `sonify_pulsar` | `algorithms/pulsar/sonification.py` | `pulsar.service.ts::sonification`; `pulsar-period-folding-form.component.ts`, `pulsar-light-curve-sonifier.component.ts` |
 
-`algorithms/pulsar/` is the one **port** rather than extraction under
-`algorithms/`, marked `# PORTED:`. The TypeScript is kept and typechecked
-(`npm run typecheck`) as the provenance record the port is diffed against.
+`algorithms/pulsar/` is a **port** rather than an extraction under
+`algorithms/`, marked `# PORTED:`. Parity is pinned by Python tests; the
+intermediate TypeScript extraction remains available in repository history.
 
 ---
 
@@ -115,7 +139,7 @@ from tools.pulsar import (
     fold_pulsar_lightcurve, sonify_pulsar,
 )
 
-lc   = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc   = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg   = compute_pulsar_periodogram(lc.artifact.path)
 fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
 wav  = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
@@ -133,7 +157,7 @@ normal for a pulsar and is why the field exists.
 
 B0329+54 is the **only** one of the five bundled scans where this works with
 default settings. Verified against the curated periods in
-`test_data/pulsar/Curated pulsars.docx`, cross-checked against live ATNF:
+`data/pulsar/Curated pulsars.docx`, cross-checked against live ATNF:
 
 | Scan | Curated difficulty | `S1400` | Blind search result | Fold at curated `P0` |
 | --- | --- | --- | --- |
@@ -160,14 +184,48 @@ consequences for tool design are the load-bearing part:
    B1133+16 the spurious ~2.18 s peak appears at `back_scale` 3, 12 and 30 but
    the true 1.19 s period wins at 1 and 6. Varying it is the cheapest
    diagnostic available.
-4. **For any known source, `search_atnf` beats measuring.** A catalogued period
-   turns four of these five scans from failures into usable folds.
+4. **A reference period rescues a failed search, and costs the detection
+   claim.** A catalogued period turns four of these five scans from failures
+   into usable folds — offline for these five, via `curated_periods.json`, and
+   through `search_atnf` for any other source. What it cannot do is stand in for
+   the measurement.
 
 B1933+16 resists even a tuned search, for a physical reason worth recording:
 `DM = 158.6` smears its pulse across ~11% of its 359 ms period over the 80 MHz
 effective band. It is the brightest of the four faint scans and still the
 hardest, and no amount of tuning fixes it — **dedispersion would**, and this
 pipeline has none.
+
+### Measure first, check second
+
+The curated period and ATNF's `P0` are **references to check a result against**,
+not inputs to the pipeline. The ordering the tools and the system prompt state:
+
+1. **Measure.** Run `compute_pulsar_periodogram`; read `peak_fold_snr` and
+   `top_peaks`. This is the only evidence that does not depend on already
+   knowing the answer.
+2. **Compare.** Against stage 0's `curated_period_s`, or `search_atnf` for a
+   source the curation does not cover. Agreement confirms the measurement, and
+   both numbers get reported with their provenance.
+3. **Retune, do not substitute.** On a disagreement, a low `peak_fold_snr`, or a
+   `peak_does_not_fold` warning: vary `back_scale`, narrow `start`/`stop` away
+   from the artifact, raise `steps`. The two artifacts on this data are
+   0.016665 s (60.006 Hz mains) and a 2.1–2.2 s red-noise peak.
+4. **Fall back, and say so.** Only once a retuned search has failed, fold at the
+   reference period — and report that the period came from outside the data, so
+   that profile's `pulse_snr` is not an independent detection.
+
+The distinction is the whole reason the fixtures are usable as verification.
+`data/README.md`: the scans carry no period in-file, so **a successful fold
+is a real detection rather than a fit to a known answer** — which holds only
+while the period being folded at was measured. Seeding the fold from the
+literature by default would quietly convert every `pulse_snr` in the pipeline
+from evidence into a restatement of the input, and `peak_fold_snr` — which folds
+at the periodogram's *own* peak — would be the only number left that still meant
+anything.
+
+Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
+60 seconds on a 20 m dish, and reporting it plainly is the point.
 
 ---
 
@@ -185,13 +243,11 @@ downstream consumes a plot.
 | Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
 
 All of that — labels, series names, the log axis, the hidden series, the
-folded x extent — is Astromancer's own chart configuration, extracted into
-`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
+folded x extent — is Astromancer's own chart configuration, ported to
 `algorithms/pulsar/charts.py`. It is not styling chosen here. The
 `docs/extraction.md` entry that listed the Highcharts components as "left
 behind as UI" is superseded for the parts that decide *what* is drawn; the
-widget plumbing (boost thresholds, tooltips, export buttons) is still left
-behind.
+widget plumbing (boost thresholds, tooltips, export buttons) was not ported.
 
 **The periodogram plot is the diagnostic worth reaching for.** §4 explains that
 four of five bundled scans return a confident artifact rather than the pulsar;
@@ -205,7 +261,7 @@ Maxima with its harmonic comb at P/2, P/3, P/4… receding to the left.
 ## 5. Where the output goes
 
 Every stage writes into `<artifact dir>/pulsar/`, where the artifact directory
-is `$KEPLER_ARTIFACT_DIR` if set and `./artifacts` otherwise, **resolved to an
+is `$MARS_ARTIFACT_DIR` if set and `./artifacts` otherwise, **resolved to an
 absolute path at import**. Returned `artifact.path` values are therefore always
 absolute — a caller can change directory or hand the path to another process.
 
@@ -264,147 +320,28 @@ can report them and continue.
 
 ## 7. Not covered
 
-- **No name-to-scan resolution.** Every stage takes a *file path*. An agent
-  asked to "sonify B0329+54" has a source name and no way to reach a scan:
-  `search_atnf` returns the catalogued period but no observational data, and
-  nothing in the registry advertises that `test_data/pulsar/` exists. Today the
-  caller must already know the path. `tools/claude_photometry_haiku_tool.py`
-  solves the same problem for FITS frames with `list_bundled_targets()` /
-  `resolve_fits_path()`, so there is a precedent to follow if this is wanted.
-
 - **No dedispersion.** These are single-band continuum scans; the pipeline
   never sees a frequency axis, so dispersion measure plays no part.
 - **No barycentric correction.** Periods are topocentric, which is why they
   differ from an ATNF `P0` in the fourth decimal.
 - **No period uncertainty.** The periodogram reports a grid peak, not a fitted
   period with an error bar. Refine by re-running with a narrow `start`/`stop`
-  and more `steps`.
+  and more `steps`. The curated period stage 0 reports carries no error bar
+  either — it is a transcribed literature value, and it is barycentric while
+  the scans are topocentric.
+- **No curated period beyond the bundled five.** `curated_periods.json` covers
+  the scans in this repository and nothing else. A scan from elsewhere resolves
+  with `curated_period_s` null, and its period has to be measured or fetched
+  from ATNF.
 - **`sonificationBrowser` is not ported** — it drives an `AudioContext`, which
-  a file-writing tool has no use for. It remains extracted in TypeScript.
+  a file-writing tool has no use for. Its retired extraction remains in git
+  history.
 
 ---
 
-## 8. Pressing Issues and Tooling Bugs
+## 8. Open bugs and the plotting-tools review
 
-- **The document is stale about scan discovery.** `tools.pulsar` and
-  `tools.registry` now expose `list_pulsar_scans` and `resolve_pulsar_scan`,
-  so §7's "No name-to-scan resolution" note is no longer true. The main
-  diagram, stage count, result-contract table and "Not covered" section need
-  to be updated so agents see the optional Stage 0 discovery step before the
-  four processing stages.
-
-- **The periodogram schema hides the recommended diagnostic knobs.**
-  `compute_pulsar_periodogram()` accepts `back_scale` and
-  `subtract_background`, and both this document and the tool description tell
-  callers to vary `back_scale` when red-noise peaks move. The registry schema
-  does not advertise either parameter, so an agent using `TOOL_SCHEMAS` cannot
-  follow that guidance. Add them to the schema and pin the parity with a
-  registry test.
-
-- **Degenerate periodogram inputs can escape the "errors, never raised"
-  contract.** A constant light-curve artifact raises `ZeroDivisionError` from
-  `algorithms.pulsar.periodogram.lomb_scargle()` because the variance is zero,
-  and an all-NaN artifact returns `errors=[]` with `peak_period_s` set to the
-  lower search bound and `peak_power=nan`. Stage 2 should filter/validate
-  finite values, reject zero-variance data with a `ToolError`, and catch this
-  class of arithmetic failure at the tool boundary.
-
-- **`top_peaks` is ambiguous in frequency mode.** In period mode each entry's
-  `x` is seconds; in `freq_mode=True` it is Hz, while the model/docs still
-  talk about period harmonics. Return explicit `period_s` and `frequency_hz`
-  fields per peak, or make the schema/documentation mode-specific enough that
-  callers cannot fold using a frequency value as if it were a period.
-
-- **Folded rendering lacks hard resource guards for bad periods.**
-  `fold_lightcurve()` preserves upstream's repeated-subtraction `floatMod`,
-  so a tiny positive `period_s` can run for an impractically large number of
-  loop iterations. The folded sonifier also sizes interpolation from
-  `sample_rate * period_s`, while public `sample_rate` and very long periods
-  are not bounded by the schema. Validate periods against the observation
-  baseline/Nyquist range and cap rendered interpolation work before allocating
-  arrays or entering the fold.
-
-- **Stage 0 does not yet follow the same error-return discipline.**
-  `list_pulsar_scans()` and `resolve_pulsar_scan()` return structured
-  `ToolError`s for missing directories and ambiguous names, but header reads
-  and `stat()` calls can still raise `OSError` for unreadable files. If Stage 0
-  is part of the public pipeline, per-file read failures should be collected
-  into `errors` or `warnings` rather than aborting the call.
-
----
-
-## 9. Review of Plotting Tools and Charts
-
-Review target: the `agent/pulsar-plots` work merged into `dev` by
-`808f2ad`, primarily commits `e28a5e0` and `96072af`.
-
-### Findings
-
-1. **High: the periodogram chart can mislabel what it plotted.**
-   `compute_pulsar_periodogram()` defaults to `channel="sum"`, searching
-   source1 + source2, but `PERIODOGRAM_CHART` hard-codes the rendered series as
-   "Polarization XX". The periodogram artifact also does not persist the
-   selected channel, so `plot_pulsar()` cannot recover the truth later. This is
-   scientifically misleading: the default plot is usually not XX at all, it is
-   the summed trace. Store `channel` in the periodogram ECSV metadata and map
-   it to "Sum", "Polarization XX", or "Polarization YY" when drawing.
-
-2. **Medium: frequency-mode periodograms inherit period-mode chart semantics.**
-   `plot_pulsar()` correctly detects a `frequency_hz` column, but still returns
-   the Astromancer period-mode spec: x label "Period (s)" and logarithmic
-   x-axis type. `freq_mode=True` uses a linear frequency grid, so the rendered
-   plot should say "Frequency (Hz)" and should not silently force the period
-   chart's axis semantics. Either make a frequency chart spec or override the
-   period spec whenever `frequency_hz` is the x column.
-
-3. **Medium: malformed `.ecsv` input can still raise instead of returning a
-   `ToolError`.** `plot_pulsar()` catches `_LoadError` around file existence
-   and raw-scan ingest, but `Table.read(file.path, format="ascii.ecsv")` is in
-   the same block and its exceptions are not wrapped. A bad artifact can escape
-   the result contract that "failures are returned as `errors` on the model,
-   never raised." Mirror `_load_artifact()` and convert unreadable table files
-   to `ToolError(code="parse_error", ...)`.
-
-4. **Medium: the public schema hides useful plotting controls.**
-   The Python function accepts `x_label`, `y_label`, `back_scale`,
-   `subtract_background`, `dpi`, `figsize`, and `subdir`, but the registry
-   schema advertises only `path`, `kind`, `title`, `show_hidden_series`, and
-   `output_name`. For agent callers this means a raw-scan plot cannot vary the
-   same baseline settings as stage 1, and generated figures cannot be sized or
-   redirected even though the function supports it. Add the missing schema
-   fields or intentionally remove the unsupported public parameters.
-
-5. **Low: current tests prove the renderer writes PNGs, not that the charts are
-   visually non-empty or correctly annotated.** `tests/test_pulsar_plots.py`
-   checks spec constants, inferred kind, PNG dimensions, series names and
-   metadata. That is good unit coverage, but it would not catch a blank axes
-   area, invisible traces, a missing peak marker caused by metadata drift, or
-   confidence lines hidden outside the plotted range. Add a small pixel-level
-   smoke check for the committed B0329+54 examples or inspect matplotlib axes
-   objects before saving.
-
-### What Looks Sound
-
-- The split between `algorithms/pulsar/charts.py` and `tools.pulsar` is the
-  right boundary. Chart identity, labels, hidden series, confidence-line names
-  and the folded x-axis ladder are treated as ported Astromancer semantics,
-  while matplotlib remains only the file renderer.
-- `compute_pulsar_periodogram()` now stores peak and confidence metadata in the
-  periodogram artifact, so `plot_pulsar()` can draw the diagnostic marker and
-  thresholds without recomputing the spectrum.
-- `plot_pulsar()` accepts raw scans as a convenience but still prefers the
-  artifact handoff: light-curve, periodogram and folded outputs can all be
-  plotted by passing their `.ecsv` paths directly.
-- The folded chart preserves Astromancer's hidden `Difference` and `Sum`
-  series and exposes them through `show_hidden_series`, which is a practical
-  translation of an interactive legend into a static PNG tool.
-- The committed example PNGs are an appropriate exception to the generated-file
-  rule: they are small, inspectable, and make the chart output reviewable
-  without rerunning the pipeline.
-
-### Suggested Follow-Up Order
-
-Fix the periodogram label/metadata issue first, because it can change the
-scientific meaning of the plot. Then fix frequency-mode chart semantics and
-the malformed-ECSV error path. Schema parity and pixel-level plot checks can
-follow as one focused hardening PR.
+Known tool-correctness bugs in `tools/pulsar.py`, and the review of the pulsar
+plotting tools, live in
+[`analysis/pulsar-pipeline-review.md`](analysis/pulsar-pipeline-review.md) — kept
+separate so this document stays a description of the pipeline as designed.

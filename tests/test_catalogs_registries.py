@@ -9,7 +9,7 @@ The tests here guard three things:
 * the **two-registry divergence**: ``CATALOGS`` (11 catalogs) and
   ``CATALOG_OPTIONS`` (APASS + PanSTARRS) disagree deliberately, and merging
   them would silently change which reference band a narrowband image calibrates
-  against (``algorithms/catalogs/EXTRACTION.md`` §4);
+  against (``docs/extraction.md``, Catalogs §4);
 * the **colour transforms themselves**, which are numeric calibration behaviour
   copied verbatim from upstream, not style.
 """
@@ -32,7 +32,7 @@ from algorithms.catalogs import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: Every catalog Kepler declares, and the VizieR table behind it. Pinned because
+#: Every catalog MARS declares, and the VizieR table behind it. Pinned because
 #: a changed table ID silently repoints a query at different photometry.
 EXPECTED_CATALOGS = {
     "APASS": "II/336",

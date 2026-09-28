@@ -1,6 +1,6 @@
 """Pulsar light-curve sonification: amplitude-modulated noise to 16-bit PCM.
 
-PORTED from ``algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts``
+PORTED from ``git-history:algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts``
 -- itself extracted from astromancer's ``PulsarService.sonification``
 (``pulsar.service.ts`` 889-1054). This module targets the **saved-WAV path**;
 the live-playback twin (``sonificationBrowser``) differs in three documented
@@ -43,7 +43,7 @@ the drift; ``tools.pulsar`` reports it as a stretch factor and warns when it
 matters.
 
 Only one behaviour deliberately diverges from upstream, and it is the noise
-carrier: upstream calls ``Math.random()``, which is unseedable. Kepler's
+carrier: upstream calls ``Math.random()``, which is unseedable. MARS's
 default checks have to be deterministic (``CLAUDE.md``), so the carrier comes
 from a seeded ``numpy`` generator. Same distribution, reproducible draw.
 Everything else is arithmetic-for-arithmetic, including the ``Math.floor``

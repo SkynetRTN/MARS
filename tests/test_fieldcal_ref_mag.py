@@ -190,7 +190,7 @@ def test_explicit_lookup_that_cannot_resolve_blocks_the_fallback():
 # ---------------------------------------------------------------------------
 
 def test_custom_filter_lookup_overlays_the_catalog_lookup():
-    """A deployment can teach a catalog a filter Kepler ships no transform for."""
+    """A deployment can teach a catalog a filter MARS ships no transform for."""
     value, _ = _resolve(
         "Sloan_r",
         APASS_FULL,

@@ -257,7 +257,7 @@ def combined_bounding_box(
     ``if False:`` and fell through to querying each field individually. The
     algorithm was never deleted, and the reason it was switched off was never
     recorded, so it is kept as a working function rather than as a comment —
-    but nothing in Kepler calls it, and turning it on is a behaviour change that
+    but nothing in MARS calls it, and turning it on is a behaviour change that
     needs its own validation.
 
     How it works: a query region given as centre plus width/height is really a

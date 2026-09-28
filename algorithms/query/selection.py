@@ -133,7 +133,7 @@ def catalog_supports_filter(
 
     ``custom_filter_lookup`` is ``{catalog_name: {filter: target}}`` and overlays
     the catalog's own lookup, letting a deployment teach a catalog about a filter
-    Kepler does not ship a transform for.
+    MARS does not ship a transform for.
 
     Unknown catalog names return ``False`` rather than raising: selection is
     advisory, and the query runner validates names separately with a clear error.
@@ -180,7 +180,7 @@ def select_catalogs_for_filter(
 
     Two deliberate fallbacks, both returning the list unchanged: a blank filter
     means there is nothing to match on, and *no* compatible catalog means the
-    caller's configuration disagrees with Kepler's transform tables. Dropping
+    caller's configuration disagrees with MARS's transform tables. Dropping
     every catalog would turn a recoverable situation into a failed calibration,
     so the full list is tried and the mismatch is logged as a warning.
     """

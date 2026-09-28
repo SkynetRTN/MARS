@@ -45,7 +45,7 @@ from tools.pulsar import (
     fold_pulsar_lightcurve, plot_pulsar,
 )
 
-lc   = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc   = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg   = compute_pulsar_periodogram(lc.artifact.path)
 fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
 for stage in (lc, pg, fold):
@@ -60,7 +60,7 @@ PSR B0329+54 rendered as audio: 60 s, stereo, 16-bit PCM, 44.1 kHz, 10.1 MB.
 Each polarization is one channel, and the pulse arrives as a burst of static
 roughly every 0.71 s.
 
-Produced by the **agent loop**, not by a script — `tools/runner.py` driving
+Produced by the **agent loop**, not by a script — `tools/agent/` driving
 `tools.registry.TOOL_SCHEMAS`, given only this instruction:
 
 > Sonify pulsar B0329+54, but measure the period from the observation itself
@@ -83,15 +83,23 @@ step.
 
 **The period came from the data alone.** The measured value was
 `0.7144527749932426 s`, which is 9.4e-5 relative from both the curated
-literature period (`test_data/pulsar/Curated pulsars.docx`, 0.7145197 s) and
+literature period (`data/pulsar/Curated pulsars.docx`, 0.7145197 s) and
 ATNF's live `P0` — with no catalogue consulted during the run.
 
 ### Regenerating it
 
 ```bash
-export ANTHROPIC_API_KEY=...          # the loop needs a key; the tools do not
-uv run kepler-astro-query "Sonify pulsar B0329+54, but measure the period from the observation itself with a periodogram rather than taking a catalogue value. Fold at what you measure, then render the audio."
+export ANTHROPIC_API_KEY=...          # the loop needs a backend; the tools do not
+uv run mars                         # then ask, in the console:
 ```
+
+> Sonify pulsar B0329+54, but measure the period from the observation itself
+> with a periodogram rather than taking a catalogue value. Fold at what you
+> measure, then render the audio.
+
+The original run predates the console and was driven by the retired
+`kepler-astro-query` shim over the same loop and the same registry; what it
+did is unchanged by where it is typed.
 
 Or without an agent, three deterministic calls:
 
@@ -100,7 +108,7 @@ from tools.pulsar import (
     load_pulsar_lightcurve, compute_pulsar_periodogram, sonify_pulsar,
 )
 
-lc = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg = compute_pulsar_periodogram(lc.artifact.path, start=0.7, stop=0.73, steps=2000)
 wav = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
 ```
@@ -114,4 +122,4 @@ The PNGs are cheap (~75 KB each) and compress; adding a plot for another source
 is reasonable. **The audio is not** — 10 MB, incompressible, and permanent in
 git history even if deleted later. Keep it to the one file; if a second render
 ever becomes necessary, prefer a few seconds over a full 60 s pass
-(`audio_seconds=5`). See `test_data/README.md`, "Repository size".
+(`audio_seconds=5`). See `data/README.md`, "Repository size".

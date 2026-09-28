@@ -201,7 +201,7 @@ def test_unknown_catalog_returns_false_rather_than_raising():
 
 
 def test_custom_filter_lookup_can_add_support():
-    """A deployment can teach a catalog a filter Kepler ships no transform for."""
+    """A deployment can teach a catalog a filter MARS ships no transform for."""
     assert not catalog_supports_filter("2MASS", "OIII")
     assert catalog_supports_filter(
         "2MASS", "OIII", custom_filter_lookup={"2MASS": {"OIII": "J"}}
@@ -330,7 +330,7 @@ def test_ocl_filters_are_the_one_place_the_two_registries_disagree(image_filter)
     * a caller passing ``strict_filter_parity=True`` gets ``(None, None)`` for
       every OCL frame and calibrates nothing;
     * the OCL substitution recorded in
-      ``test_data/fieldcal/ocl_filter_report.json`` trials V, r' and R and picks
+      ``data/fieldcal/ocl_filter_report.json`` trials V, r' and R and picks
       the lowest slop — a policy the fallback's fixed V-first order cannot
       express.
 
