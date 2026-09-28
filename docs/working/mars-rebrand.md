@@ -5,7 +5,9 @@ distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
 questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
-the feature branch `mars-rebrand` (§5); **R1–R4 are done** (2026-09-27).
+the feature branch `mars-rebrand` (§5). **All six phases are done**: R1–R4
+and R6 on 2026-09-27, merged to `dev` as PR #89 (`a4474c8`), and R5 on
+2026-09-28, when `v0.1.0rc3` was published.
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -280,6 +282,19 @@ URL>"`, then `mars-mcp self-test` and `mars-mcp fetch-data optical`.
 Separately, `v0.1.0rc1` (`kepler`) still installs and fetches through the
 redirect.
 
+**Done 2026-09-28.** PR #89 merged into `dev` as `a4474c8`, and
+`v0.1.0rc3` was tagged there; the release workflow's build, data, verify
+(Python 3.12 and 3.13) and publish jobs all passed, publishing
+`skynet_mars-0.1.0rc3-py3-none-any.whl`, the sdist and `SHA256SUMS` as a
+GitHub pre-release. In a clean `python:3.13` container on Linux ARM, the
+wheel installed from its release URL, `mars-mcp self-test` passed (blind
+search at 204.4σ), and `mars-mcp fetch-data optical` installed the 269 MB
+bundle into `~/.local/share/mars`. In a second clean container,
+`kepler 0.1.0rc1` installed from its old `archon774/kepler` URL and its
+`kepler-mcp self-test` passed; its wheel and both bundle URLs answer a Range
+request with `206` through the redirect. A container on Docker's default
+bridge could not resolve `github.com`; the gate ran with host networking.
+
 ### R6 — Outside the repository
 
 - The shared vault: rename `[[Kepler MCP Tool Surface]]` and related notes
@@ -290,8 +305,12 @@ redirect.
   **Done 2026-09-27**, at the maintainer's direction: `/home/claude/Kepler`
   is now `/home/claude/mars`, and `.venv` was rebuilt (its scripts carry
   absolute paths). Its agent-memory directory was empty. Records that quote
-  the old path keep it, as records do. The vault still names the old path,
-  and is the rest of R6.
+  the old path keep it, as records do.
+- **Vault: done 2026-09-27, in place** at the maintainer's choice, rather than
+  by renaming notes: operation `save-20260927-mars-rebrand` retitled
+  `[[Kepler]]` "MARS (formerly Kepler)" with the current identity, gave the
+  thirteen `Kepler …` concept notes `MARS …` aliases, and kept every file
+  name, link and ledger path. The vault lint was clean afterwards.
 
 ---
 
