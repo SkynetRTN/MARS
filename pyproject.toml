@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skynet-mars"
-version = "0.1.0rc3"
+version = "0.1.0rc4"
 description = "MARS, the MCP Astronomy Research Suite: astronomy tools for LLM agents and Python, built on algorithms extracted from Skynet."
 readme = "README.md"
 requires-python = ">=3.13"
