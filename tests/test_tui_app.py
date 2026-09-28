@@ -866,7 +866,7 @@ def test_the_header_names_mars_and_the_backend_from_launch():
 
 
 def test_the_console_opens_in_the_skynet_palette():
-    """The brand's exact colours (docs/working/mars-rebrand.md §4), with the
+    """The brand's exact colours (docs/archive/mars-rebrand.md §4), with the
     light variant registered for the theme switcher."""
     from textual.color import Color
 

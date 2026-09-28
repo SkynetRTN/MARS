@@ -12,20 +12,13 @@ writes the code.
 
 ## Index
 
-| Track | Document | Status |
-| --- | --- | --- |
-| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Complete. R1–R4 and R6 done 2026-09-27 (merged as PR #89); R5 done 2026-09-28: `v0.1.0rc3` published as `skynet-mars`. Remaining: remove the compatibility shims (§6.3) in the release after `0.1.0rc3`; archive this plan. |
-
-**Renaming Kepler to MARS** (MCP Astronomy Research Suite): the distribution
-becomes `skynet-mars`, the commands `mars`, `mars-mcp` and `mars-bench`, and
-the environment variables `MARS_*`. It covers the logo, the repository rename
-and what it means for the published `v0.1.0rc1`. Recorded evidence — the
-archive, the benchmark report — is deliberately left as it was written.
+No track is in progress.
 
 ## Landed
 
-Every earlier plan this folder has carried has landed. The MCP tool surface's
-completion audit (2026-09-25) is in its own `Archived` block. For the others,
+Every earlier plan this folder has carried has landed. The MARS rebrand's
+(2026-09-28) and the MCP tool surface's (2026-09-25) completion audits are in
+their own `Archived` blocks. For the others,
 a completion audit on 2026-09-18 re-verified each one against `dev`: the default suite is green
 (2575 passed, 44 skipped), and the asset-gated evidence — the NGC 5286 B
 frames from pixels, the bounded M15 plate solve, the ATLAS backend against the
@@ -34,6 +27,7 @@ from the record.
 
 | Track | Where it went | Finished |
 | --- | --- | --- |
+| MARS rebrand | [`../archive/mars-rebrand.md`](../archive/mars-rebrand.md); `v0.1.0rc3` published | 2026-09-28 (R5, the last phase) |
 | MCP tool surface | [`../archive/mcp-tool-surface.md`](../archive/mcp-tool-surface.md); `v0.1.0rc1` published | 2026-09-25 (C9, the last phase) |
 | Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
 | Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |

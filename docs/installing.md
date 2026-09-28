@@ -42,12 +42,12 @@ pip fails with `Failed building wheel for sep` (or `photutils`) and
 
 ```bash
 python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/SkynetRTN/MARS/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
 mars-env/bin/mars-mcp self-test
 ```
 
 `[mcp]` brings the server. Releases are listed at
-<https://github.com/archon774/skynet-mars/releases>; MARS is not on PyPI. A wheel
+<https://github.com/SkynetRTN/MARS/releases>; MARS is not on PyPI. A wheel
 built with `uv build` in a checkout installs the same way. `mars-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
@@ -93,29 +93,25 @@ reads its data locations when it starts.
 
 ### Upgrading from Kepler
 
-Kepler was renamed MARS in `0.1.0rc3`. **Install `skynet-mars` into a new
-environment** (or `pip uninstall kepler` first). `kepler` and `skynet-mars`
-are different distributions that install the same `tools` and `algorithms`
-packages and the same `kepler*` commands: installed over Kepler, they share
-files, and a later `pip uninstall kepler` deletes files MARS needs. If that
-has happened, reinstall the `skynet-mars` wheel with `--force-reinstall`.
+Kepler was renamed MARS in `0.1.0rc3`, which also read Kepler's names for
+that one pre-release. Releases after it do not, so an install configured as
+Kepler is moved over by hand:
 
-For that one pre-release, what a Kepler install was configured with keeps
-working, and is removed in the release after it:
-
-- A `KEPLER_*` variable is read as its `MARS_*` twin when the twin is unset,
-  and ignored when it is set; the server logs a line naming both either way.
-  A `.env` still written with `KEPLER_*` is read the same way.
-- The `kepler`, `kepler-mcp` and `kepler-bench` commands run their MARS
-  successors, after saying so on stderr.
-- A Kepler home (`~/.local/share/kepler`, and its macOS and Windows
-  equivalents) is **not** used and **never moved**: its fetched bundles are
-  hundreds of megabytes of your disk. Every start says so while it is there
-  and `MARS_HOME` is unset. To keep its bundles, downloads and artifacts,
-  move what is inside it (`bundles/`, `fits_downloads/`, `artifacts/`) into
-  the MARS home and remove it, or point `MARS_HOME` at it. Do not rename the
-  directory itself: `mars-mcp` creates the MARS home when it starts, and a
-  rename would nest the old home inside the new one.
+- **Install `skynet-mars` into a new environment** (or `pip uninstall kepler`
+  first). The two distributions install the same `tools` and `algorithms`
+  packages: installed over Kepler they share files, and a later
+  `pip uninstall kepler` deletes files MARS needs. If that has happened,
+  reinstall the `skynet-mars` wheel with `--force-reinstall`.
+- **Rename every `KEPLER_*` variable to `MARS_*`**, in your shell, a host's
+  configuration and any `.env`. A `KEPLER_*` variable is ignored.
+- **Point the host at `mars-mcp`** under the key `mars`; the `kepler`,
+  `kepler-mcp` and `kepler-bench` commands no longer exist.
+- **Move what you want to keep** from the Kepler home
+  (`~/.local/share/kepler`, and its macOS and Windows equivalents) into the
+  MARS home -- at least `bundles/`, and `fits_downloads/` and `artifacts/` if
+  you use them -- or set `MARS_HOME` to the old directory. Nothing moves it
+  for you. Do not rename the directory itself if a MARS home already exists:
+  the rename would nest one inside the other.
 
 ## The optional data bundles
 

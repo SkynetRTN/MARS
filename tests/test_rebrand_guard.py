@@ -1,11 +1,11 @@
 """R3's guard: the project is MARS, and "Kepler" survives only where it must.
 
-``docs/working/mars-rebrand.md`` §5 (R3). A case-insensitive search of the
+``docs/archive/mars-rebrand.md`` §5 (R3). A case-insensitive search of the
 code trees may find ``kepler`` only in the places below. Each is there on
 purpose, and none is the project's name for itself:
 
-- the deprecation shims and their tests, removed in the release after
-  ``0.1.0rc3`` (§6.3), and the handful of lines elsewhere that name them;
+- a handful of lines that name the old name on purpose (``OLD_NAME_LINES``);
+  the deprecation shims that honoured it for ``0.1.0rc3`` are gone (§6.3);
 - published names that must keep their bytes: the data bundles' archives,
   their ``ARCHIVE_PREFIX``, and the ``.kepler-bundle.json`` marker a fetched
   bundle carries (§3);
@@ -51,22 +51,14 @@ SCOPE = (
     "pyproject.toml",
 )
 
-#: Whole files that exist to handle the old name.
-SHIMS = frozenset(
-    {
-        "tools/aliases.py",
-        "tools/compat.py",
-        "tests/test_aliases.py",
-        "tests/test_compat.py",
-        "tests/test_rebrand_guard.py",
-    }
-)
+#: Whole files that must name the old name: this guard, which quotes it.
+SHIMS = frozenset({"tests/test_rebrand_guard.py"})
 
-#: Records, kept as written under a dated note (docs/working/mars-rebrand.md
+#: Records, kept as written under a dated note (docs/archive/mars-rebrand.md
 #: §2), and the rebrand plan itself.
 RECORDS = frozenset(
     {
-        "docs/working/mars-rebrand.md",
+        "docs/archive/mars-rebrand.md",
         "docs/archive/mcp-tool-surface.md",
         "docs/archive/model-backends.md",
         "docs/archive/optical-tools.md",
@@ -109,20 +101,12 @@ MISSION = (
 #: Kepler, by file and heading; the section ends at the next heading.
 UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
 
-#: Single lines outside the shims that name the old name on purpose, by file.
-SHIM_REFERENCES = {
-    "pyproject.toml": r'^kepler(?:-bench|-mcp)? = "tools\.aliases:',
-    "docs/working/README.md": r"Renaming Kepler to MARS",
-    "tools/config.py": r"^# Kepler's KEPLER_\* names|^#: fetched by Kepler and moved into",
-    "tools/llm/factory.py": r"# KEPLER_\* names are otherwise adopted",
+#: Single lines that name the old name on purpose, by file.
+OLD_NAME_LINES = {
+    "docs/archive/README.md": r"Kepler renamed MARS \(MCP Astronomy Research Suite\)",
+    "tools/config.py": r"^#: fetched by Kepler and moved into",
     "tools/mcp/__main__.py": r"project called ``kepler``",
-    "tools/mcp/selftest.py": r"# KEPLER_\* too",
-    "tools/paths.py": r"find the ``kepler``",
-    "tests/test_bench_tasks.py": r'"KEPLER_MAX_FRAMES"',
     "tests/test_mcp_surface.py": r"pip install 'kepler\[mcp\]'",
-    "tests/test_tool_registry_coverage.py": (
-        r"deprecated kepler, kepler-mcp and kepler-bench|KEPLER_\* variables and the kepler home"
-    ),
 }
 
 _ALLOWED = re.compile("|".join(PUBLISHED + MISSION))
@@ -164,7 +148,7 @@ def _unexplained(path: str, text: str, number: int = 0) -> bool:
         return False
     if path in UPGRADE_SECTIONS and number in _section_lines(path, UPGRADE_SECTIONS[path]):
         return False
-    reference = SHIM_REFERENCES.get(path)
+    reference = OLD_NAME_LINES.get(path)
     if reference and re.search(reference, text):
         return False
     if path in QUOTES_OLD_CHECKOUT:
@@ -217,8 +201,32 @@ def test_no_new_top_level_package():
     ]
 
 
-def test_every_shim_reference_still_matches_something():
+def test_every_old_name_line_still_matches_something():
     """A stale entry would let a new mention through unexamined."""
     hits = _hits()
-    for path, pattern in SHIM_REFERENCES.items():
+    for path, pattern in OLD_NAME_LINES.items():
         assert any(p == path and re.search(pattern, t) for p, _, t in hits), path
+
+
+def test_the_repository_is_skynetrtn_mars_outside_the_records():
+    """The repository is ``SkynetRTN/MARS`` (renamed and transferred to the
+    Skynet organisation 2026-09-28); the distribution stays ``skynet-mars``.
+    Its earlier names only redirect, until someone creates a repository under
+    one, so nothing current may point at them. Records keep the names they
+    were written with, and ``tools/mcp/bundles.py`` names them to say exactly
+    that."""
+    result = subprocess.run(
+        ["git", "grep", "-n", "-E", r"archon774/(skynet-mars|mars-suite|MARS)\b", "--", *SCOPE],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in (0, 1):
+        pytest.skip(f"git grep failed: {result.stderr.strip()}")
+    stale = [
+        line
+        for line in result.stdout.splitlines()
+        if line.split(":", 1)[0] not in RECORDS | {"tools/mcp/bundles.py"}
+        and not line.split(":", 1)[0].startswith(RECORD_TREES)
+    ]
+    assert stale == [], "\n".join(stale)

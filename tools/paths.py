@@ -128,9 +128,8 @@ def user_data_base(
 ) -> Path | None:
     """The platform's per-user data directory that the home is named inside.
 
-    ``None`` when no home directory resolves. Kept apart from
-    :func:`mars_home` so that :mod:`tools.compat` can find the ``kepler``
-    home an earlier install left beside it.
+    ``None`` when no home directory resolves, and :func:`mars_home` falls
+    back to a per-user temporary directory.
     """
 
     environ = os.environ if environ is None else environ

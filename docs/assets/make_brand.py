@@ -10,7 +10,7 @@ maintainer's masters. Everything else is exported from them, never redrawn:
   Navy (banner). Its own background makes one file right in both themes.
 - ``docs/assets/mars-mark.png`` -- the mark at 512x512, for documentation.
 - ``tools/mcp/icons/mars-{64,128}.png`` -- the MCP server's icons, shipped in
-  the wheel (``docs/working/mars-rebrand.md`` §4).
+  the wheel (``docs/archive/mars-rebrand.md`` §4).
 
 Re-run after changing a master:
 
@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[2]
 BRAND = ROOT / "brand"
 
-#: Skynet palette, docs/working/mars-rebrand.md §4.
+#: Skynet palette, docs/archive/mars-rebrand.md §4.
 NAVY_BANNER = (0x1F, 0x26, 0x33)
 
 #: The social preview's background, and where its wordmark and tagline sit.

@@ -6,12 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from tools.compat import adopt_legacy_environment
 from tools.paths import bundled_data_dir, is_checkout, mars_home
-
-# Kepler's KEPLER_* names, honoured until the release after 0.1.0rc3. The entry
-# points adopt them first and say so; this is for library use, and is silent.
-adopt_legacy_environment()
 
 ARTIFACT_DIR_ENV = "MARS_ARTIFACT_DIR"
 DATA_DIR_ENV = "MARS_DATA_DIR"
