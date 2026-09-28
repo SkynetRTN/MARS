@@ -17,7 +17,8 @@ def test_the_project_declares_gpl_3_only_with_its_licence_file():
     project = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project["license"] == "GPL-3.0-only"
     assert project["license-files"] == ["LICENSE"]
-    assert project["authors"] == [{"name": "Skynet Robotic Telescope Network"}]
+    assert project["authors"] == [{"name": "James Atkisson", "email": "james@atkisson.net"}]
+    assert project["maintainers"] == [{"name": "SkynetRTN"}]
     # PEP 639: a licence expression replaces the licence classifiers, and
     # setuptools refuses a project that declares both.
     assert not any(c.startswith("License ::") for c in project.get("classifiers", []))

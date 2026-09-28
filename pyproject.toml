@@ -12,7 +12,11 @@ requires-python = ">=3.12"
 # projects MARS grew from (README.md, License).
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
-authors = [{ name = "Skynet Robotic Telescope Network" }]
+# As Skycat declares them: the author is the account that holds the PyPI and
+# TestPyPI projects; the Skynet organisation maintains it. Copyright is the
+# Skynet Robotic Telescope Network's (README.md, License).
+authors = [{ name = "James Atkisson", email = "james@atkisson.net" }]
+maintainers = [{ name = "SkynetRTN" }]
 dependencies = [
     "ads==0.12.7",
     "annotated-types==0.8.0",
