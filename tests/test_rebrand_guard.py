@@ -208,14 +208,15 @@ def test_every_old_name_line_still_matches_something():
         assert any(p == path and re.search(pattern, t) for p, _, t in hits), path
 
 
-def test_the_repository_is_named_mars_outside_the_records():
-    """The repository is ``archon774/MARS`` (renamed 2026-09-28); the
-    distribution stays ``skynet-mars``. Its earlier names only redirect, until
-    someone creates a repository under one, so nothing current may point at
-    them. Records keep the names they were written with, and
-    ``tools/mcp/bundles.py`` names them to say exactly that."""
+def test_the_repository_is_skynetrtn_mars_outside_the_records():
+    """The repository is ``SkynetRTN/MARS`` (renamed and transferred to the
+    Skynet organisation 2026-09-28); the distribution stays ``skynet-mars``.
+    Its earlier names only redirect, until someone creates a repository under
+    one, so nothing current may point at them. Records keep the names they
+    were written with, and ``tools/mcp/bundles.py`` names them to say exactly
+    that."""
     result = subprocess.run(
-        ["git", "grep", "-n", "-E", r"archon774/(skynet-mars|mars-suite)\b", "--", *SCOPE],
+        ["git", "grep", "-n", "-E", r"archon774/(skynet-mars|mars-suite|MARS)\b", "--", *SCOPE],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
