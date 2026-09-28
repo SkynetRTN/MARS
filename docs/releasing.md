@@ -122,9 +122,7 @@ The same as any release (*Versions and tags*): bump `version`, `uv lock`,
 merge, tag the merged commit. The workflow then publishes to GitHub and
 TestPyPI, verifies the TestPyPI upload, and waits for approval of the `pypi`
 environment. Approve it from the run's page once the TestPyPI job is green.
-After the first PyPI release, update the "not on PyPI" advice in
-`README.md`, `docs/installing.md` and `tools/mcp/__main__.py`
-(`_missing_sdk_message`).
+The first release published this way was `0.1.0rc4`, on 2026-09-28.
 
 ## The data release
 
@@ -174,7 +172,7 @@ x86_64 Linux, macOS or Windows; see `installing.md`):
 
 ```bash
 python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/SkynetRTN/MARS/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/pip install "skynet-mars[mcp]==<version>"
 mars-env/bin/mars-mcp self-test
 mars-env/bin/mars-mcp fetch-data optical      # optional
 ```

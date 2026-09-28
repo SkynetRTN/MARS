@@ -764,16 +764,18 @@ def test_the_server_never_uses_a_gui_matplotlib_backend():
     assert source.index('setdefault("MPLBACKEND"') < source.index("from tools.mcp import groups")
 
 
-def test_the_missing_sdk_advice_never_names_the_pypi_project():
-    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project.
+def test_the_missing_sdk_advice_names_this_interpreter_and_this_version():
+    """Finding 15: a bare `pip install 'kepler[mcp]'` installed an unrelated
+    PyPI project. `skynet-mars` is on PyPI now, but a bare command can still
+    reach another environment or move the version, so the advice names this
+    interpreter's pip and, when installed, the exact version."""
+    from importlib.metadata import version
 
-    Still pinned after the rename: `skynet-mars` is not on PyPI either.
-    """
     from tools.mcp.__main__ import _missing_sdk_message
 
     message = _missing_sdk_message()
-    assert sys.executable in message and "skynet-mars[mcp] @" in message
-    assert "not on PyPI" in message
+    assert f"{sys.executable} -m pip install" in message
+    assert f"skynet-mars[mcp]=={version('skynet-mars')}" in message
 
 
 def test_a_group_list_naming_nothing_is_an_error():

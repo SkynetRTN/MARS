@@ -105,7 +105,7 @@ UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
 OLD_NAME_LINES = {
     "docs/archive/README.md": r"Kepler renamed MARS \(MCP Astronomy Research Suite\)",
     "tools/config.py": r"^#: fetched by Kepler and moved into",
-    "tools/mcp/__main__.py": r"project called ``kepler``",
+    "tools/mcp/__main__.py": r"called ``kepler`` is unrelated",
     "tests/test_mcp_surface.py": r"pip install 'kepler\[mcp\]'",
 }
 

@@ -59,7 +59,7 @@ Homepage = "https://github.com/SkynetRTN/MARS"
 Repository = "https://github.com/SkynetRTN/MARS"
 Issues = "https://github.com/SkynetRTN/MARS/issues"
 Releases = "https://github.com/SkynetRTN/MARS/releases"
-Documentation = "https://github.com/SkynetRTN/MARS/tree/main/docs"
+Documentation = "https://github.com/SkynetRTN/MARS/tree/dev/docs"
 
 [project.scripts]
 mars = "tools.tui:launch"
