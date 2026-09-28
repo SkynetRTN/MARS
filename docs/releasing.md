@@ -45,10 +45,74 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
    asset digest.
 4. **publish** creates the GitHub release with the wheel, the sdist and
    `SHA256SUMS`, only after **verify** and **data** pass. It is the only job
-   with write permission, and only on a tag.
+   with write permission to the repository, and only on a tag.
+5. **publish to TestPyPI** uploads the wheel and the sdist to TestPyPI, after
+   the same three jobs pass.
+6. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
+   requires it to be byte-identical to the one **build** made, installs it
+   with its dependencies from PyPI -- never from TestPyPI, where anyone can
+   register a dependency's name -- and runs `mars-mcp self-test`.
+7. **publish to PyPI** refuses a wheel that declares no licence, then
+   uploads. It runs in the `pypi` environment, so it waits for a reviewer.
+
+The build job and CI's `package` job, which runs on every pull request, both
+run `twine check --strict` and `.github/scripts/check_dist.py`: the core data,
+the package data the server reads, and nothing that must not ship.
 
 `secret-scan.yml` and `workflow-safety.yml` (actionlint, zizmor) run on the
 pull request that changes any workflow, this one included.
+
+## Publishing to PyPI
+
+The distribution is `skynet-mars` on [PyPI](https://pypi.org/project/skynet-mars/)
+and [TestPyPI](https://test.pypi.org/project/skynet-mars/). Uploads use
+[trusted publishing](https://docs.pypi.org/trusted-publishers/): PyPI trusts
+this repository's release workflow directly, so no API token is stored in the
+repository or its secrets.
+
+**A PyPI version is permanent.** A file, once uploaded, can never be replaced,
+even after deletion; a mistake is fixed only by a new version. That is why
+every release goes through TestPyPI first, and why PyPI waits for a reviewer.
+A tag that has already been published to GitHub cannot be reused either:
+`v0.1.0rc3` predates this workflow, so the first index upload is the next
+version.
+
+### One-time setup (the maintainer, on the web)
+
+1. **A licence.** `pyproject.toml` declares none yet, and **publish to PyPI**
+   refuses to upload until the wheel does (`license = "<SPDX expression>"`
+   plus a `LICENSE` file). The algorithms are extracted from Skynet and
+   Astromancer, so the choice is theirs to clear. TestPyPI does not wait for
+   it.
+2. **Pending trusted publishers**, one on each index -- on
+   [pypi.org](https://pypi.org/manage/account/publishing/) and
+   [test.pypi.org](https://test.pypi.org/manage/account/publishing/) (separate
+   accounts):
+
+   | Field | PyPI | TestPyPI |
+   | --- | --- | --- |
+   | PyPI project name | `skynet-mars` | `skynet-mars` |
+   | Owner | `archon774` | `archon774` |
+   | Repository name | `MARS` | `MARS` |
+   | Workflow name | `release.yml` | `release.yml` |
+   | Environment name | `pypi` | `testpypi` |
+
+   A pending publisher reserves the name until the first upload creates the
+   project. The repository is `MARS` since it was renamed; a publisher
+   registered under an earlier name would not match.
+3. **Two GitHub environments** (repository Settings → Environments):
+   `testpypi`, and `pypi` with **required reviewers** and a deployment rule
+   limited to tags `v*`. The environment is what makes PyPI wait for a person.
+
+### Cutting a release to the indexes
+
+The same as any release (*Versions and tags*): bump `version`, `uv lock`,
+merge, tag the merged commit. The workflow then publishes to GitHub and
+TestPyPI, verifies the TestPyPI upload, and waits for approval of the `pypi`
+environment. Approve it from the run's page once the TestPyPI job is green.
+After the first PyPI release, update the "not on PyPI" advice in
+`README.md`, `docs/installing.md` and `tools/mcp/__main__.py`
+(`_missing_sdk_message`).
 
 ## The data release
 
