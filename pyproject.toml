@@ -88,10 +88,6 @@ dependencies = [
 mars = "tools.tui:launch"
 mars-bench = "tools.bench.cli:main"
 mars-mcp = "tools.mcp.__main__:main"
-# Deprecated aliases, removed in the release after 0.1.0rc3 (tools/aliases.py).
-kepler = "tools.aliases:kepler"
-kepler-bench = "tools.aliases:kepler_bench"
-kepler-mcp = "tools.aliases:kepler_mcp"
 
 [project.optional-dependencies]
 mcp = [

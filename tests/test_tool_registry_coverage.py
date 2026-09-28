@@ -45,12 +45,6 @@ NOT_TOOL_MODULES = {
     # The .env loader, kept apart from tools.config so an entry point can load
     # .env before any setting is fixed at import. Re-exported by tools.config.
     "tools.dotenv",
-    # The deprecated kepler, kepler-mcp and kepler-bench commands, each
-    # forwarding to its MARS name; removed in the release after 0.1.0rc3.
-    "tools.aliases",
-    # KEPLER_* variables and the kepler home, honoured for the same one
-    # pre-release; removed with tools.aliases.
-    "tools.compat",
 }
 
 

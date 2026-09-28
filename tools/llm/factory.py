@@ -57,11 +57,6 @@ def build_backend(
     to know which provider it landed on to ask for the same thing.
     """
 
-    # tools.llm never imports tools.config, which is where a library caller's
-    # KEPLER_* names are otherwise adopted (tools.compat); silent here too.
-    from tools.compat import adopt_legacy_environment
-
-    adopt_legacy_environment()
     spec = spec or os.environ.get("MARS_MODEL_BACKEND")
     if not spec:
         raise ValueError(

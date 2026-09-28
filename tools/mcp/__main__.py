@@ -52,14 +52,6 @@ def main(argv: list[str] | None = None) -> int:
     from tools.dotenv import DOTENV_PATH, load_dotenv
 
     loaded = load_dotenv()
-    # Before anything reads a setting or writes into the home (tools.compat).
-    from tools.compat import adopt_legacy_environment, legacy_home_notice
-
-    for legacy in adopt_legacy_environment():
-        print(f"mars-mcp: {legacy.message()}", file=sys.stderr)
-    notice = legacy_home_notice()
-    if notice:
-        print(f"mars-mcp: {notice}", file=sys.stderr)
     pin_numba_cache()
 
     if argv[:1] == ["fetch-data"]:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 
 def launch() -> int:
     """The ``mars`` console script: load ``.env``, then start the console.
@@ -19,14 +17,6 @@ def launch() -> int:
     from tools.paths import pin_numba_cache
 
     load_dotenv()
-    # Printed before the console takes the screen, and so seen on exit.
-    from tools.compat import adopt_legacy_environment, legacy_home_notice
-
-    for legacy in adopt_legacy_environment():
-        print(f"mars: {legacy.message()}", file=sys.stderr)
-    notice = legacy_home_notice()
-    if notice:
-        print(f"mars: {notice}", file=sys.stderr)
     pin_numba_cache()
     from tools.tui.__main__ import main
 

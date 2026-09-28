@@ -137,8 +137,6 @@ def test_a_task_may_shape_mars_own_configuration(tmp_path):
         "LD_PRELOAD",
         "mars_max_frames",
         "MARSISH",
-        # The legacy name is not a way round the rule (tools/compat.py).
-        "KEPLER_MAX_FRAMES",
     ],
 )
 def test_a_task_may_not_set_anything_else(tmp_path, key):

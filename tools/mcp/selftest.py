@@ -124,16 +124,9 @@ def _server_environment(artifacts: str) -> dict[str, str]:
     """
 
     import tools
-    from tools.compat import LEGACY_PREFIX
     from tools.paths import bundled_data_dir
 
-    # KEPLER_* too: this process already adopted them (tools.compat), and a
-    # child re-adopting one would print its deprecation line a second time.
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in _NOT_INHERITED and not k.startswith(LEGACY_PREFIX)
-    }
+    env = {k: v for k, v in os.environ.items() if k not in _NOT_INHERITED}
     package_root = str(Path(tools.__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(
         [package_root, *filter(None, [env.get("PYTHONPATH")])]
