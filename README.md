@@ -298,12 +298,12 @@ UCAC4/UCAC5 catalogs.
 
 MARS's tools are also served over **MCP**, so Claude Code, Codex, Cursor or
 any other MCP host can call them from a machine that has **no checkout** of
-this repository. Install a release — Python 3.13 is the target — and register
-its server:
+this repository. Install [`skynet-mars`](https://pypi.org/project/skynet-mars/)
+from PyPI on Python 3.13 and register its server:
 
 ```bash
 python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/SkynetRTN/MARS/releases/download/v0.1.0rc3/skynet_mars-0.1.0rc3-py3-none-any.whl"
+mars-env/bin/pip install "skynet-mars[mcp]"
 mars-env/bin/mars-mcp self-test          # launches the server as a host would, runs a pulsar detection
 ```
 

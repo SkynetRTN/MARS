@@ -21,23 +21,27 @@ log = logging.getLogger("mars-mcp")
 
 
 def _missing_sdk_message() -> str:
-    """How to add the SDK -- never by package name alone.
+    """How to add the SDK: this interpreter's pip, and this exact version.
 
-    ``skynet-mars`` is not on PyPI, so ``pip install 'skynet-mars[mcp]'``
-    finds nothing -- or, should anyone register the name, something else --
-    instead of the SDK. (Before the rename the trap was live: the PyPI
-    project called ``kepler`` is unrelated, and ``-U`` replaced this install
-    with it.) So the advice names this interpreter's own pip and the wheel the
-    user installed from.
+    ``skynet-mars`` is on PyPI, so the extra can be installed by name -- but
+    a bare ``pip install`` may be a different environment's pip, and an
+    unpinned requirement may upgrade or downgrade the install it is meant to
+    complete. So the advice names ``sys.executable`` and the installed
+    version. (Before the rename the bare command was a trap: the PyPI project
+    called ``kepler`` is unrelated, and ``-U`` replaced this install with it.)
     """
 
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        requirement = f"skynet-mars[mcp]=={version('skynet-mars')}"
+    except PackageNotFoundError:
+        requirement = "skynet-mars[mcp]"
     return (
         "mars-mcp needs its optional [mcp] dependencies. From a checkout, run "
-        "`uv sync --extra mcp`. From an install, reinstall the same wheel with the "
-        f"extra, using this environment's pip: `{sys.executable} -m pip install "
-        "\"skynet-mars[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
-        "Do not run `pip install skynet-mars[mcp]`: skynet-mars is not on PyPI, "
-        "so pip would fetch nothing, or someone else's project."
+        "`uv sync --extra mcp`. From an install, add them with this environment's "
+        f"pip: `{sys.executable} -m pip install \"{requirement}\"` "
+        "(see docs/installing.md)."
     )
 
 
