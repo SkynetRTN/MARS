@@ -21,7 +21,11 @@
 > - the R4 icon gate is answered by recording which hosts ignore `icons` (R4).
 >
 > **Corrected at archive:** the status line below says "Proposal"; the track
-> finished as recorded here. §6.3's shims are gone: a `KEPLER_*` variable is
+> finished as recorded here. The repository was renamed once more, to
+> **`archon774/MARS`**, on 2026-09-28, after this track finished: the
+> repository is MARS, the distribution stays `skynet-mars`. §1 and §3 record
+> `archon774/skynet-mars` as it was; all three earlier names redirect and must
+> never be reused. §6.3's shims are gone: a `KEPLER_*` variable is
 > now ignored, and `docs/installing.md` describes the manual move.
 
 **Status:** Proposal, 2026-09-25. Names decided by the maintainer: the

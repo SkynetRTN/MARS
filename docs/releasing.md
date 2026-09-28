@@ -82,7 +82,7 @@ python -m tools.mcp.bundles isochrones /path/to/girardi dist/bundles --include '
 Each prints its manifest entry. Then:
 
 1. Paste the entry into `bundles.json`, with `url` set to
-   `https://github.com/archon774/skynet-mars/releases/download/data/<archive>`.
+   `https://github.com/archon774/MARS/releases/download/data/<archive>`.
 2. Upload the archive: `gh release upload data dist/bundles/<archive>`.
 3. Ship the manifest change in the next release.
 
@@ -98,7 +98,7 @@ On a machine with no checkout (and a C compiler unless it is Python 3.12 or
 
 ```bash
 python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/MARS/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
 mars-env/bin/mars-mcp self-test
 mars-env/bin/mars-mcp fetch-data optical      # optional
 ```

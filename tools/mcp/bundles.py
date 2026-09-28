@@ -68,10 +68,11 @@ __all__ = [
 ]
 
 #: Where release assets download from: the repository's canonical name. The
-#: earlier names (``archon774/kepler``, ``archon774/mars-suite``) redirect only
+#: earlier names (``archon774/kepler``, ``archon774/mars-suite``,
+#: ``archon774/skynet-mars``) redirect only
 #: until someone creates a repository under them, so nothing new points there.
 #: ``build_main`` prints entries against this, and a test holds the manifest to it.
-RELEASE_DOWNLOADS = "https://github.com/archon774/skynet-mars/releases/download"
+RELEASE_DOWNLOADS = "https://github.com/archon774/MARS/releases/download"
 
 #: Overrides where bundles are fetched from: a URL prefix, or a local directory
 #: holding the archives (for testing, and for an offline mirror).

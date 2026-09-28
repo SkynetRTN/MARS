@@ -206,3 +206,26 @@ def test_every_old_name_line_still_matches_something():
     hits = _hits()
     for path, pattern in OLD_NAME_LINES.items():
         assert any(p == path and re.search(pattern, t) for p, _, t in hits), path
+
+
+def test_the_repository_is_named_mars_outside_the_records():
+    """The repository is ``archon774/MARS`` (renamed 2026-09-28); the
+    distribution stays ``skynet-mars``. Its earlier names only redirect, until
+    someone creates a repository under one, so nothing current may point at
+    them. Records keep the names they were written with, and
+    ``tools/mcp/bundles.py`` names them to say exactly that."""
+    result = subprocess.run(
+        ["git", "grep", "-n", "-E", r"archon774/(skynet-mars|mars-suite)\b", "--", *SCOPE],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in (0, 1):
+        pytest.skip(f"git grep failed: {result.stderr.strip()}")
+    stale = [
+        line
+        for line in result.stdout.splitlines()
+        if line.split(":", 1)[0] not in RECORDS | {"tools/mcp/bundles.py"}
+        and not line.split(":", 1)[0].startswith(RECORD_TREES)
+    ]
+    assert stale == [], "\n".join(stale)

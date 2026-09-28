@@ -42,12 +42,12 @@ pip fails with `Failed building wheel for sep` (or `photutils`) and
 
 ```bash
 python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/MARS/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
 mars-env/bin/mars-mcp self-test
 ```
 
 `[mcp]` brings the server. Releases are listed at
-<https://github.com/archon774/skynet-mars/releases>; MARS is not on PyPI. A wheel
+<https://github.com/archon774/MARS/releases>; MARS is not on PyPI. A wheel
 built with `uv build` in a checkout installs the same way. `mars-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
