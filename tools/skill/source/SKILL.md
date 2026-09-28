@@ -1,6 +1,6 @@
-# Kepler astronomy tools
+# MARS astronomy tools
 
-Kepler is 55 astronomy tools: thin clients over eight remote databases
+MARS is 55 astronomy tools: thin clients over eight remote databases
 (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA, ADS) and local pipelines that run
 on data already on this machine — a radio-pulsar chain, a variable-star chain,
 optical frames with plate solving, photometry and zero-point calibration, an
@@ -22,10 +22,10 @@ carry the workflow for one area and are worth reading before working in it.
 | [`references/optical.md`](references/optical.md) | FITS frames, plate solving, photometry, zero points |
 | [`references/hr.md`](references/hr.md) | an HR diagram or cluster parameters |
 | [`references/radio.md`](references/radio.md) | a radio FITS map or a source's radio spectrum |
-| [`references/checkout.md`](references/checkout.md) | calling the tools from a Kepler checkout rather than through a tool server |
+| [`references/checkout.md`](references/checkout.md) | calling the tools from a MARS checkout rather than through a tool server |
 
 Every rule below restates guidance whose authority is the system prompt of
-Kepler's own agent loop, `tools/agent/prompt.py`, and names the section it
+MARS's own agent loop, `tools/agent/prompt.py`, and names the section it
 comes from. Where the two ever disagree, the prompt is right and this file is
 stale.
 
@@ -190,10 +190,10 @@ A result's inline `preview` holds a few rows (ten by default). Its `count`, and
 the `row_count` on each `artifact`, say how many exist. When the question is
 about the whole set, read the file.
 
-- **Where they are.** Served by `kepler-mcp`, every artifact is under the
+- **Where they are.** Served by `mars-mcp`, every artifact is under the
   artifact directory the server pinned at startup — a per-user directory
-  unless `KEPLER_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
-  description names it. From a checkout it is `KEPLER_ARTIFACT_DIR`, or
+  unless `MARS_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
+  description names it. From a checkout it is `MARS_ARTIFACT_DIR`, or
   `artifacts/` in the directory Python started in. Either way the paths are
   local files you can read directly.
 - **How they are laid out.** Each tool writes into its own subdirectory

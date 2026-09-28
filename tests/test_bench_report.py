@@ -337,7 +337,7 @@ def test_no_failures_says_so_rather_than_printing_an_empty_section():
 def test_both_files_are_written_with_the_same_content(tmp_path):
     report = build_report([_pair()])
     md, js = write_report(report, tmp_path)
-    assert md.read_text().startswith("# Kepler model benchmark")
+    assert md.read_text().startswith("# MARS model benchmark")
     assert json.loads(js.read_text())["matrix"] == report["matrix"]
 
 

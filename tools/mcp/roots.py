@@ -16,10 +16,10 @@ directory, and a host launches a server wherever it likes: the user's project,
 their home directory, or a directory they cannot write. Defaulting there would
 put an untracked ``artifacts/`` into the user's repository unasked, or fail on
 the first write. A fixed per-user directory is the same place every session,
-the server logs it at startup, and ``KEPLER_ARTIFACT_DIR`` still wins for a
+the server logs it at startup, and ``MARS_ARTIFACT_DIR`` still wins for a
 user who wants artifacts beside their project.
 
-``KEPLER_DATA_DIR`` already defaults to a package-anchored path, so pinning it
+``MARS_DATA_DIR`` already defaults to a package-anchored path, so pinning it
 only makes the resolved value explicit in the environment and in the log.
 """
 
@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import MutableMapping
 
-from tools.paths import bundled_data_dir, kepler_home
+from tools.paths import bundled_data_dir, mars_home
 
 __all__ = [
     "ARTIFACT_DIR_ENV",
@@ -41,8 +41,8 @@ __all__ = [
     "user_artifact_dir",
 ]
 
-ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
-DATA_DIR_ENV = "KEPLER_DATA_DIR"
+ARTIFACT_DIR_ENV = "MARS_ARTIFACT_DIR"
+DATA_DIR_ENV = "MARS_DATA_DIR"
 
 
 @dataclass(frozen=True)
@@ -61,15 +61,15 @@ def user_artifact_dir(
     platform: str | None = None,
     home: Path | None = None,
 ) -> Path:
-    """The per-user artifact directory: ``<kepler home>/artifacts``.
+    """The per-user artifact directory: ``<mars home>/artifacts``.
 
-    ``~/.local/share/kepler/artifacts`` on Linux (``$XDG_DATA_HOME`` honoured),
-    ``~/Library/Application Support/kepler/artifacts`` on macOS,
-    ``%LOCALAPPDATA%\\kepler\\artifacts`` on Windows; ``KEPLER_HOME`` moves
-    all of them. See :func:`tools.paths.kepler_home`.
+    ``~/.local/share/mars/artifacts`` on Linux (``$XDG_DATA_HOME`` honoured),
+    ``~/Library/Application Support/mars/artifacts`` on macOS,
+    ``%LOCALAPPDATA%\\mars\\artifacts`` on Windows; ``MARS_HOME`` moves
+    all of them. See :func:`tools.paths.mars_home`.
     """
 
-    return kepler_home(environ, platform=platform, home=home) / "artifacts"
+    return mars_home(environ, platform=platform, home=home) / "artifacts"
 
 
 def default_data_dir() -> Path:

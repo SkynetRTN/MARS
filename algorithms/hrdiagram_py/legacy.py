@@ -2,7 +2,7 @@
 
 Input objects deliberately remain mapping-shaped: Astromancer's TypeScript
 algorithms operated on JSON service objects, so preserving that loose boundary
-is more faithful than inventing a session model in Kepler.
+is more faithful than inventing a session model in MARS.
 """
 
 from __future__ import annotations

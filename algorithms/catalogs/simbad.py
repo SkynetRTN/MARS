@@ -1,16 +1,16 @@
-"""Kepler: SIMBAD object-type vocabulary.
+"""MARS: SIMBAD object-type vocabulary.
 
 SIMBAD tags every object with a machine ``otype`` code — ``GlCl``, ``EB*``,
-``gammaBurst`` — and Kepler surfaces those to users as prose. This is the
+``gammaBurst`` — and MARS surfaces those to users as prose. This is the
 mapping, and it is a plain lookup table with no behaviour attached; the resolver
 that consumes it is ``query/simbad.py``.
 
-The table is reproduced exactly as Kepler's upstream carried it, empty strings
+The table is reproduced exactly as MARS's upstream carried it, empty strings
 and all. Three points worth knowing before editing:
 
 * Two entries map to the empty string (``Possible_As*``, ``Unknown``). Callers
   must treat "present but empty" as "no label", not as a missing key.
-* The vocabulary is SIMBAD's, not Kepler's. Codes are added and retired
+* The vocabulary is SIMBAD's, not MARS's. Codes are added and retired
   upstream; an unrecognized code means SIMBAD moved, and the resolver falls
   back to the raw code rather than failing.
 * ``Inexistent`` is a real SIMBAD code meaning "not an object (error, artefact)".

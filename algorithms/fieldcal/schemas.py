@@ -24,18 +24,18 @@ from algorithms.catalogs.schemas import (
     IAstrometry,
     ICatalogSource,
     IPhotometry,
-    KeplerBaseModel,
+    MARSBaseModel,
     Mag,
 )
 
-# ``KeplerBaseModel``, ``Mag``, ``IPhotometry``, ``IAstrometry``,
+# ``MARSBaseModel``, ``Mag``, ``IPhotometry``, ``IAstrometry``,
 # ``ICatalogSource`` and ``CatalogSource`` are defined in ``catalogs/schemas.py``
 # and imported above: they are the catalog data contract, and field calibration
 # has to compare against the same classes a ``query/`` backend produces rather
 # than local twins. Everything below is calibration state, which fieldcal owns.
 
 
-class IAperture(KeplerBaseModel):
+class IAperture(MARSBaseModel):
     aper_a: Optional[float] = None
     aper_b: Optional[float] = None
     aper_theta: Optional[float] = None
@@ -47,7 +47,7 @@ class IAperture(KeplerBaseModel):
     annulus_theta_out: Optional[float] = None
 
 
-class PhotometrySettings(KeplerBaseModel):
+class PhotometrySettings(MARSBaseModel):
     # Mirrors PhotSettings defaults from legacy
     mode: str = "aperture"
     a: Optional[float] = None
@@ -67,7 +67,7 @@ class PhotometrySettings(KeplerBaseModel):
     reject_bkg_outliers: bool = False
 
 
-class ISourceMeta(KeplerBaseModel):
+class ISourceMeta(MARSBaseModel):
     file_id: Optional[int] = None
     time: Optional[datetime] = None
     filter: Optional[str] = None
@@ -75,16 +75,16 @@ class ISourceMeta(KeplerBaseModel):
     exp_length: Optional[float] = None
 
 
-class IFwhm(KeplerBaseModel):
+class IFwhm(MARSBaseModel):
     fwhm_x: Optional[float] = None
     fwhm_y: Optional[float] = None
     theta: Optional[float] = None
 
 
-class ISourceId(KeplerBaseModel):
+class ISourceId(MARSBaseModel):
     id: Optional[str] = None
 
-class SourceExtractionSettings(KeplerBaseModel):
+class SourceExtractionSettings(MARSBaseModel):
     x: int = Field(1)
     y: int = Field(1)
     width: int = Field(0)
@@ -197,7 +197,7 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
 # Catalogs
 # ============================================================================
 
-# Catalog schemas are owned by Kepler's ``catalogs`` package, not by field
+# Catalog schemas are owned by MARS's ``catalogs`` package, not by field
 # calibration -- a ``CatalogSource`` handed back by a ``query/`` backend has to
 # be the same class this module's matching code compares against, and a
 # structurally identical local copy would not be. Re-exported under the names
@@ -211,7 +211,7 @@ Catalog = CatalogMeta
 # Photometric Calibration (formerly "FieldCal")
 # ============================================================================
 
-class PhotometricCalibrationSettings(KeplerBaseModel):
+class PhotometricCalibrationSettings(MARSBaseModel):
     """
     Settings used to perform photometric (field) calibration / zero-point solve.
     """
@@ -235,7 +235,7 @@ class PhotometricCalibrationSettings(KeplerBaseModel):
     strict_filter_parity: bool = False
 # (Ports legacy FieldCal fields 1:1.)  # :contentReference[oaicite:4]{index=4}
 
-class FieldCalResult(KeplerBaseModel):
+class FieldCalResult(MARSBaseModel):
     """
     Result of photometric calibration for a single file.
     """

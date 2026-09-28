@@ -1,4 +1,4 @@
-"""Terminal graphics capability detection for the Kepler TUI."""
+"""Terminal graphics capability detection for the MARS TUI."""
 
 from __future__ import annotations
 

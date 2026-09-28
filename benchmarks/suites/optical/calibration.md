@@ -50,7 +50,7 @@ local tools with no fixtures at all:
 
 - Both run **end to end, offline, against replay**
   (`test_the_optical_suite_runs_its_real_tools_and_its_real_warning_fires`).
-- `optical-listing-truncated`'s `env: {KEPLER_MAX_FRAMES: "5"}` really takes
+- `optical-listing-truncated`'s `env: {MARS_MAX_FRAMES: "5"}` really takes
   effect, `list_optical_frames` really reads the bundled 42-frame library, and
   the `listing_truncated` warning the key names is **the one the tool itself
   raised** — asserted against the recorded event stream, not assumed.

@@ -11,8 +11,8 @@ hard-failure check -- it is printed verbatim in the report beside the failure,
 so a scoreboard entry explains itself without anyone opening the suite file.
 
 Security requirements realized here: S5 (``yaml.safe_load``, always), S6
-(suite and fixture paths are contained), B7 (a task's ``env`` is ``KEPLER_*``
-only -- it can shrink ``KEPLER_MAX_FRAMES`` to exercise the truncation
+(suite and fixture paths are contained), B7 (a task's ``env`` is ``MARS_*``
+only -- it can shrink ``MARS_MAX_FRAMES`` to exercise the truncation
 warning; it cannot set ``ANTHROPIC_API_KEY``, ``OPENAI_BASE_URL`` or ``PATH``).
 """
 
@@ -45,8 +45,8 @@ __all__ = [
 #: message and before a run starts.
 TASK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
-#: B7. A task may shape Kepler's own configuration and nothing else.
-ENV_KEY_RE = re.compile(r"^KEPLER_[A-Z0-9_]+$")
+#: B7. A task may shape MARS's own configuration and nothing else.
+ENV_KEY_RE = re.compile(r"^MARS_[A-Z0-9_]+$")
 
 _TASK_KEYS = frozenset(
     {
@@ -303,7 +303,7 @@ def _resolve_fixture_list(
 
 
 def _load_env(value: Any, file: Path) -> dict[str, str]:
-    """B7. ``KEPLER_*`` only, and string values only."""
+    """B7. ``MARS_*`` only, and string values only."""
 
     if value is None:
         return {}
@@ -313,7 +313,7 @@ def _load_env(value: Any, file: Path) -> dict[str, str]:
         if not isinstance(key, str) or not ENV_KEY_RE.match(key):
             raise TaskError(
                 f"{file} env key {key!r} is not allowed. A task may shape "
-                "Kepler's own configuration (KEPLER_*) and nothing else: it "
+                "MARS's own configuration (MARS_*) and nothing else: it "
                 "cannot set a credential, a provider base URL, or PATH."
             )
         if isinstance(item, bool) or not isinstance(item, (str, int)):

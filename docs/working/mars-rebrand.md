@@ -4,7 +4,8 @@
 distribution and repository are **`skynet-mars`** (§1). The repository is
 renamed (`kepler` → `mars-suite` → `skynet-mars`, all on 2026-09-25), and both
 earlier names redirect (§3). All
-questions in §6 are decided. No phase started; R4 waits for the logo files.
+questions in §6 are decided. The logo files are in `brand/` (§4). Work is on
+the feature branch `mars-rebrand` (§5); **R1–R4 are done** (2026-09-27).
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -15,11 +16,9 @@ code.
 
 > [!note] Written against `mcp-support`
 > This plan was measured and written on the `mcp-support` branch at
-> `b0388e0`, where the MCP tool-surface track is complete. It is committed to
-> `dev` ahead of that branch, so until `mcp-support` merges into `dev`, its
-> links into `../archive/` and its references to `tools/mcp/`, `tools/skill/`
-> and `tools/paths.py` describe code that is not on `dev` yet. The rollout
-> starts from the merged state.
+> `b0388e0`, where the MCP tool-surface track is complete. That branch has
+> since merged into `dev` (PR #88, `8ec0003`), and the rollout starts from
+> the merged state.
 
 ---
 
@@ -141,7 +140,8 @@ Its UNC-Chapel Hill palette is likewise separate from the Skynet palette.
 
 ## 5. Rollout
 
-Phases **R1–R6**, one PR each against `mcp-support`. Every phase ends with the
+Phases **R1–R6**, committed in order on the one feature branch
+`mars-rebrand`, cut from `dev` at `ec5b7e1`. Every phase ends with the
 default suite green on Python 3.13, with and without `[mcp]`.
 
 ### R1 — Identity: the distribution, commands, server and skill
@@ -157,6 +157,13 @@ default suite green on Python 3.13, with and without `[mcp]`.
 **Gate:** a wheel named `skynet_mars-…` installs, and `mars-mcp self-test`
 passes on it.
 
+**Done 2026-09-27.** The `skynet_mars-0.1.0rc3` wheel installed into a clean
+Python 3.13 environment, `mars-mcp self-test` passed, and each `kepler*`
+alias named its successor on stderr and ran it. The aliases live in
+`tools/aliases.py`. One departure: the skill source's three `kepler-mcp
+fetch-data` mentions became `mars-mcp`, so the skill does not teach a
+deprecated command; its prose is otherwise R3's.
+
 ### R2 — Environment and paths
 
 - `MARS_*` for every variable, and `MARS_HOME` with the `mars` per-user home.
@@ -170,6 +177,21 @@ passes on it.
 
 **Gate:** an install with only `KEPLER_*` set behaves as it did (per §6.3),
 and one with `MARS_*` set ignores `KEPLER_*`.
+
+**Done 2026-09-27.** `tools/compat.py` adopts each `KEPLER_X` into an unset
+`MARS_X` right after `.env` loads in every entry point (and silently when
+`tools.config` is imported), so every reader knows only `MARS_*`. Each is
+reported on stderr, adopted or ignored. The notice about a leftover `kepler`
+home repeats at every start until that home is gone or `MARS_HOME` is set,
+and says to move its contents, not rename it (review fix: `mars-mcp` creates
+the `mars` home at startup, so a rename nested the old home inside it).
+`tools.llm.factory` adopts too, because `tools.llm` never imports
+`tools.config`. On an installed wheel with only `KEPLER_HOME` set, `mars-mcp
+self-test` passed and used that home. Two things kept their names on purpose:
+the fetched-bundle marker `.kepler-bundle.json`, an on-disk format a moved
+Kepler home still carries, and the three `KEPLER_ISOCHRONE_DIR` messages in
+`algorithms/hrdiagram_py/`, which are R3's (the one phase that edits
+`algorithms/`).
 
 ### R3 — Code identifiers and prose
 
@@ -188,6 +210,27 @@ and one with `MARS_*` set ignores `KEPLER_*`.
 **Gate:** the guard passes, and `git grep -i kepler` returns only allowlisted
 paths.
 
+**Done 2026-09-27**, with the guard (`tests/test_rebrand_guard.py`) scoped to
+the code trees — `tools`, `tests`, `algorithms`, `benchmarks`, `skills`,
+`data`, `.github`, `.claude`, `pyproject.toml`. The documentation is R4's, and
+joins the scope there. The guard allows the shims, published names
+(`ARCHIVE_PREFIX = "kepler-"`, the two bundle archives, `.kepler-bundle.json`,
+`archon774/kepler`) and the mission's forms (`MISSION`), each by content,
+never a whole file outside the shims. It also pins §6.2's "no new top-level
+package". Decided on the way:
+
+- The classes follow PEP 8's capitalised acronyms, as `SDSSQueryBackend`
+  already does: `MARSApp`, `MARSToolModel`, `MARSBaseModel`, `MARSHeader`,
+  `MARSSDSS`.
+- Textual names a message handler after the app class, and turns `MARSApp`
+  into `marsapp`, so the rename silently unhooked the console's four
+  `on_kepler_app_*` handlers. They are now bound with `@on(Message)`, which
+  no class name can break.
+- The bundle builder keeps the `kepler-` archive prefix: a name is part of an
+  archive's content-addressed identity, and `--check` compares it.
+- All 30 `# EXTRACTED: was …` markers keep their upstream symbols; only the
+  "In Kepler the …" prose after them changed.
+
 ### R4 — Documentation and the logo
 
 - README (banner, title, the MCP section's install lines), `docs/*.md`,
@@ -200,6 +243,28 @@ paths.
 
 **Gate:** no dead links; the banner renders in both schemes; a host shows the
 server's icon (or the PR records which hosts ignore `icons`).
+
+**Done 2026-09-27**, except the last gate item:
+
+- `docs/assets/make_brand.py` exports everything from the masters in
+  `brand/`, and reproduces the committed files byte for byte: the README
+  banner `docs/assets/mars-banner.png` (1760×360, the mark beside the
+  wordmark and tagline lifted from the social preview, on Navy (banner)), the
+  mark at 512 px, and the server icons `tools/mcp/icons/mars-{64,128}.png`.
+  The banner carries its own plate, so one PNG serves both schemes and the
+  light/dark SVG pair is retired.
+- The server introduces itself as `mars`, titled *MARS — MCP Astronomy
+  Research Suite*, with both icons as `data:` URIs (a stdio server has no URL
+  to serve), shipped in the wheel. A test reads them from a real handshake.
+  **Not yet seen in a host's UI**; which hosts display `icons` is still to be
+  recorded.
+- Current documents say MARS and spell it out once; records carry a dated
+  note under their titles instead of being rewritten. The guard now covers
+  the documentation, with the records, the "Upgrading from Kepler" section of
+  `docs/installing.md`, and "Keplerian"/"Kepler's laws" (which
+  `docs/working/obs-report.md` uses for orbits) allowed.
+- No new dead links. The README's install line names the `v0.1.0rc3`
+  `skynet_mars` wheel, which exists once R5 tags it.
 
 ### R5 — Repository and release
 
@@ -222,6 +287,11 @@ redirect.
   name.
 - Optionally, the local checkout directory. It is named in this machine's
   agent memory paths and the vault, so change it deliberately or not at all.
+  **Done 2026-09-27**, at the maintainer's direction: `/home/claude/Kepler`
+  is now `/home/claude/mars`, and `.venv` was rebuilt (its scripts carry
+  absolute paths). Its agent-memory directory was empty. Records that quote
+  the old path keep it, as records do. The vault still names the old path,
+  and is the rest of R6.
 
 ---
 

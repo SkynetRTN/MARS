@@ -37,13 +37,22 @@ __all__ = [
     "normalize_result",
     "result_is_error",
     "served_instructions",
+    "served_icons",
     "served_resources",
     "served_tools",
     "stringified_nulls",
     "to_json_text",
 ]
 
-SERVER_NAME = "kepler"
+SERVER_NAME = "mars"
+
+#: What a host shows for the server, where it shows more than the name.
+SERVER_TITLE = "MARS \u2014 MCP Astronomy Research Suite"
+
+#: The square mark, exported from ``brand/`` by ``docs/assets/make_brand.py``
+#: and shipped in the wheel. Theme-neutral: the mark carries its own navy tile.
+ICON_DIR = Path(__file__).resolve().parent / "icons"
+ICON_SIZES = (64, 128)
 
 #: Case-folded strings a model sends when it means JSON ``null`` -- the
 #: confirmed-live failure ``SYSTEM_PROMPT`` and the skill both warn about.
@@ -58,8 +67,8 @@ _STRINGY_NULLS = frozenset({"none", "null", "nil"})
 #: root is shared -- is added here instead.
 _ARTIFACT_NOTES = {
     "list_artifacts": (
-        " Served by kepler-mcp: the artifact directory is {root}, pinned when "
-        "the server started (KEPLER_ARTIFACT_DIR, or a per-user default) and "
+        " Served by mars-mcp: the artifact directory is {root}, pinned when "
+        "the server started (MARS_ARTIFACT_DIR, or a per-user default) and "
         "shared by every session on this machine. This lists only the files "
         "directly inside the directory given, and tools write into per-tool "
         "subdirectories of it (pulsar/, vizier/, simbad/, ...): pass one as "
@@ -68,7 +77,7 @@ _ARTIFACT_NOTES = {
         "read the path a result named rather than the newest-looking file."
     ),
     "describe_artifact": (
-        " Served by kepler-mcp: tools write their artifacts under {root}, "
+        " Served by mars-mcp: tools write their artifacts under {root}, "
         "pinned when the server started. The paths are local to this machine "
         "and readable directly; pass the path a tool result named."
     ),
@@ -82,7 +91,7 @@ _ARTIFACT_NOTES = {
 _SERVED_CORRECTIONS = {
     "sonify_pulsar": (
         "the audio is never inlined.",
-        "served by kepler-mcp, the WAV also comes back inline as an audio block "
+        "served by mars-mcp, the WAV also comes back inline as an audio block "
         "when it is under the server's audio limit -- a host that cannot play "
         "it may save it to a file instead.",
     ),
@@ -90,7 +99,7 @@ _SERVED_CORRECTIONS = {
         "report their "
         "paths, do not describe their contents as if you had visually inspected "
         "them.",
-        "report their paths. Served by kepler-mcp, each plot under the server's "
+        "report their paths. Served by mars-mcp, each plot under the server's "
         "image limit also comes back inline as an image: describe only what an "
         "inlined image shows, and never the contents of one that was not inlined.",
     ),
@@ -149,6 +158,25 @@ def served_instructions(artifact_root: Path | None = None) -> str:
         # would cut the facts short, so the path gives way to where to find it.
         text = brief + "\n\n" + install_facts("the artifact directory list_artifacts names")
     return text
+
+
+def served_icons() -> list[dict[str, Any]]:
+    """The server's icons, as ``Implementation.icons`` entries.
+
+    ``data:`` URIs, not URLs: a stdio server has nothing to serve a URL from,
+    and a host that fetched one from the repository would show nothing
+    offline. Hosts that ignore ``icons`` lose nothing but the picture.
+    """
+
+    return [
+        {
+            "src": "data:image/png;base64,"
+            + base64.b64encode((ICON_DIR / f"mars-{side}.png").read_bytes()).decode("ascii"),
+            "mime_type": "image/png",
+            "sizes": [f"{side}x{side}"],
+        }
+        for side in ICON_SIZES
+    ]
 
 
 def served_resources() -> list[dict[str, str]]:
@@ -244,7 +272,7 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """Serialize one tool's return value into a JSON object.
 
     Mirrors ``tools/agent/engine.py::_normalize_result``, which this surface
-    may not import: a Kepler model becomes its fields, and the three tools that
+    may not import: a MARS model becomes its fields, and the three tools that
     return a bare ``list`` of models are wrapped as ``{status, count,
     results}``. Serialization goes through ``pydantic_core.to_json`` rather
     than ``model_dump()``, so a NaN or infinity becomes ``null`` and a path or
@@ -259,7 +287,7 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
         return _to_jsonable(value)
     raise TypeError(
         f"tool {name!r} returned {type(value).__name__}; a registered tool must "
-        "return a Kepler model or a list of them"
+        "return a MARS model or a list of them"
     )
 
 

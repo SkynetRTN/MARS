@@ -1,7 +1,7 @@
 """The skill and the agent loop's system prompt say the same load-bearing things.
 
 ``tools/skill/source/`` restates, for a model that never receives
-``SYSTEM_PROMPT``, the rules ``tools/agent/prompt.py`` gives Kepler's own loop.
+``SYSTEM_PROMPT``, the rules ``tools/agent/prompt.py`` gives MARS's own loop.
 Two hand-written statements of one rule drift the first time a correction
 lands in one and not the other, so this module pins them together: every
 invariant below must appear, word for word after normalisation, in **both**
@@ -200,7 +200,7 @@ def test_relative_links_resolve_to_a_source_document(name):
 
 def test_the_repository_copy_is_rendered_from_the_source():
     assert check_repository_copy() == [], (
-        "skills/kepler-tools/ is stale; run `uv run python -m tools.skill`"
+        "skills/mars-tools/ is stale; run `uv run python -m tools.skill`"
     )
 
 
@@ -222,7 +222,7 @@ def test_the_claude_skill_link_points_at_the_repository_copy():
 def test_the_working_on_the_repository_files_point_at_the_skill():
     for doc in ("AGENTS.md", "CLAUDE.md"):
         text = (_REPO_ROOT / doc).read_text(encoding="utf-8")
-        assert "skills/kepler-tools/" in text, doc
+        assert "skills/mars-tools/" in text, doc
 
 
 # --- the served skill (C5) ------------------------------------------------------
@@ -249,7 +249,7 @@ def test_the_brief_keeps_the_rules_the_prompt_states(phrase):
 
 
 def test_the_brief_points_at_every_served_document_and_nothing_else():
-    named = set(re.findall(r"kepler://skill/[\w/.-]+\.md", served_brief()))
+    named = set(re.findall(r"mars://skill/[\w/.-]+\.md", served_brief()))
     assert named == {SERVED_URI_PREFIX + name for name in served_documents()}
 
 
@@ -273,4 +273,4 @@ def test_the_served_documents_and_the_repository_copy_share_one_source():
         )
         assert text.replace(SERVED_URI_PREFIX, "") == kept, name
         assert repository[name].endswith(source), name
-    assert "kepler://" not in "".join(repository.values())
+    assert "mars://" not in "".join(repository.values())

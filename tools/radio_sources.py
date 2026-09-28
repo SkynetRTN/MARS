@@ -1,4 +1,4 @@
-"""Kepler: radio FITS frame -> known-source identification -> labeled SED plot.
+"""MARS: radio FITS frame -> known-source identification -> labeled SED plot.
 
 Replaces two non-functional scratch scripts (``Spectral_Plot.py``,
 ``Best_Fit_Analysis.py``) with one tool. The main deliverable is

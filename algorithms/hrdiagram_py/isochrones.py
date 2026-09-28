@@ -45,7 +45,7 @@ def fit_and_compare(
     """
     if config.ISOCHRONE_DIR is None:
         raise RuntimeError(
-            "KEPLER_ISOCHRONE_DIR is not configured; install the operator Girardi "
+            "MARS_ISOCHRONE_DIR is not configured; install the operator Girardi "
             "grid and set it to the unpacked track directory"
         )
 
@@ -73,7 +73,7 @@ def fit_and_compare(
     temporary_iso_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".dat", prefix="kepler_girardi_", dir=members_csv_path.parent,
+            mode="w", suffix=".dat", prefix="mars_girardi_", dir=members_csv_path.parent,
             delete=False,
         ) as handle:
             temporary_iso_path = Path(handle.name)

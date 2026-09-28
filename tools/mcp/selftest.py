@@ -1,6 +1,6 @@
-"""``kepler-mcp self-test``: prove an install works, the way a host would use it.
+"""``mars-mcp self-test``: prove an install works, the way a host would use it.
 
-Launches this interpreter's own ``kepler-mcp`` over stdio -- the transport a
+Launches this interpreter's own ``mars-mcp`` over stdio -- the transport a
 host uses -- and checks, through the protocol alone:
 
 1. every registered tool is served, with the skill brief as instructions and
@@ -54,7 +54,7 @@ async def _run(env: dict[str, str]) -> None:
         command=sys.executable,
         args=_server_arguments(),
         env=env,
-        cwd=env["KEPLER_ARTIFACT_DIR"],
+        cwd=env["MARS_ARTIFACT_DIR"],
     )
     # The transport is built here rather than by `Client(params)`, which uses
     # stdio_client's default `errlog` -- `sys.stderr` as it was when the SDK was
@@ -104,7 +104,7 @@ async def _run(env: dict[str, str]) -> None:
 #: So each is also *pinned* -- the group filter by ``--tools`` naming every
 #: group (a flag beats both the variable and the file), the scan directory by
 #: setting it to the bundled scans (the real environment beats the file).
-_NOT_INHERITED = ("KEPLER_MCP_TOOLS", "KEPLER_PULSAR_DATA_DIR")
+_NOT_INHERITED = ("MARS_MCP_TOOLS", "MARS_PULSAR_DATA_DIR")
 
 
 def _server_arguments() -> list[str]:
@@ -119,33 +119,40 @@ def _server_environment(artifacts: str) -> dict[str, str]:
     """The child server's environment: the caller's, minus what skews the check.
 
     The package's own root goes first on ``PYTHONPATH``, so the child imports
-    this same Kepler even when it was never installed (a checkout run by
+    this same MARS even when it was never installed (a checkout run by
     pytest), and even though the child starts in the temporary directory.
     """
 
     import tools
+    from tools.compat import LEGACY_PREFIX
     from tools.paths import bundled_data_dir
 
-    env = {k: v for k, v in os.environ.items() if k not in _NOT_INHERITED}
+    # KEPLER_* too: this process already adopted them (tools.compat), and a
+    # child re-adopting one would print its deprecation line a second time.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _NOT_INHERITED and not k.startswith(LEGACY_PREFIX)
+    }
     package_root = str(Path(tools.__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(
         [package_root, *filter(None, [env.get("PYTHONPATH")])]
     )
-    env["KEPLER_ARTIFACT_DIR"] = artifacts
-    env["KEPLER_PULSAR_DATA_DIR"] = str(bundled_data_dir() / "pulsar")
+    env["MARS_ARTIFACT_DIR"] = artifacts
+    env["MARS_PULSAR_DATA_DIR"] = str(bundled_data_dir() / "pulsar")
     return env
 
 
 def main(argv: list[str] | None = None) -> int:
     if argv:
-        print("usage: kepler-mcp self-test", file=sys.stderr)
+        print("usage: mars-mcp self-test", file=sys.stderr)
         return 2
     try:
         import anyio
         import mcp  # noqa: F401
     except ImportError:
         # The server's own advice, which names this interpreter's pip and the
-        # wheel -- a bare pointer at the docs left the PyPI `kepler` trap open.
+        # wheel -- a bare pointer at the docs left the PyPI name trap open.
         from tools.mcp.__main__ import _missing_sdk_message
 
         print(_missing_sdk_message(), file=sys.stderr)
@@ -154,9 +161,9 @@ def main(argv: list[str] | None = None) -> int:
     from tools import config
     from tools.mcp.bundles import load_manifest
 
-    print("kepler-mcp self-test", flush=True)
+    print("mars-mcp self-test", flush=True)
     status = 0
-    with tempfile.TemporaryDirectory(prefix="kepler-self-test-") as artifacts:
+    with tempfile.TemporaryDirectory(prefix="mars-self-test-") as artifacts:
         try:
             anyio.run(_run, _server_environment(artifacts))
         except* _Failed:

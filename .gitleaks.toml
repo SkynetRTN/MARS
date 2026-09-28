@@ -1,4 +1,4 @@
-# Gitleaks configuration for Kepler.
+# Gitleaks configuration for MARS.
 #
 # Keep the default rule set active. Add allowlist entries only for documented,
 # non-secret placeholders that are safe to publish.
@@ -92,8 +92,8 @@ paths = [
   '''tests/test_mcp_surface\.py''',
   '''tools/skill/source/references/checkout\.md''',
   '''tools/skill/source/references/databases\.md''',
-  '''skills/kepler-tools/references/checkout\.md''',
-  '''skills/kepler-tools/references/databases\.md''',
+  '''skills/mars-tools/references/checkout\.md''',
+  '''skills/mars-tools/references/databases\.md''',
   '''docs/installing\.md''',
   '''docs/tool-architecture\.md''',
   '''docs/archive/mcp-tool-surface\.md''',

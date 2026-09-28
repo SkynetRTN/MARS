@@ -1,4 +1,4 @@
-"""The initial Textual shell for Kepler's research console."""
+"""The initial Textual shell for MARS's research console."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -47,8 +47,9 @@ from tools.tui.backends import (
 )
 from tools.tui.commands import help_text, parse_input, resolve, suggest
 from tools.tui.render.capability import GraphicsTier, detect_tier
+from tools.tui.theme import MARS_DARK, THEMES
 from tools.tui.widgets.artifacts import ArtifactBrowser
-from tools.tui.widgets.header import KeplerHeader
+from tools.tui.widgets.header import MARSHeader
 from tools.tui.widgets.models import ModelBrowser
 from tools.tui.widgets.prompt import CommandMenu, PromptInput
 from tools.tui.widgets.sessions import SessionBrowser, history_from_manifest
@@ -58,7 +59,7 @@ from tools.workspace import describe_session, list_artifacts, list_sessions
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
 
-__all__ = ["ApprovalModal", "KeplerApp", "DEFAULT_THINKING_BUDGET"]
+__all__ = ["ApprovalModal", "MARSApp", "DEFAULT_THINKING_BUDGET"]
 
 #: What the console asks a provider to spend on reasoning it will show.
 #: Enabled by default: a research console whose model works silently for four
@@ -169,10 +170,10 @@ class ApprovalModal(ModalScreen[Decision]):
         self.dismiss(decisions[event.button.id or "deny"])
 
 
-class KeplerApp(App[None]):
+class MARSApp(App[None]):
     """The single-column shell shared by the console's later UI phases."""
 
-    TITLE = "Kepler"
+    TITLE = "MARS"
 
     BINDINGS = [
         Binding("f3", "show_artifacts", "Artifacts"),
@@ -238,6 +239,10 @@ class KeplerApp(App[None]):
 
         pass
 
+    # The four handlers below are bound with @on rather than named
+    # on_<app>_<message>: Textual derives that name from the app's class name
+    # (MARSApp -> "marsapp"), so renaming the class silently unhooked them.
+
     def __init__(
         self,
         backend: "ModelBackend",
@@ -247,6 +252,11 @@ class KeplerApp(App[None]):
         thinking_budget: int | None = DEFAULT_THINKING_BUDGET,
     ) -> None:
         super().__init__()
+        # The Skynet palette (tools/tui/theme.py). Both are registered, so the
+        # command palette's theme switcher offers the light one too.
+        for theme in THEMES:
+            self.register_theme(theme)
+        self.theme = MARS_DARK.name
         self.backend = backend
         self.max_turns = max_turns
         self.thinking_budget = thinking_budget
@@ -267,16 +277,16 @@ class KeplerApp(App[None]):
         self._queue_lock = threading.Lock()
         self._queued_input: list[str] = []
         self._stop_requested = False
-        self._pending_approvals: set[KeplerApp.ApprovalRequest] = set()
+        self._pending_approvals: set[MARSApp.ApprovalRequest] = set()
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
 
-        yield KeplerHeader(self.sub_title, id="banner")
+        yield MARSHeader(self.sub_title, id="banner")
         yield Transcript(id="transcript")
         with Vertical(id="composer"):
             yield CommandMenu(id="completions")
-            yield PromptInput(placeholder="Ask Kepler…", id="prompt")
+            yield PromptInput(placeholder="Ask MARS…", id="prompt")
         yield Static(self._status_text(), id="status")
 
     def on_mount(self) -> None:
@@ -299,7 +309,8 @@ class KeplerApp(App[None]):
             request.decision = Decision.DENY
             request.ready.set()
 
-    def on_kepler_app_engine_event(self, message: EngineEvent) -> None:
+    @on(EngineEvent)
+    def _handle_engine_event(self, message: EngineEvent) -> None:
         """Render each worker event on Textual's UI thread."""
 
         event = message.event
@@ -316,7 +327,8 @@ class KeplerApp(App[None]):
             self._return_undelivered_input()
         self._refresh_status()
 
-    def on_kepler_app_approval_request(self, request: ApprovalRequest) -> None:
+    @on(ApprovalRequest)
+    def _handle_approval_request(self, request: ApprovalRequest) -> None:
         """Display a modal and unblock the worker when the user answers."""
 
         self.push_screen(
@@ -324,14 +336,16 @@ class KeplerApp(App[None]):
             lambda decision: self._resolve_approval(request, decision),
         )
 
-    def on_kepler_app_history_updated(self, message: HistoryUpdated) -> None:
+    @on(HistoryUpdated)
+    def _handle_history_updated(self, message: HistoryUpdated) -> None:
         """Keep completed text exchanges available to the next prompt."""
 
         self._history = message.history
         self._history_ready = True
         self._finish_prompt_if_ready()
 
-    def on_kepler_app_engine_failed(self, message: EngineFailed) -> None:
+    @on(EngineFailed)
+    def _handle_engine_failed(self, message: EngineFailed) -> None:
         """Make unexpected worker failures visible in the transcript."""
 
         self._append_transcript("The engine stopped unexpectedly.")
@@ -598,7 +612,7 @@ class KeplerApp(App[None]):
 
         self.backend = backend
         self.sub_title = spec_of(backend)
-        self.query_one("#banner", KeplerHeader).set_backend(self.sub_title)
+        self.query_one("#banner", MARSHeader).set_backend(self.sub_title)
         self._append_transcript(f"Backend switched to {self.sub_title}.")
 
     def _offer_model_choice(self, provider: str) -> bool:
@@ -770,13 +784,13 @@ class KeplerApp(App[None]):
         self._forget_approval(request)
         return request.decision
 
-    def _release_pending_approvals(self) -> tuple["KeplerApp.ApprovalRequest", ...]:
+    def _release_pending_approvals(self) -> tuple["MARSApp.ApprovalRequest", ...]:
         with self._queue_lock:
             pending = tuple(self._pending_approvals)
             self._pending_approvals.clear()
         return pending
 
-    def _forget_approval(self, request: "KeplerApp.ApprovalRequest") -> None:
+    def _forget_approval(self, request: "MARSApp.ApprovalRequest") -> None:
         with self._queue_lock:
             self._pending_approvals.discard(request)
 

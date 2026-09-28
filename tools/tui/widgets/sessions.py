@@ -1,4 +1,4 @@
-"""Saved-session history reconstruction for the Kepler console."""
+"""Saved-session history reconstruction for the MARS console."""
 
 from __future__ import annotations
 

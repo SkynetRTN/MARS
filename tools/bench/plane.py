@@ -1,7 +1,7 @@
-"""The tool plane: which of Kepler's 55 registered tools run live in a
+"""The tool plane: which of MARS's 55 registered tools run live in a
 benchmark, which are replayed from fixtures, and how a call decides.
 
-``docs/benchmarking/harness.md`` section 3. Kepler's tools are not one surface,
+``docs/benchmarking/harness.md`` section 3. MARS's tools are not one surface,
 they are three:
 
 * **Class L** -- local and deterministic. They read the bundled fixture tree

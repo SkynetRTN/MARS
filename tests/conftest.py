@@ -1,10 +1,10 @@
-"""Shared fixtures for Kepler's algorithm tests.
+"""Shared fixtures for MARS's algorithm tests.
 
 Two rules shape everything here, both from ``CLAUDE.md``:
 
 * **Default checks stay deterministic and bounded.** Nothing in this suite opens
   a socket unless it is marked ``network``, and nothing marked ``network`` runs
-  without ``KEPLER_TEST_NETWORK=1``.
+  without ``MARS_TEST_NETWORK=1``.
 * **The Python folders are byte-preserving extractions.** So the fixtures are
   real Skynet frames and real recorded Skynet solver output, not synthesised
   arrays — see ``data/README.md``.
@@ -143,7 +143,7 @@ FRAMES: dict[str, str] = {
     "ngc5128_b": "ngc5128_galaxy_b_001.fits",
     # The three frames behind the recorded NGC 5286 B solves (P8). Git LFS
     # objects, and the only multi-HDU frames in the tree: four Afterglow-aligned
-    # exposures each, of which Kepler reads only the primary.
+    # exposures each, of which MARS reads only the primary.
     "ngc5286_b_000": "ngc5286_globular_b_000.fits",
     "ngc5286_b_001": "ngc5286_globular_b_001.fits",
     "ngc5286_b_002": "ngc5286_globular_b_002.fits",
@@ -377,7 +377,7 @@ def afterglow_web_zero_points() -> dict[str, tuple[float, float]]:
 
     Independent ground truth: these came out of the hosted Afterglow
     field-calibration service, not out of Skynet's local pipeline, so agreement
-    between them and Kepler's solver is a cross-implementation check rather than
+    between them and MARS's solver is a cross-implementation check rather than
     a self-comparison. 73 subjects; six of the eight frames in
     ``data/optical`` appear.
     """
@@ -479,14 +479,14 @@ def pytest_collection_modifyitems(config, items):
     live call by accident in CI; requiring the environment variable too makes
     the opt-in explicit, as CLAUDE.md asks for remote calls.
     """
-    net_on = os.environ.get("KEPLER_TEST_NETWORK") == "1"
-    model_on = os.environ.get("KEPLER_TEST_MODEL_API") == "1"
+    net_on = os.environ.get("MARS_TEST_NETWORK") == "1"
+    model_on = os.environ.get("MARS_TEST_MODEL_API") == "1"
 
     net_skip = pytest.mark.skip(
-        reason="live catalog query; set KEPLER_TEST_NETWORK=1 to run"
+        reason="live catalog query; set MARS_TEST_NETWORK=1 to run"
     )
     model_skip = pytest.mark.skip(
-        reason="live model provider; set KEPLER_TEST_MODEL_API=1 to run"
+        reason="live model provider; set MARS_TEST_MODEL_API=1 to run"
     )
     for item in items:
         if not net_on and "network" in item.keywords:

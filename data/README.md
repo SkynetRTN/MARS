@@ -10,7 +10,7 @@ pipeline data repository at `/home/claude/skynet-data/pipeline_data`, with one
 labelled exception: `variable_star/`, a 253-byte synthetic parity fixture
 (below). Nothing
 was synthesised, resampled, trimmed, or re-headered. That is the point:
-Kepler's Python folders are byte-preserving extractions from Skynet (see
+MARS's Python folders are byte-preserving extractions from Skynet (see
 `CLAUDE.md`, "The extraction contract"), so the tests that guard them have to
 run on the frames and the recorded solver outputs the upstream pipeline
 actually produced.
@@ -30,8 +30,8 @@ archive download root, already matched by the depth-independent
 `data/` is also a **boundary**: `tools/optical.py` walks the download root
 recursively (astroquery nests MAST products under
 `mastDownload/<mission>/<obs_id>/`) and will only do so while that root
-resolves inside this directory. `KEPLER_DATA_DIR` moves the root and the
-boundary together; `KEPLER_OPTICAL_DATA_DIR` moves the frame library alone.
+resolves inside this directory. `MARS_DATA_DIR` moves the root and the
+boundary together; `MARS_OPTICAL_DATA_DIR` moves the frame library alone.
 
 **Total size: ~175 MB in git**, essentially all of it the 39 plain-git FITS
 frames, plus **93 MB of Git LFS objects** — the three NGC 5286 B frames. That is
@@ -101,7 +101,7 @@ Nothing breaks without them. `tools.config.is_lfs_pointer` recognises a stub,
 four recorded zero-point solves.
 
 They are also the **only multi-HDU frames** in this directory: each carries four
-Afterglow-aligned exposures of the same field, and every Kepler code path reads
+Afterglow-aligned exposures of the same field, and every MARS code path reads
 the primary and ignores the rest. That is why they are 31 MB apiece where a
 single-HDU frame of the same geometry would be 7.7 MB.
 
@@ -132,8 +132,8 @@ by name have short aliases in `tests/conftest.py::FRAMES`:
 
 Results from the **hosted Afterglow photometry web service**, not from Skynet's
 local pipeline. That independence is what makes them worth carrying: agreement
-between Kepler and these numbers is a cross-implementation check, where
-agreement with `fieldcal/zp_solutions/` is a check against the code Kepler was
+between MARS and these numbers is a cross-implementation check, where
+agreement with `fieldcal/zp_solutions/` is a check against the code MARS was
 extracted from.
 
 - `afterglow_web_values_{bvr,narrowband,sdss}.csv` — per-category zero points
@@ -150,8 +150,8 @@ extracted from.
   run, carrying `zero_point`, `zero_point_correction` and `calibrated_zero_point`
   per row.
 
-**Afterglow's convention differs from Kepler's.** Afterglow fixes
-`zero_point = 20` and reports a `zero_point_correction`; Kepler computes the
+**Afterglow's convention differs from MARS's.** Afterglow fixes
+`zero_point = 20` and reports a `zero_point_correction`; MARS computes the
 absolute zero point directly. Any comparison has to add the two, or it lands 20
 magnitudes off in a way that looks entirely plausible.
 
@@ -166,7 +166,7 @@ Four complete Skynet field calibrations, each a matched pair:
 
 This pair is what makes `tests/test_fieldcal_solution.py` a genuine parity test
 rather than a self-consistency check: inputs and expected outputs were both
-recorded upstream, before the extraction. Kepler reproduces all four to the last
+recorded upstream, before the extraction. MARS reproduces all four to the last
 float bit — the only value with any drift is `limmag5`, which goes through
 `np.polyfit`.
 
@@ -218,7 +218,7 @@ result and Afterglow's, and declares them within a 5e-4 mag tolerance. The full
 chain, all offline:
 
 ```
-Kepler calc_solution        21.147659857998637   (bit-exact)
+MARS calc_solution        21.147659857998637   (bit-exact)
 Skynet recorded local fit   21.147659857998637
 Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
 Afterglow web table         21.147                (3 dp, recorded by hand)
@@ -233,7 +233,7 @@ was unreachable. These two files close that gap. They are VizieR responses,
 retrieved once (2026-09-13) with the same column request the live tool path
 sends, stored as one JSON object each — provenance block, `query`, the
 column names/dtypes/units as returned, then one response row per line — and
-they are *not* Skynet artifacts: they are Kepler's own recording of the
+they are *not* Skynet artifacts: they are MARS's own recording of the
 public catalogue content of this field.
 
 | File | What | Query | Rows |
@@ -373,7 +373,7 @@ scan.
 
 The file sits in this directory rather than at a path the tool hardcodes,
 because the curation belongs to the scans it describes: point
-`KEPLER_PULSAR_DATA_DIR` at another archive and that archive's own
+`MARS_PULSAR_DATA_DIR` at another archive and that archive's own
 `curated_periods.json` is the one consulted.
 
 That closes an offline gap rather than adding a convenience: a blind period
@@ -438,7 +438,7 @@ The 9 MB frame cut-off governs what plain git carries. The Afterglow table cover
 left out, and their web values still ship, so any of them can be added later
 without touching the ground-truth files. The three NGC 5286 B frames are 31 MB
 each and are the exception the LFS tracking exists for — they are large because
-each holds four aligned exposures, of which Kepler reads one.
+each holds four aligned exposures, of which MARS reads one.
 
 ## Refreshing
 

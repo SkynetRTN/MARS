@@ -1,4 +1,4 @@
-"""Small shared models for Kepler tool results."""
+"""Small shared models for MARS tool results."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
-    "KeplerToolModel",
+    "MARSToolModel",
     "ToolWarning",
     "ToolError",
     "ArtifactRef",
@@ -46,23 +46,23 @@ __all__ = [
 ]
 
 
-class KeplerToolModel(BaseModel):
+class MARSToolModel(BaseModel):
     """Base model for public tool summaries."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class ToolWarning(KeplerToolModel):
+class ToolWarning(MARSToolModel):
     code: str
     message: str
 
 
-class ToolError(KeplerToolModel):
+class ToolError(MARSToolModel):
     code: str
     message: str
 
 
-class ArtifactRef(KeplerToolModel):
+class ArtifactRef(MARSToolModel):
     """A file a tool wrote to disk, plus enough metadata to use it."""
 
     path: str
@@ -71,7 +71,7 @@ class ArtifactRef(KeplerToolModel):
     columns: list[str] = Field(default_factory=list)
 
 
-class ToolResult(KeplerToolModel):
+class ToolResult(MARSToolModel):
     """Bounded result returned by remote/catalog database tools.
 
     ``preview`` is a small inline sample only. Full data goes to ``artifact``
@@ -94,7 +94,7 @@ class ToolResult(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class FileMetadata(KeplerToolModel):
+class FileMetadata(MARSToolModel):
     path: str
     exists: bool
     is_file: bool = False
@@ -103,7 +103,7 @@ class FileMetadata(KeplerToolModel):
     suffix: str | None = None
 
 
-class ArtifactMetadata(KeplerToolModel):
+class ArtifactMetadata(MARSToolModel):
     file: FileMetadata
     artifact_type: str
     media_type: str | None = None
@@ -111,13 +111,13 @@ class ArtifactMetadata(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class TableSummary(KeplerToolModel):
+class TableSummary(MARSToolModel):
     name: str | None = None
     row_count: int | None = None
     columns: list[str] = Field(default_factory=list)
 
 
-class WcsSearchSummary(KeplerToolModel):
+class WcsSearchSummary(MARSToolModel):
     """The search the plate solver was asked to run.
 
     Present only when the solve reached the backends. ``radius_deg`` and the
@@ -144,7 +144,7 @@ class WcsSearchSummary(KeplerToolModel):
     explicit: list[str] = Field(default_factory=list)
 
 
-class WcsSummary(KeplerToolModel):
+class WcsSummary(MARSToolModel):
     """Compact celestial WCS metadata from a FITS header or plate solve.
 
     ``algorithms.wcs.results.WcsSolveMetadata`` carries fitted diagnostics such
@@ -170,7 +170,7 @@ class WcsSummary(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class CatalogSummary(KeplerToolModel):
+class CatalogSummary(MARSToolModel):
     name: str
     display_name: str | None = None
     num_sources: int | None = None
@@ -178,7 +178,7 @@ class CatalogSummary(KeplerToolModel):
     filter_aliases: list[str] = Field(default_factory=list)
 
 
-class ReferenceBandResolution(KeplerToolModel):
+class ReferenceBandResolution(MARSToolModel):
     catalog: str
     image_filter: str | None = None
     supported: bool
@@ -194,7 +194,7 @@ class ReferenceBandResolution(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointSolution(KeplerToolModel):
+class ZeropointSolution(MARSToolModel):
     #: The ABSOLUTE photometric zero point in magnitudes, as ``calc_solution``
     #: returns it. Afterglow's API instead fixes ``zero_point = 20`` and
     #: reports a ``zero_point_correction``; adding the two gives this number.
@@ -210,7 +210,7 @@ class ZeropointSolution(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointReference(KeplerToolModel):
+class ZeropointReference(MARSToolModel):
     """A recorded zero-point solve shipped as ground truth.
 
     Three independent numbers describe the same exposure and they do not use
@@ -247,7 +247,7 @@ class ZeropointReference(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointComparison(KeplerToolModel):
+class ZeropointComparison(MARSToolModel):
     """A computed zero point placed against the recorded ground truth.
 
     ``delta_vs_skynet``/``delta_vs_afterglow`` are ``zero_point`` minus the
@@ -268,7 +268,7 @@ class ZeropointComparison(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class CatalogResponseReference(KeplerToolModel):
+class CatalogResponseReference(MARSToolModel):
     """A recorded VizieR response shipped next to a recorded zero-point solve.
 
     The provenance a fixture like ``apass_response.json`` carries -- what was
@@ -291,7 +291,7 @@ class CatalogResponseReference(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class FieldCalMatch(KeplerToolModel):
+class FieldCalMatch(MARSToolModel):
     """One detection the selection replay matched to a catalog candidate.
 
     ``detected_id`` is the recorded (Afterglow) source id; ``catalog_index``
@@ -317,7 +317,7 @@ class FieldCalMatch(KeplerToolModel):
     ref_mag_error: float | None = None
 
 
-class FieldCalReplay(KeplerToolModel):
+class FieldCalReplay(MARSToolModel):
     """The end-to-end selection replay of a recorded field calibration.
 
     The recorded detections and the recorded *full* catalog response go
@@ -361,7 +361,7 @@ class FieldCalReplay(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PhotometryTargetLibrary(KeplerToolModel):
+class PhotometryTargetLibrary(MARSToolModel):
     """The local FITS library ``run_photometry_on_target`` can actually run on.
 
     There is no live image archive behind photometry -- ``categories`` is
@@ -375,7 +375,7 @@ class PhotometryTargetLibrary(KeplerToolModel):
     warnings: list[ToolWarning] = Field(default_factory=list)
 
 
-class SourceSummary(KeplerToolModel):
+class SourceSummary(MARSToolModel):
     """One detected source's position, magnitude, and flux.
 
     ``ra_deg``/``dec_deg`` are populated whenever the frame carries a celestial
@@ -402,7 +402,7 @@ class SourceSummary(KeplerToolModel):
     flux_error: float | None = None
 
 
-class PhotometryRunResult(KeplerToolModel):
+class PhotometryRunResult(MARSToolModel):
     """Result of running source extraction (and optionally a verified
     zero-point solve) on one bundled FITS target.
 
@@ -433,7 +433,7 @@ class PhotometryRunResult(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarObservationInfo(KeplerToolModel):
+class PulsarObservationInfo(MARSToolModel):
     """Fields every stage of the pulsar pipeline reports about its input."""
 
     flavour: Literal["cal", "standard"] = "cal"
@@ -448,7 +448,7 @@ class PulsarObservationInfo(KeplerToolModel):
     back_scale_s: float | None = None
 
 
-class PulsarScan(KeplerToolModel):
+class PulsarScan(MARSToolModel):
     """A pulsar scan available on local disk.
 
     ``path`` is what every pipeline stage takes. The rest is read from the
@@ -485,7 +485,7 @@ class PulsarScan(KeplerToolModel):
     warnings: list[ToolWarning] = Field(default_factory=list)
 
 
-class PulsarScanList(KeplerToolModel):
+class PulsarScanList(MARSToolModel):
     """Scans found locally, plus where they were looked for."""
 
     scans: list[PulsarScan] = Field(default_factory=list)
@@ -495,7 +495,7 @@ class PulsarScanList(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarFixture(KeplerToolModel):
+class VariableStarFixture(MARSToolModel):
     """One bundled, paired-source CSV available to the variable-star tools."""
 
     path: str
@@ -505,7 +505,7 @@ class VariableStarFixture(KeplerToolModel):
     row_count: int = 0
 
 
-class VariableStarFixtureList(KeplerToolModel):
+class VariableStarFixtureList(MARSToolModel):
     """Stage 0 variable-star fixture discovery result."""
 
     fixtures: list[VariableStarFixture] = Field(default_factory=list)
@@ -515,7 +515,7 @@ class VariableStarFixtureList(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarLightCurve(KeplerToolModel):
+class VariableStarLightCurve(MARSToolModel):
     """Stage 1 merged paired-source photometry."""
 
     file: FileMetadata
@@ -528,7 +528,7 @@ class VariableStarLightCurve(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarPeriodogram(KeplerToolModel):
+class VariableStarPeriodogram(MARSToolModel):
     """Stage 2 fixed-grid error-weighted variable-star periodogram."""
 
     file: FileMetadata
@@ -542,7 +542,7 @@ class VariableStarPeriodogram(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarFoldedLightCurve(KeplerToolModel):
+class VariableStarFoldedLightCurve(MARSToolModel):
     """Stage 3 phase-folded differential variable-star photometry."""
 
     file: FileMetadata
@@ -556,7 +556,7 @@ class VariableStarFoldedLightCurve(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class OpticalFrame(KeplerToolModel):
+class OpticalFrame(MARSToolModel):
     """An optical FITS frame available on local disk.
 
     ``path`` is what every image tool takes. Everything else is read from the
@@ -581,10 +581,10 @@ class OpticalFrame(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class OpticalFrameList(KeplerToolModel):
+class OpticalFrameList(MARSToolModel):
     """Frames found locally, plus where they were looked for.
 
-    ``search_root`` is the primary root -- the ``KEPLER_OPTICAL_DATA_DIR``
+    ``search_root`` is the primary root -- the ``MARS_OPTICAL_DATA_DIR``
     override or the bundled optical directory -- and reports it whether or not
     that directory exists. ``search_roots`` is every root actually inspected,
     which additionally carries the archive download root once something has
@@ -687,7 +687,7 @@ class PulsarFoldedProfile(PulsarObservationInfo):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarSonification(KeplerToolModel):
+class PulsarSonification(MARSToolModel):
     """A rendered pulsar audio file, plus what it was rendered from.
 
     The observation fields describe the input light curve; the audio fields
@@ -738,7 +738,7 @@ class PulsarSonification(KeplerToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarPlot(KeplerToolModel):
+class PulsarPlot(MARSToolModel):
     """A rendered pulsar chart.
 
     The chart's identity -- axis labels, series names, whether the x axis is

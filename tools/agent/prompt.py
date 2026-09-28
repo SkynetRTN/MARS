@@ -1,4 +1,4 @@
-"""The system prompt for Kepler's agent loop.
+"""The system prompt for MARS's agent loop.
 
 Moved verbatim from the retired ``tools/runner.py`` shim: it is ~270 lines of
 confirmed-live failure-mode guidance and the source of the benchmark seed

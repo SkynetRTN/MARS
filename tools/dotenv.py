@@ -5,7 +5,7 @@ An entry point that loaded ``.env`` through ``tools.config`` had already
 fixed every import-time setting -- the artifact and data roots, the isochrone
 directory, preview rows, frame caps, the MCP tool groups -- from the
 environment *without* the file. The values were loaded, logged as read, and
-ignored. Importing this module resolves nothing, so ``kepler-mcp`` and the
+ignored. Importing this module resolves nothing, so ``mars-mcp`` and the
 console can load ``.env`` first. ``tools.config`` re-exports all of it.
 """
 
@@ -40,7 +40,7 @@ def load_dotenv(
     report what it picked up without ever handling the values.
 
     **The real environment always wins.** A variable already set is left
-    alone, so ``ANTHROPIC_API_KEY=... uv run kepler`` still overrides the file
+    alone, so ``ANTHROPIC_API_KEY=... uv run mars`` still overrides the file
     and a test's ``monkeypatch.setenv`` is not silently undone. A missing or
     unreadable file is not an error -- the file is optional by construction.
 

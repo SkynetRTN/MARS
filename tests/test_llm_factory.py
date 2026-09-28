@@ -38,15 +38,15 @@ def test_an_unknown_provider_is_rejected():
 # --- resolution order ----------------------------------------------
 
 
-def test_the_spec_argument_beats_KEPLER_MODEL_BACKEND(monkeypatch):
-    monkeypatch.setenv("KEPLER_MODEL_BACKEND", "anthropic/claude-sonnet-5")
+def test_the_spec_argument_beats_MARS_MODEL_BACKEND(monkeypatch):
+    monkeypatch.setenv("MARS_MODEL_BACKEND", "anthropic/claude-sonnet-5")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
     backend = build_backend("openai/gpt-4.1", transport=CapturingTransport()())
     assert backend.spec == "openai/gpt-4.1"
 
 
 def test_no_spec_and_no_env_is_an_error(monkeypatch):
-    monkeypatch.delenv("KEPLER_MODEL_BACKEND", raising=False)
+    monkeypatch.delenv("MARS_MODEL_BACKEND", raising=False)
     with pytest.raises(ValueError):
         build_backend()
 

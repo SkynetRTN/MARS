@@ -9,7 +9,7 @@ whether it broke Gemini's OpenAPI subset.
 
 Regenerate after an intended registry change with:
 
-    KEPLER_REGEN_SCHEMA_GOLDEN=1 uv run pytest tests/test_llm_schema.py
+    MARS_REGEN_SCHEMA_GOLDEN=1 uv run pytest tests/test_llm_schema.py
 
 then read every changed file before committing it.
 """
@@ -226,12 +226,12 @@ def _dump(value: object) -> str:
 def test_golden_dialect_rendering_is_byte_stable(name):
     rendered = _dump(_render()[name])
     path = GOLDEN / name
-    if os.environ.get("KEPLER_REGEN_SCHEMA_GOLDEN"):
+    if os.environ.get("MARS_REGEN_SCHEMA_GOLDEN"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
         pytest.skip(f"regenerated {name}")
     assert path.read_text(encoding="utf-8") == rendered, (
         f"{name} is stale. Regenerate with "
-        "KEPLER_REGEN_SCHEMA_GOLDEN=1 uv run pytest tests/test_llm_schema.py "
+        "MARS_REGEN_SCHEMA_GOLDEN=1 uv run pytest tests/test_llm_schema.py "
         "and review the diff in every dialect."
     )

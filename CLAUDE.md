@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-Kepler is a **staging area for extracted astronomy algorithms**, not yet a coherent
+MARS (MCP Astronomy Research Suite) is a **staging area for extracted astronomy algorithms**, not yet a coherent
 package. It holds four things:
 
 1. `tools/` — plain Python tool wrappers, split database/archive tools, the
-   optional agent loop and the `kepler` console over it, and shared
+   optional agent loop and the `mars` console over it, and shared
    tool-facing models.
 2. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
    `fieldcal/`, `catalogs/`, `query/`) plus the shared `skylib_lite/` subset
@@ -21,7 +21,7 @@ code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
 `docs/tool-architecture.md` describe the current architecture.
 
 Using the tools, as opposed to working on this repository, is taught by the agent
-skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`:
+skill in `skills/mars-tools/`, rendered from its one source in `tools/skill/source/`:
 edit the source, then run `uv run python -m tools.skill`.
 
 ## The extraction contract (most important thing to know)
@@ -86,7 +86,7 @@ exist.
 The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
 parity against recorded Skynet output and pins known bugs rather than fixing them. See
 `tests/README.md`. Nothing in it opens a socket unless marked `network`, which also
-requires `KEPLER_TEST_NETWORK=1`.
+requires `MARS_TEST_NETWORK=1`.
 
 There is **no linter or formatter configured**. Match the surrounding file's style.
 
@@ -201,7 +201,7 @@ query, and passing it `catalog_fixture=` (or `catalog_sources=` from
 **together with the recorded VSX rows** -- the recorded selection filtered
 variables out before matching, and does not reproduce without them.
 
-One public tool call is Kepler's execution boundary: no run, stage, or session
+One public tool call is MARS's execution boundary: no run, stage, or session
 state is retained between calls, and no tool writes state another tool reads.
 
 ### The agent loop and the model port
@@ -211,7 +211,7 @@ state is retained between calls, and no tool writes state another tool reads.
 the twelve event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved
 verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
 `tools/tui/` is the console over it, and the repository's only model-driven
-entry point: `kepler`. The `tools/runner.py` shim and its
+entry point: `mars`. The `tools/runner.py` shim and its
 `kepler-astro-query` script were deleted once the console replaced them.
 
 `run_session()` also takes three optional callables for an interactive caller,
@@ -251,7 +251,7 @@ the four adapters. Its rules:
 `tools/bench/` owns the model benchmark harness and nothing else: the tool
 plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
 (`tasks.py`), the run loop (`harness.py`), the four graders, the report, and
-the `kepler-bench` CLI. Its rules:
+the `mars-bench` CLI. Its rules:
 
 - **It owns no tool and adds nothing to the tool surface.** It reads
   `tools/registry.py`'s schemas and substitutes `run_session`'s
@@ -274,7 +274,7 @@ the `kepler-bench` CLI. Its rules:
 - Zero new dependencies; nothing here opens a socket under a plain
   `uv run pytest`, and that is a test (B2), not a convention.
 
-`tools/mcp/` owns the MCP server (`kepler-mcp`) and nothing else: a fourth
+`tools/mcp/` owns the MCP server (`mars-mcp`) and nothing else: a fourth
 consumer of the registry, served over stdio to a coding agent's console on a
 machine with no checkout. Its rules:
 
@@ -301,32 +301,32 @@ machine with no checkout. Its rules:
   a schema whose `properties` is declared empty takes no arguments, whatever
   the function's signature accepts.
 - **`.env` is loaded first.** `tools/dotenv.py` resolves nothing at import;
-  `kepler-mcp` (every subcommand, `fetch-data` and `self-test` included)
+  `mars-mcp` (every subcommand, `fetch-data` and `self-test` included)
   loads `.env` before pinning roots or importing `tools.config`,
-  whose settings are fixed at import, and so does the `kepler` console
+  whose settings are fixed at import, and so does the `mars` console
   (`tools.tui:launch`). `tools.config` re-exports the loader.
 - **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
   worst case, tested). Claude Code truncates a server's instructions at
-  about 2,000. Everything longer is a `kepler://skill/...` resource.
+  about 2,000. Everything longer is a `mars://skill/...` resource.
 - **The skill has one source**, `tools/skill/source/`. Edit it and run
-  `uv run python -m tools.skill`; `skills/kepler-tools/` is generated.
+  `uv run python -m tools.skill`; `skills/mars-tools/` is generated.
 
-**Bundled data and the Kepler home.** Tools read bundled fixtures only through
+**Bundled data and the MARS home.** Tools read bundled fixtures only through
 `config.BUNDLED_DATA_DIR`, which is `tools/_data`: a committed symlink to
 `data/` in a checkout (or, in a clone made without symlink support, where the
 link arrives as a text file, the checkout's `data/` directly), and in a wheel
 the core data (`pulsar/`, `fieldcal/`, `afterglow/`, `variable_star/`) that
 package-data ships. Never add a path of the form
 `Path(__file__).parents[1] / "data"`: under a wheel it names a directory that
-does not exist. An installed Kepler writes only under the per-user Kepler
-home (`tools/paths.py`; `KEPLER_HOME`):
+does not exist. An installed MARS writes only under the per-user MARS
+home (`tools/paths.py`; `MARS_HOME`):
 
 - `artifacts/`, the default for the MCP server and an installed console;
 - `fits_downloads/`;
 - `numba-cache/`, numba's compiled-function cache (`NUMBA_CACHE_DIR`,
   set by both entry points on an install);
 - `bundles/<name>/`, the optional `optical` and `isochrones` bundles that
-  `kepler-mcp fetch-data` installs, pinned by size and SHA-256 in
+  `mars-mcp fetch-data` installs, pinned by size and SHA-256 in
   `tools/mcp/bundles.json`.
 
 A changed bundle is a new, content-addressed asset on the standing `data`
@@ -364,9 +364,9 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   their own configuration assign `query.config.settings`. Note that enabling the
   cache snaps query regions to a fixed grid, which is observable near a field
   edge (`docs/extraction.md`, Query §5.1).
-- `tools/config.py` — `KEPLER_DATA_DIR` (default `<repo>/data`) is the data
+- `tools/config.py` — `MARS_DATA_DIR` (default `<repo>/data`) is the data
   root: the fixture frames, the recorded reference solves, and the archive
-  download root `KEPLER_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
+  download root `MARS_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
   that `tools/mast.py` and `tools/casda.py` write into.
 
   It is also a **boundary**. `tools/optical.py` walks the download root
@@ -375,11 +375,11 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   resolves *inside* the data root; outside it the directory is searched flat
   and the listing carries a `download_root_outside_data_dir` warning.
   Containment is decided on the resolved path, so a symlink out of the tree
-  does not buy a walk of wherever it lands. Overriding `KEPLER_DATA_DIR` moves
+  does not buy a walk of wherever it lands. Overriding `MARS_DATA_DIR` moves
   the download root and the boundary, not the bundled frame library — that has
-  its own override, `KEPLER_OPTICAL_DATA_DIR`.
+  its own override, `MARS_OPTICAL_DATA_DIR`.
 
-  `KEPLER_MAX_FRAMES` (default 200, must be ≥ 1) bounds how many frames one
+  `MARS_MAX_FRAMES` (default 200, must be ≥ 1) bounds how many frames one
   `list_optical_frames` call reads headers for and returns **per root**; over
   the cap the listing carries a `listing_truncated` warning naming the total.
   Per root, not overall, because roots are ordered primary-first and an
@@ -394,7 +394,7 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   data (`tools/_data`, a symlink to `data/` in a checkout), reading no
   setting — so a downloaded product under `data/fits_downloads/` stays
   writable and no environment variable can switch the guard off. It also
-  covers fetched data bundles (`<kepler home>/bundles/`). A new fixture
+  covers fetched data bundles (`<mars home>/bundles/`). A new fixture
   subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the tuple
   matches the directories present. An installed wheel re-anchors the data
   and download roots; see `docs/installing.md`.
@@ -456,8 +456,8 @@ provenance and parity details.
   would ignore every fixture. The untracked part is `data/fits_downloads/`,
   matched by the depth-independent `fits_downloads/` pattern.
 - ADS-backed tools require `ADS_DEV_KEY`; the optional agent loop — the
-  `kepler` console and `tools/agent/` under it — requires a model backend.
-  `ANTHROPIC_API_KEY` by default, or `KEPLER_MODEL_BACKEND=provider/model`
+  `mars` console and `tools/agent/` under it — requires a model backend.
+  `ANTHROPIC_API_KEY` by default, or `MARS_MODEL_BACKEND=provider/model`
   plus that provider's key, or a local Ollama daemon, which needs none. The
   backend is selectable inside the session with `/backend`, so an unset
   variable is a question of which one it opens on, not whether it runs. Remote

@@ -1,4 +1,4 @@
-"""Kepler: NED historical tables for an object.
+"""MARS: NED historical tables for an object.
 
 NED (NASA/IPAC Extragalactic Database) answers "give me all historical
 measurements of X" more directly than most other sources here:

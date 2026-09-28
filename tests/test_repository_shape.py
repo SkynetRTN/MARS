@@ -29,7 +29,7 @@ RETIRED_TYPESCRIPT_PATHS = (
 
 
 def test_current_python_has_no_optical_run_or_batch_api():
-    """A tool call, not a persisted run, is Kepler's optical execution unit."""
+    """A tool call, not a persisted run, is MARS's optical execution unit."""
     matches = []
     for directory in (ROOT / "algorithms", ROOT / "tools"):
         for path in directory.rglob("*.py"):
@@ -58,7 +58,7 @@ def test_gitignore_does_not_ignore_the_data_fixture_tree():
 
 
 def test_retired_typescript_surface_stays_absent():
-    """Kepler executes the Python ports and has no Node/TypeScript toolchain."""
+    """MARS executes the Python ports and has no Node/TypeScript toolchain."""
     present = [path for path in RETIRED_TYPESCRIPT_PATHS if (ROOT / path).exists()]
 
     assert present == []

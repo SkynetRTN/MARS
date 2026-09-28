@@ -8,7 +8,7 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 
 ## What this suite is for
 
-Kepler's Python folders are **byte-preserving extractions** from Skynet (see
+MARS's Python folders are **byte-preserving extractions** from Skynet (see
 `CLAUDE.md`, "The extraction contract"). So these are not tests of whether the
 algorithms are *right* — that question was settled upstream. They test whether
 the algorithms still do **exactly what they did before the extraction**,
@@ -63,7 +63,7 @@ Three consequences shape everything here:
 - `slow` — runs source extraction or photometry over a real frame. Included by
   default; `-m "not slow"` skips them.
 - `network` — reaches a live catalog service. **Never runs by default.** Needs
-  both `-m network` and `KEPLER_TEST_NETWORK=1`, per CLAUDE.md's rule that
+  both `-m network` and `MARS_TEST_NETWORK=1`, per CLAUDE.md's rule that
   default checks stay deterministic and bounded.
 - `solver_data` — needs astrometry.net index files covering a ~10 arcmin field,
   or a local UCAC4/UCAC5 tree, plus the corresponding environment setting.
@@ -75,7 +75,7 @@ Three consequences shape everything here:
 
 `.github/workflows/ci.yml` runs `uv run --locked pytest` as a required job.
 The default suite remains deterministic: network-marked tests are skipped unless
-`KEPLER_TEST_NETWORK=1` is set explicitly.
+`MARS_TEST_NETWORK=1` is set explicitly.
 
 ## Defects recorded here
 
@@ -107,7 +107,7 @@ changed — which may be the intent, but is never an accident.
 | `catalogs/` + `fieldcal/ref_mag.py` | OCL (Open/Clear/Lum) filters resolve for catalog **selection** but not for **strict** reference-magnitude resolution — the two read different registries, and only `CATALOGS` carries `_OCL_TO_V`. Unfiltered frames still calibrate against V, but by the non-legacy preferred-band fallback rather than the declared mapping. `strict_filter_parity=True` calibrates nothing for them. The recorded OCL policy (`ocl_filter_report.json`) is a three-way V/r'/R trial the fixed fallback cannot express. | `test_query_selection.py` |
 | `wcs/header_utils.py` | `estimate_pixel_scale_arcsec_per_pix` documents a three-step preference order but has steps 1 (WCS) and 3 (optics) **commented out** upstream. Only direct keywords are consulted, so a header with a good CD matrix and no `SECPIX` returns `None`. | `test_wcs_headers.py` |
 | `query/geometry.py` | The `ra_max >= ra_min + 24` "whole sky" branch is **unreachable**: `arcsin` caps at 90°, so the RA half-width never exceeds 6 h and the span never reaches 24. Beyond that point the NaN path above takes over. | `test_query_geometry.py` |
-| `query/geometry.py` | `combined_bounding_box` is a working function that upstream guarded off with `if False:`; nothing in Kepler calls it. Kept as code because the reason it was disabled was never recorded. | `test_query_geometry.py` |
+| `query/geometry.py` | `combined_bounding_box` is a working function that upstream guarded off with `if False:`; nothing in MARS calls it. Kept as code because the reason it was disabled was never recorded. | `test_query_geometry.py` |
 | `query/geometry.py` | Two footprint implementations disagree by design: `boxes_from_wcs` projects corners and tracks rotation; `image_boxes_from_wcs` multiplies pixel scale by axis length and is **blind to rotation**. 2.6% apart on a 1.6° frame, and growing with angle. | `test_query_geometry.py` |
 | `catalogs/vsx_catalog.py` | VSX declares all 35 of its bands as the empty **string** `''`, where every other catalog uses a list of column names. Both are falsy so readers keying on `set(catalog.mags)` are unaffected — but anything indexing the value breaks, and `_filter_variable_stars` swallows exceptions, so it would silently disable variable-star rejection. | `test_catalogs_registries.py` |
 | `catalogs/catalog_options.py` | `_MutatingCatalog` merges `filter_lookup` into the **class** dict, where `catalogs.catalog.Catalog` rebinds an instance copy. Preserved as an upstream difference; safe only because both classes are private and instantiated once. | `test_catalogs_registries.py` |

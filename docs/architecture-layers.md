@@ -1,9 +1,9 @@
-# Kepler's Layers: Tools, Turn-Taking, and the Harness
+# MARS's Layers: Tools, Turn-Taking, and the Harness
 
 Date: 2026-09-25
 Status: current-state reference
 
-Three separable things in this repository get called by the same words. This
+Three separable things in MARS (MCP Astronomy Research Suite) get called by the same words. This
 document draws the difference, because the distinction decides where a change
 belongs: a new astronomy capability, a change to how a turn is taken, and a
 change to how a run is governed are three different PRs touching three
@@ -86,7 +86,7 @@ normal values, normalise and validate locally, call an algorithm package
 rather than reimplementing astronomy, and return a small Pydantic model plus
 warnings, errors and artifact paths.
 
-> **One public tool call is Kepler's execution boundary.** No run, stage,
+> **One public tool call is MARS's execution boundary.** No run, stage,
 > session or batch object spans two calls; no tool writes state another tool
 > reads.
 
@@ -131,7 +131,7 @@ The definition the code supports is not "the thing that takes turns":
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture/fig-5-gates-dark.svg">
-  <img src="assets/architecture/fig-5-gates-light.svg" alt="A plain turn-taking wrapper beside Kepler's loop, which has seven gates on the wires between the same four steps." width="880">
+  <img src="assets/architecture/fig-5-gates-light.svg" alt="A plain turn-taking wrapper beside MARS's loop, which has seven gates on the wires between the same four steps." width="880">
 </picture>
 
 Same four steps; seven gates on the wires between them. Each exists because of
@@ -180,7 +180,7 @@ modify it. See `tool-architecture.md` §10.2 for the console and
 The tools decide what is *possible*, turn-taking decides what happens *next*,
 and the harness decides what is *permitted, recorded and believed*.
 
-**So: is Kepler a harness?** No — it contains two. Kepler is an astronomy
+**So: is MARS a harness?** No — it contains two. MARS is an astronomy
 capability library that ships a console and a benchmark over it. The
 turn-taking genuinely is a thin wrapper, deliberately so, and it is also not
 where the engineering is: delete `tools/agent/`, `tools/llm/`, `tools/tui/`
@@ -190,7 +190,7 @@ two harnesses share the loop verbatim and differ only in three arguments. If
 turn-taking were the harness, that substitution would be impossible.
 
 This is the reading the code supports where the prose disagrees with itself:
-`README.md` calls Kepler "an agentic, tool-enabled system", while
+`README.md` calls MARS "an agentic, tool-enabled system", while
 `tool-architecture.md` §9 lists "No orchestration framework" as a non-goal.
 Both are true of different layers.
 

@@ -1,4 +1,4 @@
-"""Session-browser and resume-history behavior for the Kepler TUI."""
+"""Session-browser and resume-history behavior for the MARS TUI."""
 
 from __future__ import annotations
 
@@ -252,7 +252,7 @@ def test_session_browser_lists_manifest_metadata_and_selects_the_session(
 ):
     """The browser must identify a session before returning its manifest path."""
 
-    from tools.tui.app import KeplerApp
+    from tools.tui.app import MARSApp
     from tools.tui.widgets import sessions as session_widgets
 
     path = tmp_path / "session_manifest.json"
@@ -269,7 +269,7 @@ def test_session_browser_lists_manifest_metadata_and_selects_the_session(
     monkeypatch.setattr(session_widgets, "describe_session", lambda path: manifest)
 
     async def scenario() -> None:
-        app = KeplerApp(backend=object())
+        app = MARSApp(backend=object())
         browser = session_widgets.SessionBrowser()
         selected: list[Path | None] = []
         async with app.run_test() as pilot:

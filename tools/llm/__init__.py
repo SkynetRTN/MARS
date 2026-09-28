@@ -1,4 +1,4 @@
-"""Kepler's provider-neutral model port.
+"""MARS's provider-neutral model port.
 
 Two rules govern the design:
 

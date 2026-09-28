@@ -1,4 +1,4 @@
-"""Reusable FITS photometry and plotting pipeline for Kepler tools.
+"""Reusable FITS photometry and plotting pipeline for MARS tools.
 
 The registered ``tools.photometry`` wrapper imports this module to resolve
 local FITS targets, extract sources, compute photometry, select a zero point,
@@ -184,7 +184,7 @@ def list_bundled_targets() -> dict[str, list[str]]:
     parse, so the CLI and the registered tools cannot drift apart. This is an
     index of filenames, not a header listing: it goes through
     ``bundled_frame_paths`` rather than ``list_optical_frames`` so it reads no
-    headers and is never subject to ``KEPLER_MAX_FRAMES`` -- an index that
+    headers and is never subject to ``MARS_MAX_FRAMES`` -- an index that
     advertises itself as the complete fixed set must not silently truncate.
 
     Scoped to the primary root on purpose. ``list_photometry_targets`` tells

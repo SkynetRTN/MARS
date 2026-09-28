@@ -1,4 +1,4 @@
-"""Kepler: CASDA (CSIRO ASKAP Science Data Archive) search.
+"""MARS: CASDA (CSIRO ASKAP Science Data Archive) search.
 
 CASDA serves ASKAP continuum images, spectral-line/polarization cubes,
 source catalogues, spectra, and visibilities -- a radio archive distinct
@@ -44,7 +44,7 @@ def _opal_password_stored(username: str) -> bool:
     """Whether ``casda.login`` will find a password without prompting.
 
     astroquery prompts with ``getpass`` when the keyring has no password.
-    Under ``kepler-mcp`` there is no terminal -- stdin is the protocol
+    Under ``mars-mcp`` there is no terminal -- stdin is the protocol
     stream -- so the prompt either fails or blocks the server, holding the
     lock every other call waits on. The username check alone did not prevent
     that. A keyring that cannot be read counts as holding nothing.
@@ -164,7 +164,7 @@ def search_casda(
         casda.login(username=CASDA_OPAL_USERNAME)
         url_list = casda.stage_data(table)
         # The literal "fits_downloads" this used to pass ignored
-        # KEPLER_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
+        # MARS_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
         # one directory and a frame registry searching another. Same directory
         # as tools.mast now, which is the one tools.optical searches.
         # Read through the module for the same reason tools.mast does.

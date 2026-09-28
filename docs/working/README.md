@@ -14,7 +14,7 @@ writes the code.
 
 | Track | Document | Status |
 | --- | --- | --- |
-| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Proposal, 2026-09-25. All decisions made; the distribution and repository are `skynet-mars` (renamed). `mcp-support` has merged; no phase started; R4 waits for the logo files. |
+| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | In progress on `mars-rebrand`. All decisions made; the distribution and repository are `skynet-mars` (renamed). R1–R4 done 2026-09-27 (identity; environment and paths; code and prose, with the guard; documentation and logo); R5 (release) next; logo files in `brand/`. |
 
 **Renaming Kepler to MARS** (MCP Astronomy Research Suite): the distribution
 becomes `skynet-mars`, the commands `mars`, `mars-mcp` and `mars-bench`, and

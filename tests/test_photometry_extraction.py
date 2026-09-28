@@ -73,7 +73,7 @@ def test_detection_count_is_stable_for_a_given_frame(frame_image, frame, expecte
 def test_extraction_is_deterministic(frame_image):
     """Same input, same output — down to the last float.
 
-    Nothing in the path is stochastic, but SEP works on a buffer Kepler
+    Nothing in the path is stochastic, but SEP works on a buffer MARS
     prepares, so a bug that left the buffer partly modified would show up as run
     to run drift rather than as an error.
     """
@@ -389,7 +389,7 @@ def test_orphan_sip_coefficients_are_dropped(frame_header_copy):
     """SIP without a ``-SIP`` CTYPE is inconsistent; apply it and positions shift.
 
     Some upstream reductions leave ``A_*``/``B_*`` behind after rewriting CTYPE.
-    astropy would apply them anyway (with a warning). Kepler drops them, because
+    astropy would apply them anyway (with a warning). MARS drops them, because
     it builds header WCS objects only for linear pixel<->sky conversion.
     """
     header = frame_header_copy("ngc3628")
@@ -541,7 +541,7 @@ def test_source_radec_returns_hours_wrapped_into_zero_to_24(frame_header):
 # ---------------------------------------------------------------------------
 
 def test_sigma_to_fwhm_constant():
-    """``2*sqrt(2*ln 2)``. SEP reports Gaussian sigma; Kepler reports FWHM."""
+    """``2*sqrt(2*ln 2)``. SEP reports Gaussian sigma; MARS reports FWHM."""
     assert SIGMA_TO_FWHM == pytest.approx(2.3548200450309493, abs=1e-12)
     assert SIGMA_TO_FWHM == pytest.approx(2 * math.sqrt(2 * math.log(2)), abs=0)
 

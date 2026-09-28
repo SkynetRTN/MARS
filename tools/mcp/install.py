@@ -134,7 +134,7 @@ def install_facts(
             f"- Artifacts are local files under {root}; read them directly.",
             f"- Pulsar scans {_mark(pulsar, 'MISSING')}; zero-point "
             f"references {_mark(references, 'MISSING')}; optical frame library "
-            f"{_mark(frames, 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
+            f"{_mark(frames, 'absent (mars-mcp fetch-data optical)')}; isochrone grid "
             f"{_mark(isochrones, 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
             f"solving {solving}.",
             "- Keys are the user's own, from this server's environment. An ADS token "

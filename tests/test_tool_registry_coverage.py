@@ -35,16 +35,22 @@ NOT_TOOL_MODULES = {
     # to the tool surface. pkgutil.iter_modules yields it as a package.
     "tools.bench",
     # The agent skill's single source and its renderer: Markdown plus the code
-    # that renders skills/kepler-tools/ from it. Guidance, not a tool.
+    # that renders skills/mars-tools/ from it. Guidance, not a tool.
     "tools.skill",
     # The MCP server: a fourth consumer of the registry, serving it over stdio.
     # It reads TOOL_SCHEMAS/TOOL_FUNCTIONS and owns no tool of its own.
     "tools.mcp",
-    # Where bundled data and the per-user Kepler home are. Paths, no tool.
+    # Where bundled data and the per-user MARS home are. Paths, no tool.
     "tools.paths",
     # The .env loader, kept apart from tools.config so an entry point can load
     # .env before any setting is fixed at import. Re-exported by tools.config.
     "tools.dotenv",
+    # The deprecated kepler, kepler-mcp and kepler-bench commands, each
+    # forwarding to its MARS name; removed in the release after 0.1.0rc3.
+    "tools.aliases",
+    # KEPLER_* variables and the kepler home, honoured for the same one
+    # pre-release; removed with tools.aliases.
+    "tools.compat",
 }
 
 

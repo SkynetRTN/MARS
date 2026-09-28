@@ -30,7 +30,7 @@ EXTRACTED FROM:
   ``query/geometry.py``; the job/ORM wrapper is not extracted.
 
 SEVERED: upstream's signature led with an SQLAlchemy job row that the function
-never read — it was there for call-site symmetry. Kepler drops that parameter
+never read — it was there for call-site symmetry. MARS drops that parameter
 rather than carry a duck-typed placeholder.
 """
 

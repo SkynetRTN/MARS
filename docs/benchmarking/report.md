@@ -1,5 +1,11 @@
 # Kepler model benchmark
 
+> [!NOTE] Renamed 2026-09-25
+> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
+> carries the new names from `0.1.0rc3`. This record keeps the names in use
+> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
+> plan](../working/mars-rebrand.md).
+
 ## Run `2026-09-14-full-claude-sonnet-5-core` -- suite `core`
 
 - started 2026-09-14T17:37:33.000385+00:00, finished 2026-09-14T18:08:30.676458+00:00

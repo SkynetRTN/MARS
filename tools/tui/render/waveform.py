@@ -13,12 +13,14 @@ from pathlib import Path
 
 from rich.text import Text
 
+from tools.tui.theme import MIST_BLUE
+
 __all__ = ["render_waveform"]
 
 _BRAILLE_DOTS = ((0x01, 0x02, 0x04, 0x40), (0x08, 0x10, 0x20, 0x80))
 
 
-def render_waveform(path: str | Path, *, width: int = 60) -> Text:
+def render_waveform(path: str | Path, *, width: int = 60, color: str = MIST_BLUE) -> Text:
     """Render PCM WAV amplitudes in ``width`` two-by-four braille cells.
 
     Only the frames it draws are read. The preview picks evenly spaced frames
@@ -27,6 +29,9 @@ def render_waveform(path: str | Path, *, width: int = 60) -> Text:
     example alone cost 0.75 s and ~300 MB of Python floats that way -- on the
     UI thread, where that is a frozen console. The chosen frames are the same
     frames either way.
+
+    ``color`` is the glyphs' colour; the console passes one that suits its
+    active theme (:func:`tools.tui.theme.waveform_color`).
     """
 
     if width < 1:
@@ -53,7 +58,7 @@ def render_waveform(path: str | Path, *, width: int = 60) -> Text:
         dots = _BRAILLE_DOTS[0][_amplitude_row(points[index])]
         dots |= _BRAILLE_DOTS[1][_amplitude_row(points[index + 1])]
         glyphs.append(chr(0x2800 + dots))
-    return Text("".join(glyphs), style="cyan")
+    return Text("".join(glyphs), style=color)
 
 
 def _decode_pcm(raw: bytes, sample_width: int) -> list[float]:

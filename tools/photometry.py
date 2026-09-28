@@ -359,7 +359,7 @@ def calibrate_zeropoint(
     scale (``ZeropointReference.instrumental_zero_mag``, 20.0 for the three
     NGC 5286 B solves and 0.0 for ``ngc5128_b_002``) before the comparison, so
     ``delta_vs_skynet`` means the same thing for every field. The returned
-    ``zero_point`` is the value as measured, on Kepler's own scale.
+    ``zero_point`` is the value as measured, on MARS's own scale.
     """
     # Argument errors first, before the filesystem is touched.
     warnings: list = []
@@ -532,7 +532,7 @@ def calibrate_zeropoint(
     zero_point = float(zero_point)
 
     if compare_to is not None:
-        # The solve above measures on Kepler's own instrumental scale, whose
+        # The solve above measures on MARS's own instrumental scale, whose
         # zero is 0.0. A recorded run that used a different one is not directly
         # comparable, so put this value on the reference's scale first -- for
         # the three NGC 5286 B solves that is a clean 20 magnitudes, which is

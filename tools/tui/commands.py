@@ -1,4 +1,4 @@
-"""Declarative slash commands for the Kepler console.
+"""Declarative slash commands for the MARS console.
 
 This module deliberately contains no Textual imports. Parsing and resolution
 are reusable by the UI and directly testable without a terminal event loop.

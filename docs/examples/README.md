@@ -90,7 +90,7 @@ ATNF's live `P0` — with no catalogue consulted during the run.
 
 ```bash
 export ANTHROPIC_API_KEY=...          # the loop needs a backend; the tools do not
-uv run kepler                         # then ask, in the console:
+uv run mars                         # then ask, in the console:
 ```
 
 > Sonify pulsar B0329+54, but measure the period from the observation itself

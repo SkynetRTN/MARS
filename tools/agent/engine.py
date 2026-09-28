@@ -1,8 +1,8 @@
-"""``run_session()`` -- Kepler's headless agent loop.
+"""``run_session()`` -- MARS's headless agent loop.
 
 Events flow out as an iterator; a :class:`~tools.agent.approval.Decision` flows
 in through the ``approver`` callable. Keeping the directions separate leaves the
-event stream pure and directly consumable by the Kepler console, a plain
+event stream pure and directly consumable by the MARS console, a plain
 Python caller, and the benchmark harness alike. See
 ``docs/archive/model-backends.md`` section 4.7 and
 ``docs/tool-architecture.md`` section 10.
@@ -494,7 +494,7 @@ def _run_tool_turn(
 def _normalize_result(name: str, value: Any) -> dict[str, Any]:
     """Serialize one tool's return value into the result dict the loop records.
 
-    Almost every registered tool returns a single Kepler model. Three return a
+    Almost every registered tool returns a single MARS model. Three return a
     plain ``list`` of them -- ``list_photometric_catalogs``, ``list_artifacts``
     and ``list_zeropoint_references`` -- and a list has no ``model_dump()``, so
     dispatching any of the three raised ``AttributeError`` mid-turn and ended
@@ -519,7 +519,7 @@ def _normalize_result(name: str, value: Any) -> dict[str, Any]:
         return {"status": "ok", "count": len(items), "results": items}
     raise TypeError(
         f"tool {name!r} returned {type(value).__name__}; a registered tool must "
-        "return a Kepler model or a list of them"
+        "return a MARS model or a list of them"
     )
 
 

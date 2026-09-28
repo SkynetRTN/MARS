@@ -43,13 +43,13 @@ class GridUnavailableError(RuntimeError):
 def _configured_directory() -> Path:
     if config.ISOCHRONE_DIR is None:
         raise GridUnavailableError(
-            "Girardi grid directory is unavailable; set KEPLER_ISOCHRONE_DIR "
+            "Girardi grid directory is unavailable; set MARS_ISOCHRONE_DIR "
             "to an unpacked grid directory"
         )
     directory = config.ISOCHRONE_DIR
     if not directory.is_dir():
         raise GridUnavailableError(
-            "Girardi grid directory is unavailable; set KEPLER_ISOCHRONE_DIR "
+            "Girardi grid directory is unavailable; set MARS_ISOCHRONE_DIR "
             "to an unpacked grid directory"
         )
     return directory

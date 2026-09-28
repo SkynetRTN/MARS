@@ -261,7 +261,7 @@ def test_the_fixture_guard_exempts_the_archive_download_root():
 
 def test_the_fixture_guard_cannot_be_disabled_by_the_download_root_setting(monkeypatch):
     """Code review of the first draft: exempting whatever FITS_DOWNLOAD_DIR
-    named meant KEPLER_FITS_DOWNLOAD_DIR=<repo>/data switched the guard off for
+    named meant MARS_FITS_DOWNLOAD_DIR=<repo>/data switched the guard off for
     every fixture. The guard names the fixture subtrees and reads no setting.
     """
     from tools import config
@@ -289,7 +289,7 @@ def test_the_fixture_subtrees_match_the_directories_actually_present():
 
 
 def test_the_fixture_guard_does_not_travel_with_the_data_dir_setting(monkeypatch):
-    """KEPLER_DATA_DIR points at where downloads land and how far a search may
+    """MARS_DATA_DIR points at where downloads land and how far a search may
     walk. Pointing it at an operator's own archive does not make that archive a
     tree of fixtures, nor make this repository's frames writable.
     """

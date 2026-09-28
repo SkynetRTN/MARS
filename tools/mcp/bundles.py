@@ -1,4 +1,4 @@
-"""Optional data bundles: build them, and fetch them onto an installed Kepler (C7).
+"""Optional data bundles: build them, and fetch them onto an installed MARS (C7).
 
 A wheel ships the core data -- the five pulsar scans, the field-calibration
 references, the Afterglow parity fixtures -- and nothing else
@@ -11,7 +11,7 @@ and are published separately, as GitHub release assets (C8):
 
 **The manifest pins the bytes.** ``bundles.json`` beside this module records,
 for each bundle, the archive's name, size and SHA-256, and it ships inside the
-wheel. An installed Kepler accepts only the archive its own manifest names, so
+wheel. An installed MARS accepts only the archive its own manifest names, so
 a wheel cannot silently fetch a bundle built for a different release -- the
 silent-wrong-answer failure C8 warns about.
 
@@ -21,11 +21,11 @@ checksum anywhere. Not gzipped: compressed output can differ between zlib
 versions, which would make the checksum irreproducible, and FITS barely
 compresses.
 
-**Fetching** (``kepler-mcp fetch-data``) downloads into
-``<kepler home>/bundles/.downloads/``, resuming a partial download with an HTTP
+**Fetching** (``mars-mcp fetch-data``) downloads into
+``<mars home>/bundles/.downloads/``, resuming a partial download with an HTTP
 Range request; checks size and SHA-256; extracts through tarfile's ``data``
 filter (no absolute paths, no ``..``, no links out of the tree) into a staging
-directory; and swaps that into ``<kepler home>/bundles/<name>/``, writing the
+directory; and swaps that into ``<mars home>/bundles/<name>/``, writing the
 completion marker last. ``tools.config.fetched_bundle`` reads a bundle only
 once that marker exists. A second fetch of a verified bundle does nothing.
 Nothing is ever written into the installed package.
@@ -75,7 +75,13 @@ RELEASE_DOWNLOADS = "https://github.com/archon774/skynet-mars/releases/download"
 
 #: Overrides where bundles are fetched from: a URL prefix, or a local directory
 #: holding the archives (for testing, and for an offline mirror).
-BUNDLE_URL_ENV = "KEPLER_BUNDLE_URL"
+BUNDLE_URL_ENV = "MARS_BUNDLE_URL"
+
+#: Every bundle archive's name begins with this. Kept from before the MARS
+#: rename: an archive's name is part of its content-addressed identity
+#: (``docs/releasing.md``), the published assets carry it, and ``--check``
+#: compares the name too, so a new prefix would fail every unchanged bundle.
+ARCHIVE_PREFIX = "kepler-"
 
 MANIFEST_PATH = Path(__file__).parent / "bundles.json"
 
@@ -372,7 +378,7 @@ def _install_locked(
         part.unlink()
         raise BundleError(
             f"{spec.archive} failed verification (size {size:,}, sha256 {digest}); "
-            f"this Kepler expects size {spec.size:,}, sha256 {spec.sha256}. The "
+            f"this MARS expects size {spec.size:,}, sha256 {spec.sha256}. The "
             "download was discarded."
         )
 
@@ -444,7 +450,7 @@ def _checkout_note(name: str, target: Path) -> str:
     if name == "isochrones":
         return (
             "This is a checkout, which never reads a fetched grid on its own: set "
-            f"KEPLER_ISOCHRONE_DIR={target} to fit against this one."
+            f"MARS_ISOCHRONE_DIR={target} to fit against this one."
         )
     if (config.BUNDLED_DATA_DIR / name).is_dir():
         return f"This is a checkout: it reads its own data/{name}, not this fetched copy."
@@ -452,13 +458,13 @@ def _checkout_note(name: str, target: Path) -> str:
 
 
 def fetch_main(argv: Iterable[str] | None = None) -> int:
-    """``kepler-mcp fetch-data``: install optional data bundles."""
+    """``mars-mcp fetch-data``: install optional data bundles."""
 
     manifest = load_manifest()
     parser = argparse.ArgumentParser(
-        prog="kepler-mcp fetch-data",
+        prog="mars-mcp fetch-data",
         description=(
-            "Fetch Kepler's optional data bundles into "
+            "Fetch MARS's optional data bundles into "
             f"{config.BUNDLES_DIR}. Checksum-verified against this install's "
             "manifest, resumable, and a no-op for a bundle already installed."
         ),
@@ -506,7 +512,7 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             print(f"  {_checkout_note(name, target)}")
     if status == 0:
         print(
-            "Restart any running kepler-mcp to use newly fetched bundles: the "
+            "Restart any running mars-mcp to use newly fetched bundles: the "
             "server reads its data locations when it starts."
         )
     return status
@@ -536,11 +542,11 @@ def build_main(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    building = args.out / f"kepler-{args.name}.tar.building"
+    building = args.out / f"{ARCHIVE_PREFIX}{args.name}.tar.building"
     size, digest, files = build_archive(args.source, building, args.include)
     # Content-addressed name: a release asset for one set of bytes never
     # changes, and two builds of the same tree name the same file.
-    archive = building.with_name(f"kepler-{args.name}-{digest[:12]}.tar")
+    archive = building.with_name(f"{ARCHIVE_PREFIX}{args.name}-{digest[:12]}.tar")
     building.replace(archive)
     entry = {
         "archive": archive.name,

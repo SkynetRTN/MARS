@@ -43,7 +43,7 @@ _AUDIO_SUFFIXES = {".aiff", ".flac", ".mp3", ".ogg", ".wav"}
 _TEXT_SUFFIXES = {".json", ".log", ".md", ".txt", ".yaml", ".yml"}
 _WRITE_SUFFIXES = {"ecsv": ".ecsv", "csv": ".csv", "fits": ".fits"}
 _ACTIVE_ARTIFACT_SUBDIR: ContextVar[str | None] = ContextVar(
-    "kepler_active_artifact_subdir", default=None
+    "mars_active_artifact_subdir", default=None
 )
 
 

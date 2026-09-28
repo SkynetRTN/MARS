@@ -1,4 +1,4 @@
-# Benchmarking Models on the Kepler Tool Surface
+# Benchmarking Models on the MARS Tool Surface
 
 > [!NOTE] Archived 2026-09-18
 > This track is complete and this document is a record, not a plan. Every
@@ -60,7 +60,7 @@ index. This document is the architecture and the implementation plan. Where
 the two disagree, the divergences are enumerated in section 15 with reasons —
 they are not silent.
 
-Kepler owns four model backends, 55 registered tools over 21 modules, a
+MARS (MCP Astronomy Research Suite) owns four model backends, 55 registered tools over 21 modules, a
 headless agent loop, a persisted tool-call manifest, and a system prompt that
 is already a written record of how models fail on this surface. What it does
 not own is any way to answer the question the port was built for: **on this
@@ -114,10 +114,10 @@ Three rules govern the design. The first two are inherited:
 The third is this document's, and it is the one that makes the harness worth
 building rather than merely possible:
 
-> **Replay only what is remote.** Kepler's local pipelines run for real.
+> **Replay only what is remote.** MARS's local pipelines run for real.
 
 The model is under test. The astronomy *services* are not, so they are
-recorded and replayed. But Kepler's own algorithms are not under test either —
+recorded and replayed. But MARS's own algorithms are not under test either —
 `tests/` already pins them bit-exact — and replaying them would destroy the
 measurement. Folding a pulsar light curve at a wrong period returns a *flat
 profile, not an error* (`docs/pulsar-tool-pipeline.md`). That silent failure is
@@ -203,7 +203,7 @@ non-colliding path without writing, which is what S7's "the replay layer
 synthesizes artifact paths itself" needs.
 
 **Nothing else exists.** No `tools/bench/`, no `benchmarks/`, no
-`kepler-bench`, no `ReplayBackend`, no manifest v2.
+`mars-bench`, no `ReplayBackend`, no manifest v2.
 That part is greenfield.
 
 ---
@@ -212,7 +212,7 @@ That part is greenfield.
 
 | Question | Decision |
 | --- | --- |
-| Where do tool results come from? | Recorded fixtures for remote services; **live execution for Kepler's local pipelines** (section 3). |
+| Where do tool results come from? | Recorded fixtures for remote services; **live execution for MARS's local pipelines** (section 3). |
 | Does the harness change the engine? | No. It substitutes `tool_functions=` and reads the manifest. One additive manifest change in 4a. |
 | Is grading coupled to running? | **No.** `run` and `grade` are separate verbs over a run directory, so a grader fix re-grades a past run for free. |
 | What is graded? | Four independent axes -- two headline (correctness, efficiency), two diagnostic -- reported as a matrix. No blended score by default. |
@@ -254,7 +254,7 @@ checker is enough for these flat schemas.
 
 ## 3. The Tool Surface Under Test
 
-Kepler's 55 registered tools are not one surface. They are three, and the
+MARS's 55 registered tools are not one surface. They are three, and the
 harness treats each differently. This classification is data
 (`tools/bench/plane.py::TOOL_CLASSES`), it is asserted complete against
 `TOOL_FUNCTIONS` by a test (B1), and adding a registry tool without
@@ -328,7 +328,7 @@ source counts).
   `listing_truncated` warning, the `ambiguous` error from
   `resolve_optical_frame` when a field was observed in two bands — all arrive
   from the code that produces them in production.
-- **A regression tripwire for Kepler itself.** A class-L task whose answer key
+- **A regression tripwire for MARS itself.** A class-L task whose answer key
   stops matching is either a model getting worse or a tool changing behaviour;
   the manifest says which.
 
@@ -358,7 +358,7 @@ contract is untouched by this work.
 | `tools/bench/graders/protocol.py` | Fault counts and `null_argument_fidelity`. |
 | `tools/bench/report.py` | Matrix rendering: Markdown and JSON. |
 | `tools/bench/answers.py` | The audit verb's reader: the task's prompt beside the model's reply. Offline; consults no model. |
-| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
+| `tools/bench/cli.py` | `mars-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
 | `tools/bench/sources.py` | Mechanical resolution of an answer key's expected value. No key is ever a hand-typed literal. |
 | `tools/bench/falsify.py` | The adversarial pass over the keys themselves. Consults no model; can only accuse. |
 | `tools/bench/generalize.py` | **Added after this document** (2026-09-14). Would this pass rate hold on a tool-use question nobody has written yet? A Beta-Binomial over the per-task counts, fitted on a deterministic posterior grid, because a binomial interval over sessions cannot represent how much the questions differ from each other. It reports `expected_rate` (the mean over many new questions, which narrows as tasks are added) and `predictive_interval` (where one new question lands, which does not) and keeps them apart on purpose. Read by no verb and no report: it is an analysis module with its own test, not part of the pipeline. |
@@ -390,7 +390,7 @@ testable.
 ```
 suite + fixtures + backend spec
         │
-        │  kepler-bench run           (live model, replayed remote tools,
+        │  mars-bench run           (live model, replayed remote tools,
         ▼                              live local tools)
 artifacts/bench/<run-id>/
     run.json                          every knob, recorded
@@ -400,11 +400,11 @@ artifacts/bench/<run-id>/
         answer.txt                    the final answer, unbounded
         artifacts/                    whatever the tools wrote
         │
-        │  kepler-bench grade         (offline, free, repeatable)
+        │  mars-bench grade         (offline, free, repeatable)
         ▼
     grades.json
         │
-        │  kepler-bench compare
+        │  mars-bench compare
         ▼
     report.md  report.json            the matrix
 ```
@@ -545,7 +545,7 @@ Per `(backend, task, repeat)` the harness writes:
 
 And once per run, **`run.json`**: run id, UTC start/end, backend specs with
 capabilities, suite id and the SHA-256 of every task file, fixture file
-SHA-256s, `KEPLER_*` environment overrides in force, temperature, seed,
+SHA-256s, `MARS_*` environment overrides in force, temperature, seed,
 repeats, `max_turns`, the token budget, the host, the `git rev-parse HEAD` of
 the repository and whether `benchmarks/` was dirty at launch. **A run that cannot state its inputs is not a benchmark** — the
 harness refuses to start if it cannot read the corpus hashes, and stamps
@@ -603,8 +603,8 @@ prompt: >
 # parameter -- a run that reaches it is incomplete, not failed.
 fixtures: [search_simbad, search_ned]   # relative names under the fixture root
 miss_policy: error                      # optional per-task override
-env:                                    # optional; KEPLER_* only (B7)
-  KEPLER_MAX_FRAMES: "5"
+env:                                    # optional; MARS_* only (B7)
+  MARS_MAX_FRAMES: "5"
 enable: []                              # opt-in for blocked tools, e.g. solve_astrometry
 
 expect:
@@ -636,7 +636,7 @@ expect:
 ```
 
 `must_reach_verdict` is the ground-truth key (7.1.3): it reads a boolean a
-Kepler tool computed against recorded truth, so no phrasing can pass or fail
+MARS tool computed against recorded truth, so no phrasing can pass or fail
 it. The four keys after it are the fidelity families of 7.1.4 —
 `must_disclose` for scope inflation, `must_label` for mislabeling,
 `must_state_uncertainty` for omitted uncertainty, `must_source_value` for
@@ -663,8 +663,8 @@ resolves it (`tools/bench/sources.py`):
 Three source kinds, all model-independent: `fixture` (a field of the recorded
 archive response), `dataset` (a field of a repository data file — independent
 ground truth that predates this benchmark, resolved against the repository's
-own `data/` tree rather than `KEPLER_DATA_DIR`), and `tool_result` (the value a
-deterministic Kepler tool returned on the run being graded — the fidelity
+own `data/` tree rather than `MARS_DATA_DIR`), and `tool_result` (the value a
+deterministic MARS tool returned on the run being graded — the fidelity
 case). A literal `expected:` fails to load.
 
 The last kind is not circular: it reads the return value of repository code
@@ -731,8 +731,8 @@ is enforced by the loader.
   segment, or an absolute prefix is rejected before resolution; the resolved
   path is then re-checked for containment under the fixture root with
   `tools.config.within` (S6). Same for `content_ref`.
-- `env:` keys must match `^KEPLER_[A-Z0-9_]+$` (B7). A task can shrink
-  `KEPLER_MAX_FRAMES` to exercise the truncation warning; it cannot set
+- `env:` keys must match `^MARS_[A-Z0-9_]+$` (B7). A task can shrink
+  `MARS_MAX_FRAMES` to exercise the truncation warning; it cannot set
   `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, or `PATH`.
 - `id` must match `^[a-z0-9][a-z0-9_-]{0,63}$` — it becomes an artifact
   subdirectory name, and `scoped_artifacts` will reject anything else anyway.
@@ -767,7 +767,7 @@ the model is held constant:
 | Held constant | Why it matters |
 | --- | --- |
 | The prompt text, verbatim | 9.1 gives all eight core prompts in full; no per-model rewording |
-| `SYSTEM_PROMPT`, unmodified | we are testing *swap the model into Kepler as it ships*, not each model at its best |
+| `SYSTEM_PROMPT`, unmodified | we are testing *swap the model into MARS as it ships*, not each model at its best |
 | The tool registry and its 55 schemas | same world, same affordances |
 | The fixture set and its `miss_policy` | same archive responses, same failures |
 | `max_turns`, temperature 0, seed where available | same budget, same determinism |
@@ -802,7 +802,7 @@ is one where a confident answer is itself the failure.
 
 #### 7.1.3 Ground truth: the repository already knows the answers
 
-Kepler does not need invented answer keys for its local pipelines. It ships
+MARS does not need invented answer keys for its local pipelines. It ships
 recorded truth, and `tests/` already pins against it:
 
 | Source | Holds | Used by |
@@ -812,7 +812,7 @@ recorded truth, and `tests/` already pins against it:
 | `data/afterglow/afterglow_web_values_*.csv` | Afterglow's own zero point per bundled frame (`carina_nebula_v_000` 21.021 ± 0.013, …) | cross-implementation checks |
 | `data/frame_provenance.json` | what each of the 42 frames actually is | frame-identity checks |
 
-**And Kepler ships tools that grade against that truth.**
+**And MARS ships tools that grade against that truth.**
 `compare_zeropoint_to_reference` returns `within_tolerance`, `delta_vs_skynet`
 and the `tolerance_mag` it used; `replay_field_calibration` returns
 `selection_matches_recorded`. So for these tasks the answer key is not a regex
@@ -865,14 +865,14 @@ attributed it by name to Trotter et al. 2017, whose abstract actually says
 "0.670 ± 0.019%/yr" averaged over six decades and explicitly non-constant. The
 figure came from training data and was presented as a pipeline result.
 
-**Scope inflation** has the most surface area, because almost every Kepler tool
+**Scope inflation** has the most surface area, because almost every MARS tool
 bounds something and says so: `search_vizier`'s `max_catalogs`, `search_mast`'s
 `max_observations`, `list_optical_frames`' `listing_truncated`,
 `plot_field_sed`'s 60-arcminute default radius cap, `identify_radio_sources`
 skipping uncatalogued sources into `warnings`, and every tool's ten-row
 `preview` beside a full-size artifact.
 
-**Mislabeling** is the subtlest and the most Kepler-specific. `source_count`
+**Mislabeling** is the subtlest and the most MARS-specific. `source_count`
 means "sources for which a photometric measurement was obtained," never "valid"
 or "good" sources. `zero_point_error_mag` is the solve's own formal scatter,
 not an accuracy figure for the resulting magnitudes. `spectral_index` follows
@@ -888,7 +888,7 @@ reaching the answer by a different valid route.
 
 #### 7.1.5 Correct negatives: when a confident answer is the failure
 
-Kepler's documented limits make a distinct task family, and it is the one most
+MARS's documented limits make a distinct task family, and it is the one most
 benchmarks skip:
 
 | Situation | The right answer |
@@ -1037,7 +1037,7 @@ entirely `must_not_match` — "do not say the object is missing from the
 catalogue" — scores a silent session as **correct**. That is not hypothetical:
 a live sweep recorded `qwen3.5:9b` as 3/3 on `atnf-formal-designation` on
 exactly this, in all three repeats. It was found by reading the answers
-(`kepler-bench answers`, section 11), which is the argument for that verb
+(`mars-bench answers`, section 11), which is the argument for that verb
 existing.
 
 #### 7.1.9 Calibrating the corpus before trusting it
@@ -1212,7 +1212,7 @@ The deeper problem is what an advisory column does to the incentive. Five
 checks in this suite were firing on correct answers; a second opinion sitting
 beside them makes that survivable instead of urgent. **An extra diagnostic
 layer over a broken check leaves the check broken.** Every one of the five was
-found by reading the prose (`kepler-bench answers`, section 11) and fixed where
+found by reading the prose (`mars-bench answers`, section 11) and fixed where
 it was — see 7.1.7, whose last three constraints exist because of that pass.
 
 So the rule is now unconditional: **every verdict in this harness is a
@@ -1458,7 +1458,7 @@ limit, and a confident one is the failure.
 | id | Prompt | What it discriminates |
 | --- | --- | --- |
 | `optical-ambiguous-band` | "Describe the pointing of the M31 frame." | `data/optical/` holds `m31_galaxy_r_000.fits` and `m31_galaxy_v_000.fits`, so `resolve_optical_frame` returns `ambiguous`; the answer must surface it and pick a band explicitly or ask — never guess |
-| `optical-listing-truncated` | "What optical frames are available here?" with `env: {KEPLER_MAX_FRAMES: "5"}` | the listing carries `listing_truncated`; `must_disclose` on that warning, and the answer must not present five frames as the whole library |
+| `optical-listing-truncated` | "What optical frames are available here?" with `env: {MARS_MAX_FRAMES: "5"}` | the listing carries `listing_truncated`; `must_disclose` on that warning, and the answer must not present five frames as the whole library |
 
 The offline-zeropoint schema probe that used to sit here moved to the
 `fieldcal` suite (9.2), where it is graded against the recorded solve instead
@@ -1492,7 +1492,7 @@ a named test, not advice.
 | **B4** | Every run states its inputs | `harness.py` | `run.json` carries every knob; `corpus_dirty` is surfaced, never suppressed |
 | **B5** | The token budget is checked before dispatch | `harness.py` | a run crossing the budget stops with `budget_exceeded` and keeps partial results |
 | **B6** | Report strings are escaped | `report.py` | model- and fixture-derived text is untrusted by construction; if an HTML report is ever added, every such string is escaped |
-| **B7** | A task's `env` is `KEPLER_*` only | `tasks.py` | a task setting a credential or `PATH` is rejected at load |
+| **B7** | A task's `env` is `MARS_*` only | `tasks.py` | a task setting a credential or `PATH` is rejected at load |
 
 B1 deserves its emphasis. The registry went from 49 tools to 55 in four days
 while the port was being written. Without a closed plane, the first new remote
@@ -1504,36 +1504,36 @@ latency and failure folded into someone's scoreboard.
 
 ## 11. CLI
 
-`kepler-bench`, a new `[project.scripts]` entry
+`mars-bench`, a new `[project.scripts]` entry
 (`tools.bench.cli:main`). No dependency change; no `uv lock` churn.
 
 **Correction (2026-09-18):** this named `kepler-astro-query` as the script it
 sat alongside. That entry point and the `tools/runner.py` shim behind it were
-retired once the console replaced them; the two scripts today are `kepler` and
-`kepler-bench`.
+retired once the console replaced them; the two scripts today are `mars` and
+`mars-bench`.
 
 ```bash
 # Run a suite against two backends, three repeats, with a ceiling.
-kepler-bench run core \
+mars-bench run core \
   --backend anthropic/claude-opus-5 --backend ollama/qwen3.8:27b-mlx \
   --repeats 3 --max-tokens 2000000 --out artifacts/bench/2026-09-13-core
 
 # Grade (offline, free, repeatable after a grader fix).
-kepler-bench grade artifacts/bench/2026-09-13-core
+mars-bench grade artifacts/bench/2026-09-13-core
 
 # Attack the keys with the evidence already recorded. Offline, free, no model.
-kepler-bench falsify artifacts/bench/2026-09-13-core
+mars-bench falsify artifacts/bench/2026-09-13-core
 
 # Render the matrix; --composite for a single weighted number.
-kepler-bench compare artifacts/bench/2026-09-13-core [more-run-dirs...]
+mars-bench compare artifacts/bench/2026-09-13-core [more-run-dirs...]
 
 # Read what the models actually said. Offline, free, no model.
-kepler-bench answers artifacts/bench/2026-09-13-core --wrong-only
-kepler-bench answers artifacts/bench/2026-09-13-core --disagreed
+mars-bench answers artifacts/bench/2026-09-13-core --wrong-only
+mars-bench answers artifacts/bench/2026-09-13-core --disagreed
 
 
 # Capture a fixture entry for review. Live, one tool, human-reviewed after.
-kepler-bench record core/ned-formal-designation --tool search_ned
+mars-bench record core/ned-formal-designation --tool search_ned
 ```
 
 `answers` is the audit verb: every other verb reduces a session to a verdict,
@@ -1594,7 +1594,7 @@ keys, no daemon, no new CI job.
 | `tests/test_bench_generalize.py` | the Beta-Binomial fit: two corpora with an identical total and different spreads get different predictive intervals, and `expected_rate` is not read as `predictive_interval` |
 
 Live provider runs stay behind the existing `model_api` marker plus
-`KEPLER_TEST_MODEL_API=1`; the `pulsar` and `optical` suites' own end-to-end
+`MARS_TEST_MODEL_API=1`; the `pulsar` and `optical` suites' own end-to-end
 tests carry `slow`. **No new markers and no dependency changes.**
 
 ---
@@ -1650,7 +1650,7 @@ Delivered on `agent/model-benchmark` off `dev`, one commit per phase, each with
 | **4b** | `Add ReplayBackend and the recorded-transcript format` | `tools/llm/replay_backend.py`, `benchmarks/transcripts/smoke.json`. |
 | **4c** | `Add the benchmark tool plane and fixture store` | `plane.py` (B1 closed), `fixtures.py` (B3, S5, S6, S7). Open question 1 answered: the class-M predicate is asserted against the tool's own registry schema. |
 | **4d** | `Add benchmark record mode with the credential scan` | S2, plus imperative-string flagging for review. |
-| **5a** | `Add the benchmark task loader, run loop, and kepler-bench run` | S5, S6, B2, B4, B5, B7. |
+| **5a** | `Add the benchmark task loader, run loop, and mars-bench run` | S5, S6, B2, B4, B5, B7. |
 | **5b** | `Add the four benchmark graders and the grade verb` | The three kinds of right answer, the four fidelity families, three clocks. |
 | **5c** | `Add the benchmark matrix and the compare/record verbs` | B6; headline axes first, no blended score by default. |
 | **5d** | `Add the benchmark corpus` | 16 tasks, five suites. Two pulsar task premises were measured and both original guesses were wrong (§9.3). **Calibration gate met 2026-09-14** for every suite but `smoke`; see each `calibration.md`. |
@@ -1693,7 +1693,7 @@ built against:
 | `tools/sessions.py` | 4a: manifest v2, the `artifact_subdir` override, `record_turn` keywords. |
 | `tools/agent/engine.py` | 4a: pass usage/latency/raw stop reason into `record_turn`; set `session.backend`. **The only engine edit in this rollout.** |
 | `tests/test_tool_registry_coverage.py` | 4c: add `tools.bench` to `NOT_TOOL_MODULES`. |
-| `pyproject.toml` | 5a: the `kepler-bench` console script. **No dependency changes, no new markers.** |
+| `pyproject.toml` | 5a: the `mars-bench` console script. **No dependency changes, no new markers.** |
 | `docs/tool-architecture.md`, `docs/working/README.md`, `README.md`, `CLAUDE.md`, this document | documentation phase |
 
 **Deliberately not touched:** `tools/registry.py` — the schemas are the input

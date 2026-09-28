@@ -49,7 +49,7 @@ __all__ = [
 ]
 
 #: Names groups to serve, comma-separated, when ``--tools`` is not given.
-TOOLS_ENV = "KEPLER_MCP_TOOLS"
+TOOLS_ENV = "MARS_MCP_TOOLS"
 
 
 @dataclass(frozen=True)

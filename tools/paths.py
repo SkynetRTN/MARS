@@ -1,13 +1,13 @@
-"""The per-user Kepler home, and the bundled data that ships with the package.
+"""The per-user MARS home, and the bundled data that ships with the package.
 
-Two locations that exist whether Kepler is a checkout or an installed wheel,
+Two locations that exist whether MARS is a checkout or an installed wheel,
 and that code on both sides of the import-time boundary needs:
 
-- :func:`kepler_home` -- the user-writable directory Kepler owns:
-  ``$XDG_DATA_HOME/kepler`` (default ``~/.local/share/kepler``),
-  ``~/Library/Application Support/kepler`` on macOS, ``%LOCALAPPDATA%\\kepler``
-  on Windows, or ``KEPLER_HOME`` when set. The MCP server's artifacts, an
-  installed Kepler's archive downloads, and fetched data bundles live under it
+- :func:`mars_home` -- the user-writable directory MARS owns:
+  ``$XDG_DATA_HOME/mars`` (default ``~/.local/share/mars``),
+  ``~/Library/Application Support/mars`` on macOS, ``%LOCALAPPDATA%\\mars``
+  on Windows, or ``MARS_HOME`` when set. The MCP server's artifacts, an
+  installed MARS's archive downloads, and fetched data bundles live under it
   (``docs/archive/mcp-tool-surface.md`` §3.2, §3.5).
 - :data:`BUNDLED_DATA_LINK` -- ``tools/_data``. In a checkout it is a symlink to
   the repository's ``data/``; in a wheel it is a real directory holding the
@@ -28,14 +28,15 @@ from typing import Mapping
 
 __all__ = [
     "BUNDLED_DATA_LINK",
-    "KEPLER_HOME_ENV",
+    "MARS_HOME_ENV",
     "bundled_data_dir",
     "is_checkout",
-    "kepler_home",
+    "mars_home",
+    "user_data_base",
     "pin_numba_cache",
 ]
 
-KEPLER_HOME_ENV = "KEPLER_HOME"
+MARS_HOME_ENV = "MARS_HOME"
 
 #: ``tools/_data``: the repository's ``data/`` in a checkout, the shipped core
 #: data in an installed wheel.
@@ -85,36 +86,60 @@ def bundled_data_dir(link: Path = BUNDLED_DATA_LINK) -> Path:
     return link.resolve()
 
 
-def kepler_home(
+#: The per-user directory's name under the platform's data directory.
+HOME_NAME = "mars"
+
+
+def mars_home(
     environ: Mapping[str, str] | None = None,
     *,
     platform: str | None = None,
     home: Path | None = None,
 ) -> Path:
-    """The per-user directory Kepler owns, for this platform. Not created here.
+    """The per-user directory MARS owns, for this platform. Not created here.
 
-    ``KEPLER_HOME`` wins when set. Otherwise the platform's per-user data
-    directory plus ``kepler``; a relative ``XDG_DATA_HOME`` is ignored, as the
+    ``MARS_HOME`` wins when set. Otherwise the platform's per-user data
+    directory plus ``mars``; a relative ``XDG_DATA_HOME`` is ignored, as the
     XDG specification requires.
     """
 
     environ = os.environ if environ is None else environ
-    explicit = environ.get(KEPLER_HOME_ENV, "").strip()
+    explicit = environ.get(MARS_HOME_ENV, "").strip()
     if explicit:
         return Path(explicit).expanduser()
+    base = user_data_base(environ, platform=platform, home=home)
+    if base is None:
+        # No resolvable home (a service account, a stripped container).
+        # tools.config calls this at import, so failing here would make
+        # every tool unimportable; a per-user temporary directory keeps
+        # them working, and MARS_HOME is the way to choose a real one.
+        import tempfile
 
+        uid = os.getuid() if hasattr(os, "getuid") else "user"
+        return Path(tempfile.gettempdir()) / f"{HOME_NAME}-{uid}"
+    return base / HOME_NAME
+
+
+def user_data_base(
+    environ: Mapping[str, str] | None = None,
+    *,
+    platform: str | None = None,
+    home: Path | None = None,
+) -> Path | None:
+    """The platform's per-user data directory that the home is named inside.
+
+    ``None`` when no home directory resolves. Kept apart from
+    :func:`mars_home` so that :mod:`tools.compat` can find the ``kepler``
+    home an earlier install left beside it.
+    """
+
+    environ = os.environ if environ is None else environ
     platform = sys.platform if platform is None else platform
     if home is None:
         try:
             home = Path.home()
         except (RuntimeError, KeyError, OSError):
-            # No resolvable home (a service account, a stripped container).
-            # tools.config calls this at import, so failing here would make
-            # every tool unimportable; a per-user temporary directory keeps
-            # them working, and KEPLER_HOME is the way to choose a real one.
-            import tempfile
-
-            return Path(tempfile.gettempdir()) / f"kepler-{os.getuid() if hasattr(os, 'getuid') else 'user'}"
+            return None
     if platform == "darwin":
         base = home / "Library" / "Application Support"
     elif platform == "win32":
@@ -123,15 +148,15 @@ def kepler_home(
     else:
         xdg = environ.get("XDG_DATA_HOME", "")
         base = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".local" / "share"
-    return base / "kepler"
+    return base
 
 
 def pin_numba_cache(environ: dict[str, str] | None = None) -> None:
-    """On an install, point numba's on-disk cache into the Kepler home.
+    """On an install, point numba's on-disk cache into the MARS home.
 
     ``algorithms/skylib_lite`` compiles with ``@njit(cache=True)``, and numba
     writes that cache beside the source -- into ``site-packages`` for an
-    installed wheel, the directory an installed Kepler otherwise never writes
+    installed wheel, the directory an installed MARS otherwise never writes
     (and which the next upgrade replaces). numba reads ``NUMBA_CACHE_DIR`` when
     it is imported, so an entry point calls this before importing any tool. A
     checkout, or a user's own setting, is left alone.
@@ -140,4 +165,4 @@ def pin_numba_cache(environ: dict[str, str] | None = None) -> None:
     environ = os.environ if environ is None else environ
     if is_checkout() or environ.get("NUMBA_CACHE_DIR"):
         return
-    environ["NUMBA_CACHE_DIR"] = str(kepler_home(environ) / "numba-cache")
+    environ["NUMBA_CACHE_DIR"] = str(mars_home(environ) / "numba-cache")

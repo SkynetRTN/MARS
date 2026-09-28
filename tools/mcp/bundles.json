@@ -1,7 +1,7 @@
 {
   "_about": [
-    "The optional data bundles this Kepler accepts. Ships inside the wheel: an",
-    "installed Kepler fetches exactly these bytes and rejects anything else, so a",
+    "The optional data bundles this MARS accepts. Ships inside the wheel: an",
+    "installed MARS fetches exactly these bytes and rejects anything else, so a",
     "wheel cannot pair itself with a bundle built for another release.",
     "Each archive is content-addressed and published as an asset of this",
     "repository's standing 'data' GitHub release (phase C8 of",
@@ -23,7 +23,7 @@
       "sha256": "12f8359efc78669abbb5006cb25a98ede05115699312fbc7922c90240cec3ec3",
       "files": 4307,
       "url": "https://github.com/archon774/skynet-mars/releases/download/data/kepler-isochrones-12f8359efc78.tar",
-      "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (KEPLER_ISOCHRONE_DIR)."
+      "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (MARS_ISOCHRONE_DIR)."
     }
   }
 }

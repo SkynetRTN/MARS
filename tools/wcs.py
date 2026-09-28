@@ -39,7 +39,7 @@ from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
 #: The committed fixture tree, and the subtrees under it that hold fixtures.
 #: Pinned to the package's own bundled data rather than read from
 #: ``config.DATA_DIR``: an
-#: operator who points KEPLER_DATA_DIR at their own archive has neither made
+#: operator who points MARS_DATA_DIR at their own archive has neither made
 #: these frames writable nor made that archive a tree of fixtures. The guard
 #: names the subtrees rather than the whole of ``data/`` because the archive
 #: download root lives under ``data/`` too, and a downloaded product must stay
@@ -242,12 +242,12 @@ def _under_fixture_root(path: Path) -> bool:
     claiming the product was a bundled fixture.
 
     Deliberately independent of ``config.FITS_DOWNLOAD_DIR``. An earlier draft
-    exempted whatever that setting named, which meant ``KEPLER_FITS_DOWNLOAD_DIR=
+    exempted whatever that setting named, which meant ``MARS_FITS_DOWNLOAD_DIR=
     <repo>/data`` -- a plausible misconfiguration -- silently disabled the guard
     for every fixture. A safety net that a single environment variable can
     switch off is not one.
 
-    Fetched bundles are fixtures too: ``kepler-mcp fetch-data optical`` puts
+    Fetched bundles are fixtures too: ``mars-mcp fetch-data optical`` puts
     the same frames under ``config.BUNDLES_DIR``, checksum-verified, and a
     header written into one would silently break that verification.
     """
@@ -540,7 +540,7 @@ def solve_astrometry(
     attempted_backends: list[str] = []
     solver_failures: list[str] = []
     try:
-        with TemporaryDirectory(prefix="kepler-wcs-") as tmpdir:
+        with TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
             solve_result = _solve_wcs(
                 header,
                 data,

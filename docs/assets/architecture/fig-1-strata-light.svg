@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="548" viewBox="0 0 900 548" role="img" aria-label="Five layers: two harnesses -- the kepler console and kepler-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.">
-  <title>Five layers: two harnesses -- the kepler console and kepler-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="548" viewBox="0 0 900 548" role="img" aria-label="Five layers: two harnesses -- the mars console and mars-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.">
+  <title>Five layers: two harnesses -- the mars console and mars-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.</title>
   <style>
   svg { color: #0F1619; }
   text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #0F1619; }
@@ -41,11 +41,11 @@
   <text class="tl mid" x="450" y="16">THE HARNESSES &#8212; TWO CONSUMERS, ONE LOOP</text>
 
   <rect class="d-box" x="70" y="28" width="300" height="62"/>
-  <text class="t" x="86" y="52">kepler &#8212; the console</text>
+  <text class="t" x="86" y="52">mars &#8212; the console</text>
   <text class="ts" x="86" y="72">tools/tui/ &#183; 2,944 lines &#183; Textual</text>
 
   <rect class="d-box" x="530" y="28" width="300" height="62"/>
-  <text class="t" x="546" y="52">kepler-bench &#8212; the benchmark</text>
+  <text class="t" x="546" y="52">mars-bench &#8212; the benchmark</text>
   <text class="ts" x="546" y="72">tools/bench/ &#183; 7,383 lines</text>
 
   <line class="d-line" x1="220" y1="90" x2="320" y2="140" marker-end="url(#a)"/>

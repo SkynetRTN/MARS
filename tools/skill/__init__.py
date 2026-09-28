@@ -1,6 +1,6 @@
-"""The Kepler agent skill: one source, rendered to every surface that carries it.
+"""The MARS agent skill: one source, rendered to every surface that carries it.
 
-The skill teaches a model that is *not* running inside Kepler's own agent loop
+The skill teaches a model that is *not* running inside MARS's own agent loop
 which tool to reach for, in what order, and which results are silently wrong.
 ``tools/agent/prompt.py`` is the authority for every rule it restates; the
 skill cites that prompt by section name, and
@@ -9,10 +9,10 @@ between the two.
 
 ``source/`` is the **only** hand-edited copy (``docs/archive/mcp-tool-surface.md``
 §3.4: copies are forbidden). It lives inside the ``tools`` package so that it
-ships with an installed Kepler, where there is no checkout to read it from.
+ships with an installed MARS, where there is no checkout to read it from.
 Every other surface is rendered from it:
 
-- ``skills/kepler-tools/`` in the repository, for a coding agent working in a
+- ``skills/mars-tools/`` in the repository, for a coding agent working in a
   checkout and for a human reading it -- ``python -m tools.skill`` writes it,
   ``python -m tools.skill --check`` reports drift, and a test runs the check;
 - the MCP server (phase C5): :func:`served_brief` is its instructions and
@@ -53,14 +53,14 @@ __all__ = [
     "write_repository_copy",
 ]
 
-SKILL_NAME = "kepler-tools"
+SKILL_NAME = "mars-tools"
 
 #: What a skill loader shows a model when deciding whether to load the skill.
 SKILL_DESCRIPTION = (
-    "How to use Kepler's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, "
+    "How to use MARS's astronomy tools correctly -- SIMBAD, NED, VizieR, ATNF, "
     "MAST, MPC, CASDA and ADS queries, and the local pulsar, variable-star, "
     "optical photometry, plate-solving, HR-diagram and radio-source pipelines. "
-    "Use when calling any Kepler tool, and before any pulsar period "
+    "Use when calling any MARS tool, and before any pulsar period "
     "measurement, database name lookup or literature claim -- it covers the "
     "stage orders, identifier forms and silently wrong results the tool "
     "descriptions alone do not."
@@ -68,14 +68,14 @@ SKILL_DESCRIPTION = (
 
 SOURCE_DIR = Path(__file__).resolve().parent / "source"
 
-#: The rendered copy in a checkout. It does not exist in an installed Kepler.
+#: The rendered copy in a checkout. It does not exist in an installed MARS.
 REPOSITORY_COPY = Path(__file__).resolve().parents[2] / "skills" / SKILL_NAME
 
 _ENTRY = "SKILL.md"
 _BRIEF = "BRIEF.md"
 
 #: Resource URIs of the served documents are this prefix plus their source path.
-SERVED_URI_PREFIX = "kepler://skill/"
+SERVED_URI_PREFIX = "mars://skill/"
 
 #: Source documents the server does not publish: how to call the tools as
 #: Python functions from a checkout, which a user of the server never does.
@@ -105,7 +105,7 @@ def _banner(name: str) -> str:
 
 
 def render_repository_copy() -> dict[str, str]:
-    """The ``skills/kepler-tools/`` files, keyed like :func:`source_documents`."""
+    """The ``skills/mars-tools/`` files, keyed like :func:`source_documents`."""
     rendered = {}
     for name, text in source_documents().items():
         body = _banner(name) + text
@@ -143,7 +143,7 @@ def served_documents() -> dict[str, str]:
     """The documents the MCP server publishes as resources, keyed like the source.
 
     Everything but the brief (which is the instructions) and the checkout
-    reference, with relative links rewritten to ``kepler://skill/...`` URIs.
+    reference, with relative links rewritten to ``mars://skill/...`` URIs.
     """
 
     sources = source_documents()

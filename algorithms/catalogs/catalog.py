@@ -1,4 +1,4 @@
-"""Kepler: catalog plugin base class.
+"""MARS: catalog plugin base class.
 
 A catalog plugin is a *declaration*: what the catalog is called, how many
 sources it holds, which VizieR table backs it, which of its columns carry
@@ -14,7 +14,7 @@ it *contains*, not how to reach it. Import ``algorithms.query.registry`` instead
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
 observation_asset_processing/optical_data_processing/catalogs/catalog.py
 (45 lines). The attribute set and the ``filter_lookup`` merge semantics are
-preserved; the docstrings are Kepler's.
+preserved; the docstrings are MARS's.
 """
 
 from typing import Dict, List, Optional
@@ -30,7 +30,7 @@ class Catalog:
     Subclasses declare, as class attributes:
 
     ``name``
-        Kepler's identifier for the catalog, and the key it is registered under.
+        MARS's identifier for the catalog, and the key it is registered under.
     ``display_name``
         Human-readable name.
     ``num_sources``

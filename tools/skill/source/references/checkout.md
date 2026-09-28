@@ -1,6 +1,6 @@
-# Calling the tools from a Kepler checkout
+# Calling the tools from a MARS checkout
 
-This applies only when you are working **inside a Kepler checkout** and the
+This applies only when you are working **inside a MARS checkout** and the
 tools are not reachable as tool calls. Every tool is then a plain Python
 function in `tools.registry.TOOL_FUNCTIONS`, keyed by the same name its schema
 carries, taking the same arguments as keywords.
@@ -30,11 +30,11 @@ EOF
   uncap value is `None` — the Python object, which is what JSON's `null`
   arrives as. The string `"None"` is still wrong, and omitting the argument
   still takes the capped default.
-- Artifacts are written under `KEPLER_ARTIFACT_DIR`, or `artifacts/` relative
+- Artifacts are written under `MARS_ARTIFACT_DIR`, or `artifacts/` relative
   to the directory Python was started in. Starting from the checkout root keeps
   them in one place.
 - Remote tools open real connections to the real services. `ADS_DEV_KEY` must
   be set for the ADS tools.
 
 This is how the skill is exercised before the tools are served over MCP; it is
-not how a user with an installed Kepler reaches them.
+not how a user with an installed MARS reaches them.

@@ -1,4 +1,4 @@
-"""``kepler-bench`` argument handling, chiefly the required token budget.
+"""``mars-bench`` argument handling, chiefly the required token budget.
 
 docs/benchmarking/harness.md sections 5.7 and 11.
 """
@@ -135,7 +135,7 @@ def test_compare_renders_the_matrix_over_a_run_directory(tmp_path, capsys):
     capsys.readouterr()
     assert main(["compare", str(out)]) == 0
     printed = capsys.readouterr().out
-    assert "# Kepler model benchmark" in printed
+    assert "# MARS model benchmark" in printed
     assert "## Scores" in printed
     assert "## Diagnostics" in printed
     assert (out / "report.md").exists()

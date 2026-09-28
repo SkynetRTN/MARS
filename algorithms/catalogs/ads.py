@@ -1,4 +1,4 @@
-"""Kepler: ADS field vocabulary and citation formatting.
+"""MARS: ADS field vocabulary and citation formatting.
 
 Declaration and text-formatting only -- no astroquery import, no socket,
 matching every other module in this package. This is the "extraction layer"

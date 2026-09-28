@@ -2,8 +2,7 @@
 """Generate the architecture-layer figures for ``docs/architecture-layers.md``.
 
 Twelve files, two per figure: the repository renders theme-aware assets as a
-``-light``/``-dark`` pair behind a ``<picture>`` element (see the README
-banner), not as one file with an internal ``prefers-color-scheme`` query.
+``-light``/``-dark`` pair behind a ``<picture>`` element, not as one file with an internal ``prefers-color-scheme`` query.
 GitHub picks between the two from *its own* theme setting, which an SVG's
 internal media query cannot see -- it follows the operating system instead,
 so a reader on GitHub's dark theme with a light OS would get black text on a
@@ -93,7 +92,7 @@ orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
 # --- Fig. 1 -- the five strata ------------------------------------------
 
 FIG1_ALT = (
-    "Five layers: two harnesses -- the kepler console and kepler-bench -- drive "
+    "Five layers: two harnesses -- the mars console and mars-bench -- drive "
     "run_session, which branches left into the model port and its four adapters "
     "and right into the tool registry, the tool modules and the algorithms. The "
     "right branch runs with no model, no key and no socket. The adapters never "
@@ -105,11 +104,11 @@ FIG1 = """
   <text class="tl mid" x="450" y="16">THE HARNESSES &#8212; TWO CONSUMERS, ONE LOOP</text>
 
   <rect class="d-box" x="70" y="28" width="300" height="62"/>
-  <text class="t" x="86" y="52">kepler &#8212; the console</text>
+  <text class="t" x="86" y="52">mars &#8212; the console</text>
   <text class="ts" x="86" y="72">tools/tui/ &#183; 2,944 lines &#183; Textual</text>
 
   <rect class="d-box" x="530" y="28" width="300" height="62"/>
-  <text class="t" x="546" y="52">kepler-bench &#8212; the benchmark</text>
+  <text class="t" x="546" y="52">mars-bench &#8212; the benchmark</text>
   <text class="ts" x="546" y="72">tools/bench/ &#183; 7,383 lines</text>
 
   <line class="d-line" x1="220" y1="90" x2="320" y2="140" marker-end="url(#a)"/>
@@ -347,7 +346,7 @@ FIG4 = """
 FIG5_ALT = (
     "Two panels side by side. On the left a plain turn-taking wrapper: the "
     "conversation, the model call, dispatch, append the result, repeat, with "
-    "nothing between the steps. On the right Kepler's loop: the same four steps "
+    "nothing between the steps. On the right MARS's loop: the same four steps "
     "with seven gates sitting on the wires between them -- drain notes, the stop "
     "check, protocol faults, validate arguments, approve, cache, and save the "
     "manifest."
@@ -371,7 +370,7 @@ FIG5 = """
   <line class="d-line" x1="230" y1="324" x2="230" y2="368" marker-end="url(#a)"/>
   <path class="d-line" d="M 110 392 L 60 392 L 60 82 L 106 82" marker-end="url(#a)"/>
 
-  <text class="tla" x="470" y="20">KEPLER'S LOOP &#8212; engine.py, 547 LINES</text>
+  <text class="tla" x="470" y="20">MARS'S LOOP &#8212; engine.py, 547 LINES</text>
   <text class="tn" x="470" y="38">bounded at max_turns = 20 &#183; every call recorded</text>
   <rect class="d-frame" x="470" y="48" width="380" height="392"/>
 
@@ -419,10 +418,10 @@ FIG6_ALT = (
     "call."
 )
 FIG6 = """
-  <text class="tl" x="30" y="52">KEPLER &#8212; THE CONSOLE</text>
+  <text class="tl" x="30" y="52">MARS &#8212; THE CONSOLE</text>
   <text class="tn" x="30" y="72">a human in the loop</text>
 
-  <text class="tl end" x="870" y="52">KEPLER-BENCH</text>
+  <text class="tl end" x="870" y="52">MARS-BENCH</text>
   <text class="tn end" x="870" y="72">a recorder in the loop</text>
 
   <rect class="d-boxA" x="330" y="90" width="240" height="252"/>

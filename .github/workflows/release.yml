@@ -1,6 +1,6 @@
 name: Release
 
-# Builds, verifies and publishes a Kepler release from a `v<version>` tag, and
+# Builds, verifies and publishes a MARS release from a `v<version>` tag, and
 # checks that the optional data bundles it pins are published. The policy --
 # what a tag, a pre-release and a data bundle version mean -- is
 # docs/releasing.md. workflow_dispatch runs everything but `publish`, as a
@@ -109,18 +109,18 @@ jobs:
 
       - name: Install the wheel into a clean environment
         run: |
-          python -m venv "$RUNNER_TEMP/kepler"
+          python -m venv "$RUNNER_TEMP/mars"
           wheel=$(ls dist/*.whl)
-          "$RUNNER_TEMP/kepler/bin/pip" install --quiet "${wheel}[mcp]"
+          "$RUNNER_TEMP/mars/bin/pip" install --quiet "${wheel}[mcp]"
 
       - name: Self-test through the protocol
         env:
           MPLBACKEND: Agg
-          KEPLER_HOME: ${{ runner.temp }}/kepler-home
+          MARS_HOME: ${{ runner.temp }}/mars-home
         working-directory: ${{ runner.temp }}
         run: |
-          "$RUNNER_TEMP/kepler/bin/kepler-mcp" self-test
-          "$RUNNER_TEMP/kepler/bin/kepler-mcp" fetch-data --list
+          "$RUNNER_TEMP/mars/bin/mars-mcp" self-test
+          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data --list
 
   data:
     name: data bundles published
@@ -176,5 +176,5 @@ jobs:
           # packaging.version. docs/releasing.md.
           if [ "$PRERELEASE" = "true" ]; then flag=--prerelease; else flag=--latest; fi
           gh release create "$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
-            --repo "$REPO" --verify-tag "$flag" --title "Kepler $TAG" \
-            --notes "Install and register: docs/installing.md. Check the install: \`kepler-mcp self-test\`. Data bundles: \`kepler-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
+            --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
+            --notes "Install and register: docs/installing.md. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."

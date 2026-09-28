@@ -1,6 +1,6 @@
-"""Cross-implementation parity: Kepler's zero point vs the Afterglow web service.
+"""Cross-implementation parity: MARS's zero point vs the Afterglow web service.
 
-``test_fieldcal_solution.py`` proves Kepler's extracted ``calc_solution``
+``test_fieldcal_solution.py`` proves MARS's extracted ``calc_solution``
 reproduces *Skynet's* recorded output bit-for-bit. That is a parity check
 against one implementation. This file closes the loop against a second,
 independent one: the hosted Afterglow field-calibration service, whose results
@@ -8,7 +8,7 @@ are in ``data/afterglow/``.
 
 The chain of custody for NGC 5128 B runs:
 
-    Kepler calc_solution
+    MARS calc_solution
       -> 21.147659857998637   (reproduced exactly, test_fieldcal_solution.py)
     Skynet recorded local fit
       -> 21.147659857998637   (fit_summary.json: local_zero_point)
@@ -17,7 +17,7 @@ The chain of custody for NGC 5128 B runs:
     Afterglow web values table
       -> 21.147               (afterglow_web_values_master.csv, 3 dp)
 
-Kepler and Afterglow agree to 1.8e-4 mag — inside the 5e-4 tolerance the
+MARS and Afterglow agree to 1.8e-4 mag — inside the 5e-4 tolerance the
 upstream diagnostic declares. Every one of those numbers was recorded before
 the extraction, and none of this needs a network.
 
@@ -51,8 +51,8 @@ def _sources(rows):
 # The parity chain
 # ---------------------------------------------------------------------------
 
-def test_kepler_zero_point_matches_the_afterglow_service(zp_case):
-    """Kepler's solve agrees with Afterglow's within the recorded tolerance.
+def test_mars_zero_point_matches_the_afterglow_service(zp_case):
+    """MARS's solve agrees with Afterglow's within the recorded tolerance.
 
     This is the cross-implementation claim. The fixture records both the
     Afterglow calibrated zero point and the tolerance the upstream parity
@@ -74,7 +74,7 @@ def test_kepler_zero_point_matches_the_afterglow_service(zp_case):
 def test_afterglow_calibrated_zero_point_is_base_plus_correction(zp_case):
     """Afterglow reports ``zero_point = 20`` plus a correction, never an absolute.
 
-    Kepler computes the absolute zero point directly, so every comparison has to
+    MARS computes the absolute zero point directly, so every comparison has to
     add the two Afterglow numbers first. Getting this wrong yields a clean,
     plausible 20-magnitude error.
     """
@@ -93,7 +93,7 @@ def test_recorded_solve_matches_the_afterglow_web_values_table(
 
     ``afterglow_web_values_master.csv`` is a third recording of this result,
     made by hand from the web UI at three decimal places, independent of the API
-    JSON. Reaching it from Kepler's solve closes the chain.
+    JSON. Reaching it from MARS's solve closes the chain.
     """
     rows, summary = zp_case("ngc5128_b_002")
     zero_point, zero_point_error, *_ = calc_solution(_sources(rows))
@@ -137,7 +137,7 @@ def test_afterglow_calibrated_mag_is_instrumental_mag_plus_correction(
 ):
     """``calibrated_mag = mag + zero_point_correction`` for every exported row.
 
-    This is the relation Kepler's zero point is *for*. Pinning it against real
+    This is the relation MARS's zero point is *for*. Pinning it against real
     exported rows fixes the sign and which of the two zero-point numbers is the
     additive one.
     """
@@ -161,7 +161,7 @@ def test_afterglow_ran_with_aperture_correction_disabled(afterglow_fieldcal_resp
     ``field_cal.py`` forces ``apcorr_tol = 0.0`` for calibration photometry
     under a "LEGACY AFTERGLOW PARITY — DO NOT CLEAN UP" comment. This is the
     evidence behind that comment: the reference implementation whose numbers
-    Kepler has to reproduce ran with aperture correction off, so Kepler must
+    MARS has to reproduce ran with aperture correction off, so MARS must
     too, regardless of what the caller asked for.
     """
     settings = afterglow_fieldcal_response["photometry_settings"]
@@ -169,10 +169,10 @@ def test_afterglow_ran_with_aperture_correction_disabled(afterglow_fieldcal_resp
     assert settings["zero_point"] == 20
 
 
-def test_kepler_photometry_settings_can_express_the_afterglow_run(
+def test_mars_photometry_settings_can_express_the_afterglow_run(
     afterglow_fieldcal_response,
 ):
-    """Every setting Afterglow used has a Kepler equivalent with the same value.
+    """Every setting Afterglow used has a MARS equivalent with the same value.
 
     Names differ where the extraction renamed them (``a_in`` -> ``a_in_px``,
     ``theta_out`` -> ``theta_out_deg``, ``zero_point`` -> ``zero_point_mag``);
@@ -190,18 +190,18 @@ def test_kepler_photometry_settings_can_express_the_afterglow_run(
     assert set(mapping) == set(afterglow), "Afterglow settings block changed shape"
 
     settings = PhotometrySettings(
-        **{kepler: afterglow[their] for their, kepler in mapping.items()}
+        **{ours: afterglow[their] for their, ours in mapping.items()}
     )
-    for their, kepler in mapping.items():
-        assert getattr(settings, kepler) == afterglow[their], kepler
+    for their, ours in mapping.items():
+        assert getattr(settings, ours) == afterglow[their], ours
 
 
-def test_afterglow_field_cal_settings_match_keplers_defaults_where_they_overlap(
+def test_afterglow_field_cal_settings_match_mars_defaults_where_they_overlap(
     afterglow_fieldcal_response,
 ):
     """``min_snr``, ``source_match_tol`` and ``variable_check_tol`` line up.
 
-    Kepler's ``PhotometricCalibrationSettings`` defaults were carried over from
+    MARS's ``PhotometricCalibrationSettings`` defaults were carried over from
     this same configuration; a drift in any of them changes which sources reach
     the solve.
     """

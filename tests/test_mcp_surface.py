@@ -81,7 +81,7 @@ def test_a_list_result_is_wrapped_like_the_agent_loop_wraps_it():
 
 
 def test_a_non_model_result_is_a_registry_defect():
-    with pytest.raises(TypeError, match="must return a Kepler model"):
+    with pytest.raises(TypeError, match="must return a MARS model"):
         surface.normalize_result("x", {"not": "a model"})
 
 
@@ -247,7 +247,7 @@ def test_a_failing_fact_does_not_stop_the_server(tmp_path, monkeypatch):
 def test_install_facts_are_the_tools_own_answers(tmp_path, monkeypatch):
     """Finding 8: the facts looked in their own places and disagreed with the tools.
 
-    With KEPLER_DATA_DIR moved (it moves only downloads), the tools still see
+    With MARS_DATA_DIR moved (it moves only downloads), the tools still see
     the scans and references; so must the facts. An index path holding no
     index files is not "plate solving configured".
     """
@@ -265,7 +265,7 @@ def test_served_resources_are_the_skill_documents():
 
     resources = surface.served_resources()
     assert [r["uri"] for r in resources] == [SERVED_URI_PREFIX + n for n in served_documents()]
-    assert {r["title"] for r in resources} >= {"Kepler astronomy tools"}
+    assert {r["title"] for r in resources} >= {"MARS astronomy tools"}
 
 
 # --- groups and annotations (C6) ------------------------------------------------
@@ -314,7 +314,7 @@ def test_an_unknown_group_names_the_valid_ones():
 
 
 def test_the_environment_selects_groups():
-    assert groups.groups_from_environment({"KEPLER_MCP_TOOLS": "radio"}) == ("radio",)
+    assert groups.groups_from_environment({"MARS_MCP_TOOLS": "radio"}) == ("radio",)
     assert groups.groups_from_environment({}) is None
 
 
@@ -345,12 +345,12 @@ def test_roots_names_the_same_variables_as_tools_config():
 @pytest.mark.parametrize(
     ("platform", "environ", "expected"),
     [
-        ("linux", {}, "home/.local/share/kepler/artifacts"),
-        ("linux", {"XDG_DATA_HOME": "/xdg"}, "/xdg/kepler/artifacts"),
-        ("linux", {"XDG_DATA_HOME": "relative"}, "home/.local/share/kepler/artifacts"),
-        ("darwin", {}, "home/Library/Application Support/kepler/artifacts"),
-        ("win32", {"LOCALAPPDATA": "/local"}, "/local/kepler/artifacts"),
-        ("win32", {}, "home/AppData/Local/kepler/artifacts"),
+        ("linux", {}, "home/.local/share/mars/artifacts"),
+        ("linux", {"XDG_DATA_HOME": "/xdg"}, "/xdg/mars/artifacts"),
+        ("linux", {"XDG_DATA_HOME": "relative"}, "home/.local/share/mars/artifacts"),
+        ("darwin", {}, "home/Library/Application Support/mars/artifacts"),
+        ("win32", {"LOCALAPPDATA": "/local"}, "/local/mars/artifacts"),
+        ("win32", {}, "home/AppData/Local/mars/artifacts"),
     ],
 )
 def test_user_artifact_dir_per_platform(platform, environ, expected):
@@ -359,9 +359,9 @@ def test_user_artifact_dir_per_platform(platform, environ, expected):
 
 
 def test_pin_roots_defaults_to_the_per_user_directory(tmp_path, monkeypatch):
-    target = tmp_path / "user" / "kepler" / "artifacts"
+    target = tmp_path / "user" / "mars" / "artifacts"
     monkeypatch.setattr(roots, "user_artifact_dir", lambda environ: target)
-    environ = {"KEPLER_ARTIFACT_DIR": "  "}
+    environ = {"MARS_ARTIFACT_DIR": "  "}
 
     pinned = roots.pin_roots(environ)
 
@@ -370,21 +370,21 @@ def test_pin_roots_defaults_to_the_per_user_directory(tmp_path, monkeypatch):
     assert pinned.data_dir == roots.default_data_dir()
     assert pinned.data_source == "package default"
     assert environ == {
-        "KEPLER_ARTIFACT_DIR": str(target),
-        "KEPLER_DATA_DIR": str(roots.default_data_dir()),
+        "MARS_ARTIFACT_DIR": str(target),
+        "MARS_DATA_DIR": str(roots.default_data_dir()),
     }
 
 
 def test_pin_roots_keeps_an_explicit_value_and_makes_it_absolute(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    environ = {"KEPLER_ARTIFACT_DIR": "out", "KEPLER_DATA_DIR": "data"}
+    environ = {"MARS_ARTIFACT_DIR": "out", "MARS_DATA_DIR": "data"}
 
     pinned = roots.pin_roots(environ)
 
     assert pinned.artifact_dir == tmp_path / "out"
-    assert pinned.artifact_source == "KEPLER_ARTIFACT_DIR"
+    assert pinned.artifact_source == "MARS_ARTIFACT_DIR"
     assert pinned.data_dir == tmp_path / "data"
-    assert environ["KEPLER_ARTIFACT_DIR"] == str(tmp_path / "out")
+    assert environ["MARS_ARTIFACT_DIR"] == str(tmp_path / "out")
 
 
 def test_the_entry_point_does_not_import_tools_config_before_pinning():
@@ -403,9 +403,9 @@ def test_the_entry_point_does_not_import_tools_config_before_pinning():
     assert result.stdout.strip() == "False"
 
 
-def test_kepler_mcp_is_a_declared_script():
+def test_mars_mcp_is_a_declared_script():
     text = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'kepler-mcp = "tools.mcp.__main__:main"' in text
+    assert 'mars-mcp = "tools.mcp.__main__:main"' in text
 
 
 # --- the adapter, through the SDK's in-process client ---------------------------
@@ -511,10 +511,32 @@ def test_the_server_delivers_the_instructions_and_the_skill_resources():
         return client.instructions, listed, pulsar.contents[0].text
 
     instructions, listed, pulsar = _client_session(session)
-    assert instructions.startswith("Kepler: astronomy tools.")
+    assert instructions.startswith("MARS: astronomy tools.")
     assert "This install:" in instructions
     assert listed == [SERVED_URI_PREFIX + name for name in served_documents()]
     assert pulsar == served_documents()["references/pulsar.md"]
+
+
+def test_the_server_introduces_itself_as_mars_with_its_icons():
+    """R4: a host that shows server icons shows the square mark."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    async def session(client):
+        return client.server_info
+
+    info = _client_session(session)
+    assert info.name == "mars"
+    assert info.title == "MARS \u2014 MCP Astronomy Research Suite"
+    assert [icon.sizes for icon in info.icons] == [["64x64"], ["128x128"]]
+    for icon in info.icons:
+        assert icon.mime_type == "image/png"
+        header, _, data = icon.src.partition(",")
+        assert header == "data:image/png;base64"
+        side = int(icon.sizes[0].partition("x")[0])
+        assert Image.open(io.BytesIO(base64.b64decode(data))).size == (side, side)
 
 
 def test_an_unknown_resource_is_a_protocol_error():
@@ -522,7 +544,7 @@ def test_an_unknown_resource_is_a_protocol_error():
     from mcp.shared.exceptions import MCPError
 
     async def session(client):
-        return await client.read_resource("kepler://skill/references/checkout.md")
+        return await client.read_resource("mars://skill/references/checkout.md")
 
     # In process, the SDK re-raises the handler's error, possibly inside an
     # exception group; over a transport the client receives it as a JSON-RPC
@@ -565,7 +587,7 @@ def test_a_group_filter_narrows_what_is_listed_and_what_is_callable():
 
 
 def test_self_test_passes_against_this_checkout(capfd):
-    """``kepler-mcp self-test`` launches the server over stdio and runs the chain.
+    """``mars-mcp self-test`` launches the server over stdio and runs the chain.
 
     ``capfd``, not ``capsys``: the SDK hands ``sys.stderr`` to the server
     subprocess, which needs a real file descriptor.
@@ -709,7 +731,7 @@ def test_the_entry_point_loads_dotenv_before_anything_reads_configuration(tmp_pa
         "print('tools.config' in sys.modules)\n"
     )
     env_file = tmp_path / ".env"
-    env_file.write_text("KEPLER_MCP_TOOLS=hr\n")
+    env_file.write_text("MARS_MCP_TOOLS=hr\n")
     result = subprocess.run(
         [sys.executable, "-c", probe, str(env_file)], cwd=_REPO_ROOT,
         capture_output=True, text=True, check=True,
@@ -743,11 +765,14 @@ def test_the_server_never_uses_a_gui_matplotlib_backend():
 
 
 def test_the_missing_sdk_advice_never_names_the_pypi_project():
-    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project."""
+    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project.
+
+    Still pinned after the rename: `skynet-mars` is not on PyPI either.
+    """
     from tools.mcp.__main__ import _missing_sdk_message
 
     message = _missing_sdk_message()
-    assert sys.executable in message and "kepler[mcp] @" in message
+    assert sys.executable in message and "skynet-mars[mcp] @" in message
     assert "not on PyPI" in message
 
 
@@ -770,10 +795,10 @@ def test_self_test_reports_failure_rather_than_a_traceback(capfd, monkeypatch):
 def test_self_test_ignores_the_callers_tool_filter(monkeypatch):
     from tools.mcp import selftest
 
-    monkeypatch.setenv("KEPLER_MCP_TOOLS", "databases")
-    monkeypatch.setenv("KEPLER_PULSAR_DATA_DIR", "/nowhere")
+    monkeypatch.setenv("MARS_MCP_TOOLS", "databases")
+    monkeypatch.setenv("MARS_PULSAR_DATA_DIR", "/nowhere")
     env = selftest._server_environment("/tmp/artifacts")
-    assert "KEPLER_MCP_TOOLS" not in env
+    assert "MARS_MCP_TOOLS" not in env
     assert env["PYTHONPATH"].split(os.pathsep)[0] == str(_REPO_ROOT)
 
 
@@ -783,7 +808,7 @@ def test_self_test_pins_what_a_dotenv_could_set_again():
     from tools.mcp import selftest
 
     env = selftest._server_environment("/tmp/artifacts")
-    assert env["KEPLER_PULSAR_DATA_DIR"] == str(config.BUNDLED_DATA_DIR / "pulsar")
+    assert env["MARS_PULSAR_DATA_DIR"] == str(config.BUNDLED_DATA_DIR / "pulsar")
     arguments = selftest._server_arguments()
     assert arguments[:3] == ["-m", "tools.mcp", "--tools"]
     assert set(arguments[3].split(",")) == {group.name for group in groups.GROUPS}

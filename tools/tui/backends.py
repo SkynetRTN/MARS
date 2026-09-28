@@ -222,7 +222,7 @@ def _require_service(backend: ModelBackend, spec: str) -> None:
         variable = (
             (choice.endpoint_env if choice else None)
             or (choice.credential_env if choice else None)
-            or "KEPLER_MODEL_BACKEND"
+            or "MARS_MODEL_BACKEND"
         )
         raise BackendUnavailableError(
             variable, f"{spec} built, but its service did not answer"

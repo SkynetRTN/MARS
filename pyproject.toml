@@ -3,8 +3,8 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kepler"
-version = "0.1.0rc2"
+name = "skynet-mars"
+version = "0.1.0rc3"
 description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -85,9 +85,13 @@ dependencies = [
 ]
 
 [project.scripts]
-kepler = "tools.tui:launch"
-kepler-bench = "tools.bench.cli:main"
-kepler-mcp = "tools.mcp.__main__:main"
+mars = "tools.tui:launch"
+mars-bench = "tools.bench.cli:main"
+mars-mcp = "tools.mcp.__main__:main"
+# Deprecated aliases, removed in the release after 0.1.0rc3 (tools/aliases.py).
+kepler = "tools.aliases:kepler"
+kepler-bench = "tools.aliases:kepler_bench"
+kepler-mcp = "tools.aliases:kepler_mcp"
 
 [project.optional-dependencies]
 mcp = [
@@ -104,7 +108,7 @@ include = ["tools*", "algorithms*"]
 [tool.setuptools.package-data]
 "algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
 "tools.skill" = ["source/*.md", "source/references/*.md"]
-"tools.mcp" = ["bundles.json"]
+"tools.mcp" = ["bundles.json", "icons/*.png"]
 # The core data (docs/archive/mcp-tool-surface.md §3.5). tools/_data is a
 # symlink to data/ in a checkout; these globs ship its core subtrees -- never
 # data/optical/, which is the fetched optical bundle -- inside the wheel.
@@ -128,14 +132,14 @@ addopts = "-ra --strict-markers"
 markers = [
     # Reaches a remote astronomy service. Never runs by default -- see CLAUDE.md:
     # "Keep live remote astronomy service calls out of default checks." Requires
-    # both `-m network` and KEPLER_TEST_NETWORK=1.
+    # both `-m network` and MARS_TEST_NETWORK=1.
     "network: hits a live catalog service (opt-in, non-deterministic)",
     # Needs astrometry.net index files or a local UCAC4/UCAC5 catalog that are
     # not in this repo. Skips itself when the data is absent.
     "solver_data: needs astrometry index / ATLAS catalog data not in the repo",
     "slow: runs full source extraction + photometry over a real frame",
     # Reaches a live model-provider API. Never runs by default, mirroring
-    # `network`: requires both `-m model_api` and KEPLER_TEST_MODEL_API=1.
+    # `network`: requires both `-m model_api` and MARS_TEST_MODEL_API=1.
     "model_api: hits a live model provider (opt-in, costs tokens/money)",
     # Needs a local Ollama daemon with the reference model pulled. Skips itself
     # when the daemon is unreachable.

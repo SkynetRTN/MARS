@@ -384,7 +384,7 @@ def test_a_task_that_raises_is_recorded_and_the_run_continues(artifact_root, smo
 
 
 def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
-    """A task can shrink KEPLER_MAX_FRAMES to exercise the truncation
+    """A task can shrink MARS_MAX_FRAMES to exercise the truncation
     warning; the override must not leak into the next task."""
 
     import os
@@ -393,7 +393,7 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
     suite_dir.mkdir()
     (suite_dir / "t.yaml").write_text(
         "id: t\nprompt: list the frames\n"
-        "env:\n  KEPLER_MAX_FRAMES: '5'\n"
+        "env:\n  MARS_MAX_FRAMES: '5'\n"
         'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n',
         encoding="utf-8",
     )
@@ -406,10 +406,10 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
 
     class _Probe(ReplayBackend):
         def complete(self, **kwargs):
-            seen.append(os.environ.get("KEPLER_MAX_FRAMES"))
+            seen.append(os.environ.get("MARS_MAX_FRAMES"))
             return super().complete(**kwargs)
 
-    before = os.environ.get("KEPLER_MAX_FRAMES")
+    before = os.environ.get("MARS_MAX_FRAMES")
     out = artifact_root / "bench" / "run-1"
     run_suite(
         suite,
@@ -421,7 +421,7 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
         out=out,
     )
     assert seen == ["5"]
-    assert os.environ.get("KEPLER_MAX_FRAMES") == before
+    assert os.environ.get("MARS_MAX_FRAMES") == before
 
 
 # --- path handling --------------------------------------------------------

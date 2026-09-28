@@ -1,4 +1,4 @@
-"""Kepler: the pulsar tool pipeline — light curve, periodogram, fold, sonify.
+"""MARS: the pulsar tool pipeline — light curve, periodogram, fold, sonify.
 
 Four tools, one per stage of astromancer's pulsar tool, in the order that tool
 runs them. Each stage's artifact is the next stage's input::
@@ -946,7 +946,7 @@ def sonify_pulsar(
 
 #: Where scans are looked for. Overridable so a caller with their own archive
 #: does not have to move files into the repo.
-PULSAR_DATA_DIR_ENV = "KEPLER_PULSAR_DATA_DIR"
+PULSAR_DATA_DIR_ENV = "MARS_PULSAR_DATA_DIR"
 
 def _pulsar_data_dir() -> Path:
     from tools.config import BUNDLED_DATA_DIR, env_path
@@ -963,7 +963,7 @@ def _pulsar_data_dir() -> Path:
 #: against.
 #:
 #: It lives beside the scans rather than at a fixed repo path so that the
-#: curation and the data it describes stay together: ``KEPLER_PULSAR_DATA_DIR``
+#: curation and the data it describes stay together: ``MARS_PULSAR_DATA_DIR``
 #: points the tools at another archive, and that archive's own map is what
 #: applies to it. Attaching this repository's five periods to someone else's
 #: files by name would put a ``period_source`` on them naming a document that

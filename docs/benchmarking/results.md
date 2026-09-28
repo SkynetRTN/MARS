@@ -1,5 +1,11 @@
 # Benchmark Results — Kepler's Tool Surface
 
+> [!NOTE] Renamed 2026-09-25
+> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
+> carries the new names from `0.1.0rc3`. This record keeps the names in use
+> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
+> plan](../working/mars-rebrand.md).
+
 **What this measures.** For each prompt, three things: did the model reach a
 correct answer, were its tool calls and reasoning acceptable, and what did the
 answer cost in time and tokens. Nothing else enters a score.

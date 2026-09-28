@@ -123,9 +123,9 @@ def test_an_unknown_expect_section_is_an_error(tmp_path):
 # --- B7: env --------------------------------------------------------------
 
 
-def test_a_task_may_shape_keplers_own_configuration(tmp_path):
-    task = load_task(write(tmp_path, MINIMAL + "env:\n  KEPLER_MAX_FRAMES: '5'\n"))
-    assert task.env == {"KEPLER_MAX_FRAMES": "5"}
+def test_a_task_may_shape_mars_own_configuration(tmp_path):
+    task = load_task(write(tmp_path, MINIMAL + "env:\n  MARS_MAX_FRAMES: '5'\n"))
+    assert task.env == {"MARS_MAX_FRAMES": "5"}
 
 
 @pytest.mark.parametrize(
@@ -135,8 +135,10 @@ def test_a_task_may_shape_keplers_own_configuration(tmp_path):
         "OPENAI_BASE_URL",
         "PATH",
         "LD_PRELOAD",
-        "kepler_max_frames",
-        "KEPLERISH",
+        "mars_max_frames",
+        "MARSISH",
+        # The legacy name is not a way round the rule (tools/compat.py).
+        "KEPLER_MAX_FRAMES",
     ],
 )
 def test_a_task_may_not_set_anything_else(tmp_path, key):

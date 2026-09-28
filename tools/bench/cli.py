@@ -1,4 +1,4 @@
-"""``kepler-bench`` -- the benchmark CLI.
+"""``mars-bench`` -- the benchmark CLI.
 
 ``docs/benchmarking/harness.md`` section 11. Six verbs over a directory on disk:
 
@@ -35,8 +35,8 @@ DEFAULT_OUT_ROOT = Path("artifacts/bench")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="kepler-bench",
-        description="Benchmark models on Kepler's tool surface.",
+        prog="mars-bench",
+        description="Benchmark models on MARS's tool surface.",
     )
     sub = parser.add_subparsers(dest="verb", required=True)
 
@@ -173,6 +173,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from tools.compat import adopt_legacy_environment
+
+    for legacy in adopt_legacy_environment():
+        print(f"mars-bench: {legacy.message()}", file=sys.stderr)
     args = build_parser().parse_args(argv)
     if args.verb == "run":
         return _run(args)
@@ -231,7 +235,7 @@ def _run(args: Any) -> int:
 
     if not args.backend:
         print(
-            "kepler-bench run: at least one --backend is required", file=sys.stderr
+            "mars-bench run: at least one --backend is required", file=sys.stderr
         )
         return 2
 
@@ -239,7 +243,7 @@ def _run(args: Any) -> int:
     live = [spec for spec in specs if not spec.startswith("replay/")]
     if live and args.max_tokens is None:
         print(
-            "kepler-bench run: --max-tokens is required for a live backend "
+            "mars-bench run: --max-tokens is required for a live backend "
             f"({', '.join(live)}). Four backends x a suite x repeats against "
             "metered APIs is a self-inflicted billing risk, and there is no "
             "default because a default budget is a number nobody thinks about.",
@@ -383,7 +387,7 @@ def _compare(args: Any) -> int:
     if has_broken_run(report) and not args.allow_mixed_corpus:
         header = report["header"]
         print(
-            f"kepler-bench compare: {len(header['errored'])} of "
+            f"mars-bench compare: {len(header['errored'])} of "
             f"{header['sessions']} sessions failed inside the harness "
             f"({header['error_rate']:.0%}). That is an outage, not a result. "
             "Re-run before comparing; --allow-mixed-corpus overrides and the "
@@ -395,7 +399,7 @@ def _compare(args: Any) -> int:
     if has_corpus_conflict(report) and not args.allow_mixed_corpus:
         conflicts = report["header"]["corpus_conflicts"]
         print(
-            "kepler-bench compare: these run directories were not measured "
+            "mars-bench compare: these run directories were not measured "
             "with the same instrument, so pooling them would report one rate "
             "over two experiments.",
             file=sys.stderr,

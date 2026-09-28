@@ -6,7 +6,7 @@ answer**, checked by different machinery:
 
 * **Ground truth** -- a value the repository recorded *before* the model ran
   (``data/pulsar/curated_periods.json``, the four recorded Skynet solves).
-  Checked with ``must_reach_verdict``, which reads a boolean a Kepler tool
+  Checked with ``must_reach_verdict``, which reads a boolean a MARS tool
   computed against that truth, so no phrasing can pass or fail it.
 * **Fidelity** -- faithful to what the tools returned *this session*. There is
   no cosmic truth: NED returns what the fixture says, and correctness is
@@ -293,7 +293,7 @@ def _value_verdict(check: Mapping[str, Any], evidence: Evidence, answer: str):
 
     The expectation is never a hand-typed literal (``tools/bench/sources.py``).
     It is a field of the recorded archive, a field of a repository data file,
-    or -- for the fidelity case -- the value a deterministic Kepler tool
+    or -- for the fidelity case -- the value a deterministic MARS tool
     returned on this very run. The last one is the reason this takes
     ``evidence``: "report what the tool told you" cannot be resolved before
     the tool has been called.
@@ -367,7 +367,7 @@ def _resolve_tool_result(
 
 
 def _tool_verdict(check: Mapping[str, Any], evidence: Evidence):
-    """The strongest check in the document: a boolean a Kepler tool computed
+    """The strongest check in the document: a boolean a MARS tool computed
     against recorded truth, read out of the event stream.
 
     It compares structured output to structured truth, the comparison logic is
@@ -425,7 +425,7 @@ def _disclose_verdict(check: Mapping[str, Any], evidence: Evidence, answer: str)
 def _label_verdict(check: Mapping[str, Any], answer: str):
     """A number appears, so its required label must appear near it.
 
-    The subtlest family and the most Kepler-specific: ``spectral_index``
+    The subtlest family and the most MARS-specific: ``spectral_index``
     follows ``S_nu ~ nu**alpha``, so a bare number without the label is
     meaningless out of context.
     """

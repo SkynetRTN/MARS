@@ -457,7 +457,7 @@ def test_combined_bounding_box_encloses_two_adjacent_fields():
     """Still a working function even though upstream guarded its call site off.
 
     Kept as code rather than a comment because the reason it was disabled was
-    never recorded. Nothing in Kepler calls it; turning it on is a behaviour
+    never recorded. Nothing in MARS calls it; turning it on is a behaviour
     change needing its own validation.
     """
     boxes = [(180.0, 10.0, 0.2, 0.2), (180.2, 10.0, 0.2, 0.2)]

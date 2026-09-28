@@ -1,6 +1,6 @@
-# Installing Kepler and serving its tools
+# Installing MARS and serving its tools
 
-How to put Kepler on a machine that has **no checkout** of this repository,
+How to put MARS (MCP Astronomy Research Suite) on a machine that has **no checkout** of this repository,
 serve its tools to a coding agent's console over MCP, and add the optional
 data. The design behind it is `archive/mcp-tool-surface.md` §3.5 and phases
 C3–C7.
@@ -11,10 +11,10 @@ C3–C7.
 | --- | --- | ---: |
 | `tools/` and `algorithms/` | the wheel | ~4 MB of code |
 | **Core data**: the five pulsar scans, the recorded zero-point references, the Afterglow parity fixtures | the wheel, under `tools/_data/` | ~7 MB |
-| **Optional bundles**: the optical frame library, the Girardi isochrone grid | fetched on request, `kepler-mcp fetch-data` | 269 MB, 282 MB |
+| **Optional bundles**: the optical frame library, the Girardi isochrone grid | fetched on request, `mars-mcp fetch-data` | 269 MB, 282 MB |
 | astrometry.net indexes, the ATLAS UCAC5 catalogue | **never bundled**; operator-supplied | 78 GB, 5.3 GB |
 
-Measured in C7 on a clean Python 3.14 virtual environment: Kepler itself
+Measured in C7 on a clean Python 3.14 virtual environment: MARS itself
 installs to about 10 MB. The environment as a whole is about **640 MB**,
 almost all of it dependencies — `llvmlite` (for `numba`) alone is 168 MB, then
 `scipy`, `pandas`, `astropy` and `matplotlib`. `import tools.registry` takes
@@ -31,7 +31,7 @@ missing:
 | `sep` 1.4.1 | Python 3.9–3.13: Linux (x86_64, aarch64), macOS, Windows | **Python 3.14, every platform** |
 | `photutils` 3.0.0 | Linux x86_64, macOS, Windows | **Linux aarch64** (ARM servers, Raspberry Pi, Docker on Apple Silicon) |
 
-**Python 3.13 is Kepler's target** — what CI and the release workflow run,
+**Python 3.13 is MARS's target** — what CI and the release workflow run,
 and the newest Python every dependency ships wheels for. Python 3.12 or 3.13
 on x86_64 Linux, macOS or Windows needs no compiler. Anywhere else, install
 one first: `apt-get install gcc` on Debian or Ubuntu, `dnf
@@ -41,26 +41,26 @@ pip fails with `Failed building wheel for sep` (or `photutils`) and
 `python:3.14-slim` container on aarch64.
 
 ```bash
-python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
-kepler-env/bin/kepler-mcp self-test
+python3.13 -m venv mars-env
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/mars-mcp self-test
 ```
 
 `[mcp]` brings the server. Releases are listed at
-<https://github.com/archon774/skynet-mars/releases>; Kepler is not on PyPI. A wheel
-built with `uv build` in a checkout installs the same way. `kepler-mcp
+<https://github.com/archon774/skynet-mars/releases>; MARS is not on PyPI. A wheel
+built with `uv build` in a checkout installs the same way. `mars-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
 
 ## Register the server with a host
 
-The host launches `kepler-mcp` over stdio. For Claude Code:
+The host launches `mars-mcp` over stdio. For Claude Code:
 
 ```json
-{"mcpServers": {"kepler": {"command": "/path/to/kepler-env/bin/kepler-mcp"}}}
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
 ```
 
-`kepler-mcp --tools databases,timeseries` (or `KEPLER_MCP_TOOLS`) serves only
+`mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
 those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
 is all 55 tools. At startup the server logs to stderr every root it resolved,
 each served group, and whether each data bundle is present. The same facts
@@ -68,17 +68,17 @@ reach the model in the server's instructions.
 
 ## Where things go
 
-Everything Kepler writes lives under one per-user directory, the **Kepler
-home**: `~/.local/share/kepler` on Linux (`$XDG_DATA_HOME` honoured),
-`~/Library/Application Support/kepler` on macOS, and `%LOCALAPPDATA%\kepler`
-on Windows. `KEPLER_HOME` moves it. Nothing is ever written into the installed
+Everything MARS writes lives under one per-user directory, the **MARS
+home**: `~/.local/share/mars` on Linux (`$XDG_DATA_HOME` honoured),
+`~/Library/Application Support/mars` on macOS, and `%LOCALAPPDATA%\mars`
+on Windows. `MARS_HOME` moves it. Nothing is ever written into the installed
 package.
 
 | Directory | What | Override |
 | --- | --- | --- |
-| `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `KEPLER_ARTIFACT_DIR` |
-| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `KEPLER_FITS_DOWNLOAD_DIR`, or `KEPLER_DATA_DIR` (downloads then go to its `fits_downloads/`) |
-| `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `KEPLER_OPTICAL_DATA_DIR`, `KEPLER_ISOCHRONE_DIR` |
+| `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `MARS_ARTIFACT_DIR` |
+| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `MARS_FITS_DOWNLOAD_DIR`, or `MARS_DATA_DIR` (downloads then go to its `fits_downloads/`) |
+| `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `MARS_OPTICAL_DATA_DIR`, `MARS_ISOCHRONE_DIR` |
 | `<home>/numba-cache/` | numba's compiled-function cache, which numba would otherwise write into the installed package | `NUMBA_CACHE_DIR` |
 
 Artifacts are never overwritten, even by two servers sharing the directory:
@@ -88,22 +88,48 @@ numeric suffix. So the directory grows; clear it yourself when you want to.
 says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
 inside the artifact directory, and one that climbs out of it (`..`) is refused.
 
-After `kepler-mcp fetch-data`, restart any running `kepler-mcp`: the server
+After `mars-mcp fetch-data`, restart any running `mars-mcp`: the server
 reads its data locations when it starts.
+
+### Upgrading from Kepler
+
+Kepler was renamed MARS in `0.1.0rc3`. **Install `skynet-mars` into a new
+environment** (or `pip uninstall kepler` first). `kepler` and `skynet-mars`
+are different distributions that install the same `tools` and `algorithms`
+packages and the same `kepler*` commands: installed over Kepler, they share
+files, and a later `pip uninstall kepler` deletes files MARS needs. If that
+has happened, reinstall the `skynet-mars` wheel with `--force-reinstall`.
+
+For that one pre-release, what a Kepler install was configured with keeps
+working, and is removed in the release after it:
+
+- A `KEPLER_*` variable is read as its `MARS_*` twin when the twin is unset,
+  and ignored when it is set; the server logs a line naming both either way.
+  A `.env` still written with `KEPLER_*` is read the same way.
+- The `kepler`, `kepler-mcp` and `kepler-bench` commands run their MARS
+  successors, after saying so on stderr.
+- A Kepler home (`~/.local/share/kepler`, and its macOS and Windows
+  equivalents) is **not** used and **never moved**: its fetched bundles are
+  hundreds of megabytes of your disk. Every start says so while it is there
+  and `MARS_HOME` is unset. To keep its bundles, downloads and artifacts,
+  move what is inside it (`bundles/`, `fits_downloads/`, `artifacts/`) into
+  the MARS home and remove it, or point `MARS_HOME` at it. Do not rename the
+  directory itself: `mars-mcp` creates the MARS home when it starts, and a
+  rename would nest the old home inside the new one.
 
 ## The optional data bundles
 
 ```bash
-kepler-mcp fetch-data --list         # size and status of each
-kepler-mcp fetch-data optical        # or: isochrones, all
+mars-mcp fetch-data --list         # size and status of each
+mars-mcp fetch-data optical        # or: isochrones, all
 ```
 
 Each bundle is one archive whose size and SHA-256 are pinned in the installed
-package's own manifest (`tools/mcp/bundles.json`). An installed Kepler accepts
+package's own manifest (`tools/mcp/bundles.json`). An installed MARS accepts
 only the exact bytes it was released with. A download that fails partway
 resumes from where it stopped when you run the command again. A bundle that is
 already installed and verified is left alone. `--from URL_OR_DIR` (or
-`KEPLER_BUNDLE_URL`) fetches from a mirror or a local directory instead.
+`MARS_BUNDLE_URL`) fetches from a mirror or a local directory instead.
 
 What needs which bundle:
 
@@ -141,5 +167,5 @@ WCS still reports it, and every other tool is unaffected.
   into a bundle frame would silently break its checksum. Downloaded products
   stay writable.
 - `list_optical_frames` walks a download root recursively only inside the data
-  directory or the Kepler home's own `fits_downloads/`. Pointed anywhere else,
+  directory or the MARS home's own `fits_downloads/`. Pointed anywhere else,
   the root is searched flat and the listing says so.

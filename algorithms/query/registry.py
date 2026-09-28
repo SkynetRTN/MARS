@@ -34,7 +34,7 @@ class UnknownCatalogError(ValueError):
     """Raised when a caller names a catalog that is not registered.
 
     EXTRACTED FROM: ``afterglow-core/afterglow_core/errors/catalog.py``, which
-    defined this as an HTTP-404-carrying ``AfterglowError``. Kepler is a library
+    defined this as an HTTP-404-carrying ``AfterglowError``. MARS is a library
     here, not a web service, so it is a plain ``ValueError`` subclass — callers
     that need a 404 can map it at their edge. Subclassing ``ValueError`` keeps
     the ``raise ValueError(f'Unknown catalog "{name}"')` that the query runner

@@ -1,4 +1,4 @@
-"""Console-script entry point for the Kepler Textual application."""
+"""Console-script entry point for the MARS Textual application."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ import sys
 
 if __name__ == "__main__":
     # `python -m tools.tui`: load .env before the imports below read
-    # tools.config, as the `kepler` script does (tools.tui.launch).
+    # tools.config, as the `mars` script does (tools.tui.launch).
     from tools.dotenv import load_dotenv as _load_dotenv_first
 
     _load_dotenv_first()
 
 from tools.config import load_dotenv
 from tools.llm.base import BackendUnavailableError
-from tools.tui.app import DEFAULT_THINKING_BUDGET, KeplerApp
+from tools.tui.app import DEFAULT_THINKING_BUDGET, MARSApp
 from tools.tui.backends import (
     CHOICES,
     UnknownBackendError,
@@ -29,12 +29,12 @@ __all__ = ["main", "launch_spec"]
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="kepler")
+    parser = argparse.ArgumentParser(prog="mars")
     parser.add_argument(
         "--backend",
         help=(
             "Backend to start on: a name (" + ", ".join(names()) + ") or a "
-            "provider/model spec. Defaults to KEPLER_MODEL_BACKEND, then to "
+            "provider/model spec. Defaults to MARS_MODEL_BACKEND, then to "
             f"{CHOICES[0].provider}. Switch at any time with /backend."
         ),
     )
@@ -56,8 +56,8 @@ def launch_spec(requested: str | None = None) -> str:
     """The ``provider/model`` spec the console starts on.
 
     Resolution order, and no other: the ``--backend`` flag, then
-    ``KEPLER_MODEL_BACKEND``, then the first offered choice. The flag accepts a
-    bare name so ``kepler --backend ollama`` works; the environment variable
+    ``MARS_MODEL_BACKEND``, then the first offered choice. The flag accepts a
+    bare name so ``mars --backend ollama`` works; the environment variable
     does not, because it is the model port's own contract and is read
     identically by the model port's own factory and the benchmark harness.
 
@@ -69,7 +69,7 @@ def launch_spec(requested: str | None = None) -> str:
 
     if requested:
         return resolve_spec(requested)
-    configured = os.environ.get("KEPLER_MODEL_BACKEND")
+    configured = os.environ.get("MARS_MODEL_BACKEND")
     if configured:
         return configured
     first = CHOICES[0]
@@ -108,7 +108,7 @@ def main() -> int:
         print(f"Cannot start on {spec}: {exc}", file=sys.stderr)
         return 2
 
-    KeplerApp(
+    MARSApp(
         backend=backend,
         max_turns=args.max_turns,
         thinking_budget=thinking_budget,

@@ -1,6 +1,6 @@
-# Releasing Kepler
+# Releasing MARS
 
-How a Kepler release is cut, what its version means, and how the optional data
+How a MARS (MCP Astronomy Research Suite) release is cut, what its version means, and how the optional data
 bundles are published and matched to it. The workflow is
 `.github/workflows/release.yml`. Installing a release is `installing.md`.
 
@@ -38,7 +38,7 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
 2. **verify** runs on a clean runner **with no checkout**, on Python 3.12 (the
    floor) and 3.13, the newest Python every dependency ships wheels for. It
    installs the wheel with `[mcp]` and runs
-   `kepler-mcp self-test`. That launches the installed server over stdio and
+   `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
 3. **data** checks that the `data` release holds every archive
    `bundles.json` pins, at the pinned size and SHA-256. It reads GitHub's own
@@ -66,9 +66,9 @@ hex digits of their SHA-256. The same tree always builds the same file and the
 same name.
 
 **A wheel pins its bundles.** `tools/mcp/bundles.json` ships inside the wheel
-and records each archive's name, size and SHA-256. `kepler-mcp fetch-data`
+and records each archive's name, size and SHA-256. `mars-mcp fetch-data`
 downloads that exact archive from the `data` release and rejects any other
-bytes. That is how an installed Kepler resolves "which bundle matches me",
+bytes. That is how an installed MARS resolves "which bundle matches me",
 with no version negotiation. Old archives stay on the `data` release, so an
 older wheel keeps fetching the bundle it was built with.
 
@@ -97,11 +97,11 @@ On a machine with no checkout (and a C compiler unless it is Python 3.12 or
 3.13 on x86_64 Linux, macOS or Windows; see `installing.md`):
 
 ```bash
-python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
-kepler-env/bin/kepler-mcp self-test
-kepler-env/bin/kepler-mcp fetch-data optical      # optional
+python3.13 -m venv mars-env
+mars-env/bin/pip install "skynet-mars[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/skynet_mars-<version>-py3-none-any.whl"
+mars-env/bin/mars-mcp self-test
+mars-env/bin/mars-mcp fetch-data optical      # optional
 ```
 
-Then register `kepler-env/bin/kepler-mcp` with a host (`installing.md`) and
+Then register `mars-env/bin/mars-mcp` with a host (`installing.md`) and
 run a pulsar task through it.

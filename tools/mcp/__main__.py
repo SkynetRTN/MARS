@@ -1,4 +1,4 @@
-"""``kepler-mcp``: serve Kepler's tools to a host over stdio.
+"""``mars-mcp``: serve MARS's tools to a host over stdio.
 
 The order in :func:`main` is the point of this module. A checkout's ``.env``
 is loaded first, then the roots are pinned into the environment, and only then
@@ -17,25 +17,27 @@ import sys
 from tools.mcp.roots import pin_roots
 from tools.paths import pin_numba_cache
 
-log = logging.getLogger("kepler-mcp")
+log = logging.getLogger("mars-mcp")
 
 
 def _missing_sdk_message() -> str:
     """How to add the SDK -- never by package name alone.
 
-    Kepler is not on PyPI, and the PyPI project called ``kepler`` is
-    unrelated: ``pip install 'kepler[mcp]'`` installs it (and, with ``-U``,
-    replaces this install with it) instead of the SDK. So the advice names this
-    interpreter's own pip and the wheel the user installed from.
+    ``skynet-mars`` is not on PyPI, so ``pip install 'skynet-mars[mcp]'``
+    finds nothing -- or, should anyone register the name, something else --
+    instead of the SDK. (Before the rename the trap was live: the PyPI
+    project called ``kepler`` is unrelated, and ``-U`` replaced this install
+    with it.) So the advice names this interpreter's own pip and the wheel the
+    user installed from.
     """
 
     return (
-        "kepler-mcp needs its optional [mcp] dependencies. From a checkout, run "
+        "mars-mcp needs its optional [mcp] dependencies. From a checkout, run "
         "`uv sync --extra mcp`. From an install, reinstall the same wheel with the "
         f"extra, using this environment's pip: `{sys.executable} -m pip install "
-        "\"kepler[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
-        "Do not run `pip install kepler[mcp]`: Kepler is not on PyPI, and the "
-        "PyPI project named kepler is a different one."
+        "\"skynet-mars[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
+        "Do not run `pip install skynet-mars[mcp]`: skynet-mars is not on PyPI, "
+        "so pip would fetch nothing, or someone else's project."
     )
 
 
@@ -43,13 +45,21 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
     # First, for every subcommand. fetch-data and self-test import
-    # tools.config too, and a checkout's .env can move the Kepler home or name
+    # tools.config too, and a checkout's .env can move the MARS home or name
     # a bundle mirror: loaded only for the server, the fetch installed into
     # one home and the server read another. The real environment still wins
     # over the file.
     from tools.dotenv import DOTENV_PATH, load_dotenv
 
     loaded = load_dotenv()
+    # Before anything reads a setting or writes into the home (tools.compat).
+    from tools.compat import adopt_legacy_environment, legacy_home_notice
+
+    for legacy in adopt_legacy_environment():
+        print(f"mars-mcp: {legacy.message()}", file=sys.stderr)
+    notice = legacy_home_notice()
+    if notice:
+        print(f"mars-mcp: {notice}", file=sys.stderr)
     pin_numba_cache()
 
     if argv[:1] == ["fetch-data"]:
@@ -64,13 +74,13 @@ def main(argv: list[str] | None = None) -> int:
         return self_test(argv[1:])
 
     parser = argparse.ArgumentParser(
-        prog="kepler-mcp",
+        prog="mars-mcp",
         description=(
-            "Serve Kepler's astronomy tools over MCP on stdio. A host launches "
-            "this; it is not run by hand. Artifacts go to KEPLER_ARTIFACT_DIR, "
+            "Serve MARS's astronomy tools over MCP on stdio. A host launches "
+            "this; it is not run by hand. Artifacts go to MARS_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
-            "stderr at startup. `kepler-mcp fetch-data` installs the optional "
-            "data bundles; `kepler-mcp self-test` checks this install."
+            "stderr at startup. `mars-mcp fetch-data` installs the optional "
+            "data bundles; `mars-mcp self-test` checks this install."
         ),
     )
     parser.add_argument(
@@ -78,14 +88,14 @@ def main(argv: list[str] | None = None) -> int:
         metavar="GROUPS",
         help=(
             "Serve only these comma-separated tool groups (default: all 55 tools; "
-            "also KEPLER_MCP_TOOLS). Groups: databases, optical, timeseries, hr, "
+            "also MARS_MCP_TOOLS). Groups: databases, optical, timeseries, hr, "
             "radio."
         ),
     )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
-        stream=sys.stderr, level=logging.INFO, format="kepler-mcp: %(message)s"
+        stream=sys.stderr, level=logging.INFO, format="mars-mcp: %(message)s"
     )
 
     # Every tool call runs on a worker thread, and on macOS matplotlib's
@@ -130,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("download root: %s", config.FITS_DOWNLOAD_DIR)
     log.info(
         "isochrone grid: %s",
-        config.ISOCHRONE_DIR or "not set (KEPLER_ISOCHRONE_DIR); the isochrone fit is unavailable",
+        config.ISOCHRONE_DIR or "not set (MARS_ISOCHRONE_DIR); the isochrone fit is unavailable",
     )
     if loaded:
         log.info("read from %s: %s", DOTENV_PATH, ", ".join(loaded))

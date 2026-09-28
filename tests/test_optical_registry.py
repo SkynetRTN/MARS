@@ -131,11 +131,11 @@ def test_a_missing_directory_returns_an_error_naming_the_env_override():
     listing = list_optical_frames("/nonexistent/optical")
     assert listing.count == 0
     assert [e.code for e in listing.errors] == ["directory_not_found"]
-    assert "KEPLER_OPTICAL_DATA_DIR" in listing.errors[0].message
+    assert "MARS_OPTICAL_DATA_DIR" in listing.errors[0].message
 
 
 def test_env_override_redirects_the_search_root(tmp_path, monkeypatch):
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(tmp_path))
     listing = list_optical_frames()
     assert Path(listing.search_root) == tmp_path
     assert listing.count == 0
@@ -237,7 +237,7 @@ def test_only_the_download_root_is_searched_recursively(download_root, tmp_path,
     _write_frame(
         nested_primary / "subdir" / "buried.fits", object_name="Buried", image_filter="V"
     )
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(nested_primary))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(nested_primary))
     _write_frame(
         download_root / "deep" / "deeper" / "found.fits", object_name="Found", image_filter="V"
     )
@@ -260,7 +260,7 @@ def test_an_explicit_directory_argument_still_means_exactly_that_directory(downl
 def test_a_frame_reachable_through_two_roots_is_listed_once(monkeypatch, download_root):
     """Nothing stops an operator pointing both env vars at one directory."""
     download_root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(download_root))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(download_root))
     _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
 
     listing = list_optical_frames()
@@ -279,7 +279,7 @@ def test_collapsing_two_roots_into_one_keeps_the_recursive_search(
     downloads the moment an operator pointed both env vars at one directory.
     """
     download_root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(download_root))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(download_root))
     _write_frame(
         download_root / "mastDownload" / "HST" / "obs" / "nested.fits",
         object_name="Nested",
@@ -354,7 +354,7 @@ def test_the_archive_tools_and_the_registry_agree_on_the_download_root(download_
 def test_a_missing_primary_root_is_not_an_error_when_a_download_root_has_frames(
     monkeypatch, download_root
 ):
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", "/nonexistent/optical")
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", "/nonexistent/optical")
     _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
 
     listing = list_optical_frames()
@@ -366,7 +366,7 @@ def test_a_missing_primary_root_is_not_an_error_when_a_download_root_has_frames(
 
 
 def test_directory_not_found_names_every_root_it_tried(monkeypatch, download_root):
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", "/nonexistent/optical")
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", "/nonexistent/optical")
     listing = list_optical_frames()
 
     assert [e.code for e in listing.errors] == ["directory_not_found"]
@@ -374,7 +374,7 @@ def test_directory_not_found_names_every_root_it_tried(monkeypatch, download_roo
     message = listing.errors[0].message
     assert "/nonexistent/optical" in message
     assert str(download_root) in message
-    assert "KEPLER_OPTICAL_DATA_DIR" in message
+    assert "MARS_OPTICAL_DATA_DIR" in message
 
 
 def test_an_absent_download_root_is_skipped_without_a_warning(download_root):
@@ -401,7 +401,7 @@ def test_an_empty_directory_string_falls_back_to_the_default_roots(lfs_frames):
 # --- The recursive walk is bounded ------------------------------------------
 #
 # Two bounds, added after P2 recorded the unbounded rglob as an open finding.
-# KEPLER_FITS_DOWNLOAD_DIR can name anywhere -- a home directory, a mount
+# MARS_FITS_DOWNLOAD_DIR can name anywhere -- a home directory, a mount
 # point, "/" -- so recursion is confined to the data directory; and a bulk
 # search_mast(download=True) can leave thousands of products under it
 # (121,515 for Cas A), so one listing reads a bounded number of headers.
@@ -486,8 +486,8 @@ def test_the_shipped_defaults_put_the_download_root_inside_the_data_dir(monkeypa
 
     from tools import config
 
-    monkeypatch.delenv("KEPLER_DATA_DIR", raising=False)
-    monkeypatch.delenv("KEPLER_FITS_DOWNLOAD_DIR", raising=False)
+    monkeypatch.delenv("MARS_DATA_DIR", raising=False)
+    monkeypatch.delenv("MARS_FITS_DOWNLOAD_DIR", raising=False)
     spec = importlib.util.spec_from_file_location("_config_pristine", config.__file__)
     pristine = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pristine)
@@ -505,7 +505,7 @@ def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch, lfs_fram
     assert listing.count == 5
     assert [w.code for w in listing.warnings] == ["listing_truncated"]
     assert "42 frames found" in listing.warnings[0].message
-    assert "KEPLER_MAX_FRAMES" in listing.warnings[0].message
+    assert "MARS_MAX_FRAMES" in listing.warnings[0].message
 
 
 def test_an_uncapped_listing_carries_no_truncation_warning(lfs_frames):
@@ -598,7 +598,7 @@ def test_the_cap_is_per_root_so_a_large_primary_cannot_starve_the_download_root(
     big_primary = tmp_path / "primary"
     for i in range(6):
         _write_frame(big_primary / f"arch_{i:03d}.fits", object_name=f"A{i}", image_filter="V")
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(big_primary))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(big_primary))
     monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 4)
     _write_frame(
         download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
@@ -642,7 +642,7 @@ def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch
     _write_frame(fake_repo / "fits_downloads" / "old.fits", object_name="Old", image_filter="V")
     # _REPO_ROOT also anchors the default primary root; pin that to the real
     # bundled directory so the listing is a normal one, not directory_not_found.
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(OPTICAL))
     monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
     download_root.mkdir()
 
@@ -661,7 +661,7 @@ def test_an_empty_legacy_download_root_is_not_reported(download_root, monkeypatc
 
     fake_repo = download_root.parent / "repo"
     (fake_repo / "fits_downloads").mkdir(parents=True)
-    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setenv("MARS_OPTICAL_DATA_DIR", str(OPTICAL))
     monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
 
     assert list_optical_frames().warnings == []
@@ -673,11 +673,11 @@ def test_a_zero_or_negative_frame_cap_is_rejected_at_load(monkeypatch):
     from tools import config
 
     for bad in ("0", "-5", "many"):
-        monkeypatch.setenv("KEPLER_MAX_FRAMES", bad)
+        monkeypatch.setenv("MARS_MAX_FRAMES", bad)
         with pytest.raises(ValueError):
-            config.env_positive_int("KEPLER_MAX_FRAMES", 200)
-    monkeypatch.setenv("KEPLER_MAX_FRAMES", "7")
-    assert config.env_positive_int("KEPLER_MAX_FRAMES", 200) == 7
+            config.env_positive_int("MARS_MAX_FRAMES", 200)
+    monkeypatch.setenv("MARS_MAX_FRAMES", "7")
+    assert config.env_positive_int("MARS_MAX_FRAMES", 200) == 7
 
 
 def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):
@@ -692,7 +692,7 @@ def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):
     assert isinstance(result, OpticalFrameList)
     message = result.errors[0].message
     assert "Only the first 5 frames were read" in message
-    assert "KEPLER_MAX_FRAMES" in message
+    assert "MARS_MAX_FRAMES" in message
     assert "listing_truncated" in [w.code for w in result.warnings]
 
 

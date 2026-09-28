@@ -1,6 +1,6 @@
 # Algorithm Extraction Records
 
-This document consolidates the extraction records for every algorithm package under `algorithms/`.
+This document consolidates the extraction records for every algorithm package under `algorithms/` in MARS (MCP Astronomy Research Suite).
 The records were previously kept as one `EXTRACTION.md` file per package; this is now the authoritative master record.
 
 Internal section references such as `§5.2` are local to the package section they appear in unless they explicitly name another section.
@@ -357,7 +357,7 @@ data installed.
    Note this is the **anet path only** — the ATLAS backend runs its own
    self-contained scipy extractor
    (`skylib/astrometry/atlas/extract/sources.py`). If the photometry and
-   fieldcal extractions land in sibling Kepler folders, this module will be
+   fieldcal extractions land in sibling MARS folders, this module will be
    duplicated across them; consolidating it into a shared package is a
    repo-level decision outside this extraction's scope.
 
@@ -594,7 +594,7 @@ dependency, and removing them would have been a rewrite.
 | `optical_data_processing/test-photometry.py` (110 lines) | See §5. |
 | `skylib/calibration/{bias,dark,flat,cosmic,cosmetic}.py` | Pre-photometry image calibration; not reachable from the photometry path. |
 | `skylib/{astrometry,catalogs,combine,color,enhancement,ephem,io,quality,sonification}/` | Unrelated to photometry. |
-| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other Skynet stages / other Kepler modules. |
+| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other Skynet stages / other MARS modules. |
 | `skynet_db.models`, `skynet_db.config`, `runners/utils.py`, `runners/common` job machinery | ORM, S3, job-state. The seams above. |
 
 ---
@@ -661,7 +661,7 @@ It lives at `field_cal.py:612`:
 cal_phot_settings = phot_settings.model_copy(update={"apcorr_tol": 0.0})
 ```
 
-Whoever extracts Kepler `fieldcal/` must carry that line across. Its effect is
+Whoever extracts MARS `fieldcal/` must carry that line across. Its effect is
 here, in `skylib/photometry/aperture.py`: `apcorr_tol > 0` gates both the
 growth-curve aperture-correction block (line 426) and the annulus-parameter setup
 (lines 276, 374), so `0` disables aperture correction entirely.
@@ -849,13 +849,13 @@ unless noted. `OPD/` abbreviates
 
 ##### Core algorithm
 
-| Kepler file | Lines | Source | Source lines | Fidelity |
+| MARS file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
 | `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
 | `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
-| batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained Kepler API. |
+| batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
 | `__init__.py` | 58 | — | — | **New file.** Public API surface. |
 
 ##### Catalog metadata — MOVED OUT
@@ -938,7 +938,7 @@ behaviourally load-bearing:**
 
 The maintained calibration API receives WCS, supplied catalog and variable rows,
 and optional provenance `file_id` directly. The upstream row remains provenance
-only; Kepler does not recreate it.
+only; MARS does not recreate it.
 
 ##### 4.3 Catalog ownership → `algorithms/catalogs/` and `algorithms/query/`
 
@@ -984,7 +984,7 @@ pattern used by `algorithms/photometry/` and `algorithms/wcs/`.
 
 ##### 4.5 Batch driver
 
-The upstream exporter is deliberately not maintained. Kepler tools execute one
+The upstream exporter is deliberately not maintained. MARS tools execute one
 known input per call and return structured results rather than iterating a
 directory, persisting run state, or aggregating CSV output.
 
@@ -1133,7 +1133,7 @@ _Former source: `algorithms/catalogs/EXTRACTION.md`._
 
 #### 1. What this package is
 
-`catalogs/` is Kepler's answer to "what do we know about each photometric
+`catalogs/` is MARS's answer to "what do we know about each photometric
 catalog": band tables, colour transforms, VizieR table IDs, row limits, column
 mappings, and the photometric conversions three catalogs apply to their rows.
 
@@ -1155,7 +1155,7 @@ Both are reproduced, because the drift is load-bearing (§4).
 
 From `skynet/packages/py/skynet-db/skynet_db/runners/observation_asset_processing/optical_data_processing/catalogs/`:
 
-| Kepler file | Upstream file | Lines | Fidelity |
+| MARS file | Upstream file | Lines | Fidelity |
 |---|---|---|---|
 | `catalog.py` | `catalog.py` | 45 | Attribute set and `filter_lookup` merge preserved; docstrings rewritten, `table_to_sources` declared |
 | `apass_catalog.py` | `apass_catalog.py` | 37 | Metadata verbatim |
@@ -1180,29 +1180,29 @@ From `skynet/packages/py/skynet-db/skynet_db/runners/observation_asset_processin
 
 ##### Schemas and vocabulary
 
-| Kepler file | Upstream | Notes |
+| MARS file | Upstream | Notes |
 |---|---|---|
 | `schemas.py` | `skynet_db/runners/common/schemas.py` (331) — catalog subset | Field names, aliases and the NaN-stripping serializer preserved |
 | `simbad.py` | `skynet/apps/public-api/public_api/services/target_search.py` lines 27–234 | 206-entry otype table, verbatim |
 
 Afterglow's `afterglow_core/models/catalogs.py` and
 `afterglow_core/resources/catalog_plugins/*` are the common ancestor of the
-Skynet copies. Where the two disagreed, Kepler takes Skynet's — it is the
+Skynet copies. Where the two disagreed, MARS takes Skynet's — it is the
 de-Flasked, more recently maintained fork — except where noted in
 the Query section of this document, §3.
 
 #### 3. What was renamed, and why
 
-Kepler is a separate service. It records where code came from in these markers,
+MARS is a separate service. It records where code came from in these markers,
 but does not present itself as Skynet or Afterglow, so identity-bearing names
 were changed. Behaviour was not.
 
 | Was | Now | Where |
 |---|---|---|
-| `SkynetBaseModel` | `KeplerBaseModel` | `schemas.py`; `fieldcal/schemas.py` aliases it |
+| `SkynetBaseModel` | `MARSBaseModel` | `schemas.py`; `fieldcal/schemas.py` aliases it |
 | `Catalog` (Pydantic settings record) | `CatalogMeta` | `schemas.py` — freed the name for the plugin base class |
-| `"""Afterglow Core: …"""` headers | `"""Kepler: …"""` | all eleven plugins |
-| `# n_max to Skynet filter names` | `# VSX n_max band code -> Kepler band name` | `vsx_catalog.py` |
+| `"""Afterglow Core: …"""` headers | `"""MARS: …"""` | all eleven plugins |
+| `# n_max to Skynet filter names` | `# VSX n_max band code -> MARS band name` | `vsx_catalog.py` |
 
 Numeric content — every colour transform, coefficient, band table, row limit and
 VizieR ID — is untouched.
@@ -1303,7 +1303,7 @@ _Former source: `algorithms/query/EXTRACTION.md`._
 
 #### 1. What this package is
 
-`query/` is Kepler's remote catalog access layer. It owns every network call in
+`query/` is MARS's remote catalog access layer. It owns every network call in
 the catalog path: the VizieR engine, SDSS's SkyServer SQL backend, SIMBAD
 identifier resolution, the astroquery response cache, and the orchestration that
 turns "these catalogs, this field, this filter" into a list of `CatalogSource`.
@@ -1313,7 +1313,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 
 #### 2. Files copied — exact provenance
 
-| Kepler file | Upstream source | Lines | Fidelity |
+| MARS file | Upstream source | Lines | Fidelity |
 |---|---|---|---|
 | `vizier.py` | `afterglow_core/resources/catalog_plugins/vizier_catalogs.py` | 373 | Engine verbatim; Flask config → `config.py`; cache patch → `cache.py`; custom-catalog loop → a function |
 | `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 | SQL generation byte-identical |
@@ -1337,7 +1337,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 
 #### 3. Where the two upstreams disagreed
 
-Afterglow and Skynet's copies had drifted. Per file, Kepler took:
+Afterglow and Skynet's copies had drifted. Per file, MARS took:
 
 | Piece | Taken from | Why |
 |---|---|---|
@@ -1354,13 +1354,13 @@ Afterglow and Skynet's copies had drifted. Per file, Kepler took:
 
 Afterglow read `VIZIER_SERVER`, `VIZIER_CACHE` and `VIZIER_CACHE_AGE` from Flask
 config, which made importing the catalog plugins require an application context.
-Kepler reads the environment. Defaults reproduce upstream values. No effect on
+MARS reads the environment. Defaults reproduce upstream values. No effect on
 query results.
 
 ##### 4.2 Import-time monkey-patch → explicit call
 
 Afterglow patched `astroquery.query.to_cache` and `AstroQuery` as a bare side
-effect of module import. Kepler moves it to
+effect of module import. MARS moves it to
 `cache.install_cache_error_suppression()`, which `vizier.py` calls on import —
 so the default behaviour is unchanged, but the patch is greppable and a caller
 can opt out. Patching a third-party module's globals should not be invisible.
@@ -1368,7 +1368,7 @@ can opt out. Patching a third-party module's globals should not be invisible.
 ##### 4.3 `CUSTOM_VIZIER_CATALOGS` loop → `build_custom_vizier_catalog()`
 
 Afterglow built custom catalog classes in an import-time `for` loop over Flask
-config, wrapped in `try/except Exception` that logged and continued. Kepler
+config, wrapped in `try/except Exception` that logged and continued. MARS
 exposes the same class construction as a function that raises. A misconfigured
 catalog should be visible where it is registered, not absent at query time.
 
@@ -1376,7 +1376,7 @@ catalog should be visible where it is registered, not absent at query time.
 
 `query_catalogs_for_processing_run` took an `ObservationAssetProcessingRun`
 SQLAlchemy row as its first argument and never read it — it was there for
-call-site symmetry. Kepler's `query_catalogs` omits it rather than carry a
+call-site symmetry. MARS's `query_catalogs` omits it rather than carry a
 duck-typed placeholder. `fieldcal` call sites updated.
 
 ##### 4.5 SIMBAD resolver: local-database branches severed
@@ -1399,7 +1399,7 @@ and cached on first use.
 ##### 4.6 `AfterglowError` → `UnknownCatalogError(ValueError)`
 
 `afterglow_core/errors/catalog.py` defined `UnknownCatalogError` as an
-HTTP-404-carrying `AfterglowError`. Kepler is a library here, so it subclasses
+HTTP-404-carrying `AfterglowError`. MARS is a library here, so it subclasses
 `ValueError` — which keeps the `raise ValueError('Unknown catalog "…"')` that the
 query runner used catchable the same way. Callers needing a 404 map it at their
 edge.
@@ -1414,7 +1414,7 @@ service infrastructure and was left behind.
 
 ##### 4.8 Class renames
 
-`AfterglowSDSS` → `KeplerSDSS`. Generated SQL unchanged. See
+`AfterglowSDSS` → `MARSSDSS`. Generated SQL unchanged. See
 the Catalogs section of this document, §3 for the rest.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
@@ -1434,7 +1434,7 @@ The identifier filter skips NumPy exports and `str` methods but not Python
 builtins, so Landolt's sexagesimal-parsing expressions contribute `'int'` and
 `'float'` as VizieR column names. VizieR ignores unknown columns, so the query
 still returns correct data — which is why it survived upstream unnoticed.
-Left as-is: filtering builtins changes the request Kepler sends and needs
+Left as-is: filtering builtins changes the request MARS sends and needs
 validation against a live VizieR.
 
 ##### 5.3 `build_custom_vizier_catalog`'s character class is wrong
@@ -1444,7 +1444,7 @@ the generated name is never parsed. Preserved.
 
 ##### 5.4 Rows with no magnitudes are dropped
 
-`table_to_sources` appends a source only `if source.mags`. A source Kepler cannot
+`table_to_sources` appends a source only `if source.mags`. A source MARS cannot
 photometer is not useful, and field calibration depends on the filtering.
 `len(table)` and `len(sources)` differ routinely.
 
@@ -1462,7 +1462,7 @@ indistinguishable from an empty field.
 
 It calls `constraints.setdefault('flags', '0')` on the dict it was handed. A
 caller reusing one dict across catalogs finds `flags` added after querying
-SkyMapper. Upstream did the same; Kepler's runner passes a fresh dict per call.
+SkyMapper. Upstream did the same; MARS's runner passes a fresh dict per call.
 
 ##### 5.8 SDSS ignores `constraints`
 
@@ -1475,7 +1475,7 @@ pass a shared constraints dict to a catalog list including SDSS.
 ##### 5.9 `combined_bounding_box` is disabled upstream
 
 Afterglow guarded the call with `if False:` and fell through to querying each
-field separately. The reason was never recorded. Kepler keeps it as a working,
+field separately. The reason was never recorded. MARS keeps it as a working,
 tested function that nothing calls. Enabling it is a behaviour change needing its
 own validation.
 
@@ -1968,7 +1968,7 @@ Pleiades (128 pc) while the same tolerance was comfortably generous for NGC
 6124 (654 pc) -- angular PM dispersion for a fixed physical velocity
 dispersion scales as 1/distance, so no single fixed mas/yr number can be
 right for both. `isochrones.py` is the one module here that still makes its
-own network call (the PARSEC CMD service has no existing Kepler tool
+own network call (the PARSEC CMD service has no existing MARS tool
 wrapping it); Gaia DR3 and cluster-parameter catalog fetching are
 deliberately **not** implemented here. Both go through
 `tools.hr_diagram`, one layer up, which calls the existing
@@ -2136,7 +2136,7 @@ _Former source: `algorithms/lightcurve/EXTRACTION.md`._
 ### Light Curve extraction from Astromancer
 
 Algorithmic TypeScript for the **light curve** and **period folding** stages of
-Astromancer's two light-curve tools, extracted into Kepler.
+Astromancer's two light-curve tools, extracted into MARS.
 
 - **Source repo:** `/home/claude/astromancer` (Angular 16 / TypeScript). Read-only for this task; nothing there was modified.
 - **Historical destination:** `/home/claude/Kepler/algorithms/lightcurve/`
@@ -2684,7 +2684,7 @@ It is marked `# PORTED:` rather than `# EXTRACTED:` so the extraction-marker
 index stays meaningful.
 
 The port exists because the upstream sonifier cannot be executed headless — it
-is welded to `Blob`, `document` and `AudioContext` — and Kepler's tool surface
+is welded to `Blob`, `document` and `AudioContext` — and MARS's tool surface
 is Python. Note this is a **narrower** case than the one
 `docs/tool-architecture.md` once rejected when it said "TypeScript stays
 TypeScript": that rejection was about `lomb-scargle.ts`, which was
@@ -2714,7 +2714,7 @@ The four tools that sit on these are documented in
 ### 6. Deliberate divergences in the port (do not "fix")
 
 1. **The noise carrier is seeded.** Upstream calls `Math.random()`, which is
-   unseedable. Kepler's default checks must be deterministic (`CLAUDE.md`), so
+   unseedable. MARS's default checks must be deterministic (`CLAUDE.md`), so
    the carrier comes from `numpy.random.default_rng(seed)`, defaulting to 0.
    Same distribution, reproducible draw. Pass `seed=None` for upstream's
    behaviour.

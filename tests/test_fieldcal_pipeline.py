@@ -12,7 +12,7 @@ thing a tidy-up would break:
   zero point matching legacy Afterglow.
 
 The end-to-end test at the bottom runs the whole thing on a real frame with the
-seam wired to Kepler's own ``algorithms/photometry/`` and ``algorithms/wcs/`` — no network, catalog
+seam wired to MARS's own ``algorithms/photometry/`` and ``algorithms/wcs/`` — no network, catalog
 sources supplied directly.
 
 Modelled on ``skynet .../tests/runners/test_field_cal.py``.

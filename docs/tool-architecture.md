@@ -1,9 +1,9 @@
-# Kepler Tool Collection Architecture
+# MARS Tool Collection Architecture
 
 Date: 2026-08-10
 Status: active architecture
 
-Kepler is an astronomy tool collection for Python callers, scripts, notebooks,
+MARS (MCP Astronomy Research Suite) is an astronomy tool collection for Python callers, scripts, notebooks,
 agents, and future CLI/application surfaces. It is not an orchestration
 framework. The public tool layer should expose small, ordinary Python functions
 that prepare inputs, call the extracted algorithms, and return compact typed
@@ -45,7 +45,7 @@ tools/
   sessions.py         # per-run session manifest recording + the loop's cache-key helper
   agent/              # headless agent loop: run_session, events, the moved SYSTEM_PROMPT
   llm/                # provider-neutral model port -- see section 10
-  tui/                # the `kepler` console over the loop -- see section 10.2
+  tui/                # the `mars` console over the loop -- see section 10.2
   bench/              # model benchmark harness -- see section 10.1
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
@@ -77,7 +77,7 @@ package data such as
 
 ## 2. Public Tool Layer
 
-**One public tool call is Kepler's execution boundary.** No run, stage, session,
+**One public tool call is MARS's execution boundary.** No run, stage, session,
 or batch object spans two calls; no tool writes state another tool reads. A
 caller that needs a value from an earlier step passes it in, or passes the
 artifact path the earlier call returned. The processing-run architecture that
@@ -103,8 +103,8 @@ The first local, no-network tools are:
   through the same registry every image tool already takes a path from.
   Both bounds on that search are operator settings rather than tool
   parameters: the download root is walked recursively only while it resolves
-  inside `KEPLER_DATA_DIR` (outside it, searched flat with a
-  `download_root_outside_data_dir` warning), and `KEPLER_MAX_FRAMES`
+  inside `MARS_DATA_DIR` (outside it, searched flat with a
+  `download_root_outside_data_dir` warning), and `MARS_MAX_FRAMES`
   (default 200) caps how many frames one listing reads headers for from each
   root, with a `listing_truncated` warning naming the total when it bites.
   `search_mast(download=true)` reports the directories products landed in, so
@@ -207,7 +207,7 @@ timeout_s=None, force=False, search_radius_deg=None, min_scale_arcsec=None,
 max_scale_arcsec=None)` wraps the extracted plate solver with its required
 per-call backend configuration, structured unavailable and no-solution outcomes,
 attempted-backend reporting, and guarded FITS-header persistence. A single tool
-call is Kepler's execution boundary: no run or stage state is retained between
+call is MARS's execution boundary: no run or stage state is retained between
 calls.
 
 The three search bounds are opt-in (P6). Unset, the solve is the extracted
@@ -463,8 +463,8 @@ is unchanged without them:
 - A backend is named by a `provider/model` spec, split on the **first slash
   only** (`ollama/llama3.1:8b`, `openai/meta-llama/Llama-3-8b`). Recognized
   providers: `anthropic`, `openai`, `ollama`, `gemini`. `build_backend(spec)`
-  constructs one; `spec` defaults to `KEPLER_MODEL_BACKEND`.
-- Environment: `KEPLER_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
+  constructs one; `spec` defaults to `MARS_MODEL_BACKEND`.
+- Environment: `MARS_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY` / `OPENAI_BASE_URL`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`. A
   provider key from the environment reaches only that provider's default host;
   a non-default base URL needs a key passed explicitly with it.
@@ -512,8 +512,8 @@ Every default would be wrong: defaulting to live opens a socket mid-run,
 defaulting to replay measures a fixture miss instead of the tool. **A new
 registry tool must be classified in the same commit that adds it.**
 
-**Four verbs over a directory on disk** (`kepler-bench`, a console script
-beside `kepler`): `run` produces evidence, `grade` produces
+**Four verbs over a directory on disk** (`mars-bench`, a console script
+beside `mars`): `run` produces evidence, `grade` produces
 verdicts, `compare` produces the matrix, and `record` captures a fixture for
 human review. Grading is separate from running because the first version of any
 grader is wrong and re-grading must not cost a re-spend. `--max-tokens` is
@@ -529,10 +529,10 @@ test rather than a convention: the smoke suite runs end to end with both sides
 replayed, under a socket guard, in milliseconds. There is **no CI benchmark
 job** — CI stays offline, deterministic, and keyless.
 
-### 10.2 The Kepler Console
+### 10.2 The MARS Console
 
 `tools/tui/` is the Textual console over the same loop, and the repository's
-one model-driven entry point: `kepler`, with **no required arguments**, because
+one model-driven entry point: `mars`, with **no required arguments**, because
 everything it needs is chosen inside the session. It is the only package
 permitted new dependencies -- `textual` and `textual-image` are the two it
 added, over the already-pinned `pillow` and `rich`. `tools/agent/` and
@@ -670,11 +670,11 @@ repository is not checked out**. It is the serving surface section 7 allows:
 generated from `TOOL_SCHEMAS` and `TOOL_FUNCTIONS`, never the reverse. It is a
 fourth consumer of the registry, beside the loop (10), the harness (10.1) and
 the console (10.2), and it retires none of them. The console and harness
-measure and drive models through Kepler's own loop. A third-party host's
+measure and drive models through MARS's own loop. A third-party host's
 session is not graded by anything, because MCP gives the loop to the host.
 
-**Shape.** One entry point, `kepler-mcp`. A launch-time filter,
-`--tools databases,optical,timeseries,hr,radio` (or `KEPLER_MCP_TOOLS`),
+**Shape.** One entry point, `mars-mcp`. A launch-time filter,
+`--tools databases,optical,timeseries,hr,radio` (or `MARS_MCP_TOOLS`),
 serves a subset. The groups are declared by tool module in
 `tools/mcp/groups.py`, a test asserts they partition the registry, and the
 filter narrows what is callable as well as what is listed. One server, not
@@ -683,13 +683,13 @@ argument validation that makes the schemas worth having.
 
 | Module | Owns |
 | --- | --- |
-| `roots` | Pins `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
+| `roots` | Pins `MARS_ARTIFACT_DIR` and `MARS_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
 | `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
 | `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
 | `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
 | `install` | The facts about this install that the instructions carry: artifact root, which data bundles are present, whether plate solving is configured, and whether `ADS_DEV_KEY` is set (never its value). |
 | `bundles` | Builds and fetches the optional data bundles (below). |
-| `selftest` | `kepler-mcp self-test`: launches the installed server over stdio and detects B0329+54 from a measured period through the protocol. |
+| `selftest` | `mars-mcp self-test`: launches the installed server over stdio and detects B0329+54 from a measured period through the protocol. |
 
 **Results.** Every result is `structuredContent` plus the same JSON as text,
 serialised so NaN becomes `null`. `isError` follows the loop's
@@ -711,9 +711,9 @@ and a test pins the registry original.
 **Where things go.** Artifacts default to a **per-user directory**, not the
 host's launch directory: a host launches the server wherever it likes, and a
 launch-directory default would drop an untracked `artifacts/` into the user's
-repository. Everything Kepler writes is under the per-user **Kepler home**
-(`tools/paths.py`: `~/.local/share/kepler`, macOS Application Support,
-`%LOCALAPPDATA%`, or `KEPLER_HOME`), and the server logs every root at
+repository. Everything MARS writes is under the per-user **MARS home**
+(`tools/paths.py`: `~/.local/share/mars`, macOS Application Support,
+`%LOCALAPPDATA%`, or `MARS_HOME`), and the server logs every root at
 startup.
 
 **The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the
@@ -725,10 +725,10 @@ served skill has two tiers:
   must survive truncation — plus the install facts. They are held under 1,900
   characters, worst case, by a test.
 - `SKILL.md` and the per-domain references are MCP resources,
-  `kepler://skill/...`, read on demand.
+  `mars://skill/...`, read on demand.
 
 `tools/skill/source/` is the one source. It renders the served text, and also
-`skills/kepler-tools/`, the repository copy that `.claude/skills/` links for
+`skills/mars-tools/`, the repository copy that `.claude/skills/` links for
 a coding agent in a checkout. `tests/test_skill_invariants.py` pins the
 load-bearing rules as phrases in both `SYSTEM_PROMPT` and the skill, so a
 correction to one that misses the other fails a test. The pulsar tools' own
@@ -741,7 +741,7 @@ tier.
 `config.BUNDLED_DATA_DIR` is how every tool reads bundled data, so a checkout
 and a wheel find the same files the same way.
 
-Two larger **optional bundles** are fetched with `kepler-mcp fetch-data`: the
+Two larger **optional bundles** are fetched with `mars-mcp fetch-data`: the
 optical frame library (269 MB) and the Girardi isochrone grid (282 MB).
 
 - Each is a deterministic, content-addressed plain `.tar` on the repository's
@@ -763,7 +763,7 @@ with `docs/releasing.md` as the policy. It:
 - checks the tag against the version;
 - rebuilds `data/optical/` against the pinned manifest;
 - installs the wheel on clean runners with no checkout, on Python 3.12 and
-  3.13, and runs `kepler-mcp self-test`;
+  3.13, and runs `mars-mcp self-test`;
 - checks the `data` release by GitHub's asset digests;
 - then publishes — the only job with write permission.
 

@@ -52,7 +52,7 @@ class ResolvedTarget:
     """One candidate match for a free-text identifier.
 
     ``object_type`` is the prose label from ``SIMBAD_OBJECT_TYPES``. It is the
-    empty string when SIMBAD reports a code Kepler's table does not carry, which
+    empty string when SIMBAD reports a code MARS's table does not carry, which
     happens as SIMBAD's vocabulary evolves — treat it as "unknown", not as an
     error.
     """
@@ -99,7 +99,7 @@ def resolve_simbad(name: str) -> list[ResolvedTarget]:
     skipped rather than failing the lookup — a partial answer beats none.
 
     Returns an empty list, never raises, when SIMBAD is unavailable or the query
-    fails. Upstream printed such failures to stdout; Kepler logs them.
+    fails. Upstream printed such failures to stdout; MARS logs them.
 
     PRESERVED BEHAVIOUR: the identifier is lower-cased before the query.
     SIMBAD's matching is case-insensitive so this is normally invisible, and it
