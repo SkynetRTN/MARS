@@ -42,4 +42,4 @@ def test_every_python_the_classifiers_claim_is_tested_in_ci():
 def test_the_project_urls_point_at_the_repository():
     urls = _PROJECT["urls"]
     assert {"Homepage", "Repository", "Issues"} <= set(urls)
-    assert all(u.startswith("https://github.com/archon774/MARS") for u in urls.values())
+    assert all(u.startswith("https://github.com/SkynetRTN/MARS") for u in urls.values())

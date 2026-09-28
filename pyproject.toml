@@ -106,11 +106,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/archon774/MARS"
-Repository = "https://github.com/archon774/MARS"
-Issues = "https://github.com/archon774/MARS/issues"
-Releases = "https://github.com/archon774/MARS/releases"
-Documentation = "https://github.com/archon774/MARS/tree/main/docs"
+Homepage = "https://github.com/SkynetRTN/MARS"
+Repository = "https://github.com/SkynetRTN/MARS"
+Issues = "https://github.com/SkynetRTN/MARS/issues"
+Releases = "https://github.com/SkynetRTN/MARS/releases"
+Documentation = "https://github.com/SkynetRTN/MARS/tree/main/docs"
 
 [project.scripts]
 mars = "tools.tui:launch"

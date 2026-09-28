@@ -79,30 +79,42 @@ version.
 
 ### One-time setup (the maintainer, on the web)
 
-1. **A licence.** `pyproject.toml` declares none yet, and **publish to PyPI**
-   refuses to upload until the wheel does (`license = "<SPDX expression>"`
-   plus a `LICENSE` file). The algorithms are extracted from Skynet and
-   Astromancer, so the choice is theirs to clear. TestPyPI does not wait for
-   it.
-2. **Pending trusted publishers**, one on each index -- on
+The licence the upload gate asks for is in place: `GPL-3.0-only`, declared in
+`pyproject.toml` with the `LICENSE` file (README, *License*). Two more steps,
+both mirroring Skycat's (`SkynetRTN/skycat`):
+
+1. **Pending trusted publishers**, one on each index, added from the account
+   that holds the projects -- the package author's -- on
    [pypi.org](https://pypi.org/manage/account/publishing/) and
-   [test.pypi.org](https://test.pypi.org/manage/account/publishing/) (separate
-   accounts):
+   [test.pypi.org](https://test.pypi.org/manage/account/publishing/)
+   (separate accounts, separate registrations):
 
    | Field | PyPI | TestPyPI |
    | --- | --- | --- |
    | PyPI project name | `skynet-mars` | `skynet-mars` |
-   | Owner | `archon774` | `archon774` |
+   | Owner | `SkynetRTN` | `SkynetRTN` |
    | Repository name | `MARS` | `MARS` |
    | Workflow name | `release.yml` | `release.yml` |
    | Environment name | `pypi` | `testpypi` |
 
    A pending publisher reserves the name until the first upload creates the
-   project. The repository is `MARS` since it was renamed; a publisher
-   registered under an earlier name would not match.
-3. **Two GitHub environments** (repository Settings → Environments):
-   `testpypi`, and `pypi` with **required reviewers** and a deployment rule
-   limited to tags `v*`. The environment is what makes PyPI wait for a person.
+   project. The owner and repository are the ones the workflow runs under,
+   `SkynetRTN/MARS` since the transfer; a publisher registered under an
+   earlier owner or name (`archon774/...`) would never match.
+2. **Two GitHub environments** (Settings → Environments on `SkynetRTN/MARS`),
+   named exactly as the workflow names them:
+
+   | Setting | `testpypi` | `pypi` |
+   | --- | --- | --- |
+   | Required reviewers | none: a tag's rehearsal upload runs unattended | the maintainers who may release; **at least one** |
+   | Prevent self-review | -- | optional; on means the person who pushed the tag cannot approve |
+   | Wait timer | none | none |
+   | Allow administrators to bypass | -- | **off**, so an admin cannot skip the review |
+   | Deployment branches and tags | **Selected branches and tags**, one tag rule `v*` | the same, tag rule `v*` |
+   | Environment secrets | none (trusted publishing needs none) | none |
+
+   The `v*` tag rule means only a release tag can deploy to either index; the
+   reviewers are what makes PyPI wait for a person.
 
 ### Cutting a release to the indexes
 
