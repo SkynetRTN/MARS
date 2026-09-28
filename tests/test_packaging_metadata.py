@@ -43,3 +43,36 @@ def test_the_project_urls_point_at_the_repository():
     urls = _PROJECT["urls"]
     assert {"Homepage", "Repository", "Issues"} <= set(urls)
     assert all(u.startswith("https://github.com/SkynetRTN/MARS") for u in urls.values())
+
+
+def test_runtime_dependencies_are_bounded_ranges_not_a_freeze():
+    """An exact pin on every package, test tools included, clashed with the
+    rest of a user's environment. Runtime dependencies are what MARS imports,
+    bounded with ~=; exact versions belong to uv.lock."""
+    deps = _PROJECT["dependencies"] + sum(_PROJECT["optional-dependencies"].values(), [])
+    for dep in deps:
+        assert "==" not in dep and "~=" in dep, dep
+    names = {dep.split()[0].split("~=")[0].lower() for dep in deps}
+    assert not names & {"pytest", "mock", "packaging", "twine"}, names
+
+
+def test_pytest_is_a_development_dependency_only():
+    import tomllib
+
+    pyproject = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert any(d.startswith("pytest") for d in pyproject["dependency-groups"]["dev"])
+
+
+def test_the_readme_uses_absolute_urls_pypi_can_render():
+    """PyPI renders README.md with no repository to resolve a relative path
+    against: the banner showed as a broken image, and relative links 404."""
+    import re
+
+    readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+    relative_images = re.findall(r'(?:src|srcset)="(?!https://)([^"]+)"', readme)
+    relative_links = [
+        target
+        for target in re.findall(r"\]\(([^)\s]+)\)", readme)
+        if not re.match(r"(https?:|mailto:|#)", target)
+    ]
+    assert relative_images == [] and relative_links == [], (relative_images, relative_links)
