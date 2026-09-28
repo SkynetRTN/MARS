@@ -8,10 +8,11 @@ version = "0.1.0rc3"
 description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
-# GPL-3.0 because the Astromancer ports (algorithms/pulsar, variable_star,
-# hrdiagram_py) are GPL-3.0 work; see README.md's License section.
+# Copyright the Skynet Robotic Telescope Network; the licence of the Skynet
+# projects MARS grew from (README.md, License).
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
+authors = [{ name = "Skynet Robotic Telescope Network" }]
 dependencies = [
     "ads==0.12.7",
     "annotated-types==0.8.0",
