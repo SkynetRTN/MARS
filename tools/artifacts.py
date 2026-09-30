@@ -186,13 +186,13 @@ def _reserve_path(directory: Path, stem: str, suffix: str) -> Path:
     it.
     """
 
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     counter = 0
     while True:
         name = f"{stem}{suffix}" if counter == 0 else f"{stem}_{counter}{suffix}"
         path = directory / name
         try:
-            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
         except FileExistsError:
             # Jump past the highest suffix already taken, once, rather than
             # probing _1, _2, ... one open at a time: on a shared root that is
@@ -296,9 +296,8 @@ def write_table(
         prefix=f".{path.name}.", suffix=".part", dir=directory
     )
     os.close(handle)
-    # mkstemp creates the file 0600, and os.replace keeps that mode: a table
-    # would be unreadable to anyone else sharing the artifact directory, where
-    # every other artifact is 0644 less the umask. Give it the placeholder's.
+    # Keep the staging file at the reservation's private mode when replacing
+    # it, even if an encoder writes through a temporary file of its own.
     try:
         os.chmod(staging, stat.S_IMODE(path.stat().st_mode))
     except OSError:
@@ -308,6 +307,9 @@ def write_table(
             table.write(staging, format="ascii.csv", overwrite=True)
         else:
             table.write(staging, format=fmt, overwrite=True)
+        # Astropy's FITS writer may unlink and recreate the staging file,
+        # discarding mkstemp's private mode. Restore it before publishing.
+        os.chmod(staging, 0o600)
         os.replace(staging, path)
     except BaseException:
         Path(staging).unlink(missing_ok=True)

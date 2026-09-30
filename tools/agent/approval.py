@@ -1,10 +1,9 @@
 """Approval vocabulary for the agent loop.
 
-The engine calls an ``Approver`` before dispatching each tool call. Phase 0c
-ships only the allow-everything default; ``docs/tool-architecture.md`` 10.2
-builds ``tools/agent/policy.py`` -- the risk table, ``SessionPolicy``, and
-``policy_approver`` -- on top of the names defined here, so that phase supplies
-a policy rather than changing the engine's contract.
+The engine calls an ``Approver`` before dispatching each tool call. Its
+headless default denies risky calls; ``auto_approve`` is an explicit opt-in
+for trusted callers such as the benchmark's replay plane. Interactive callers
+use ``tools.agent.policy.SessionPolicy`` to ask a person.
 """
 
 from __future__ import annotations
@@ -35,7 +34,6 @@ Approver = Callable[["ToolCallProposed"], Decision]
 
 
 def auto_approve(proposed: "ToolCallProposed") -> Decision:
-    """The default approver: never blocks. The shim and any plain-Python caller
-    behave exactly as they did before the engine existed."""
+    """Explicit opt-in for trusted execution planes; never blocks."""
 
     return Decision.ALLOW

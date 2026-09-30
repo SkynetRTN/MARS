@@ -107,7 +107,11 @@ def pin_roots(environ: MutableMapping[str, str] | None = None) -> PinnedRoots:
     else:
         artifact_source = ARTIFACT_DIR_ENV
     artifact_dir = artifact_dir.resolve()
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    # The default root holds research outputs and may include private input
+    # names. Do not make it traversable by other local users under umask 022.
+    artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if artifact_source == "per-user default":
+        artifact_dir.chmod(0o700)
 
     data_dir = _from_environment(environ, DATA_DIR_ENV)
     if data_dir is None:

@@ -39,9 +39,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tarfile
+import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -50,7 +53,6 @@ from typing import Callable, Iterable, Iterator, Mapping
 
 import httpx
 
-from tools import config
 from tools.paths import BUNDLED_DATA_LINK, is_checkout
 
 __all__ = [
@@ -119,6 +121,8 @@ def _members(source: Path, pattern: str = "*") -> list[Path]:
     Hidden files are skipped; a symlink is refused.
     """
 
+    from tools import config as settings
+
     files = []
     for path in sorted(source.rglob(pattern)):
         relative = path.relative_to(source)
@@ -127,7 +131,7 @@ def _members(source: Path, pattern: str = "*") -> list[Path]:
         if path.is_symlink():
             raise BundleError(f"{path} is a symlink; a bundle holds regular files only")
         if path.is_file():
-            if config.is_lfs_pointer(path):
+            if settings.is_lfs_pointer(path):
                 raise BundleError(
                     f"{path} is a Git LFS pointer, not the file; run `git lfs pull` "
                     "before building a bundle"
@@ -207,6 +211,12 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(_CHUNK), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+# Import after the archive-digest functions are defined. An installed
+# tools.config resolves its isochrone bundle while importing and calls
+# archive_digest; importing config above would make that a circular import.
+from tools import config  # noqa: E402
 
 
 # --- fetching ------------------------------------------------------------------
@@ -322,22 +332,40 @@ def _install_lock(path: Path) -> Iterator[None]:
     Two ``fetch-data`` runs for one bundle -- two terminals, or a retry
     started before the first gave up -- shared the ``.part`` file and the
     staging directory, so one could delete the other's staging mid-extract or
-    append to its download. The second now waits, then finds the bundle
-    installed. Advisory, and POSIX only: where ``fcntl`` is missing
-    (Windows) installs are not serialised.
+    append to its download. The second waits on both POSIX and Windows.
     """
 
-    try:
-        import fcntl
-    except ImportError:
-        yield
-        return
     with open(path, "a+b") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            if handle.read(1) != b"1":
+                handle.seek(0)
+                handle.write(b"1")
+                handle.flush()
+            deadline = time.monotonic() + 300
+            while True:
+                try:
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise BundleError(f"timed out waiting for bundle lock {path}") from exc
+                    time.sleep(0.1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            if os.name == "nt":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def _recorded_sha256(marker: Path) -> str | None:
@@ -365,7 +393,18 @@ def _install_locked(
     progress: Callable[[int, int], None],
 ) -> tuple[Path, bool]:
     target = root / name
-    if _recorded_sha256(target / config.BUNDLE_MARKER) == spec.sha256:
+    # An interrupted rename can leave the old complete install here. Restore
+    # it before checking status or starting a download.
+    previous = root / f".previous-{name}"
+    if previous.exists() and not target.exists():
+        previous.rename(target)
+    if (
+        _recorded_sha256(target / config.BUNDLE_MARKER) == spec.sha256
+        and not target.is_symlink()
+        and _verified_tree(target, spec)
+    ):
+        if previous.exists() and previous.is_dir() and not previous.is_symlink():
+            shutil.rmtree(previous)
         return target, False
 
     downloads = root / ".downloads"
@@ -415,11 +454,32 @@ def _install_locked(
         + "\n",
         encoding="utf-8",
     )
+    # Preserve an earlier interrupted backup until the new target is in place.
+    # A unique fallback is only needed if both target and backup already exist.
+    if previous.exists():
+        previous = root / f".previous-{name}-{uuid.uuid4().hex}"
     if target.exists():
-        shutil.rmtree(target)
-    staging.rename(target)
+        target.rename(previous)
+    try:
+        staging.rename(target)
+    except BaseException:
+        if previous.exists():
+            previous.rename(target)
+        raise
+    for old in [root / f".previous-{name}", *root.glob(f".previous-{name}-*")]:
+        if old.is_dir() and not old.is_symlink():
+            shutil.rmtree(old)
     part.unlink()
     return target, True
+
+
+def _verified_tree(directory: Path, spec: BundleSpec) -> bool:
+    """Check extracted bytes against the independently pinned archive digest."""
+
+    try:
+        return archive_digest(directory) == (spec.size, spec.sha256, spec.files)
+    except (BundleError, OSError):
+        return False
 
 
 # --- the two command lines -----------------------------------------------------
@@ -485,6 +545,9 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--list", action="store_true", help="Show each bundle's size and status; fetch nothing."
     )
+    parser.add_argument(
+        "--verify", action="store_true", help="Rehash installed bundles against this wheel's manifest; fetch nothing."
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.list:
@@ -493,6 +556,19 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             status = f"installed at {installed}" if installed else "not installed"
             print(f"{spec.name:12s} {spec.size / 1e6:8,.0f} MB  {status}\n  {spec.description}")
         return 0
+
+    if args.verify:
+        names = list(manifest) if not args.bundles or "all" in args.bundles else args.bundles
+        failed = False
+        for name in names:
+            if name not in manifest:
+                print(f"{name}: unknown bundle", file=sys.stderr)
+                failed = True
+                continue
+            path = config.fetched_bundle(name)
+            print(f"{name}: {'verified at ' + str(path) if path else 'missing or damaged'}")
+            failed |= path is None
+        return 1 if failed else 0
 
     names = list(manifest) if not args.bundles or "all" in args.bundles else args.bundles
     status = 0

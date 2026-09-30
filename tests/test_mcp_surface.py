@@ -321,7 +321,11 @@ def test_the_environment_selects_groups():
 def test_annotations_are_derived_from_the_plane_and_the_schemas():
     hints = {s["name"]: groups.annotations_for(s) for s in TOOL_SCHEMAS}
     writers = {name for name, h in hints.items() if not h["read_only_hint"]}
-    assert writers == {"search_mast", "search_casda", "solve_astrometry"}
+    assert "build_literature_review" in writers
+    assert "load_pulsar_lightcurve" in writers
+    assert "search_mast" in writers and "search_casda" in writers
+    assert "solve_astrometry" in writers
+    assert hints["get_paper_abstract"]["read_only_hint"] is True
     assert {name for name, h in hints.items() if h.get("destructive_hint")} == {"solve_astrometry"}
     assert all("destructive_hint" not in h for name, h in hints.items() if name not in writers)
     for name, h in hints.items():
@@ -367,6 +371,10 @@ def test_pin_roots_defaults_to_the_per_user_directory(tmp_path, monkeypatch):
 
     assert pinned.artifact_dir == target and pinned.artifact_source == "per-user default"
     assert target.is_dir()
+    if os.name != "nt":
+        import stat
+
+        assert stat.S_IMODE(target.stat().st_mode) == 0o700
     assert pinned.data_dir == roots.default_data_dir()
     assert pinned.data_source == "package default"
     assert environ == {

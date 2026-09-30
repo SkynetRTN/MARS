@@ -58,13 +58,64 @@ does a wheel built with `uv build` in a checkout. `mars-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
 
+For a verifiable download, fetch the wheel and `SHA256SUMS` from the same
+[GitHub release](https://github.com/SkynetRTN/MARS/releases), run
+`sha256sum --check SHA256SUMS --ignore-missing` in that directory, then install
+the verified local wheel with `[mcp]`. On macOS, use `shasum -a 256` to compare
+the wheel with its line in `SHA256SUMS`. Installing a GitHub wheel by URL is convenient but
+does not independently check the release's checksum.
+
 ## Register the server with a host
 
-The host launches `mars-mcp` over stdio. For Claude Code:
+The host launches the **absolute path** to `mars-mcp` over stdio. Check the
+connection in your host after registration; MCP support does not mean a host
+will automatically import an MCP resource as a native skill.
+
+For [Claude Code](https://code.claude.com/docs/en/mcp), add the server with its CLI:
+
+```bash
+claude mcp add --transport stdio mars -- /absolute/path/to/mars-env/bin/mars-mcp
+```
+
+For [Codex](https://learn.chatgpt.com/docs/extend/mcp), use its CLI or put
+the same command in `~/.codex/config.toml`:
+
+```bash
+codex mcp add mars -- /absolute/path/to/mars-env/bin/mars-mcp
+codex mcp list
+```
+
+```toml
+[mcp_servers.mars]
+command = "/absolute/path/to/mars-env/bin/mars-mcp"
+default_tools_approval_mode = "writes"
+```
+
+Codex's `writes` mode prompts for tools that are not marked read-only. MARS
+marks artifact-producing calls as writes, including literature reviews and
+periodograms. For [Cursor](https://prod.cursor.com/docs/mcp), put this in
+`.cursor/mcp.json` (or
+`~/.cursor/mcp.json` for a personal installation):
 
 ```json
-{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
+{"mcpServers": {"mars": {"type": "stdio", "command": "/absolute/path/to/mars-env/bin/mars-mcp"}}}
 ```
+
+The wheel includes the general `mars-tools` skill and serves it as MCP
+instructions/resources. To make it discoverable as a **native** skill in an
+agent that supports `SKILL.md`, run the opt-in installer with that agent's
+skill directory (it refuses to overwrite a modified copy):
+
+```bash
+mars-env/bin/mars-mcp install-skill ~/.codex/skills/mars-tools
+# Claude Code: ~/.claude/skills/mars-tools
+# Cursor: ~/.cursor/skills/mars-tools
+```
+
+The repository copy at `skills/mars-tools/` is rendered from the same source.
+Restart the host after changing its MCP or skill configuration. The installed
+skill teaches stage order and scientific caveats; the MCP server supplies the
+actual tool calls.
 
 `mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
 those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
@@ -90,6 +141,9 @@ package.
 Artifacts are never overwritten, even by two servers sharing the directory:
 each name is claimed atomically, and a repeated call writes a new file with a
 numeric suffix. So the directory grows; clear it yourself when you want to.
+The default artifact root is private (`0700`) and new artifact files are
+private (`0600`) on POSIX systems; an explicit `MARS_ARTIFACT_DIR` keeps its
+existing directory permissions.
 `list_artifacts` over MCP returns the newest 100 entries of a directory, and
 says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
 inside the artifact directory, and one that climbs out of it (`..`) is refused.
@@ -124,6 +178,8 @@ Kepler is moved over by hand:
 ```bash
 mars-mcp fetch-data --list         # size and status of each
 mars-mcp fetch-data optical        # or: isochrones, all
+mars-mcp fetch-data --verify       # rehash both extracted trees; nonzero if damaged
+mars-mcp self-test --with-data     # exercise both bundles and the MCP surface
 ```
 
 Each bundle is one archive whose size and SHA-256 are pinned in the installed

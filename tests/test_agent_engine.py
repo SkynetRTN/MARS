@@ -458,6 +458,25 @@ def test_a_denied_call_never_reaches_the_tool_function(monkeypatch):
     assert not any(isinstance(e, events.ToolCallFinished) for e in stream)
 
 
+def test_headless_default_denies_a_wcs_header_write():
+    invoked = []
+    backend = StubBackend([
+        ModelResponse(stop_reason="tool_use", tool_calls=(
+            _tool_call(name="solve_astrometry", write_header=True),
+        )),
+        ModelResponse(stop_reason="end_turn", text="done"),
+    ])
+    stream = list(run_session(
+        "hi", backend=backend, session=_session(),
+        tool_schemas=[{"name": "solve_astrometry", "input_schema": {
+            "type": "object", "properties": {"write_header": {"type": "boolean"}},
+        }}],
+        tool_functions={"solve_astrometry": lambda **kwargs: invoked.append(kwargs) or ToolResult(status="ok")},
+    ))
+    assert invoked == []
+    assert any(isinstance(e, events.ToolCallDenied) for e in stream)
+
+
 def test_junk_args_to_a_no_arg_tool_are_a_fault_not_a_crash(monkeypatch):
     invoked: list = []
 

@@ -75,7 +75,7 @@ def test_a_table_is_written_beside_its_claimed_name_never_onto_it(artifact_dir, 
 
 @pytest.mark.parametrize("fmt", ["ecsv", "csv", "fits"])
 def test_a_table_gets_the_mode_every_other_artifact_gets(artifact_dir, fmt):
-    """Third review: staged through mkstemp, tables came out 0600."""
+    """Private tables and text keep the reserved file's 0600 mode."""
     import os
     import stat
 
@@ -86,8 +86,8 @@ def test_a_table_gets_the_mode_every_other_artifact_gets(artifact_dir, fmt):
     finally:
         os.umask(umask)
 
-    assert stat.S_IMODE(Path(ref.path).stat().st_mode) == 0o644
-    assert stat.S_IMODE(Path(text.path).stat().st_mode) == 0o644
+    assert stat.S_IMODE(Path(ref.path).stat().st_mode) == 0o600
+    assert stat.S_IMODE(Path(text.path).stat().st_mode) == 0o600
 
 
 def test_an_interrupted_writes_staging_file_is_not_listed(artifact_dir):

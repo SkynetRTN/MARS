@@ -35,6 +35,10 @@ REQUIRED = (
     "tools/skill/source/SKILL.md",
     "tools/skill/source/BRIEF.md",
     "algorithms/skylib_lite/astrometry/anet/ngc2000.dat",
+    "tools/_data/pulsar/curated_periods.json",
+    "tools/_data/fieldcal/zp_solutions/ngc5128_b_002/fit_summary.json",
+    "tools/_data/variable_star/two_source_parity.csv",
+    "tools/_data/afterglow/afterglow_web_values_master.csv",
 )
 
 #: The five bundled pulsar scans the self-test detects from.

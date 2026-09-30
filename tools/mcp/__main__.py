@@ -68,6 +68,20 @@ def main(argv: list[str] | None = None) -> int:
         from tools.mcp.selftest import main as self_test
 
         return self_test(argv[1:])
+    if argv[:1] == ["install-skill"]:
+        from pathlib import Path
+
+        from tools.skill import install_native_skill
+
+        skill_parser = argparse.ArgumentParser(prog="mars-mcp install-skill")
+        skill_parser.add_argument("target", type=Path, help="Explicit path to the mars-tools skill directory.")
+        skill_args = skill_parser.parse_args(argv[1:])
+        try:
+            installed = install_native_skill(skill_args.target)
+        except (FileExistsError, OSError) as exc:
+            skill_parser.error(str(exc))
+        print(f"mars-tools skill {'installed at' if installed else 'already current at'} {skill_args.target.expanduser()}")
+        return 0
 
     parser = argparse.ArgumentParser(
         prog="mars-mcp",

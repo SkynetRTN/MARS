@@ -548,8 +548,9 @@ engine knows a UI exists.
 **Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
 `ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
 and `policy_approver`. A denied call never dispatches: it returns an error
-result to the model and the loop continues. The default everywhere else is
-`auto_approve`, so a plain-Python caller behaves exactly as before.
+result to the model and the loop continues. The headless default denies risky
+calls; trusted callers such as the benchmark replay plane opt in explicitly
+with `auto_approve`.
 
 Two properties of the ask itself:
 

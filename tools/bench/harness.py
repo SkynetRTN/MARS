@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
 from tools import artifacts
+from tools.agent.approval import auto_approve
 from tools.agent import events as event_types
 from tools.agent.engine import run_session
 from tools.agent.prompt import SYSTEM_PROMPT
@@ -479,6 +480,10 @@ def _run_one(
                     max_turns=config.max_turns_override or task.max_turns,
                     session=session,
                     tool_functions=functions,
+                    # The benchmark's replay plane is the explicit execution
+                    # boundary. Its fixture calls must not be denied by the
+                    # headless engine's interactive safety default.
+                    approver=auto_approve,
                 ),
                 record=record,
                 config=config,

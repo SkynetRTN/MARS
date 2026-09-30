@@ -141,6 +141,38 @@ def test_a_second_fetch_of_a_verified_bundle_does_nothing(tmp_path, published):
     assert fetched is False
 
 
+def test_an_interrupted_swap_keeps_the_previous_install(tmp_path, published, monkeypatch):
+    release, spec = published
+    home = tmp_path / "home"
+    target = home / "optical"
+    target.mkdir(parents=True)
+    (target / "old.fits").write_text("previous release")
+    original_rename = Path.rename
+
+    def interrupt_staging(self, destination):
+        if self.name == ".staging-optical":
+            raise OSError("interrupted swap")
+        return original_rename(self, destination)
+
+    monkeypatch.setattr(Path, "rename", interrupt_staging)
+    with pytest.raises(OSError, match="interrupted swap"):
+        fetch_bundle("optical", source=str(release), bundles_dir=home,
+                     manifest={"optical": spec})
+    assert (target / "old.fits").read_text() == "previous release"
+
+
+def test_an_interrupted_install_restores_its_complete_backup(tmp_path, published):
+    release, spec = published
+    home = tmp_path / "home"
+    target, _ = fetch_bundle("optical", source=str(release), bundles_dir=home,
+                             manifest={"optical": spec})
+    target.rename(home / ".previous-optical")
+    (release / spec.archive).unlink()
+    restored, fetched = fetch_bundle("optical", source=str(release), bundles_dir=home,
+                                     manifest={"optical": spec})
+    assert restored == target and fetched is False
+
+
 def test_a_checksum_mismatch_is_rejected_and_discarded(tmp_path, published):
     release, spec = published
     wrong = replace(spec, sha256="0" * 64)
@@ -230,6 +262,18 @@ def test_fetch_data_is_a_mars_mcp_subcommand(capsys, tmp_path, monkeypatch):
     assert main(["fetch-data", "--list"]) == 0
     listed = capsys.readouterr().out
     assert "optical" in listed and "isochrones" in listed
+
+
+def test_fetch_data_verify_reports_damaged_bundle(capsys, monkeypatch):
+    monkeypatch.setattr(config, "fetched_bundle", lambda name: None)
+    assert bundles.fetch_main(["--verify", "optical"]) == 1
+    assert "optical: missing or damaged" in capsys.readouterr().out
+
+
+def test_fetch_data_verify_accepts_an_intact_bundle(capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "fetched_bundle", lambda name: tmp_path / name)
+    assert bundles.fetch_main(["--verify", "optical"]) == 0
+    assert "optical: verified at" in capsys.readouterr().out
 
 
 # --- the guards, re-anchored -------------------------------------------------------
@@ -340,24 +384,42 @@ def test_the_fixture_guard_holds_in_a_clone_without_symlinks(tmp_path, monkeypat
     assert wcs._under_fixture_root(root / "data" / "pulsar" / "scan.fits")
 
 
-def test_a_bundle_from_another_release_does_not_count_as_installed(tmp_path):
+def test_a_bundle_from_another_release_does_not_count_as_installed(tmp_path, published):
     """Finding 6: a marker from a previous release's bytes read as installed."""
+    release, spec = published
     manifest = tmp_path / "bundles.json"
-    manifest.write_text(json.dumps({"bundles": {"optical": {"sha256": "a" * 64}}}))
-    bundle = tmp_path / "bundles" / "optical"
-    bundle.mkdir(parents=True)
+    manifest.write_text(json.dumps({"bundles": {"optical": {
+        "size": spec.size, "sha256": spec.sha256, "files": spec.files,
+    }}}))
+    bundle, _ = fetch_bundle("optical", source=str(release), bundles_dir=tmp_path / "bundles",
+                             manifest={"optical": spec})
 
     def marker(sha):
         (bundle / config.BUNDLE_MARKER).write_text(json.dumps({"sha256": sha}))
 
     kwargs = dict(bundles_dir=tmp_path / "bundles", manifest=manifest)
-    marker("a" * 64)
+    marker(spec.sha256)
     assert config.fetched_bundle("optical", **kwargs) == bundle
     marker("b" * 64)
     assert config.fetched_bundle("optical", **kwargs) is None
     (bundle / config.BUNDLE_MARKER).write_text("{not json")
     assert config.fetched_bundle("optical", **kwargs) is None
     assert config.fetched_bundle("isochrones", **kwargs) is None
+
+
+def test_a_modified_file_does_not_count_as_installed(tmp_path, published):
+    release, spec = published
+    manifest = tmp_path / "bundles.json"
+    manifest.write_text(json.dumps({"bundles": {"optical": {
+        "size": spec.size, "sha256": spec.sha256, "files": spec.files,
+    }}}))
+    bundle, _ = fetch_bundle("optical", source=str(release), bundles_dir=tmp_path / "bundles",
+                             manifest={"optical": spec})
+    (bundle / "a.fits").write_bytes(b"corrupted")
+    assert config.fetched_bundle("optical", bundles_dir=tmp_path / "bundles", manifest=manifest) is None
+    _, fetched = fetch_bundle("optical", source=str(release), bundles_dir=tmp_path / "bundles",
+                              manifest={"optical": spec})
+    assert fetched and (bundle / "a.fits").read_bytes().startswith(b"SIMPLE")
 
 
 def test_fetch_replaces_a_stale_bundle(tmp_path, published):

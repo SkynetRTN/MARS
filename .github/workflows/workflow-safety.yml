@@ -25,7 +25,7 @@ jobs:
       - name: Lint workflow syntax and shell snippets
         run: |
           docker run --rm -v "$PWD:/repo" --workdir /repo \
-            rhysd/actionlint:latest -color
+            rhysd/actionlint:1.7.12 -color
 
   zizmor:
     name: zizmor
@@ -41,7 +41,7 @@ jobs:
       - name: Audit workflow security posture
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor@1 --min-severity medium --min-confidence medium .github/workflows
+        run: uvx zizmor@1.30.1 --min-severity medium --min-confidence medium .github/workflows
 
   required:
     name: "required: workflow safety"
