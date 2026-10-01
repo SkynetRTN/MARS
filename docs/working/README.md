@@ -11,7 +11,7 @@ active plans.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Active. Reconciled against `origin/dev` at `38bf06a` and the rebased remediation branch: all 110 historical algorithm IDs, current security/architecture/install findings, pulsar/benchmark issues, validation gaps and external Skynet evidence gates. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Active. Reconciled against `origin/dev` at `38bf06a` and `origin/main` at `666f2db`: all 110 historical algorithm IDs, current security/architecture/install findings, pulsar/benchmark issues, validation gaps, external Skynet evidence gates and the desktop-host D0–D4 proposal (§9). Browser support remains parked. |
 
 ## Landed
 

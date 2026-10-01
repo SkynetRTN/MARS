@@ -15,6 +15,7 @@ Current disposition and scheduling for all known continuing work are in the
 | [applicable-designs.md](applicable-designs.md) | Reads MARS against external astrophysics-agent systems and benchmarks (2026-08-11). Structured warnings, optional MCP and session persistence have shipped; current implementations are `tools.agent`, `tools.sessions` and `tools.mcp`. Reachable preserved-defect warnings remain SCI-01 in the master. |
 | [pulsar-pipeline-review.md](pulsar-pipeline-review.md) | Open tool-correctness bugs in `tools/pulsar.py` and a review of the pulsar plotting tools, split out of [`../pulsar-tool-pipeline.md`](../pulsar-tool-pipeline.md) so that architecture document stays architecture. |
 | [obs-report.md](obs-report.md) | External Skynet observation/scheduler/API snapshot (2026-09-24), moved from `working/`. Source paths leave this standalone repository; EXT-SKY-01–12 require pinned upstream revalidation before implementation. |
+| [mcp-desktop-hosts.md](mcp-desktop-hosts.md) | PR #97 desktop-host proposal and vendor-source snapshot (2026-10-01), reconciled into master §9 as D0–D4. MCPB/config-helper decisions require actual macOS/Windows/app evidence; browser support remains parked. |
 
 ## Related
 

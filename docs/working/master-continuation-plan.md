@@ -9,6 +9,10 @@ commit before this inventory was written.
 The 2026-10-01 refresh found no further `dev` commits beyond `38bf06a`.
 PR #98 subsequently integrated `origin/main` at `858b074` (the merge of that
 same `dev` baseline; no additional source changes).
+During CI, `main` advanced to `666f2db` (PR #97). Its per-host installation
+documentation and desktop-host proposal are reconciled here; `dev` remains
+at `38bf06a`. Desktop D0–D4 joins M4 as proposed, gated work, not implementation
+performed by this remediation PR. Browser support remains expressly parked.
 **Prerequisites:** the extraction/preservation contract in `AGENTS.md` and
 `CLAUDE.md`; current reference documents; explicit scientific-divergence scope
 before changing preserved numerical behavior.
@@ -33,6 +37,7 @@ it cannot establish that no undiscovered defects remain.
 | [Test coverage](../../tests/README.md), [extraction record](../extraction.md), [optical archive](../archive/optical-tools.md) | Provider contracts, configured solver assertions, ATLAS convergence, historical evidence gaps. | VAL-01–05 and §6 |
 | [Benchmark results](../benchmarking/results.md), [harness](../benchmarking/harness.md) | Attribution can pass numeric sourcing checks; deliberately hidden artifact destination arguments. | BEN-01, ART-01 |
 | [Rebrand archive](../archive/mars-rebrand.md), [MCP archive](../archive/mcp-tool-surface.md), [model archive](../archive/model-backends.md) | Namespace deferral, host validation, installed benchmark scope, output-schema/transport decisions. | ARC-01–03, INS-01–03, MCP-02, §8 |
+| [Desktop-host proposal from PR #97](../analysis/mcp-desktop-hosts.md) and [per-host installation docs](../installing.md) | New main-only D0–D4 rollout, conditional MCPB extension/config helper and explicitly parked browser service; vendor claims remain dated and require host evidence. | INS-01, D0–D4 in §9; parked transport in §8 |
 | Current `tools/`, `algorithms/`, packaging and workflows | Approval/effect drift, resource budgets, artifact destinations, supply-chain pins, upgrade/retention behavior; fatal overlap preservation test. | AUD-01–05, MCP-01–02, INS-01–03, ALG-01 |
 | [Skynet observations snapshot](../analysis/obs-report.md) | External scheduling/API findings and source availability limits. | EXT-SKY-01–12 in §7 |
 | [TUI implementation record](../superpowers/plans/2026-09-14-tui-artifact-rendering.md) and source TODO scan | Implemented renderer/browser steps with stale unchecked boxes; intentional manifest-template TODO; abstract catalog methods. | DOC-01; exclusions in §8 |
@@ -65,7 +70,7 @@ No numerical fix is authorized merely by this documentation update.
 | M1 — resource and containment | ALG-01; S1 algorithm rows; PUL-02/03/05/06; ART-01; AUD-01/02/03; MCP-01. First reproduce with bounded tests, then guard, isolate or intentionally correct. | Tool/runtime maintainer plus domain reviewer for numerical changes | Dangerous inputs fail with bounded structured results; crashing geometry is tested in a subprocess; destination containment and approval classifications are covered; valid fixtures preserve the declared contract. |
 | M2 — scientific meaning | PUL-01/04/08; S2 algorithm rows; SCI-01; BEN-01. Start with channel labels and confirmed HR coordinate/unit/join bugs; CAT-01 band-selection safeguards are already assigned to M1. | Astronomy reviewer and tool/algorithm owner; preservation decision per finding | Independent scientific reference tests, explicit units/modes, before/after numeric effects, updated preservation assertions/provenance; saved benchmark transcripts regraded. |
 | M3 — recoverable failures | S3 algorithm rows; PUL-07 after ART-01; VAL-01/02/05. | Provider/tool maintainer | Malformed/empty/provider inputs cannot escape the result contract; retries and missing-data distinctions are deterministic; schemas expose intended bounded arguments. |
-| M4 — install and architecture | ARC-01–04; AUD-02 follow-through; INS-01–03; MCP-02; VAL-03/04; PUL-09. Measure before refactoring. | Packaging/MCP maintainer, platform and domain reviewers | Import/dependency isolation, installed resource/entry-point parity, actual host/platform matrix evidence, solver convergence when correctly configured, safe skill upgrades. |
+| M4 — install and architecture | ARC-01–04; AUD-02 follow-through; INS-01–03; MCP-02; VAL-03/04; PUL-09; proposed desktop D0–D4 in §9. Measure before refactoring or accepting extension work. | Packaging/MCP maintainer, platform and domain reviewers | Import/dependency isolation, installed resource/entry-point parity, actual host/platform matrix evidence, solver convergence when correctly configured, safe skill upgrades; desktop build/no-build gate and recorded outcome. |
 | M5 — remaining correctness and evidence | S4/S5 algorithm rows; remaining §6 investigations; DOC-01 follow-through. | Relevant domain/documentation owner | Each row is closed with evidence, deliberately retained with a public caveat, or explicitly deferred with a reason and revisit trigger. |
 | M6 — external/capability decisions | BEN-02, §7 external findings and §8 optional extensions. | Upstream Skynet owner or capability sponsor | Pinned upstream source and owner/disposition first; accepted additions have requirements/provenance/tests. Rejected/deferred scope remains recorded. |
 
@@ -133,7 +138,7 @@ required in addition to the shared gates in §2.
 | ARC-04 / P2 / M4 | `algorithms/hrdiagram_py/local_grid.py` and `isochrones.py` import `tools.config`, coupling algorithm loading to process-global application roots and bundle resolution. | Pass validated grid/settings from the tool layer through a documented seam. Test standalone algorithm imports and two independently configured calls without global monkeypatching; retain exact-track selection and missing-grid semantics. |
 | MCP-01 / P1 / M1 | Sequential dispatch lock can be held by a long-running tool; no general deadline/cancellation or archive download byte/product budget. | Define per-call/resource/download budgets and cancellation semantics, coordinated with WCS/PUL limits. Stalled/cancelled work releases capacity; partial artifacts are not advertised as valid; prove bounded memory/disk/work without live bulk downloads. |
 | MCP-02 / P3 / M4 | MCP output-schema declarations are deliberately deferred while structured results normalize non-finite numbers/bytes/errors. | Decide whether host benefit justifies exposing schemas. If accepted, validate every normalized success/error result class and actual host handling; otherwise retain an explicit deferral/revisit trigger. |
-| INS-01 / P2 / M4 | Release install matrix is Linux/Python 3.13; actual macOS/Windows and Codex/Claude Code/Cursor host evidence is incomplete. | Clean installed-wheel fetch/verify/self-test and concurrent/interrupted install tests on each supported OS; appropriate permission checks; actual host registration, calls, skill/resources, approval/media and icon behavior. Record host/OS versions and evidence. SDK tests/config examples alone do not close this. |
+| INS-01 / P2 / M4 | Release install matrix is Linux/Python 3.13; actual macOS/Windows and Codex/Claude Code/Cursor host evidence is incomplete. PR #97 adds desktop-app configuration docs, not actual-host verification; D0–D4 in §9 now schedules that proposal. | Clean installed-wheel fetch/verify/self-test and concurrent/interrupted install tests on each supported OS; appropriate permission checks; actual host registration, calls, skill/resources, approval/media and icon behavior. Record host/OS versions and evidence. SDK tests/config examples alone do not close this. |
 | INS-02 / P3 / M4 | Native skill installer refuses an older pristine generated copy as well as a modified copy. | Document a safe upgrade or implement provenance/version-aware atomic replacement. Test pristine-old, modified-old, identical-current and interrupted updates; preserve user modifications. |
 | INS-03 / P3 / M4 | Installation size/import timings are historical C7/Python 3.14 measurements; current target is rc4/Python 3.13. | Label their scope and remeasure current locked target, OS/architecture and cold/warm import cost during INS-01/ARC-01. Do not silently reuse old timings as current measurements. |
 | PUL-01 / P1 / M2 | Periodogram artifact omits selected channel; static chart says Polarization XX even when searching Sum or YY (`tools/pulsar.py`). | Persist channel and render Sum/XX/YY correctly. Round-trip each channel and use an explicit unknown label for old artifacts. |
@@ -383,7 +388,7 @@ an integration needs it.
 | CAP-04 — CLI-agent/MCP model backend | Model archive defers an external agent as a ModelBackend. Revisit only with a needed provider/harness use case and explicit protocol/trajectory contracts. Existing MCP serving is a different implemented feature. |
 | CAP-05 — streaming other model adapters | OpenAI/Gemini/Ollama adapters currently use completed-text fallback. Revisit for a concrete latency/UI requirement; test cancellation, text/tool assembly and usage accounting before marking capability true. |
 | CAP-06 — shared services/richer result envelopes | `tool-architecture.md` §§4/6 sketches provenance/pagination and internal services. Introduce only when multiple actual tools need the contract; scope a caller migration/serialization test and measured benefit. These sketches do not create unconditional implementation commitments. |
-| HTTP MCP/shared service | Excluded by the completed stdio scope. Revisit only for a concrete remote-service requirement with authentication, containment and session isolation design (AUD-03). |
+| HTTP MCP/shared service | Excluded by the completed stdio scope; PR #97 expressly parks browser support. Reopen only for a sponsored hosted/classroom need, not a personal tunnel. Requires authentication/OAuth, per-user isolation, cost ceilings, operator-held key/compute policy, uploads and remote artifact/input contracts (AUD-03, CAP-03); reconsider cloud-call timeouts/result limits with current vendor evidence. |
 | Dedispersion/browser AudioContext | Current inputs are single-band continuum; browser audio graph intentionally not ported. Revisit only with suitable data/product requirements. |
 | Provider base classes, replacing database tools, wholesale orchestration | Applied-designs deliberately rejects these changes. Revisit only if the recorded architectural constraints change. |
 | Benchmark price table | Explicitly declined in the model archive; no unscheduled implementation commitment. |
@@ -397,3 +402,37 @@ acceptance evidence. Keep completed rows and their closure locators; archive
 the master only when every accepted item is closed and every remaining item has
 an explicit deferral/revisit condition, with durable outcomes folded into
 reference docs.
+
+## 9. Desktop-host rollout (D0–D4)
+
+**Status:** proposed, 2026-10-01; no phase started. This M4 substream preserves
+PR #97's sequencing: each phase is a separately reviewed PR; the preceding
+phase must land first. Owner role: packaging/MCP maintainer with actual
+macOS/Windows desktop testers. INS-01 owns overlapping host-validation work;
+record evidence once and link it from both IDs.
+
+**Prerequisites:** installed stdio MCP surface, per-host instructions in
+[`installing.md`](../installing.md), current vendor facts and available host
+machines. The [dated proposal](../analysis/mcp-desktop-hosts.md) keeps the
+rationale and sources, not a second active plan. Claims about application
+support, MCPB 0.4 `uv` support, wheel availability, startup timing and desktop
+versus ordinary ChatGPT chats require D0/D2 verification. Historical 640 MB
+dependency and 4.5 s import measurements are not current target measurements
+(INS-03).
+
+**Unblocks:** non-terminal researchers using Claude Desktop or the ChatGPT
+desktop app's Codex without hand-editing paths/configuration. No HTTP server,
+browser service or algorithm/model-backend change is included.
+
+| Phase / priority | Ordered work and decision | Exit evidence |
+| --- | --- | --- |
+| D0 / P2 | Recheck vendor facts and install from PyPI on Claude Desktop/macOS (Windows if available) and the ChatGPT desktop app's Codex. Follow the current registration docs. Run the self-test's five-step pulsar detection on B0329+54 and B1133+16 and one explicitly enabled live SIMBAD search. Record OS/app/package versions, correct period provenance, whether instructions/skill resources reach the model, inline image/audio behavior, approval prompts, cold-start time and startup/call timeout behavior. | Both apps complete detection; retain transcripts/measurements and correct installation docs. Unavailable Windows evidence stays an open INS-01 gate, not an inferred pass. Live checks stay opt-in, outside the default suite. |
+| D1 / P2, after D0 | Fold measured findings and caveats into installation docs, including the app settings route. Validate and document `uv tool install "skynet-mars[mcp]" --python 3.13` as the simplest manual route; measure stable entry-point path and first-launch behavior. Decide whether an optional registration helper is warranted or an MCPB extension would make it redundant. | A docs-only reader reproduces D0. A helper, if accepted, uses the running environment's entry point, parses existing host config, preserves unrelated entries and refuses a different `mars` entry without explicit replacement consent. Test preservation/malformed files and report writes outside MARS home. Prefer existing `codex mcp add` where sufficient. |
+| D2 / P3, after D1 | Spike a throwaway `uv`-type MCPB 0.4 extension against an exact published release, pinning managed Python 3.13. On macOS and Windows establish actual host support, first-install dependency/startup timeout or retry behavior, a non-terminal data-fetch route, and release/version/distribution feasibility. Do not infer host support from the manifest spec. | Recorded build/no-build decision with measurements and all four questions answered. If unsupported, retain managed-uv documentation, not a roughly 640 MB per-platform bundled-Python extension. If a data-fetch tool is necessary, review its effect classification and `tools/bench/plane.py` registration together; do not add one solely on speculation. |
+| D3 / P3, only after accepted D2 build decision | Add manifest source and release build asset, exact `skynet-mars[mcp]` release/Python pins, sensitive ADS key configuration and tool-group/MARS_HOME options (evaluate ANET_INDEX_PATH where needed). Verify manifest/version against the release tag, then attach MCPB to GitHub releases. Recheck connectors-directory distribution policy rather than assuming submission is possible. | Automated release gate installs/inspects built manifest and pinned version; a fresh macOS user installs by double-click and completes detection. Actual Windows Desktop installation stays a documented manual/platform gate. Dependency installation and data-fetch security remain subject to AUD-02/03 and INS-01. |
+| D4 / P2, after D3 or recorded no-build branch | Fold the chosen outcome into installation docs, `tool-architecture.md` §10.3 and `CLAUDE.md` MCP rules. For a no-build decision, document the validated manual route and rejected extension with its revisit condition. | D0–D4 closed or explicitly deferred with PR/test/evidence locators here; no orphan active desktop plan. The dated proposal remains provenance. |
+
+Browser hosts remain parked (§8), including remote local-path/result contract
+changes, OAuth, cloud-call limits and hosted-service operations. Reopening them
+requires a separate sponsor/requirements decision; desktop friction does not
+authorize an HTTP transport or production service.

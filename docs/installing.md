@@ -67,39 +67,149 @@ does not independently check the release's checksum.
 
 ## Register the server with a host
 
-The host launches the **absolute path** to `mars-mcp` over stdio. Check the
-connection in your host after registration; MCP support does not mean a host
-will automatically import an MCP resource as a native skill.
+`mars-mcp` is a **local stdio server**. The host starts it as a child process
+on your machine and exchanges MCP messages with it over stdin and stdout. It
+opens no port and listens on no network, and it lives as long as the host's
+session does. So it works in any host that can launch a local command: the
+coding-agent CLIs, the IDEs, the Claude desktop app and the ChatGPT desktop
+app (in its Codex threads). It does **not** work in a browser chat (claude.ai
+or ChatGPT on the web): those call a server from the vendor's cloud, over
+HTTPS, which MARS does not provide. Browser support is parked; see
+the [master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4)
+and the [dated host proposal](analysis/mcp-desktop-hosts.md) §6.
 
-For [Claude Code](https://code.claude.com/docs/en/mcp), add the server with its CLI:
+Every host needs the same one thing: the **absolute path** to `mars-mcp` in
+the environment you installed it into. Find it with
+`mars-env/bin/python -c "import pathlib, sysconfig; print(pathlib.Path(sysconfig.get_path('scripts')) / 'mars-mcp')"`, or
+`mars-env\Scripts\mars-mcp.exe` on Windows. A bare `mars-mcp` works only if
+that environment is on the `PATH` the host itself sees, which for a desktop
+app is usually not your shell's. Each host below is shown serving all 55
+tools; add `"args": ["--tools", "databases,timeseries"]` (or the host's
+equivalent) to serve fewer.
+
+Run `mars-mcp self-test` once before registering. It launches the server
+exactly as a host would, so a failure there is an install problem, not a host
+one.
+
+### Claude Code
 
 ```bash
-claude mcp add --transport stdio mars -- /absolute/path/to/mars-env/bin/mars-mcp
+claude mcp add mars -- /path/to/mars-env/bin/mars-mcp
+claude mcp add --scope user mars -- /path/to/mars-env/bin/mars-mcp   # every project
 ```
 
-For [Codex](https://learn.chatgpt.com/docs/extend/mcp), use its CLI or put
-the same command in `~/.codex/config.toml`:
-
-```bash
-codex mcp add mars -- /absolute/path/to/mars-env/bin/mars-mcp
-codex mcp list
-```
-
-```toml
-[mcp_servers.mars]
-command = "/absolute/path/to/mars-env/bin/mars-mcp"
-default_tools_approval_mode = "writes"
-```
-
-Codex's `writes` mode prompts for tools that are not marked read-only. MARS
-marks artifact-producing calls as writes, including literature reviews and
-periodograms. For [Cursor](https://prod.cursor.com/docs/mcp), put this in
-`.cursor/mcp.json` (or
-`~/.cursor/mcp.json` for a personal installation):
+The default scope is the current project, for you only. `--scope project`
+writes `.mcp.json` at the project root, to commit and share:
 
 ```json
 {"mcpServers": {"mars": {"type": "stdio", "command": "/absolute/path/to/mars-env/bin/mars-mcp"}}}
 ```
+
+`--env ADS_DEV_KEY=...` before the name passes a variable. Check with
+`claude mcp list`, or `/mcp` inside a session. A plate solve can outlast the
+default per-call wait; `MCP_TOOL_TIMEOUT` (milliseconds) raises it.
+
+### Claude Desktop
+
+Settings → Developer → **Edit Config** opens `claude_desktop_config.json`:
+
+| OS | Path |
+| --- | --- |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+```json
+{
+  "mcpServers": {
+    "mars": {
+      "command": "/path/to/mars-env/bin/mars-mcp",
+      "env": {"ADS_DEV_KEY": "your-token"}
+    }
+  }
+}
+```
+
+Quit and reopen the app (closing the window is not enough). The desktop app
+does not inherit your shell's environment, so a key exported in `.bashrc` or
+`.zshrc` is not seen. Put it under `env`, or for ADS in `~/.ads/dev_key`; an
+installed MARS reads no `.env` file (only a checkout's). If the
+server does not appear, its stderr is in the app's MCP log
+(`~/Library/Logs/Claude/mcp-server-mars.log` on macOS,
+`%APPDATA%\Claude\logs\` on Windows); the root lines `mars-mcp` prints at
+startup are there.
+
+### Codex CLI and the ChatGPT desktop app
+
+The ChatGPT desktop app, the Codex CLI and the Codex IDE extension share one
+MCP configuration. Register once, by any of the routes below, or in the app
+with Settings → MCP servers → Add server.
+
+```bash
+codex mcp add mars -- /path/to/mars-env/bin/mars-mcp
+```
+
+or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mars]
+command = "/path/to/mars-env/bin/mars-mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+default_tools_approval_mode = "writes"
+
+[mcp_servers.mars.env]
+ADS_DEV_KEY = "your-token"
+```
+
+Raise both timeouts. The first launch compiles bytecode and numba functions
+and can take longer than Codex's default startup wait, and a plate solve or an
+exhaustive VizieR query outlasts its default per-call limit.
+
+Codex's `writes` mode prompts for tools that are not marked read-only. MARS
+marks artifact-producing calls as writes, including literature reviews and
+periodograms.
+
+### Cursor
+
+`~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one:
+
+```json
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
+```
+
+### VS Code (Copilot agent mode)
+
+`.vscode/mcp.json` in a workspace, or **MCP: Open User Configuration** from
+the command palette. VS Code's key is `servers`, not `mcpServers`, and it
+takes an explicit `type`:
+
+```json
+{"servers": {"mars": {"type": "stdio", "command": "/path/to/mars-env/bin/mars-mcp"}}}
+```
+
+### Gemini CLI
+
+`~/.gemini/settings.json`, or `.gemini/settings.json` in a project:
+
+```json
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp", "timeout": 600000}}}
+```
+
+`timeout` is per call, in milliseconds.
+
+### Any other host
+
+A host that launches stdio servers needs only the command, optionally its
+arguments and environment. What varies is the file and the top-level key.
+
+### What reaches the model
+
+Every host gets the tools. The server also sends **instructions** (the skill
+brief and what this install has) and the full skill as `mars://skill/...`
+**resources**. Whether a host shows those to the model is the host's choice,
+and not all do. Where the model never sees them, give it the skill another way:
+in Claude Code or Claude Desktop, install `skills/mars-tools/` from a release
+or checkout as a skill.
 
 The wheel includes the general `mars-tools` skill and serves it as MCP
 instructions/resources. To make it discoverable as a **native** skill in an
@@ -116,6 +226,12 @@ The repository copy at `skills/mars-tools/` is rendered from the same source.
 Restart the host after changing its MCP or skill configuration. The installed
 skill teaches stage order and scientific caveats; the MCP server supplies the
 actual tool calls.
+
+Actual desktop-host validation remains an open gate in the
+[master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4);
+configuration examples and SDK tests do not establish every host's behavior.
+
+### Groups and startup facts
 
 `mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
 those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
