@@ -1,5 +1,13 @@
 # TUI Artifact Rendering Implementation Plan
 
+> **Completion reconciliation, 2026-10-01:** Implementation is complete in
+> `tools/tui/render/`, `tools/tui/widgets/artifacts.py`, app integration and
+> their focused tests. The TUI track landed 2026-09-18; its durable outcome is
+> `docs/tool-architecture.md` §10.2. The unchecked steps below preserve the
+> original recipe and do not schedule another implementation. Current follow-up
+> disposition is [the master continuation plan](../../working/master-continuation-plan.md),
+> DOC-01 and related validation rows.
+
 > [!NOTE] Renamed 2026-09-25
 > Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
 > carries the new names from `0.1.0rc3`. This record keeps the names in use

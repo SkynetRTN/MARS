@@ -472,8 +472,10 @@ Important files:
 
 Current caveats:
 
-- Verified offline only. No live VizieR, SkyServer, or SIMBAD response has been
-  exercised, so provider response-shape assumptions remain untested.
+- Recorded APASS/VSX provider rows are exercised, and opt-in APASS live coverage
+  exists. Other response-shape and cache-validation gaps remain; see VAL-02 in
+  [the master continuation plan](working/master-continuation-plan.md) and the
+  Query verification section of [extraction.md](extraction.md).
 - Live remote calls must stay out of default checks; see the repository
   conventions.
 

@@ -1,5 +1,11 @@
 # External Astro-Agent Design Practice Applied to Kepler
 
+> **Planning cross-reference, 2026-10-01:** Implemented recommendations and
+> remaining SCI-01 runtime-warning work are reconciled in the
+> [master continuation plan](../working/master-continuation-plan.md).
+> Historical `tools.runner` references below now correspond to `tools.agent`
+> and `tools.sessions`; the dated proposal is retained as evidence.
+
 > [!NOTE] Renamed 2026-09-25
 > Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
 > carries the new names from `0.1.0rc3`. This record keeps the names in use

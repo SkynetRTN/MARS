@@ -35,17 +35,17 @@ jobs:
       # lfs: true -- the manifest check below rebuilds data/optical/, and three
       # of its frames are Git LFS objects. The build refuses LFS pointers, so a
       # pointer-only checkout would fail here rather than ship a wrong checksum.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           lfs: true
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
 
       - name: Install uv
-        run: python -m pip install uv
+        run: python -m pip install uv==0.12.3
 
       - name: Check the tag names the package version
         if: github.event_name == 'push'
@@ -85,7 +85,7 @@ jobs:
           echo "prerelease=$prerelease" | tee -a "$GITHUB_OUTPUT"
           echo "version=$version" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: dist
           path: dist/
@@ -103,11 +103,11 @@ jobs:
         python: ["3.13"]
     steps:
       # No checkout: the wheel must work on a machine that has none.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist
@@ -132,7 +132,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           sparse-checkout: tools/mcp/bundles.json
@@ -148,6 +148,11 @@ jobs:
             archive=$(jq -r '.value.archive' <<<"$entry")
             size=$(jq -r '.value.size' <<<"$entry")
             sha=$(jq -r '.value.sha256' <<<"$entry")
+            url=$(jq -r '.value.url' <<<"$entry")
+            if [ "$url" != "https://github.com/$REPO/releases/download/data/$archive" ]; then
+              echo "::error::manifest URL $url does not name this repository's data release"
+              exit 1
+            fi
             found=$(jq -r --arg a "$archive" '.[] | select(.name == $a) | "\(.size) \(.digest)"' <<<"$assets")
             if [ "$found" != "$size sha256:$sha" ]; then
               echo "::error::the data release does not hold $archive as pinned (want: $size sha256:$sha; found: ${found:-nothing}). See docs/releasing.md."
@@ -156,15 +161,40 @@ jobs:
             echo "ok $archive"
           done
 
+  verify-data:
+    name: verify installed optional data
+    needs: [build, data]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist
+      - name: Fetch and exercise both bundles through the installed wheel
+        env:
+          MARS_HOME: ${{ runner.temp }}/mars-home
+          MPLBACKEND: Agg
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv "$RUNNER_TEMP/mars"
+          wheel=$(ls "$GITHUB_WORKSPACE"/dist/*.whl)
+          "$RUNNER_TEMP/mars/bin/pip" install --quiet "${wheel}[mcp]"
+          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data all
+          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data --verify
+          "$RUNNER_TEMP/mars/bin/mars-mcp" self-test --with-data
+
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [build, verify, data]
+    needs: [build, verify, data, verify-data]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist
@@ -190,7 +220,7 @@ jobs:
   publish-testpypi:
     name: publish to TestPyPI
     if: github.event_name == 'push'
-    needs: [build, verify, data]
+    needs: [build, verify, data, verify-data]
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -198,7 +228,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist
@@ -217,11 +247,11 @@ jobs:
     needs: [build, publish-testpypi]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist
@@ -267,13 +297,13 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           sparse-checkout: .github/scripts/check_dist.py
           sparse-checkout-cone-mode: false
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist

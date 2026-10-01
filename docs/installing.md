@@ -58,6 +58,13 @@ does a wheel built with `uv build` in a checkout. `mars-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
 
+For a verifiable download, fetch the wheel and `SHA256SUMS` from the same
+[GitHub release](https://github.com/SkynetRTN/MARS/releases), run
+`sha256sum --check SHA256SUMS --ignore-missing` in that directory, then install
+the verified local wheel with `[mcp]`. On macOS, use `shasum -a 256` to compare
+the wheel with its line in `SHA256SUMS`. Installing a GitHub wheel by URL is convenient but
+does not independently check the release's checksum.
+
 ## Register the server with a host
 
 `mars-mcp` is a **local stdio server**. The host starts it as a child process
@@ -68,11 +75,12 @@ coding-agent CLIs, the IDEs, the Claude desktop app and the ChatGPT desktop
 app (in its Codex threads). It does **not** work in a browser chat (claude.ai
 or ChatGPT on the web): those call a server from the vendor's cloud, over
 HTTPS, which MARS does not provide. Browser support is parked; see
-[`working/mcp-desktop-hosts.md`](working/mcp-desktop-hosts.md) §6.
+the [master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4)
+and the [dated host proposal](analysis/mcp-desktop-hosts.md) §6.
 
 Every host needs the same one thing: the **absolute path** to `mars-mcp` in
 the environment you installed it into. Find it with
-`mars-env/bin/python -c "import shutil; print(shutil.which('mars-mcp'))"`, or
+`mars-env/bin/python -c "import pathlib, sysconfig; print(pathlib.Path(sysconfig.get_path('scripts')) / 'mars-mcp')"`, or
 `mars-env\Scripts\mars-mcp.exe` on Windows. A bare `mars-mcp` works only if
 that environment is on the `PATH` the host itself sees, which for a desktop
 app is usually not your shell's. Each host below is shown serving all 55
@@ -94,7 +102,7 @@ The default scope is the current project, for you only. `--scope project`
 writes `.mcp.json` at the project root, to commit and share:
 
 ```json
-{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
+{"mcpServers": {"mars": {"type": "stdio", "command": "/absolute/path/to/mars-env/bin/mars-mcp"}}}
 ```
 
 `--env ADS_DEV_KEY=...` before the name passes a variable. Check with
@@ -147,6 +155,7 @@ or in `~/.codex/config.toml`:
 command = "/path/to/mars-env/bin/mars-mcp"
 startup_timeout_sec = 30
 tool_timeout_sec = 600
+default_tools_approval_mode = "writes"
 
 [mcp_servers.mars.env]
 ADS_DEV_KEY = "your-token"
@@ -155,6 +164,10 @@ ADS_DEV_KEY = "your-token"
 Raise both timeouts. The first launch compiles bytecode and numba functions
 and can take longer than Codex's default startup wait, and a plate solve or an
 exhaustive VizieR query outlasts its default per-call limit.
+
+Codex's `writes` mode prompts for tools that are not marked read-only. MARS
+marks artifact-producing calls as writes, including literature reviews and
+periodograms.
 
 ### Cursor
 
@@ -198,6 +211,26 @@ and not all do. Where the model never sees them, give it the skill another way:
 in Claude Code or Claude Desktop, install `skills/mars-tools/` from a release
 or checkout as a skill.
 
+The wheel includes the general `mars-tools` skill and serves it as MCP
+instructions/resources. To make it discoverable as a **native** skill in an
+agent that supports `SKILL.md`, run the opt-in installer with that agent's
+skill directory (it refuses to overwrite a modified copy):
+
+```bash
+mars-env/bin/mars-mcp install-skill ~/.codex/skills/mars-tools
+# Claude Code: ~/.claude/skills/mars-tools
+# Cursor: ~/.cursor/skills/mars-tools
+```
+
+The repository copy at `skills/mars-tools/` is rendered from the same source.
+Restart the host after changing its MCP or skill configuration. The installed
+skill teaches stage order and scientific caveats; the MCP server supplies the
+actual tool calls.
+
+Actual desktop-host validation remains an open gate in the
+[master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4);
+configuration examples and SDK tests do not establish every host's behavior.
+
 ### Groups and startup facts
 
 `mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
@@ -224,6 +257,9 @@ package.
 Artifacts are never overwritten, even by two servers sharing the directory:
 each name is claimed atomically, and a repeated call writes a new file with a
 numeric suffix. So the directory grows; clear it yourself when you want to.
+The default artifact root is private (`0700`) and new artifact files are
+private (`0600`) on POSIX systems; an explicit `MARS_ARTIFACT_DIR` keeps its
+existing directory permissions.
 `list_artifacts` over MCP returns the newest 100 entries of a directory, and
 says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
 inside the artifact directory, and one that climbs out of it (`..`) is refused.
@@ -258,6 +294,8 @@ Kepler is moved over by hand:
 ```bash
 mars-mcp fetch-data --list         # size and status of each
 mars-mcp fetch-data optical        # or: isochrones, all
+mars-mcp fetch-data --verify       # rehash both extracted trees; nonzero if damaged
+mars-mcp self-test --with-data     # exercise both bundles and the MCP surface
 ```
 
 Each bundle is one archive whose size and SHA-256 are pinned in the installed

@@ -12,6 +12,11 @@ was met on 2026-09-14, and a completion audit on 2026-09-18 re-verified the
 harness against `dev`. [harness.md](harness.md) is therefore a record rather
 than a plan, and carries an `Archived` block saying what was re-checked.
 
+Continuing attribution-grader and experiment-design work is tracked as BEN-01/02
+in the [master continuation plan](../working/master-continuation-plan.md);
+artifact-destination hardening is ART-01. Completion of the original harness
+does not close these later findings.
+
 ## What is here
 
 | File | What it is |

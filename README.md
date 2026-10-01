@@ -321,7 +321,8 @@ mars-env/bin/mars-mcp self-test          # launches the server as a host would, 
 - **The skill.** The server brings its own usage guidance — stage orders,
   identifier forms, period provenance — as its instructions and as
   `mars://skill/...` resources. In a checkout, the same skill is
-  `skills/mars-tools/`.
+  `skills/mars-tools/`. For an installed agent's native skill loader, use
+  `mars-mcp install-skill /path/to/agent/skills/mars-tools`.
 - **Where files go.** Artifacts and downloads go under a per-user MARS home
   (`~/.local/share/mars`, or `MARS_HOME`), never into the install.
 - **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two

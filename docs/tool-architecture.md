@@ -253,7 +253,7 @@ Current algorithm ownership:
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
-| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of Astromancer's TypeScript plus a new optimizer, not a byte-preserving extraction. The historical `_py` suffix avoids a disruptive package rename after the TypeScript extraction was retired. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
+| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, local isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of Astromancer's TypeScript plus a new optimizer, not a byte-preserving extraction. The historical `_py` suffix avoids a disruptive package rename after the TypeScript extraction was retired. Gaia/VizieR fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`; `isochrones.py` fits exact operator-installed Girardi tracks without downloads. Its application-config dependency is tracked as ARC-04 in the master continuation plan. |
 | `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
 | `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | An Astromancer Python **port**, marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
 | `algorithms.variable_star` | Variable-star source ingestion, differential light curves, error-weighted Lomb-Scargle periodograms, and phase folding | Exact-parity Python port of the Astromancer algorithms. |
@@ -548,8 +548,9 @@ engine knows a UI exists.
 **Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
 `ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
 and `policy_approver`. A denied call never dispatches: it returns an error
-result to the model and the loop continues. The default everywhere else is
-`auto_approve`, so a plain-Python caller behaves exactly as before.
+result to the model and the loop continues. The headless default denies risky
+calls; trusted callers such as the benchmark replay plane opt in explicitly
+with `auto_approve`.
 
 Two properties of the ask itself:
 

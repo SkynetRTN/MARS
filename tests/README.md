@@ -126,7 +126,9 @@ changed — which may be the intent, but is never an accident.
 
 ## Not covered
 
-Gaps are listed so they are visible rather than assumed.
+Gaps are listed so they are visible rather than assumed. Their execution order
+and acceptance checks are tracked as VAL-01–05 and PUL-09 in the
+[master continuation plan](../docs/working/master-continuation-plan.md).
 
 | Area | Why not, and what it would take |
 | --- | --- |
@@ -135,7 +137,7 @@ Gaps are listed so they are visible rather than assumed.
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
 | **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The APASS and VSX row mappers *are* executed against real provider rows — the recorded responses under `data/fieldcal/zp_solutions/ngc5128_b_002/` (`test_fieldcal_reference.py`) — but Landolt and USNO's `table_to_sources` overrides are still covered only structurally via the MRO contract; they would need recorded responses of their own. |
 | **`tools/radio_sources.py`'s VizieR/NED-backed steps** | `identify_radio_sources`'s catalog cross-match and `analyze_source_spectrum`/`plot_field_sed`'s name-based NED lookup. Confirmed working manually end to end against a synthetic FITS frame pointed at 3C 48 (real detection, real VizieR radio-catalog match, real 85-point NED spectrum, plausible spectral index -- see `docs/extraction.md`, "Radio Sources (Python)") — but there is no `network`-marked automated test for either step, so a future regression would not be caught by CI. |
-| **Broader `tools/` coverage** | The Claude photometry tool has no-network smoke coverage here. The rest of `tools/` still warrants focused tests over the public tool schemas and runner behavior. |
+| **Scientific plots and host/platform behavior** | Public registry/schema, agent/LLM and MCP paths have focused coverage. Remaining named gaps include visible pulsar chart semantics (PUL-09), actual host and macOS/Windows installed behavior (INS-01), and the provider/solver paths above. Passing preservation tests does not establish scientific correctness; all historical finding IDs are mapped in master-plan §5. |
 
 ## Adding tests
 

@@ -135,3 +135,9 @@ def test_a_downloading_call_reaches_the_approver():
 
     assert decision is Decision.DENY
     assert asked == ["search_mast"]
+
+
+def test_writing_a_wcs_header_requires_approval():
+    assert risk_tags("solve_astrometry", {"write_header": False}) == frozenset()
+    assert risk_tags("solve_astrometry", {"write_header": True}) == frozenset({"writes"})
+    assert needs_confirmation("solve_astrometry", {"write_header": True})

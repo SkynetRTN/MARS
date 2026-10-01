@@ -3,8 +3,8 @@
 The engine receives an approver callable and has no UI dependency. This module
 classifies the relatively costly, keyed, and artifact-writing tools so a caller
 can decide which calls need an explicit confirmation. ``SessionPolicy`` keeps
-an ``ALLOW_ALWAYS`` decision for the chosen tool only, and only for the current
-session.
+an ``ALLOW_ALWAYS`` decision for the chosen tool and risk class, only for the
+current session.
 """
 
 from __future__ import annotations
@@ -60,6 +60,9 @@ DOWNLOAD_FLAGS: dict[str, str] = {
     "search_casda": "download",
 }
 
+# A solve only modifies its input FITS when this flag is set.
+WRITE_FLAGS: dict[str, str] = {"solve_astrometry": "write_header"}
+
 
 def risk_tags(
     name: str, arguments: Mapping[str, Any] | None = None
@@ -73,7 +76,10 @@ def risk_tags(
     tags = TOOL_RISK.get(name, frozenset())
     flag = DOWNLOAD_FLAGS.get(name)
     if flag and arguments and arguments.get(flag):
-        return tags | frozenset({"writes", "slow"})
+        tags |= frozenset({"writes", "slow"})
+    flag = WRITE_FLAGS.get(name)
+    if flag and arguments and arguments.get(flag):
+        tags |= frozenset({"writes"})
     return tags
 
 
@@ -87,22 +93,24 @@ def needs_confirmation(
 
 @dataclass
 class SessionPolicy:
-    """Apply risk defaults and remember per-tool allow-always decisions."""
+    """Apply risk defaults and remember per-tool, per-risk allow-always decisions."""
 
     ask: Approver
-    _always_allowed: set[str] = field(default_factory=set, init=False)
+    _always_allowed: set[tuple[str, frozenset[RiskTag]]] = field(default_factory=set, init=False)
 
     def approve(self, proposed: "ToolCallProposed") -> Decision:
         """Return the decision for one proposed tool call."""
 
-        if not needs_confirmation(proposed.name, proposed.arguments):
+        tags = risk_tags(proposed.name, proposed.arguments)
+        if not tags:
             return Decision.ALLOW
-        if proposed.name in self._always_allowed:
+        key = (proposed.name, tags)
+        if key in self._always_allowed:
             return Decision.ALLOW
 
         decision = self.ask(proposed)
         if decision is Decision.ALLOW_ALWAYS:
-            self._always_allowed.add(proposed.name)
+            self._always_allowed.add(key)
             return Decision.ALLOW
         return decision
 

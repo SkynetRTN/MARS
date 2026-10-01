@@ -26,13 +26,14 @@ and the workflow refuses to publish one.
 ## What the workflow does
 
 On a `v*` tag push (or `workflow_dispatch`, which runs everything except
-`publish`, as a dry run):
+the publishing jobs, as a dry run):
 
 1. **build**:
    - checks the tag against the version;
    - rebuilds `data/optical/` and fails unless it matches `tools/mcp/bundles.json`;
    - builds the wheel and the sdist, and writes `SHA256SUMS`;
-   - fails unless the wheel carries its core data (all five pulsar scans);
+   - fails unless the wheel carries the scans, periods, zero-point reference,
+     variable-star sample, Afterglow fixtures, skill and bundle manifest;
    - classifies the version with `packaging.version`, so every PEP 440
      pre-release spelling publishes as a pre-release.
 2. **verify** runs on a clean runner **with no checkout**, on Python 3.13 --
@@ -43,16 +44,19 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
 3. **data** checks that the `data` release holds every archive
    `bundles.json` pins, at the pinned size and SHA-256. It reads GitHub's own
    asset digest.
-4. **publish** creates the GitHub release with the wheel, the sdist and
-   `SHA256SUMS`, only after **verify** and **data** pass. It is the only job
+4. **verify-data** installs the wheel without a checkout, fetches both
+   optional bundles, rehashes their extracted trees, and runs
+   `mars-mcp self-test --with-data` through stdio and the local grid loader.
+5. **publish** creates the GitHub release with the wheel, the sdist and
+   `SHA256SUMS`, only after **verify**, **data** and **verify-data** pass. It is the only job
    with write permission to the repository, and only on a tag.
-5. **publish to TestPyPI** uploads the wheel and the sdist to TestPyPI, after
-   the same three jobs pass.
-6. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
+6. **publish to TestPyPI** uploads the wheel and the sdist to TestPyPI, after
+   the same build and verification jobs pass.
+7. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
    requires it to be byte-identical to the one **build** made, installs it
    with its dependencies from PyPI -- never from TestPyPI, where anyone can
    register a dependency's name -- and runs `mars-mcp self-test`.
-7. **publish to PyPI** refuses a wheel that declares no licence, then
+8. **publish to PyPI** refuses a wheel that declares no licence, then
    uploads. It runs in the `pypi` environment, so it waits for a reviewer.
 
 The build job and CI's `package` job, which runs on every pull request, both

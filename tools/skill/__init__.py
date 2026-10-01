@@ -47,6 +47,7 @@ __all__ = [
     "SOURCE_DIR",
     "check_repository_copy",
     "render_repository_copy",
+    "install_native_skill",
     "served_brief",
     "served_documents",
     "source_documents",
@@ -194,3 +195,28 @@ def write_repository_copy(target: Path = REPOSITORY_COPY) -> list[str]:
         else:
             path.unlink()
     return changed
+
+
+def install_native_skill(target: Path) -> bool:
+    """Install the rendered skill at an explicitly chosen agent skill path.
+
+    The wheel carries the source but never writes into an agent's home on
+    install. This command is opt-in, refuses to replace a modified skill, and
+    returns false when the exact version is already present.
+    """
+
+    target = target.expanduser()
+    if target.is_symlink():
+        raise FileExistsError(f"refusing a symlinked skill directory: {target}")
+    if target.exists():
+        if target.is_dir() and not check_repository_copy(target):
+            return False
+        raise FileExistsError(f"{target} already exists with different contents")
+    target.mkdir(parents=True, mode=0o700)
+    for name, body in render_repository_copy().items():
+        path = target / name
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(body)
+        path.chmod(0o600)
+    return True

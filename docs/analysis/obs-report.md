@@ -1,5 +1,11 @@
 # Optical observations in the Skynet monorepo
 
+> **Planning cross-reference, 2026-10-01:** Current disposition is
+> [master continuation plan §7](../working/master-continuation-plan.md#7-external-skynet-findings--upstream-evidence-gate),
+> EXT-SKY-01–12. This is an external-repository snapshot; its source links leave
+> this standalone checkout and its upstream revision was not recorded. Obtain
+> pinned current upstream evidence before treating these claims as live bugs.
+
 **Repository snapshot:** 2026-09-24. **Scope:** observer-authored optical science observations in the current Skynet platform. This is a code-backed working reference, not a promise that every stored option is enforced by the scheduler or that every provisioned telescope is online tonight.
 
 ## Executive map

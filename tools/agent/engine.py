@@ -39,7 +39,8 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from tools import artifacts
 from tools.agent import events
-from tools.agent.approval import Approver, Decision, auto_approve
+from tools.agent.approval import Approver, Decision
+from tools.agent.policy import needs_confirmation
 from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import ModelBackend
 from tools.llm.schema import for_dialect
@@ -63,13 +64,23 @@ _ToolFunctions = Mapping[str, Callable[..., Any]]
 OnDelta = Callable[[events.Event], object]
 
 
+def _safe_default_approver(proposed: events.ToolCallProposed) -> Decision:
+    """Headless callers must opt in to costly or writing calls explicitly."""
+
+    return (
+        Decision.DENY
+        if needs_confirmation(proposed.name, proposed.arguments)
+        else Decision.ALLOW
+    )
+
+
 def run_session(
     user_message: str,
     *,
     backend: ModelBackend,
     system: str = SYSTEM_PROMPT,
     max_turns: int = 20,
-    approver: Approver = auto_approve,
+    approver: Approver = _safe_default_approver,
     history: Sequence[Message] = (),
     session: AgentSession | None = None,
     tool_schemas: Sequence[dict[str, Any]] | None = None,

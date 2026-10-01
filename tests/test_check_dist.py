@@ -36,9 +36,10 @@ def test_missing_core_data_fails_as_a_symlink_less_build_would(tmp_path):
     assert any("pulsar scans" in p for p in check_dist.check_wheel(wheel))
 
 
-def test_missing_package_data_fails(tmp_path):
-    wheel = _wheel(tmp_path, drop={"tools/mcp/icons/mars-64.png"})
-    assert check_dist.check_wheel(wheel) == ["missing tools/mcp/icons/mars-64.png"]
+@pytest.mark.parametrize("asset", check_dist.REQUIRED)
+def test_missing_package_data_fails(tmp_path, asset):
+    wheel = _wheel(tmp_path, drop={asset})
+    assert check_dist.check_wheel(wheel) == [f"missing {asset}"]
 
 
 @pytest.mark.parametrize(

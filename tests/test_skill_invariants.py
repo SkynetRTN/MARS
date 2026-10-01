@@ -29,6 +29,7 @@ from tools.skill import (
     SERVED_URI_PREFIX,
     SKILL_NAME,
     check_repository_copy,
+    install_native_skill,
     render_repository_copy,
     served_brief,
     served_documents,
@@ -211,6 +212,17 @@ def test_the_rendered_entry_carries_loadable_frontmatter():
     assert meta["name"] == SKILL_NAME
     assert meta["description"]
     assert body.rstrip().endswith(_ENTRY.rstrip())
+
+
+def test_installed_native_skill_is_idempotent_and_never_overwrites(tmp_path):
+    target = tmp_path / "skills" / SKILL_NAME
+    assert install_native_skill(target) is True
+    assert check_repository_copy(target) == []
+    assert install_native_skill(target) is False
+    (target / "SKILL.md").write_text("user edits", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="different contents"):
+        install_native_skill(target)
+    assert (target / "SKILL.md").read_text() == "user edits"
 
 
 def test_the_claude_skill_link_points_at_the_repository_copy():

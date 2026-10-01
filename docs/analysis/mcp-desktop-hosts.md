@@ -1,7 +1,11 @@
 # MARS in the Desktop Apps: Claude Desktop and the ChatGPT Desktop App
 
-**Status:** proposed, 2026-10-01. No phase has started. **Browser support is
-parked** at the maintainer's direction (§6).
+**Status:** dated proposal from PR #97, 2026-10-01; no phase has started.
+Scheduling and acceptance now live in the single
+[master continuation plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
+This snapshot preserves the rationale, host claims and vendor sources for
+rechecking, not a competing execution plan. **Browser support is parked**
+at the maintainer's direction (§6).
 
 **Prerequisites:** the MCP tool surface (archived 2026-09-25) and the per-host
 setup in [`../installing.md`](../installing.md). Nothing under `algorithms/`,
@@ -175,7 +179,9 @@ Each phase is one PR. No phase begins before the one before it has landed.
 
 - Fold the outcome into `../installing.md`, `../tool-architecture.md` §10.3
   and `CLAUDE.md`'s `tools/mcp/` rules.
-- Archive this document per [`README.md`](README.md)'s lifecycle.
+- Close D0–D4 in the [master plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4)
+  with evidence and fold durable outcomes into reference docs. This proposal
+  remains dated evidence, not an active track to archive separately.
 
 ## 6. Parked: browser hosts (ChatGPT web, claude.ai)
 

@@ -150,9 +150,10 @@ BUNDLE_MARKER = ".kepler-bundle.json"
 BUNDLE_MANIFEST = Path(__file__).resolve().parent / "mcp" / "bundles.json"
 
 
-def _pinned_sha256(name: str, manifest: Path) -> str | None:
+def _pinned_bundle(name: str, manifest: Path) -> tuple[int, str, int] | None:
     try:
-        return json.loads(manifest.read_text(encoding="utf-8"))["bundles"][name]["sha256"]
+        entry = json.loads(manifest.read_text(encoding="utf-8"))["bundles"][name]
+        return entry["size"], entry["sha256"], entry["files"]
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -162,12 +163,10 @@ def fetched_bundle(
 ) -> Path | None:
     """``BUNDLES_DIR/<name>`` if a verified fetch **of this install's bundle** is there.
 
-    The marker must record the SHA-256 this install's ``bundles.json`` pins.
-    A marker alone was not enough: after an upgrade that pins a rebuilt
-    bundle, the MARS home still held the previous release's bytes, and every
-    reader used them and called them installed -- the wheel/bundle mismatch
-    the manifest exists to prevent. A stale bundle now reads as not installed,
-    and ``mars-mcp fetch-data`` replaces it.
+    The marker must match the pinned archive, and the extracted tree must
+    rebuild to the same deterministic tar digest. A marker alone cannot detect
+    a missing or modified track after extraction. This costs one full tree
+    read when an installed process starts, but prevents silent wrong results.
     """
 
     directory = (BUNDLES_DIR if bundles_dir is None else bundles_dir) / name
@@ -175,10 +174,21 @@ def fetched_bundle(
         marker = json.loads((directory / BUNDLE_MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    pinned = _pinned_sha256(name, BUNDLE_MANIFEST if manifest is None else manifest)
-    if pinned is None or not isinstance(marker, dict) or marker.get("sha256") != pinned:
+    pinned = _pinned_bundle(name, BUNDLE_MANIFEST if manifest is None else manifest)
+    if (
+        pinned is None
+        or not isinstance(marker, dict)
+        or marker.get("sha256") != pinned[1]
+        or not directory.is_dir()
+        or directory.is_symlink()
+    ):
         return None
-    return directory
+    from tools.mcp.bundles import BundleError, archive_digest
+
+    try:
+        return directory if archive_digest(directory) == pinned else None
+    except (BundleError, OSError):
+        return None
 
 
 # Resolved to an absolute path at import. Artifact paths are handed back to

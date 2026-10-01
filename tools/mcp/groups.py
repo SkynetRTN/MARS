@@ -14,11 +14,10 @@ registry exactly.
 - ``openWorldHint`` is ``TOOL_CLASSES[name] != "local"`` from
   ``tools/bench/plane.py`` (§3.7): a remote tool, and a mixed one whose
   arguments can take it remote, reach a service outside this machine.
-- ``readOnlyHint`` is false for a tool whose schema has an argument that
-  writes **outside** the artifact directory -- ``download`` (fetches archive
-  products into the download root) or ``write_header`` (writes a solved WCS
-  into the FITS file). Every tool writes artifacts; that is not what the hint
-  is for.
+- ``readOnlyHint`` is true only for audited calls that make no local write.
+  Artifacts count as writes too: coding hosts may use this hint to decide
+  whether to ask for approval. An unclassified new tool is conservatively
+  treated as writing until reviewed.
 - ``destructiveHint`` (meaningful only when not read-only) is true for
   ``write_header``, which modifies an existing file, and false for
   ``download``, which only adds files.
@@ -121,6 +120,23 @@ _BY_NAME = {group.name: group for group in GROUPS}
 #: and whether that write modifies an existing file.
 _WRITES_OUTSIDE_ARTIFACTS = {"download": False, "write_header": True}
 
+# These tools only inspect local data or return remote results in the response.
+# All other registered tools create artifacts, download files, or can update a
+# FITS header. The closed allow-list avoids accidentally promising read-only
+# behavior for a newly registered writer.
+_NO_LOCAL_WRITE = frozenset({
+    "resolve_target", "get_paper_abstract", "list_vizier_catalogs",
+    "list_optical_frames", "resolve_optical_frame", "describe_image_wcs",
+    "list_photometry_targets", "list_photometric_catalogs",
+    "resolve_reference_band", "list_artifacts", "describe_artifact",
+    "list_zeropoint_references", "load_zeropoint_reference",
+    "compare_zeropoint_to_reference", "replay_field_calibration",
+    "solve_zeropoint_from_measurements", "list_pulsar_scans",
+    "resolve_pulsar_scan", "list_variable_star_fixtures",
+    "resolve_variable_star_fixture", "get_literature_cluster_params",
+    "calibrate_zeropoint",
+})
+
 
 def group_of(
     name: str, functions: Mapping[str, Callable[..., Any]] = TOOL_FUNCTIONS
@@ -185,10 +201,11 @@ def annotations_for(schema: Mapping[str, Any]) -> dict[str, bool]:
 
     properties = set((schema.get("input_schema") or {}).get("properties") or {})
     writes = properties & set(_WRITES_OUTSIDE_ARTIFACTS)
+    is_read_only = schema["name"] in _NO_LOCAL_WRITE and not writes
     hints = {
-        "read_only_hint": not writes,
+        "read_only_hint": is_read_only,
         "open_world_hint": TOOL_CLASSES[schema["name"]] != "local",
     }
-    if writes:
+    if not is_read_only:
         hints["destructive_hint"] = any(_WRITES_OUTSIDE_ARTIFACTS[arg] for arg in writes)
     return hints

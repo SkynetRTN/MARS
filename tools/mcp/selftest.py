@@ -20,6 +20,7 @@ installing.
 from __future__ import annotations
 
 import os
+import argparse
 import sys
 import tempfile
 from pathlib import Path
@@ -43,7 +44,7 @@ def _check(ok: bool, message: str) -> None:
         raise _Failed(message)
 
 
-async def _run(env: dict[str, str]) -> None:
+async def _run(env: dict[str, str], with_data: bool = False) -> None:
     from mcp.client.client import Client
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -93,6 +94,9 @@ async def _run(env: dict[str, str]) -> None:
             any(block.type == "audio" for block in sonified.content),
             "sonification returned as an audio block",
         )
+        if with_data:
+            frames = (await call("list_optical_frames")).structured_content
+            _check(frames["count"] >= 42, f"{frames['count']} optical frames served")
 
 
 #: Settings that would test the caller's configuration rather than the install:
@@ -137,9 +141,12 @@ def _server_environment(artifacts: str) -> dict[str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if argv:
-        print("usage: mars-mcp self-test", file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(prog="mars-mcp self-test")
+    parser.add_argument(
+        "--with-data", action="store_true",
+        help="Also check both optional bundles, optical frames and an isochrone track.",
+    )
+    args = parser.parse_args(argv)
     try:
         import anyio
         import mcp  # noqa: F401
@@ -155,10 +162,24 @@ def main(argv: list[str] | None = None) -> int:
     from tools.mcp.bundles import load_manifest
 
     print("mars-mcp self-test", flush=True)
+    if args.with_data:
+        try:
+            _check(config.fetched_bundle("optical") is not None, "optical bundle verified")
+            _check(config.fetched_bundle("isochrones") is not None, "isochrone bundle verified")
+            from algorithms.hrdiagram_py.local_grid import load_isochrone
+
+            track = load_isochrone(
+                age=8.60, metallicity=-0.05,
+                blue_filter="BP", red_filter="RP", lum_filter="G",
+            )
+            _check(bool(track["data"]), f"isochrone track has {len(track['data'])} rows")
+        except _Failed:
+            print("FAILED")
+            return 1
     status = 0
     with tempfile.TemporaryDirectory(prefix="mars-self-test-") as artifacts:
         try:
-            anyio.run(_run, _server_environment(artifacts))
+            anyio.run(_run, _server_environment(artifacts), args.with_data)
         except* _Failed:
             # The SDK client runs each check inside anyio task groups, which
             # re-raise a failure wrapped in an ExceptionGroup; a plain

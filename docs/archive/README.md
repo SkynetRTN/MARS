@@ -15,6 +15,10 @@ does. Read an archived plan when you want the *why* — the alternatives that
 were rejected, the constraint that forced a shape, the measurement that
 overturned a guess.
 
+Remaining findings and deferred decisions from these records are reconciled in
+the [master continuation plan](../working/master-continuation-plan.md). An
+archive completion date applies to its original implementation track.
+
 | Document | Track | Finished | Durable outcome |
 | --- | --- | --- | --- |
 | [mars-rebrand.md](mars-rebrand.md) | Kepler renamed MARS (MCP Astronomy Research Suite): the `skynet-mars` distribution, commands, server and skill; `MARS_*` variables and the `mars` home; code and prose with a guard test; the logo, banner, server icon and console palette; the repository and the `v0.1.0rc3` release. Phases R1–R6. | 2026-09-28 | `../installing.md`'s *Upgrading from Kepler*; `tests/test_rebrand_guard.py`; `../assets/make_brand.py`; `tools/tui/theme.py` |
@@ -31,7 +35,9 @@ produced.
 
 **The TUI track** was folded into `../tool-architecture.md` section 10.2 and
 its working document deleted before this folder existed, under the lifecycle
-rule as it then stood. Git history has it.
+rule as it then stood. Git history has it. The narrower
+[artifact-rendering implementation recipe](../superpowers/plans/2026-09-14-tui-artifact-rendering.md)
+remains as a completed record with a completion annotation.
 
 ## Why archived rather than deleted
 
