@@ -28,7 +28,16 @@ npx @anthropic-ai/mcpb validate installers/claude-desktop/manifest.json
 npx @anthropic-ai/mcpb pack installers/claude-desktop mars.mcpb
 ```
 
-The result is under 300 kB, and `*.mcpb` is git-ignored. Install it in
+Without Node, a plain zip of the five packed files is the same extension,
+file for file and byte for byte:
+
+```bash
+cd installers/claude-desktop
+zip -r -D ../../mars.mcpb manifest.json pyproject.toml uv.lock icon.png src
+```
+
+The result is under 300 kB, and `*.mcpb` is git-ignored. Neither route signs
+it, so Claude Desktop shows it as unsigned. Install it in
 Claude Desktop by double-clicking it, or with Settings → Extensions →
 Advanced settings → Install Extension.
 
