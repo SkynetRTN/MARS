@@ -64,10 +64,11 @@ end; `releasing.md` describes what a release is.
 on your machine and exchanges MCP messages with it over stdin and stdout. It
 opens no port and listens on no network, and it lives as long as the host's
 session does. So it works in any host that can launch a local command: the
-coding-agent CLIs, the IDEs and the Claude desktop app. It does **not** work
-in a browser chat (claude.ai or ChatGPT on the web). Those connect only to a
-remote server over HTTPS, which MARS does not provide; see
-[`working/mcp-http-transport.md`](working/mcp-http-transport.md).
+coding-agent CLIs, the IDEs, the Claude desktop app and the ChatGPT desktop
+app (in its Codex threads). It does **not** work in a browser chat (claude.ai
+or ChatGPT on the web): those call a server from the vendor's cloud, over
+HTTPS, which MARS does not provide. Browser support is parked; see
+[`working/mcp-desktop-hosts.md`](working/mcp-desktop-hosts.md) §6.
 
 Every host needs the same one thing: the **absolute path** to `mars-mcp` in
 the environment you installed it into. Find it with
@@ -129,7 +130,11 @@ server does not appear, its stderr is in the app's MCP log
 `%APPDATA%\Claude\logs\` on Windows); the root lines `mars-mcp` prints at
 startup are there.
 
-### Codex CLI
+### Codex CLI and the ChatGPT desktop app
+
+The ChatGPT desktop app, the Codex CLI and the Codex IDE extension share one
+MCP configuration. Register once, by any of the routes below, or in the app
+with Settings → MCP servers → Add server.
 
 ```bash
 codex mcp add mars -- /path/to/mars-env/bin/mars-mcp
