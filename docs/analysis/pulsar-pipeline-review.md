@@ -1,6 +1,10 @@
 # Pulsar Pipeline — Open Bugs and Plotting-Tools Review
 
-Status: open findings, not yet scheduled
+> **Planning cross-reference, 2026-10-01:** These findings are sequenced as
+> PUL-01–09 in the [master continuation plan](../working/master-continuation-plan.md#4-current-audit-and-tool-level-work-register),
+> including the ART-01 prerequisite before exposing artifact destination controls.
+
+Status: dated open findings; current scheduling and acceptance checks are in the master plan
 Scope: defects in `tools/pulsar.py` and its tests — not the pipeline's shape.
 
 Split out of [`../pulsar-tool-pipeline.md`](../pulsar-tool-pipeline.md) so the

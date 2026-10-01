@@ -22,7 +22,7 @@ updated when the code changes.
 | [`analysis/`](analysis/README.md) | Point-in-time review and external-research output. Dated. Kept for the "why"; the action items land elsewhere as plans or code. |
 | [`benchmarking/`](benchmarking/README.md) | Measuring models on MARS's tool surface: the harness design, the 144-session sweep, the generated report, and the figures. |
 | [`archive/`](archive/README.md) | Completed track documents, kept as records rather than deleted. Not current-state. |
-| [`working/`](working/README.md) | Plans under active development, one per file. None in flight; the MCP tool surface landed on 2026-09-25 and is archived. |
+| [`working/`](working/README.md) | The [master continuation plan](working/master-continuation-plan.md): current dispositions, execution order and acceptance checks for known continuing work. |
 | [`examples/`](examples/README.md) | Committed sample output — the deliberate exception to the repository's "no generated files" rule. |
 
 ## Document lifecycle
@@ -32,10 +32,11 @@ updated when the code changes.
 - **`analysis/`** documents are snapshots. They are not kept current against the
   code; they record what a review found on a given date. Trim or delete one when
   it has been fully superseded.
-- **`working/`** holds plans that are being executed. When a plan's work lands,
-  fold the durable outcome into a reference doc, add an `Archived` block to the
-  plan recording what was verified and what it got wrong, and move it to
-  `archive/`. That folder's README says why they are kept rather than deleted.
+- **`working/`** holds the single master continuation plan. New findings get a
+  row there, linked to their evidence; completed work gets closure locators.
+  Fold durable outcomes into reference docs as they land. Archive the master
+  only after accepted work is closed and remaining scope has explicit
+  deferral/revisit decisions; preserve its verification record.
 - **`archive/`** documents are records. They are never updated to track the
   code; a correction to one is dated and marked inline.
 - **`benchmarking/`** is the benchmark track's own folder — design, results,

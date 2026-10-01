@@ -1,5 +1,12 @@
 # Kepler Algorithm Remediation Plan
 
+> **Planning cross-reference, 2026-10-01:** All 110 finding IDs now have current
+> dispositions and execution streams in the
+> [master continuation plan §5](../working/master-continuation-plan.md#5-complete-historical-algorithm-disposition-register).
+> The original rollout, duplicate counts and TypeScript targets below are
+> historical; several failures changed or disappeared in later Python/stateless
+> work. Use the master for scheduling and this record for original evidence.
+
 > [!NOTE] Renamed 2026-09-25
 > Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
 > carries the new names from `0.1.0rc3`. This record keeps the names in use

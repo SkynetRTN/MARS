@@ -1,22 +1,22 @@
 # Working Documents
 
-Plans under active development. They describe intended work, not necessarily
-the current codebase. Each document states its **Status**, **Prerequisites**,
-and **Unblocks**.
-
-There is **one document per track**. Each states the problem, the architecture
-that answers it, and the phased rollout that gets there — a track's design and
-its action plan are the same document, and neither carries implementation code.
-They are architecture and sequencing for an agent to work through; the agent
-writes the code.
+The [master continuation plan](master-continuation-plan.md) is the single index
+and execution sequence for known continuing work. It states **Status**,
+**Prerequisites**, **Unblocks**, priorities, evidence, dependencies and
+acceptance checks. Its work streams remain sections of that plan; dated
+reviews and completed implementation records are evidence, not competing
+active plans.
 
 ## Index
 
-No track is in progress.
+| Plan | Status |
+| --- | --- |
+| [master-continuation-plan.md](master-continuation-plan.md) | Active. Reconciled against `origin/dev` at `38bf06a` and the rebased remediation branch: all 110 historical algorithm IDs, current security/architecture/install findings, pulsar/benchmark issues, validation gaps and external Skynet evidence gates. |
 
 ## Landed
 
-Every earlier plan this folder has carried has landed. The MARS rebrand's
+The earlier implementation tracks listed below have landed; their deferred
+decisions and remaining findings are reconciled in the master plan. The MARS rebrand's
 (2026-09-28) and the MCP tool surface's (2026-09-25) completion audits are in
 their own `Archived` blocks. For the others,
 a completion audit on 2026-09-18 re-verified each one against `dev`: the default suite is green
@@ -36,14 +36,16 @@ from the record.
 
 ## Lifecycle
 
-When a track's work lands:
+When a work stream lands:
 
 1. Fold the durable outcome into a reference document at the top level of
    `docs/` — that is the document that stays current against the code.
-2. Add an `Archived` block to the plan: when the track finished, what was
-   re-verified and how, and any statement in it that the repository has since
-   overtaken, marked inline where it sits rather than silently rewritten.
-3. Move it to [`../archive/`](../archive/README.md) and add its row there.
+2. Update its master-plan rows with closure commit/PR, test evidence and any
+   deliberate limitations. Keep the original finding IDs.
+3. Archive the master only after every accepted item is closed and the others
+   have explicit deferral/revisit decisions. Add an `Archived` block recording
+   what was verified, move it to [`../archive/`](../archive/README.md), and add
+   its row there. Do not delete dated source reviews to erase open findings.
 
 A plan whose subject has its own folder — as the benchmark harness has
 [`../benchmarking/`](../benchmarking/README.md) — is archived beside its
