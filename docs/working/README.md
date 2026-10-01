@@ -12,7 +12,9 @@ writes the code.
 
 ## Index
 
-No track is in progress.
+| Track | Document | Status |
+| --- | --- | --- |
+| MCP over HTTP: ChatGPT and Claude as remote hosts | [`mcp-http-transport.md`](mcp-http-transport.md) | Proposed, 2026-10-01; awaiting H0 (maintainer decision) |
 
 ## Landed
 

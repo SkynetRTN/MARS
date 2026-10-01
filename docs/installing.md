@@ -60,11 +60,140 @@ end; `releasing.md` describes what a release is.
 
 ## Register the server with a host
 
-The host launches `mars-mcp` over stdio. For Claude Code:
+`mars-mcp` is a **local stdio server**. The host starts it as a child process
+on your machine and exchanges MCP messages with it over stdin and stdout. It
+opens no port and listens on no network, and it lives as long as the host's
+session does. So it works in any host that can launch a local command: the
+coding-agent CLIs, the IDEs and the Claude desktop app. It does **not** work
+in a browser chat (claude.ai or ChatGPT on the web). Those connect only to a
+remote server over HTTPS, which MARS does not provide; see
+[`working/mcp-http-transport.md`](working/mcp-http-transport.md).
+
+Every host needs the same one thing: the **absolute path** to `mars-mcp` in
+the environment you installed it into. Find it with
+`mars-env/bin/python -c "import shutil; print(shutil.which('mars-mcp'))"`, or
+`mars-env\Scripts\mars-mcp.exe` on Windows. A bare `mars-mcp` works only if
+that environment is on the `PATH` the host itself sees, which for a desktop
+app is usually not your shell's. Each host below is shown serving all 55
+tools; add `"args": ["--tools", "databases,timeseries"]` (or the host's
+equivalent) to serve fewer.
+
+Run `mars-mcp self-test` once before registering. It launches the server
+exactly as a host would, so a failure there is an install problem, not a host
+one.
+
+### Claude Code
+
+```bash
+claude mcp add mars -- /path/to/mars-env/bin/mars-mcp
+claude mcp add --scope user mars -- /path/to/mars-env/bin/mars-mcp   # every project
+```
+
+The default scope is the current project, for you only. `--scope project`
+writes `.mcp.json` at the project root, to commit and share:
 
 ```json
 {"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
 ```
+
+`--env ADS_DEV_KEY=...` before the name passes a variable. Check with
+`claude mcp list`, or `/mcp` inside a session. A plate solve can outlast the
+default per-call wait; `MCP_TOOL_TIMEOUT` (milliseconds) raises it.
+
+### Claude Desktop
+
+Settings → Developer → **Edit Config** opens `claude_desktop_config.json`:
+
+| OS | Path |
+| --- | --- |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+```json
+{
+  "mcpServers": {
+    "mars": {
+      "command": "/path/to/mars-env/bin/mars-mcp",
+      "env": {"ADS_DEV_KEY": "your-token"}
+    }
+  }
+}
+```
+
+Quit and reopen the app (closing the window is not enough). The desktop app
+does not inherit your shell's environment, so a key exported in `.bashrc` or
+`.zshrc` is not seen. Put it under `env`, or for ADS in `~/.ads/dev_key`; an
+installed MARS reads no `.env` file (only a checkout's). If the
+server does not appear, its stderr is in the app's MCP log
+(`~/Library/Logs/Claude/mcp-server-mars.log` on macOS,
+`%APPDATA%\Claude\logs\` on Windows); the root lines `mars-mcp` prints at
+startup are there.
+
+### Codex CLI
+
+```bash
+codex mcp add mars -- /path/to/mars-env/bin/mars-mcp
+```
+
+or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mars]
+command = "/path/to/mars-env/bin/mars-mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+
+[mcp_servers.mars.env]
+ADS_DEV_KEY = "your-token"
+```
+
+Raise both timeouts. The first launch compiles bytecode and numba functions
+and can take longer than Codex's default startup wait, and a plate solve or an
+exhaustive VizieR query outlasts its default per-call limit.
+
+### Cursor
+
+`~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one:
+
+```json
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
+```
+
+### VS Code (Copilot agent mode)
+
+`.vscode/mcp.json` in a workspace, or **MCP: Open User Configuration** from
+the command palette. VS Code's key is `servers`, not `mcpServers`, and it
+takes an explicit `type`:
+
+```json
+{"servers": {"mars": {"type": "stdio", "command": "/path/to/mars-env/bin/mars-mcp"}}}
+```
+
+### Gemini CLI
+
+`~/.gemini/settings.json`, or `.gemini/settings.json` in a project:
+
+```json
+{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp", "timeout": 600000}}}
+```
+
+`timeout` is per call, in milliseconds.
+
+### Any other host
+
+A host that launches stdio servers needs only the command, optionally its
+arguments and environment. What varies is the file and the top-level key.
+
+### What reaches the model
+
+Every host gets the tools. The server also sends **instructions** (the skill
+brief and what this install has) and the full skill as `mars://skill/...`
+**resources**. Whether a host shows those to the model is the host's choice,
+and not all do. Where the model never sees them, give it the skill another way:
+in Claude Code or Claude Desktop, install `skills/mars-tools/` from a release
+or checkout as a skill.
+
+### Groups and startup facts
 
 `mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
 those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
