@@ -12,7 +12,9 @@ writes the code.
 
 ## Index
 
-No track is in progress.
+| Track | Document | Status |
+| --- | --- | --- |
+| MARS in the desktop apps: Claude Desktop and the ChatGPT desktop app | [`mcp-desktop-hosts.md`](mcp-desktop-hosts.md) | Proposed, 2026-10-01; browser support parked (§6) |
 
 ## Landed
 
