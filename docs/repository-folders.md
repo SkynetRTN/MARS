@@ -26,6 +26,15 @@ deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
 
+## `installers/`
+
+Build inputs for installers that are not the wheel.
+
+- `claude-desktop/` is the Claude Desktop extension: a `.mcpb` manifest of the
+  `uv` type, its locked environment, and a two-line entry point that runs
+  `mars-mcp`. It pins a release already on PyPI. Its README has the build,
+  test and after-release steps.
+
 ## `skills/`
 
 `skills/mars-tools/` is the rendered repository copy of the agent skill:

@@ -1,0 +1,60 @@
+{
+  "manifest_version": "0.4",
+  "name": "mars",
+  "display_name": "MARS — MCP Astronomy Research Suite",
+  "version": "0.1.0-rc.4",
+  "description": "55 astronomy tools: SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and local pulsar, variable-star, photometry, plate-solving, HR-diagram and radio-source pipelines.",
+  "long_description": "Runs the skynet-mars MCP server on your own machine. Claude Desktop installs Python 3.13 and the dependencies (about 640 MB) the first time the extension starts, so the first launch takes several minutes. Results are written under the per-user MARS home. The optional optical frame library and isochrone grid are not included; see the documentation for fetching them.",
+  "author": {
+    "name": "Skynet Robotic Telescope Network",
+    "url": "https://github.com/SkynetRTN/MARS"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SkynetRTN/MARS"
+  },
+  "homepage": "https://github.com/SkynetRTN/MARS",
+  "documentation": "https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md",
+  "support": "https://github.com/SkynetRTN/MARS/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "--locked", "src/server.py"],
+      "env": {
+        "ADS_DEV_KEY": "${user_config.ads_dev_key}",
+        "MARS_MCP_TOOLS": "${user_config.tool_groups}",
+        "MARS_HOME": "${user_config.mars_home}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  },
+  "user_config": {
+    "ads_dev_key": {
+      "type": "string",
+      "title": "ADS API token",
+      "description": "Enables the ADS literature tools. Get one at https://ui.adsabs.harvard.edu/user/settings/token. Leave empty to use ~/.ads/dev_key, or to go without ADS.",
+      "sensitive": true,
+      "required": false
+    },
+    "tool_groups": {
+      "type": "string",
+      "title": "Tool groups",
+      "description": "Comma-separated subset to serve: databases, optical, timeseries, hr, radio. Leave empty for all 55 tools.",
+      "required": false
+    },
+    "mars_home": {
+      "type": "directory",
+      "title": "MARS home",
+      "description": "Where artifacts, downloads and data bundles go. Leave empty for the per-user default.",
+      "required": false
+    }
+  },
+  "keywords": ["astronomy", "pulsar", "photometry", "simbad", "vizier", "ads"],
+  "license": "GPL-3.0-only"
+}

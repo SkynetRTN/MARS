@@ -111,7 +111,23 @@ default per-call wait; `MCP_TOOL_TIMEOUT` (milliseconds) raises it.
 
 ### Claude Desktop
 
-Settings → Developer → **Edit Config** opens `claude_desktop_config.json`:
+**The extension** needs no Python, no virtual environment and no config file.
+It is a `.mcpb` file that Claude Desktop installs with a double-click (or
+Settings → Extensions → Advanced settings → Install Extension). Claude Desktop
+then downloads Python 3.13 and the dependencies itself. The first launch takes
+a few minutes, and later ones do not. The extension's settings ask for the ADS
+token (stored as a secret), the tool groups and the MARS home, all optional.
+The optional data bundles still need one command, with
+[uv](https://docs.astral.sh/uv/) installed:
+`uvx --python 3.13 --from "skynet-mars[mcp]==<version>" mars-mcp fetch-data optical`.
+If you set the extension's MARS home, run that command with the same
+directory in `MARS_HOME`, or the bundle lands where the server does not look.
+Releases do not carry the `.mcpb` yet; build it from a checkout with
+`npx @anthropic-ai/mcpb pack installers/claude-desktop mars.mcpb`
+(`installers/claude-desktop/README.md`).
+
+**By hand**, against an install of your own: Settings → Developer → **Edit
+Config** opens `claude_desktop_config.json`:
 
 | OS | Path |
 | --- | --- |
