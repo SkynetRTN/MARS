@@ -41,6 +41,18 @@ it, so Claude Desktop shows it as unsigned. Install it in
 Claude Desktop by double-clicking it, or with Settings → Extensions →
 Advanced settings → Install Extension.
 
+## Data bundles
+
+The extension does not fetch the optional data bundles. With
+[uv](https://docs.astral.sh/uv/) installed, run:
+
+```bash
+uvx --python 3.13 --from "skynet-mars[mcp]==<version>" mars-mcp fetch-data optical
+```
+
+If you set the extension's MARS home, run this with the same directory in
+`MARS_HOME`. Otherwise the bundle lands where the server does not look.
+
 ## Test without Claude Desktop
 
 Unpack the `.mcpb` (it is a zip) outside the checkout, and run the manifest's
