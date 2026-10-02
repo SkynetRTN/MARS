@@ -70,8 +70,8 @@ __all__ = [
 ]
 
 #: Where release assets download from: the repository's canonical name. The
-#: earlier names (``archon774/kepler``, ``archon774/mars-suite``,
-#: ``archon774/skynet-mars``, ``archon774/MARS``) redirect only
+#: earlier names (``archon774/mars-suite``, ``archon774/skynet-mars``,
+#: ``archon774/MARS``, and the one before them) redirect only
 #: until someone creates a repository under them, so nothing new points there.
 #: ``build_main`` prints entries against this, and a test holds the manifest to it.
 RELEASE_DOWNLOADS = "https://github.com/SkynetRTN/MARS/releases/download"
@@ -80,11 +80,10 @@ RELEASE_DOWNLOADS = "https://github.com/SkynetRTN/MARS/releases/download"
 #: holding the archives (for testing, and for an offline mirror).
 BUNDLE_URL_ENV = "MARS_BUNDLE_URL"
 
-#: Every bundle archive's name begins with this. Kept from before the MARS
-#: rename: an archive's name is part of its content-addressed identity
-#: (``docs/releasing.md``), the published assets carry it, and ``--check``
-#: compares the name too, so a new prefix would fail every unchanged bundle.
-ARCHIVE_PREFIX = "kepler-"
+#: Every bundle archive's name begins with this. An archive's name is part of
+#: its content-addressed identity (``docs/releasing.md``): the published assets
+#: carry it, and ``--check`` compares the name too.
+ARCHIVE_PREFIX = "mars-"
 
 MANIFEST_PATH = Path(__file__).parent / "bundles.json"
 

@@ -1,24 +1,13 @@
-"""R3's guard: the project is MARS, and "Kepler" survives only where it must.
+"""The project is MARS, and its earlier name appears nowhere in the repository.
 
-``docs/archive/mars-rebrand.md`` §5 (R3). A case-insensitive search of the
-code trees may find ``kepler`` only in the places below. Each is there on
-purpose, and none is the project's name for itself:
+A case-insensitive search of every tracked text file, however the name is
+spaced, finds only the astronomy named after the astronomer: the space
+telescope and its mission, "Keplerian" orbits, Kepler's laws. A tool that
+queries the telescope's data must be able to say so. Add the form it needs to
+:data:`MISSION`, never a path or a file.
 
-- a handful of lines that name the old name on purpose (``OLD_NAME_LINES``);
-  the deprecation shims that honoured it for ``0.1.0rc3`` are gone (§6.3);
-- published names that must keep their bytes: the data bundles' archives,
-  their ``ARCHIVE_PREFIX``, and the ``.kepler-bundle.json`` marker a fetched
-  bundle carries (§3);
-- the repository's first name, which still redirects and must stay unused;
-- the **Kepler mission**, and the astronomy named after Kepler himself
-  ("Keplerian" orbits, Kepler's laws). A tool that queries the telescope's
-  data must be able to say so. Add the form it needs to :data:`MISSION`,
-  never a path.
-
-The documentation joined this scope in R4. A **record** -- a dated plan,
-analysis or report -- says what was true when it was written, and keeps the
-old names under a dated note (``RECORDS``); a current document may name them
-only to describe the upgrade from Kepler.
+The earlier name is spelled in pieces here (:data:`_OLD`) so that this file
+carries it no more than any other.
 """
 
 from __future__ import annotations
@@ -31,6 +20,9 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: The earlier name, in pieces.
+_OLD = "kep" + "ler"
 
 #: What is searched: the whole repository but its binary data.
 SCOPE = (
@@ -46,19 +38,16 @@ SCOPE = (
     "benchmarks",
     "skills",
     "data",
+    "installers",
     ".github",
     ".claude",
     "pyproject.toml",
 )
 
-#: Whole files that must name the old name: this guard, which quotes it.
-SHIMS = frozenset({"tests/test_rebrand_guard.py"})
-
-#: Records, kept as written under a dated note (docs/archive/mars-rebrand.md
-#: §2), and the rebrand plan itself.
+#: Dated records -- plans, analyses, reports -- that may keep the repository
+#: names they were written with (see the last test).
 RECORDS = frozenset(
     {
-        "docs/archive/mars-rebrand.md",
         "docs/archive/mcp-tool-surface.md",
         "docs/archive/model-backends.md",
         "docs/archive/optical-tools.md",
@@ -72,48 +61,21 @@ RECORDS = frozenset(
 )
 RECORD_TREES = ("docs/benchmarking/figures/",)
 
-#: Published names that keep their bytes, wherever they are mentioned.
-PUBLISHED = (
-    r"kepler-(?:optical|isochrones)-(?:[0-9a-f]{12}|<sha12>)\.tar",
-    r'ARCHIVE_PREFIX = "kepler-"',
-    r"\.kepler-bundle\.json",
-    r"archon774/kepler\b",
-    # Retired before the rename; named only where its retirement is recorded.
-    r"kepler-astro-query",
-)
-
-#: The checkout's directory until R6 renamed it /home/claude/mars. Allowed
-#: only in the files that quote it as a record -- extraction provenance and a
-#: live run's output -- never globally: nothing may depend on it any more.
-OLD_CHECKOUT = r"/home/claude/Kepler\b"
-QUOTES_OLD_CHECKOUT = frozenset({"docs/extraction.md", "tools/bench/graders/answer.py"})
-
 #: The telescope and the astronomer, not the project.
+_ASTRONOMER = _OLD.capitalize()
 MISSION = (
-    r"\bKeplerian\b",
-    r"\bKepler's (?:laws?|equation)\b",
-    r"\bKepler(?:/K2)? (?:space telescope|mission|spacecraft|Input Catalog)\b",
+    rf"\b{_ASTRONOMER}ian\b",
+    rf"\b{_ASTRONOMER}'s (?:laws?|equation)\b",
+    rf"\b{_ASTRONOMER}(?:/K2)? (?:space telescope|mission|spacecraft|Input Catalog)\b",
     r"\bKIC ?\d+",
     r"\bKOI-?\d+",
 )
 
-#: Whole sections of a current document that describe the upgrade from
-#: Kepler, by file and heading; the section ends at the next heading.
-UPGRADE_SECTIONS = {"docs/installing.md": "### Upgrading from Kepler"}
+_ALLOWED = re.compile("|".join(MISSION))
 
-#: Single lines that name the old name on purpose, by file.
-OLD_NAME_LINES = {
-    "docs/archive/README.md": r"Kepler renamed MARS \(MCP Astronomy Research Suite\)",
-    "tools/config.py": r"^#: fetched by Kepler and moved into",
-    "tools/mcp/__main__.py": r"called ``kepler`` is unrelated",
-    "tests/test_mcp_surface.py": r"pip install 'kepler\[mcp\]'",
-}
-
-_ALLOWED = re.compile("|".join(PUBLISHED + MISSION))
-
-#: The name however it is spaced: the console's wordmark was "K E P L E R",
-#: which a plain search for "kepler" never saw.
-_NAME = re.compile(r"k[\s._-]*e[\s._-]*p[\s._-]*l[\s._-]*e[\s._-]*r", re.IGNORECASE)
+#: The name however it is spaced: a wordmark spelled with spaces between the
+#: letters is invisible to a plain search.
+_NAME = re.compile(r"[\s._-]*".join(_OLD), re.IGNORECASE)
 
 
 def _hits() -> list[tuple[str, int, str]]:
@@ -132,27 +94,7 @@ def _hits() -> list[tuple[str, int, str]]:
     return hits
 
 
-def _section_lines(path: str, heading: str) -> range:
-    """1-based line numbers of the section, its heading included."""
-    lines = (_REPO_ROOT / path).read_text(encoding="utf-8").splitlines()
-    heading_index = lines.index(heading)
-    end_index = next(
-        (i for i in range(heading_index + 1, len(lines)) if lines[i].startswith("#")),
-        len(lines),
-    )
-    return range(heading_index + 1, end_index + 1)
-
-
-def _unexplained(path: str, text: str, number: int = 0) -> bool:
-    if path in SHIMS or path in RECORDS or path.startswith(RECORD_TREES):
-        return False
-    if path in UPGRADE_SECTIONS and number in _section_lines(path, UPGRADE_SECTIONS[path]):
-        return False
-    reference = OLD_NAME_LINES.get(path)
-    if reference and re.search(reference, text):
-        return False
-    if path in QUOTES_OLD_CHECKOUT:
-        text = re.sub(OLD_CHECKOUT, "", text)
+def _names_the_project(text: str) -> bool:
     return _NAME.search(_ALLOWED.sub("", text)) is not None
 
 
@@ -160,13 +102,20 @@ def _unexplained(path: str, text: str, number: int = 0) -> bool:
     shutil.which("git") is None or not (_REPO_ROOT / ".git").exists(),
     reason="needs a git checkout",
 )
-def test_kepler_appears_only_where_it_must():
-    unexplained = [
-        f"{path}:{number}: {text.strip()}"
-        for path, number, text in _hits()
-        if _unexplained(path, text, number)
-    ]
-    assert unexplained == [], "\n".join(unexplained)
+def test_the_earlier_name_appears_nowhere():
+    named = [f"{path}:{number}: {text.strip()}" for path, number, text in _hits() if _names_the_project(text)]
+    assert named == [], "\n".join(named)
+
+
+@pytest.mark.skipif(
+    shutil.which("git") is None or not (_REPO_ROOT / ".git").exists(),
+    reason="needs a git checkout",
+)
+def test_no_tracked_path_carries_the_earlier_name():
+    result = subprocess.run(["git", "ls-files"], cwd=_REPO_ROOT, capture_output=True, text=True)
+    if result.returncode != 0:
+        pytest.skip(f"git ls-files failed: {result.stderr.strip()}")
+    assert [path for path in result.stdout.splitlines() if _NAME.search(path)] == []
 
 
 def test_the_mission_stays_nameable():
@@ -177,21 +126,18 @@ def test_the_mission_stays_nameable():
         "Keplerian orbital position",
         "solving Kepler's equation",
     ):
-        assert not _unexplained("tools/future_mission_tool.py", text), text
-    assert _unexplained("tools/future_mission_tool.py", "Kepler's astronomy tools")
-    assert _unexplained("tools/tui/widgets/header.py", 'WORDMARK = "K E P L E R"')
-
-
-def test_the_old_checkout_path_is_allowed_only_where_it_is_quoted():
-    quoted = "`/home/claude/Kepler/algorithms/lightcurve/`"
-    assert not _unexplained("docs/extraction.md", quoted)
-    assert _unexplained("tools/config.py", 'ROOT = "/home/claude/Kepler/data"')
-    assert _unexplained("docs/installing.md", quoted)
+        assert not _names_the_project(text), text
+    old = _ASTRONOMER
+    assert _names_the_project(f"{old}'s astronomy tools")
+    assert _names_the_project(f"pip install '{_OLD}[mcp]'")
+    assert _names_the_project(f".{_OLD}-bundle.json")
+    assert _names_the_project(f'WORDMARK = "{" ".join(_OLD.upper())}"')
+    assert _names_the_project(f"/home/claude/{old}/artifacts")
 
 
 def test_no_new_top_level_package():
-    """§6.2: the namespace move is its own track, so nothing new joins
-    ``tools`` and ``algorithms`` at the top level in the meantime."""
+    """The namespace move is its own track, so nothing new joins ``tools``
+    and ``algorithms`` at the top level in the meantime."""
     import tomllib
 
     pyproject = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -199,13 +145,6 @@ def test_no_new_top_level_package():
         "tools*",
         "algorithms*",
     ]
-
-
-def test_every_old_name_line_still_matches_something():
-    """A stale entry would let a new mention through unexamined."""
-    hits = _hits()
-    for path, pattern in OLD_NAME_LINES.items():
-        assert any(p == path and re.search(pattern, t) for p, _, t in hits), path
 
 
 def test_the_repository_is_skynetrtn_mars_outside_the_records():

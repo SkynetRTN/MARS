@@ -139,8 +139,8 @@ standing GitHub release tagged **`data`**:
 
 | Bundle | Source | Archive |
 | --- | --- | --- |
-| `optical` | `data/optical/` in this repository (Git LFS pulled) | `kepler-optical-<sha12>.tar` |
-| `isochrones` | the operator's Girardi grid, `.npy` files only | `kepler-isochrones-<sha12>.tar` |
+| `optical` | `data/optical/` in this repository (Git LFS pulled) | `mars-optical-<sha12>.tar` |
+| `isochrones` | the operator's Girardi grid, `.npy` files only | `mars-isochrones-<sha12>.tar` |
 
 **A bundle's version is its content.** Archives are deterministic plain
 `.tar` (sorted members, fixed mode, owner and mtime), named by the first 12

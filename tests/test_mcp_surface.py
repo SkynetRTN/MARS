@@ -773,7 +773,7 @@ def test_the_server_never_uses_a_gui_matplotlib_backend():
 
 
 def test_the_missing_sdk_advice_names_this_interpreter_and_this_version():
-    """Finding 15: a bare `pip install 'kepler[mcp]'` installed an unrelated
+    """Finding 15: a bare `pip install` of the earlier name installed an unrelated
     PyPI project. `skynet-mars` is on PyPI now, but a bare command can still
     reach another environment or move the version, so the advice names this
     interpreter's pip and, when installed, the exact version."""

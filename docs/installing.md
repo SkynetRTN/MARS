@@ -191,12 +191,3 @@ Windows. Set `MARS_HOME` to move it.
 
 On Linux and macOS the default artifact directory and its files are private to
 you (`0700` and `0600`).
-
-### Upgrading from Kepler
-
-Kepler was renamed MARS in `0.1.0rc3`, and later releases do not read Kepler's
-names. Install `skynet-mars` into a new environment rather than over
-`kepler`. The two share files, and uninstalling `kepler` afterwards breaks
-MARS. Rename `KEPLER_*` variables to `MARS_*`, and point hosts at `mars-mcp`.
-Copy `bundles/` (and anything else you want) from `~/.local/share/kepler`
-into the MARS home, or set `MARS_HOME` to the old directory.
