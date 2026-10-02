@@ -781,9 +781,29 @@ def test_the_missing_sdk_advice_names_this_interpreter_and_this_version():
 
     from tools.mcp.__main__ import _missing_sdk_message
 
-    message = _missing_sdk_message()
+    message = _missing_sdk_message(has_pip=True)
     assert f"{sys.executable} -m pip install" in message
     assert f"skynet-mars[mcp]=={version('skynet-mars')}" in message
+
+
+def test_the_missing_sdk_advice_fits_an_environment_uv_made(tmp_path):
+    """An environment uv made has no pip, so the pip advice would fail
+    there. A `uv tool install` is installed again with the extra, unpinned so
+    `uv tool upgrade` still works; any other pip-less environment gets
+    `uv pip` aimed at this interpreter."""
+    from importlib.metadata import version
+
+    from tools.mcp.__main__ import _missing_sdk_message
+
+    requirement = f'"skynet-mars[mcp]=={version("skynet-mars")}"'
+    (tmp_path / "uv-receipt.toml").write_text("[tool]\n", encoding="utf-8")
+    tool = _missing_sdk_message(prefix=str(tmp_path), has_pip=False)
+    assert 'uv tool install --python 3.13 "skynet-mars[mcp]"`' in tool
+    assert "pip" not in tool
+
+    plain = _missing_sdk_message(prefix=str(tmp_path / "venv"), has_pip=False)
+    assert f"uv pip install --python {sys.executable} {requirement}" in plain
+    assert "-m pip" not in plain
 
 
 def test_a_group_list_naming_nothing_is_an_error():
@@ -950,14 +970,16 @@ def test_a_tool_that_prints_never_writes_to_the_protocol_stream(tmp_path):
 
 
 def test_self_test_without_the_sdk_gives_the_servers_advice(monkeypatch, capsys):
-    """It pointed at docs/, which a wheel does not ship, and not at the pip
-    command that avoids the unrelated PyPI project."""
+    """It pointed at docs/, which a wheel does not ship, and not at the
+    install command that avoids the unrelated PyPI project. Which command that
+    is depends on the environment running the test, so it is the server's."""
     from tools.mcp import selftest
+    from tools.mcp.__main__ import _missing_sdk_message
 
     monkeypatch.setitem(sys.modules, "mcp", None)  # import mcp -> ImportError
     assert selftest.main([]) == 2
     err = capsys.readouterr().err
-    assert "uv sync --extra mcp" in err and "-m pip install" in err
+    assert "uv sync --extra mcp" in err and _missing_sdk_message() in err
 
 
 # --- the third review -----------------------------------------------------------------

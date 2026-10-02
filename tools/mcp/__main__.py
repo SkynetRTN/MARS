@@ -20,28 +20,44 @@ from tools.paths import pin_numba_cache
 log = logging.getLogger("mars-mcp")
 
 
-def _missing_sdk_message() -> str:
-    """How to add the SDK: this interpreter's pip, and this exact version.
+def _missing_sdk_message(prefix: str | None = None, has_pip: bool | None = None) -> str:
+    """How to add the SDK: this environment's installer, and this exact version.
 
     ``skynet-mars`` is on PyPI, so the extra can be installed by name -- but
     a bare ``pip install`` may be a different environment's pip, and an
     unpinned requirement may upgrade or downgrade the install it is meant to
-    complete. So the advice names ``sys.executable`` and the installed
+    complete. So the advice names this environment and the installed
     version. (Before the rename the bare command was a trap: the PyPI project
     called ``kepler`` is unrelated, and ``-U`` replaced this install with it.)
+
+    An environment uv made has no pip. A ``uv tool install`` (recognised by
+    the ``uv-receipt.toml`` uv writes into it) is installed again with the
+    extra, so that uv's record of the tool keeps it. That advice is unpinned:
+    the environment is the tool's alone, and a pin would stop
+    ``uv tool upgrade`` from ever moving it. Any other pip-less environment is
+    completed with ``uv pip`` aimed at this interpreter.
     """
 
+    import importlib.util
     from importlib.metadata import PackageNotFoundError, version
 
+    prefix = sys.prefix if prefix is None else prefix
+    if has_pip is None:
+        has_pip = importlib.util.find_spec("pip") is not None
     try:
         requirement = f"skynet-mars[mcp]=={version('skynet-mars')}"
     except PackageNotFoundError:
         requirement = "skynet-mars[mcp]"
+    if os.path.isfile(os.path.join(prefix, "uv-receipt.toml")):
+        command = 'uv tool install --python 3.13 "skynet-mars[mcp]"'
+    elif has_pip:
+        command = f"{sys.executable} -m pip install \"{requirement}\""
+    else:
+        command = f"uv pip install --python {sys.executable} \"{requirement}\""
     return (
         "mars-mcp needs its optional [mcp] dependencies. From a checkout, run "
-        "`uv sync --extra mcp`. From an install, add them with this environment's "
-        f"pip: `{sys.executable} -m pip install \"{requirement}\"` "
-        "(see docs/installing.md)."
+        "`uv sync --extra mcp`. From an install, add them to this environment: "
+        f"`{command}` (see docs/installing.md)."
     )
 
 
