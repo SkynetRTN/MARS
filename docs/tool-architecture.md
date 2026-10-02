@@ -467,7 +467,36 @@ is unchanged without them:
 - Environment: `MARS_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY` / `OPENAI_BASE_URL`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`. A
   provider key from the environment reaches only that provider's default host;
-  a non-default base URL needs a key passed explicitly with it.
+  a non-default base URL needs a key passed explicitly with it. With
+  `MARS_MODEL_BACKEND` unset the default is Anthropic. Examples:
+  `anthropic/claude-sonnet-5`, `openai/gpt-4.1`, `ollama/qwen3.8:27b-mlx`
+  (`OLLAMA_BASE_URL` defaults to `http://localhost:11434/v1`, no key),
+  `gemini/gemini-2.5-pro`; `OLLAMA_TIMEOUT_S` is in section 10.2.
+- `.env` at the repository root is read when the console launches and again
+  on every `/backend`, so a key added while the console is open takes effect
+  on the next switch. The real environment always wins over the file, and the
+  file is gitignored.
+
+  ```bash
+  MARS_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run mars
+  ```
+- The loop is equally callable from plain Python:
+
+  ```python
+  from tools.agent.engine import run_session
+  from tools.llm.factory import build_backend
+
+  for event in run_session(
+      "all historical radio data on Cassiopeia A",
+      backend=build_backend("ollama/qwen3.8:27b-mlx"),
+  ):
+      print(event)
+  ```
+
+  Every run writes a session manifest (`tools.sessions.AgentSession`) under
+  `artifacts/sessions/<session_id>/session_manifest.json`, recording each turn
+  and tool call, cache hits included; an identical repeat call within a
+  session is served from the loop's cache with no network round trip.
 - `complete()` is the **only required method** of a `ModelBackend`, and it is
   non-streaming. Streaming is a capability flag with a one-shot fallback.
   Schema translation into a backend's dialect and pre-dispatch argument
@@ -538,6 +567,82 @@ permitted new dependencies -- `textual` and `textual-image` are the two it
 added, over the already-pinned `pillow` and `rich`. `tools/agent/` and
 `tools/llm/` stay zero-new-dependency, which is what keeps the loop callable
 from plain Python.
+
+**Using it.** `uv run mars` opens on the default backend; flags only choose a
+different start:
+
+```bash
+uv run mars --backend ollama       # start on the local daemon
+uv run mars --thinking-budget 0    # without asking for reasoning
+uv run mars --max-turns 40         # with a higher ceiling than 20
+```
+
+```text
+╭─ M A R S ──────────────────────────────────────────────────────────────────╮
+│ astronomy research console · anthropic/claude-sonnet-5                     │
+╰────────────────────────────────────────────────────────────────────────────╯
+
+  › how far away is M31?
+
+  Session 20260918T164552Z_2ac41045d42a started.
+
+  Turn 1 started.
+
+  ▊  ✻ thinking
+  ▊  NED's resolver is weaker on colloquial names than SIMBAD's, so
+  ▊  resolve first.
+
+  ✓ search_simbad  (696 ms)
+
+  Turn 1 finished: tool_use.
+
+  Turn 2 started.
+
+  M31 is the Andromeda Galaxy, 2.5 Mly away.
+
+  Turn 2 finished: end_turn.
+
+  Session finished: end_turn.
+
+ ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎
+ ▊  Ask MARS…                                                             ▎
+ ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎
+  2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
+```
+
+The header names the session's `provider/model`; the status bar counts turns
+against the ceiling, token usage once a turn reports it, the artifacts
+written, and the graphics tier detected for this terminal. It needs a backend
+before it will answer anything — a key for the provider it opens on, or a
+local Ollama daemon, which needs none — but if the default cannot be used the
+console still opens and says why, and `/backend` fixes it from inside the
+session (section 10 lists the environment).
+
+| Command | Aliases | Does |
+| --- | --- | --- |
+| `/help` | `/?` | List the commands, generated from the registry. |
+| `/backend [name\|spec] [model]` | `/b` | List the backends, or switch (below). |
+| `/artifacts` | `/a` | Browse what this session wrote, with previews. |
+| `/sessions` | `/s` | Browse saved sessions and resume one. |
+| `/resume <id>` | `/r` | Resume a saved session by id. |
+| `/quit` | `/q`, `/exit` | Exit. |
+
+`/status`, `/tools`, `/approve`, `/prompt` and `/new` are registered and
+offered by the menu, but not implemented yet: they answer with a notice
+rather than doing anything.
+
+| Key | Does |
+| --- | --- |
+| `Tab` | Complete the slash command being typed. |
+| `F3` / `F4` | Artifact browser · session browser. |
+| `Esc` | Stop the running turn at its next safe point; close a browser. |
+| `o` | In the artifact browser, open the selected file in the desktop handler. |
+| `Ctrl+Q` | Quit. |
+
+Everything a run writes is kept: tool artifacts land under
+`artifacts/sessions/<session_id>/`, `F3` browses them with image and waveform
+previews, and the session manifest beside them is what `/sessions` and
+`/resume` read back.
 
 **Threading.** The engine is synchronous, so the console runs it in a Textual
 thread worker and posts each event to the UI thread as a message. Approval runs
@@ -754,9 +859,34 @@ optical frame library (269 MB) and the Girardi isochrone grid (282 MB).
 - Absent, a tool says so (`bundle_not_installed`). An empty listing is never
   presented as the answer.
 
+- `--from URL_OR_DIR` (or `MARS_BUNDLE_URL`) fetches from a mirror or a local
+  directory instead.
+
 The fixture-write guard, the download root and `tools.optical`'s recursion
 boundary are **re-anchored** for an installed layout, never weakened. Nothing
 is written into the installed package.
+
+- `solve_astrometry(write_header=true)` refuses to write into the bundled data
+  or into a fetched bundle (`refusing_to_modify_fixture`). Downloaded products
+  stay writable.
+- `list_optical_frames` walks a download root recursively only inside the data
+  directory or the MARS home's `fits_downloads/`. Anywhere else, it searches
+  the root flat and says so.
+
+An install writes under the MARS home (`MARS_HOME`; `docs/installing.md`).
+Each subdirectory has its own override:
+
+| Directory | Override |
+| --- | --- |
+| `artifacts/` | `MARS_ARTIFACT_DIR` |
+| `fits_downloads/` | `MARS_FITS_DOWNLOAD_DIR`, or `MARS_DATA_DIR` (then its `fits_downloads/`) |
+| `bundles/optical/`, `bundles/isochrones/` | `MARS_OPTICAL_DATA_DIR`, `MARS_ISOCHRONE_DIR` |
+| `numba-cache/` | `NUMBA_CACHE_DIR` |
+
+Each artifact name is claimed atomically, so two servers sharing the
+directory never overwrite each other. A repeat call adds a numeric suffix.
+`list_artifacts` returns the newest 100 entries of a directory, and refuses
+one that climbs out (`..`). `CASDA_OPAL_USERNAME` enables CASDA downloads.
 
 **Releases.** `.github/workflows/release.yml` publishes a `v<version>` tag,
 with `docs/releasing.md` as the policy. It:
