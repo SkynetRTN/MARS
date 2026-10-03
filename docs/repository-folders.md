@@ -16,7 +16,7 @@ Repository automation and ownership policy.
 - `workflows/ci.yml` runs the current lightweight Python/repository-shape checks.
 - `workflows/secret-scan.yml` runs gitleaks against the tree and history.
 - `workflows/workflow-safety.yml` runs actionlint and zizmor against workflows.
-- `workflows/release.yml` builds, verifies (a clean install on Python 3.13
+- `workflows/release.yml` builds, verifies (a clean install on Python 3.12 and 3.13
   running `mars-mcp self-test`) and publishes a release from a
   `v<version>` tag, and checks the standing `data` release holds the pinned
   bundles. Policy: [releasing.md](releasing.md).

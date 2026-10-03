@@ -48,15 +48,16 @@ def test_the_extension_has_one_version_of_its_own():
     assert _EXT_PROJECT["version"] == _MANIFEST["version"]
 
 
-def test_the_extension_runs_python_3_13_the_supported_target():
-    """uv installs Python from ``requires-python``. The manifest declares no
-    ``runtimes.python``: Desktop could check that against a system Python the
-    user does not have, when uv would have fetched one."""
+def test_the_extension_runs_python_3_13_a_supported_version():
+    """uv installs Python from ``requires-python``: 3.13, the newest supported
+    version. The manifest declares no ``runtimes.python``: Desktop could check
+    that against a system Python the user does not have, when uv would have
+    fetched one."""
 
     assert _EXT_PROJECT["requires-python"] == ">=3.13,<3.14"
     assert _entry_point().PYTHON == "3.13"
     assert "runtimes" not in _MANIFEST.get("compatibility", {})
-    assert _REPO_PROJECT["requires-python"] == ">=3.13"
+    assert "Programming Language :: Python :: 3.13" in _REPO_PROJECT["classifiers"]
 
 
 def test_the_manifest_is_the_uv_type_run_locked_from_its_own_directory():

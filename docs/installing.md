@@ -42,8 +42,9 @@ python3.13 -m venv ~/mars-env
 ~/mars-env/bin/mars-mcp self-test     # Windows: ~\mars-env\Scripts\mars-mcp.exe
 ```
 
-**Python 3.13** is the supported version. On Python 3.13 on x86_64 Linux,
-Apple Silicon macOS or x64 Windows, every dependency has a pre-built wheel.
+**Python 3.12 and 3.13** are supported, and CI tests both; the commands above
+use 3.13. On either, on x86_64 Linux, Apple Silicon macOS or x64 Windows,
+every dependency has a pre-built wheel.
 Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
 Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
 toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about

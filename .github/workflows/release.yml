@@ -100,9 +100,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Python 3.13, MARS's version: the floor, and what CI runs -- the newest
-        # Python every dependency ships wheels for (docs/installing.md).
-        python: ["3.13"]
+        # Every supported Python, as CI tests them (docs/installing.md).
+        python: ["3.12", "3.13"]
     steps:
       # No checkout: the wheel must work on a machine that has none.
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

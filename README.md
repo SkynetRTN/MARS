@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <img src="https://img.shields.io/badge/python-3.13-blue" alt="Python 3.13">
+  <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue" alt="Python 3.12 | 3.13">
 </p>
 
 MARS (MCP Astronomy Research Suite) is an agentic, tool-enabled system for
