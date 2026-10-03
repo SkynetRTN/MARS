@@ -22,7 +22,10 @@ ROOT_LOCK = HERE.parents[1] / "uv.lock"
 
 
 def _versions(lock: Path) -> dict[str, str]:
-    return {p["name"]: p["version"] for p in tomllib.loads(lock.read_text(encoding="utf-8"))["package"]}
+    """Every locked package but skynet-mars itself: the extension pins the
+    published release, which trails the repository's version."""
+    packages = tomllib.loads(lock.read_text(encoding="utf-8"))["package"]
+    return {p["name"]: p["version"] for p in packages if p["name"] != "skynet-mars"}
 
 
 def main() -> int:
