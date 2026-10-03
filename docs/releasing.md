@@ -26,7 +26,10 @@ and the workflow refuses to publish one.
 ## What the workflow does
 
 On a `v*` tag push (or `workflow_dispatch`, which runs everything except
-the publishing jobs, as a dry run):
+the publishing jobs, as a dry run), GitHub and TestPyPI publication run in
+parallel after the same verified build and data gates. PyPI remains serial:
+it can run only after the TestPyPI wheel has been downloaded, byte-compared
+with the build artifact, installed and self-tested.
 
 1. **build**:
    - checks the tag against the version;
@@ -48,10 +51,11 @@ the publishing jobs, as a dry run):
    optional bundles, rehashes their extracted trees, and runs
    `mars-mcp self-test --with-data` through stdio and the local grid loader.
 5. **publish** creates the GitHub release with the wheel, the sdist and
-   `SHA256SUMS`, only after **verify**, **data** and **verify-data** pass. It is the only job
-   with write permission to the repository, and only on a tag.
-6. **publish to TestPyPI** uploads the wheel and the sdist to TestPyPI, after
-   the same build and verification jobs pass.
+   `SHA256SUMS`, only after **verify**, **data** and **verify-data** pass. It is
+   the only job with write permission to the repository, and only on a tag.
+6. **publish to TestPyPI** runs in parallel with **publish**, uploading the
+   wheel and the sdist to TestPyPI after the same build and verification jobs
+   pass.
 7. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
    requires it to be byte-identical to the one **build** made, installs it
    with its dependencies from PyPI -- never from TestPyPI, where anyone can
@@ -124,8 +128,9 @@ both mirroring Skycat's (`SkynetRTN/skycat`):
 
 The same as any release (*Versions and tags*): bump `version`, `uv lock`,
 merge, tag the merged commit. The workflow then publishes to GitHub and
-TestPyPI, verifies the TestPyPI upload, and waits for approval of the `pypi`
-environment. Approve it from the run's page once the TestPyPI job is green.
+TestPyPI in parallel, verifies the TestPyPI upload, and waits for approval of
+the `pypi` environment. Approve it from the run's page once the TestPyPI job
+is green.
 The first release published this way was `0.1.0rc4`, on 2026-09-28.
 
 After the release is on PyPI, move the Claude Desktop extension to it
