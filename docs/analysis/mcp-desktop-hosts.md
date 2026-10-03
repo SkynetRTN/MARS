@@ -216,6 +216,63 @@ aarch64, where Claude Desktop does not run:
 Windows if available), then run the pulsar detection. Record the first-launch
 time and what the settings dialog passes for an empty field.
 
+### Phase D2 for Codex: the plugin, built ahead of order (2026-10-02)
+
+Built at the maintainer's direction for the ChatGPT desktop app on Fedora 44.
+OpenAI's Linux preview ships `.rpm` packages for Fedora 43 and 44, x86_64 and
+aarch64. The plugin is `installers/codex/` (README there), with
+`tests/test_codex_plugin.py`. Like the extension since #109, it pins no MARS
+release: `.mcp.json` runs `uv tool run --from "skynet-mars[mcp]@latest"
+mars-mcp`, from uv's cache. It does not reuse the extension's `src/server.py`
+launcher, because that runs from the plugin's directory, and Codex replaces
+the directory while a server starts. A clean Fedora 44 container failed with
+"Current directory does not exist" a few seconds in. The measurements below
+were taken while the plugin still pinned a release (`0.1.0rc4`, then
+`0.1.0rc5`). It is the Codex counterpart of
+the `.mcpb`: Codex's plugin format bundles the MCP server's launch
+configuration with skills, and `.agents/plugins/marketplace.json` makes the
+repository a marketplace.
+
+- **Format.** Codex's own `.codex-plugin/plugin.json` and `.mcp.json`, not
+  the portable Agent Plugins layout. The portable `mcp.json` accepts only
+  `command`, `args`, `env` and `cwd` for a stdio server, and the
+  user-side `[plugins."<id>".mcp_servers.<name>]` policy has no timeout
+  either. Only Codex's `.mcp.json` can raise the 10 s start limit and the
+  60 s per-call limit (read in `openai/codex` at `d42aecc`:
+  `codex-mcp/src/agent_plugin_config.rs`, `config/src/types.rs`).
+- **Cold first launch, as the app runs it.** With Codex CLI 0.160 (the same
+  core as the app), a throwaway `CODEX_HOME`, an empty `HOME` and only
+  uv-managed Pythons, `codex app-server` started the server through
+  `mcpServerStatus/list` in **44 s**. That run downloaded CPython 3.13 and
+  installed the locked environment (737 MB of uv cache). It listed 55 tools,
+  and `mcpServer/tool/call` ran `list_pulsar_scans` and
+  `compute_pulsar_periodogram` without a model login. A warm start took
+  1.8 s. `mars-mcp self-test`, run from the installed plugin's environment,
+  passed: B0329+54 at 204σ.
+- **Environment.** Codex gives a stdio server only `HOME`, `PATH`, `USER`,
+  `LANG` and a few more (`rmcp-client` `DEFAULT_ENV_VARS`). The plugin
+  forwards the settings MARS reads (the ADS key, MARS home and tool groups,
+  `XDG_DATA_HOME`, the CASDA user and the session bus its keyring needs, and
+  the plate solvers' data paths) through `env_vars`. Because the command is
+  a bare `uv` resolved on the app's `PATH`, the Fedora route is
+  `dnf install uv` (`/usr/bin`).
+- **Fedora's uv** ships `python-downloads = "manual"` (`/etc/uv/uv.toml`),
+  and Fedora 44's Python is 3.14. A clean Fedora 44 container showed the
+  server dying in the handshake, so the plugin sets
+  `UV_PYTHON_DOWNLOADS=automatic`, its only value. The same container showed
+  that `photutils` has no Python 3.13 wheel for aarch64 Linux, so aarch64
+  needs `gcc`. After the fix, clean containers on x86_64 (no compiler) and
+  aarch64 (with gcc) installed from GitHub and passed the whole check.
+- **The skill** in the plugin is rendered by `python -m tools.skill`, the
+  same source the releases are cut from.
+- **No OpenAI key.** The model is the signed-in app session's.
+
+**Remaining gate:** install the `.rpm` on Fedora 44 Workstation, then add the
+marketplace and confirm three things: the Plugins Directory lists MARS, a
+Codex thread starts the server, and the model reads the skill. Run the pulsar
+detection, and record whether the app's own `PATH` finds `uv`. The app's UI
+is the only part not yet exercised.
+
 ### Phase D3: The extension, released (only if D2 says build)
 
 - Manifest source in the repository, built by `release.yml`, with a version

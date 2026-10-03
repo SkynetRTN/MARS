@@ -1,0 +1,20 @@
+{
+  "name": "mars",
+  "interface": {
+    "displayName": "MARS"
+  },
+  "plugins": [
+    {
+      "name": "mars",
+      "source": {
+        "source": "local",
+        "path": "./installers/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    }
+  ]
+}

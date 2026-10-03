@@ -4,10 +4,6 @@ on:
   pull_request:
   push:
     branches: [main, dev]
-  # Weekly, so the newest-dependencies jobs see an upstream release that
-  # breaks MARS even when no pull request is open (Mondays, 06:17 UTC).
-  schedule:
-    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -35,7 +31,7 @@ jobs:
         run: python -m compileall -q tools algorithms tests
 
   python-tests:
-    name: python tests (${{ matrix.python }}, ${{ matrix.dependencies }})
+    name: python tests (${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -44,15 +40,8 @@ jobs:
         # (tests/test_packaging_metadata.py). 3.13 is the newest every
         # dependency ships wheels for (docs/installing.md).
         python: ["3.12", "3.13"]
-        # locked: uv.lock, the versions this repository pins and Dependabot
-        # moves. newest: the newest releases pyproject.toml's bounds allow,
-        # what `uv tool install` and the Claude Desktop extension resolve.
-        dependencies: [locked, newest]
     env:
       UV_PYTHON: ${{ matrix.python }}
-      # --locked fails if uv.lock is stale; --upgrade re-resolves to the
-      # newest allowed releases, in the runner's copy only.
-      RESOLUTION: ${{ matrix.dependencies == 'locked' && '--locked' || '--upgrade' }}
     steps:
       # lfs: true only here. The three NGC 5286 B frames are Git LFS objects
       # and the field-calibration tests that drive them from pixels skip
@@ -78,7 +67,7 @@ jobs:
       - name: Run the MCP tests without the [mcp] extra
         env:
           MPLBACKEND: Agg
-        run: uv run "$RESOLUTION" pytest tests/test_mcp_surface.py tests/test_mcp_bundles.py tests/test_skill_invariants.py tests/test_tool_registry_coverage.py
+        run: uv run --locked pytest tests/test_mcp_surface.py tests/test_mcp_bundles.py tests/test_skill_invariants.py tests/test_tool_registry_coverage.py
 
       # Then everything with it. Without the extra, every test of the server's
       # own validation -- the check that keeps undeclared arguments from a
@@ -86,11 +75,7 @@ jobs:
       - name: Run pytest
         env:
           MPLBACKEND: Agg
-        run: uv run "$RESOLUTION" --extra mcp pytest
-
-      - name: Record the resolved versions
-        if: always()
-        run: uv pip list --format freeze | sort
+        run: uv run --locked --extra mcp pytest
 
   # What the release workflow will build and upload, checked on every pull
   # request rather than first at a tag: an index accepts a broken wheel as
