@@ -20,6 +20,9 @@ The ``decompose_linear`` tests are adapted from
 from __future__ import annotations
 
 import math
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -155,21 +158,33 @@ CRASHING_CALLS = [
 ]
 
 
-def _crashes(expression: str) -> bool:
-    """Run one overlap call in a subprocess; report whether it survived."""
-    import subprocess
-    import sys
-    from pathlib import Path
-
-    result = subprocess.run(
-        [sys.executable, "-c",
-         "from algorithms.skylib_lite.util.overlap import "
-         "ellipoverlap, triangle_unitcircle_overlap\n"
-         f"print({expression})"],
-        capture_output=True, text=True, timeout=300,
+def _run_python(source: str) -> subprocess.CompletedProcess[str]:
+    """Run a potentially fatal geometry path outside the pytest process."""
+    return subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=300,
         cwd=str(Path(__file__).resolve().parent.parent),
     )
+
+
+def _crashes(expression: str) -> bool:
+    """Run one overlap call in a subprocess; report whether it survived."""
+    result = _run_python(
+        "from algorithms.skylib_lite.util.overlap import "
+        "ellipoverlap, triangle_unitcircle_overlap\n"
+        f"print({expression})"
+    )
     return result.returncode != 0
+
+
+def _assert_fatal_after_setup(source: str) -> None:
+    """Require setup to finish before accepting a non-Python fatal exit."""
+    result = _run_python(source)
+    assert result.stdout == "READY\n", result
+    assert result.returncode != 0, result
+    assert "Traceback (most recent call last)" not in result.stderr, result
 
 
 @pytest.mark.slow
@@ -223,6 +238,47 @@ def test_an_off_centre_pixel_is_safe_at_the_same_scale():
     enough to have gone unnoticed.
     """
     assert not _crashes("ellipoverlap(-0.3, -0.7, 0.7, 0.3, 0.2, 0.2, 0.0)")
+
+
+@pytest.mark.slow
+def test_run_photometry_fixed_ellipse_reaches_the_fatal_overlap_path():
+    """PRESERVED DEFECT: the public fixed-ellipse path terminates the process."""
+    _assert_fatal_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "background = np.zeros_like(data)\n"
+        "background_rms = np.ones_like(data)\n"
+        "source = SourceExtractionData(x=3.0, y=3.0)\n"
+        "settings = PhotometrySettings(mode='aperture', a=0.35, b=0.34, apcorr_tol=0)\n"
+        "print('READY', flush=True)\n"
+        "run_photometry(data, Header({'EXPTIME': 1}), [source], settings, "
+        "background=background, background_rms=background_rms)\n"
+        "print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_run_photometry_default_auto_reaches_the_fatal_overlap_path():
+    """PRESERVED DEFECT: default auto settings can derive a fatal ellipse."""
+    _assert_fatal_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "background = np.zeros_like(data)\n"
+        "background_rms = np.ones_like(data)\n"
+        "source = SourceExtractionData(x=3.0, y=3.0, fwhm_x=0.3297, "
+        "fwhm_y=0.3200, theta=0.0, flux=1.0)\n"
+        "settings = PhotometrySettings(mode='auto', apcorr_tol=0)\n"
+        "print('READY', flush=True)\n"
+        "run_photometry(data, Header({'EXPTIME': 1}), [source], settings, "
+        "background=background, background_rms=background_rms)\n"
+        "print('SURVIVED', flush=True)\n"
+    )
 
 
 # ---------------------------------------------------------------------------
