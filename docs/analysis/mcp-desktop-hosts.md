@@ -1,12 +1,13 @@
 # MARS in the Desktop Apps: Claude Desktop and the ChatGPT Desktop App
 
-**Status:** dated proposal from PR #97, 2026-10-01. Only D2 has started.
+**Status:** dated proposal from PR #97, 2026-10-01. D2 was built ahead of
+order, at the maintainer's direction; no other phase has started.
 Scheduling and acceptance now live in the single
 [master continuation plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
 This snapshot preserves the rationale, host claims and vendor sources for
 rechecking, not a competing execution plan. D2 has since been built, in
-`installers/claude-desktop/`; its D2 results are below, and its open gate is
-tracked in the master plan. **Browser support is parked**
+`installers/claude-desktop/`; its results are below. Its gate, a real
+Claude Desktop install, is open. **Browser support is parked**
 at the maintainer's direction (§6).
 
 **Prerequisites:** the MCP tool surface (archived 2026-09-25) and the per-host
@@ -172,7 +173,7 @@ Done on 2026-10-01. The extension was not thrown away: it is
 `tests/test_claude_desktop_extension.py`. What was verified, on Linux
 aarch64, where Claude Desktop does not run:
 
-- `mcpb` 2.1.2 validates the manifest and packs a 75 kB `.mcpb`. Its icon
+- `mcpb` 2.1.2 validates the manifest and packs a 277 kB `.mcpb`, most of it the icon. Its icon
   warning, which recommends 512×512, is met by exporting the mark from
   `docs/assets/make_brand.py`.
 - **Cold first launch, as the host runs it.** The manifest's own `uv run

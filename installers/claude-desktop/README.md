@@ -33,7 +33,7 @@ file for file and byte for byte:
 
 ```bash
 cd installers/claude-desktop
-zip -r -D ../../mars.mcpb manifest.json pyproject.toml uv.lock icon.png src
+zip -D ../../mars.mcpb manifest.json pyproject.toml uv.lock icon.png src/server.py
 ```
 
 The result is under 300 kB, and `*.mcpb` is git-ignored. Neither route signs
@@ -80,8 +80,20 @@ release rather than leading it. Once `v<version>` is published:
 1. Set the new version in three places: `version` in `pyproject.toml` and
    the `skynet-mars[mcp]==` pin in PEP 440 form (`0.1.0rc5`), and `version`
    in `manifest.json` in semver form, as MCPB requires (`0.1.0-rc.5`).
-2. Run `uv lock` in this directory.
+2. Run `python installers/claude-desktop/sync_lock.py` from the repository
+   root, not a bare `uv lock`. Resolved on its own, the extension's lock picks
+   newer releases than the root `uv.lock` that CI's parity suite runs against;
+   the script locks every package the two share at the root's version.
 3. Build and test as above.
 
 `tests/test_claude_desktop_extension.py` checks that the four version fields
-agree and that the pin is never ahead of the repository's version.
+agree, that the pin is never ahead of the repository's version, and that the
+two locks agree.
+
+## Platforms
+
+The manifest says macOS and Windows, but MCPB cannot name a CPU. The locked
+`numba` and `llvmlite` publish macOS wheels for **Apple Silicon only**, and
+`sep`, `photutils` and others have no Windows-on-ARM wheels. On an Intel Mac
+or an ARM Windows machine, the first launch would have to compile them and
+fails. Supported: Apple Silicon Macs and x64 Windows.

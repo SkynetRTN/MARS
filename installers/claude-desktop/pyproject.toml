@@ -1,7 +1,9 @@
 # The Claude Desktop extension's environment. Claude Desktop runs
 # `uv run --locked` in the unpacked extension, which installs exactly what
-# uv.lock beside this file pins. The skynet-mars pin must equal the
-# repository's own version (tests/test_claude_desktop_extension.py).
+# uv.lock beside this file pins. The skynet-mars pin names a published
+# release, so it may trail the repository's version but never lead it, and
+# uv.lock holds the root lock's versions (sync_lock.py; both checked by
+# tests/test_claude_desktop_extension.py).
 [project]
 name = "mars-claude-desktop"
 version = "0.1.0rc4"

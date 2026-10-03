@@ -113,9 +113,10 @@ default per-call wait; `MCP_TOOL_TIMEOUT` (milliseconds) raises it.
 
 **The extension** needs no Python, no virtual environment and no config file.
 It is a `.mcpb` file that Claude Desktop installs with a double-click (or
-Settings → Extensions → Advanced settings → Install Extension). Claude Desktop
-then downloads Python 3.13 and the dependencies itself. The first launch takes
-a few minutes, and later ones do not. The extension's settings ask for the ADS
+Settings → Extensions → Advanced settings → Install Extension), on an Apple
+Silicon Mac or x64 Windows. Claude Desktop should then download Python 3.13
+and the dependencies itself, so the first launch takes a few minutes; that is
+not yet confirmed on a real Desktop install. The extension's settings ask for the ADS
 token (stored as a secret), the tool groups and the MARS home, all optional.
 The optional data bundles still need one command, with
 [uv](https://docs.astral.sh/uv/) installed:

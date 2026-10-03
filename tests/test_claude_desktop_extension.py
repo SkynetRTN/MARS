@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import sys
 import tomllib
 from pathlib import Path
 
@@ -29,9 +30,15 @@ _REPO_PROJECT = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf
 
 
 def _entry_point():
+    """Loaded without writing ``src/__pycache__``, which a plain zip of
+    ``src`` would otherwise pack."""
     spec = importlib.util.spec_from_file_location("mars_desktop_entry", _EXT / "src" / "server.py")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    previous, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
     return module
 
 
@@ -132,3 +139,16 @@ def test_the_extension_needs_no_model_key():
     providers = re.compile(r"ANTHROPIC|OPENAI|GEMINI|CLAUDE|MODEL", re.IGNORECASE)
     assert not any(providers.search(name) for name in _MANIFEST["server"]["mcp_config"]["env"])
     assert not any(providers.search(name) for name in _MANIFEST["user_config"])
+
+
+def test_the_extension_locks_the_versions_ci_tests():
+    """Resolved on its own, the extension's lock picked newer numpy, numba and
+    llvmlite than the root lock the parity suite runs against. Every package
+    the two share must be at the root's version (``sync_lock.py``)."""
+
+    def versions(lock):
+        return {p["name"]: p["version"] for p in tomllib.loads(lock.read_text(encoding="utf-8"))["package"]}
+
+    root, ours = versions(_ROOT / "uv.lock"), versions(_EXT / "uv.lock")
+    drift = {name: (root[name], ours[name]) for name in ours if name in root and root[name] != ours[name]}
+    assert drift == {}, f"run installers/claude-desktop/sync_lock.py: {drift}"

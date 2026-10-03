@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 README.md
+sync_lock.py

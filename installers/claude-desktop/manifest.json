@@ -4,7 +4,7 @@
   "display_name": "MARS — MCP Astronomy Research Suite",
   "version": "0.1.0-rc.4",
   "description": "55 astronomy tools: SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and local pulsar, variable-star, photometry, plate-solving, HR-diagram and radio-source pipelines.",
-  "long_description": "Runs the skynet-mars MCP server on your own machine. Claude Desktop installs Python 3.13 and the dependencies (about 640 MB) the first time the extension starts, so the first launch takes several minutes. Results are written under the per-user MARS home. The optional optical frame library and isochrone grid are not included; see the documentation for fetching them.",
+  "long_description": "Runs the skynet-mars MCP server on your own machine. Claude Desktop installs Python 3.13 and the dependencies (about 640 MB) the first time the extension starts, so the first launch takes several minutes. Needs an Apple Silicon Mac or x64 Windows. Results are written under the per-user MARS home. The optional optical frame library and isochrone grid are not included; see the documentation for fetching them.",
   "author": {
     "name": "Skynet Robotic Telescope Network",
     "url": "https://github.com/SkynetRTN/MARS"
