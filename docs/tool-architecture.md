@@ -893,14 +893,15 @@ with `docs/releasing.md` as the policy. It:
 
 - checks the tag against the version;
 - rebuilds `data/optical/` against the pinned manifest;
-- installs the wheel on clean runners with no checkout, on Python 3.13, and
-  runs `mars-mcp self-test`;
+- installs the wheel on clean runners with no checkout, on Python 3.12 and
+  3.13, and runs `mars-mcp self-test`;
 - checks the `data` release by GitHub's asset digests;
 - then publishes — the only job with write permission.
 
-Python 3.13 is the target because it is the newest Python every dependency
-ships wheels for. `sep` has none for 3.14, and `photutils` none for Linux
-aarch64. Installing and registering is `docs/installing.md`.
+Python 3.12 and 3.13 are supported, and CI tests both against `uv.lock` and
+against the newest releases the bounds allow. 3.13 is the newest Python every
+dependency ships wheels for: `sep` has none for 3.14, and `photutils` none
+for Linux aarch64. Installing and registering is `docs/installing.md`.
 
 **Dependency direction.** `tools/mcp → tools/registry`, plus
 `tools/mcp/groups → tools/bench/plane` (import-light by design). `tools/mcp`

@@ -16,7 +16,7 @@ Repository automation and ownership policy.
 - `workflows/ci.yml` runs the current lightweight Python/repository-shape checks.
 - `workflows/secret-scan.yml` runs gitleaks against the tree and history.
 - `workflows/workflow-safety.yml` runs actionlint and zizmor against workflows.
-- `workflows/release.yml` builds, verifies (a clean install on Python 3.13
+- `workflows/release.yml` builds, verifies (a clean install on Python 3.12 and 3.13
   running `mars-mcp self-test`) and publishes a release from a
   `v<version>` tag, and checks the standing `data` release holds the pinned
   bundles. Policy: [releasing.md](releasing.md).
@@ -31,15 +31,16 @@ end-to-end validation.
 Build inputs for installers that are not the wheel.
 
 - `claude-desktop/` is the Claude Desktop extension: a `.mcpb` manifest of the
-  `uv` type, its locked environment, and a two-line entry point that runs
-  `mars-mcp`. It pins a release already on PyPI. Its README has the build,
-  test and after-release steps.
+  `uv` type, an empty environment, and an entry point that runs the newest
+  `mars-mcp` on PyPI through `uv tool run`. It names no MARS version, so a
+  release needs no change here. Its README has the build and test steps.
 - `codex/` is the Codex plugin, for the ChatGPT desktop app's Codex threads,
   the Codex CLI and the IDE extension: a `.codex-plugin/plugin.json`, a
-  `.mcp.json` that runs `uv run --locked mars-mcp`, the same kind of locked
-  environment, and the skill as that release renders it. `.agents/plugins/marketplace.json`
-  at the root lists it, which makes the repository a Codex marketplace. Its
-  README has the Fedora install, test and after-release steps.
+  `.mcp.json` that runs the same entry point as the extension (a byte-for-byte
+  copy of its `src/server.py`), and the skill, rendered by
+  `python -m tools.skill`. `.agents/plugins/marketplace.json` at the root lists
+  it, which makes the repository a Codex marketplace. Its README has the Fedora
+  install and test steps.
 
 ## `skills/`
 
