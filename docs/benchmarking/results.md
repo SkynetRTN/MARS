@@ -1,10 +1,4 @@
-# Benchmark Results — Kepler's Tool Surface
-
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](../archive/mars-rebrand.md).
+# Benchmark Results — MARS's Tool Surface
 
 **What this measures.** For each prompt, three things: did the model reach a
 correct answer, were its tool calls and reasoning acceptable, and what did the
@@ -107,7 +101,7 @@ why three of these ask for a measurement and grade the disclosure.
 | prompt | what it is probing |
 | --- | --- |
 | *Describe the pointing of the M31 frame.* | There is more than one. Surfacing the ambiguity is the correct answer; picking one silently is the failure. |
-| *What optical frames are available here?* | The listing is capped at `KEPLER_MAX_FRAMES` and says so. Calling five frames the whole library is the failure. |
+| *What optical frames are available here?* | The listing is capped at `MARS_MAX_FRAMES` and says so. Calling five frames the whole library is the failure. |
 
 **Three kinds of right answer are in play here**, and they need different
 machinery. *Ground truth* — a value the repository recorded before the model
@@ -218,7 +212,7 @@ agreement themselves in prose instead of calling
 `compare_zeropoint_to_reference`. The tool is registered, classified `local`,
 and named in the task's `must_call`; nothing blocked it.
 
-`must_reach_verdict` reads a boolean a Kepler tool computed against recorded
+`must_reach_verdict` reads a boolean a MARS tool computed against recorded
 truth, so a model's own comparison does not satisfy it. That is the check
 working: **asked to "calibrate and tell me whether it agrees", every backend
 does the arithmetic itself rather than invoking the comparison.**
@@ -258,7 +252,7 @@ A session is *correct* when it answered and failed no hard check.
 | check | what it asserts | what a failure means | |
 | --- | --- | --- | :-: |
 | `incomplete` | the session produced a final answer at all | it ended in `error`, hit the turn cap, or exhausted the token budget. Not a wrong answer — **no** answer | hard |
-| `must_reach_verdict` | a named Kepler tool returned a named boolean this session, with the required value | the model did not obtain the machine verdict. It reads the *tool's return*, so no phrasing can pass or fail it | hard |
+| `must_reach_verdict` | a named MARS tool returned a named boolean this session, with the required value | the model did not obtain the machine verdict. It reads the *tool's return*, so no phrasing can pass or fail it | hard |
 | `must_report_value` | a number within a relative tolerance of a mechanically-resolved expectation appears in the answer | the model did the work and did not state the number, or stated a different one. The expectation comes from the archive, a repository data file, or a deterministic tool's own return this run — never a hand-typed literal | hard |
 | `must_report_artifact_path` | the answer names an artifact this session actually wrote | the answer cites nothing, or cites a path the manifest does not record. Checked against the manifest, not a regex, so **an invented but plausible path fails**. Full path or recorded basename both count | hard |
 | `must_not_match` | a specific forbidden statement does not appear | the model made the claim the task exists to catch | hard |
@@ -379,14 +373,14 @@ model runs at least as much as it measures the model.
 ## Reading the answers
 
 Every check is a claim about a piece of prose, and until this pass nothing in
-the harness put the prose in front of a reader. `kepler-bench answers` prints
+the harness put the prose in front of a reader. `mars-bench answers` prints
 the task's prompt beside the model's reply — offline, free, and consulting no
 model. It found three things the scoreboard could not, and each one was a
 **defect in a check**, fixed where it was rather than papered over with a
 second opinion.
 
 ```bash
-kepler-bench answers artifacts/bench/<run> --wrong-only
+mars-bench answers artifacts/bench/<run> --wrong-only
 ```
 
 ### 1. An empty answer scored correct
@@ -461,7 +455,7 @@ failure list at all — every instance of both was the grader being wrong.
 `qwen3.8:27b-mlx` goes from 9 always-correct tasks to **12** and from 77%
 to **85%**; `claude-sonnet-5` from 8 to 9 and from 86% to **88%**.
 
-`kepler-bench falsify` — which attacks the keys with recorded evidence and
+`mars-bench falsify` — which attacks the keys with recorded evidence and
 consults no model — now reports **no candidate false positives across all 15
 run directories**. It caught the `pulsar-fallback-disclosure` pattern itself,
 once its `sourced_after_all` probe was fixed to ask the tool results whether a
@@ -572,12 +566,12 @@ by grammar rather than by a list of phrasings.
 ## Reproducing this
 
 ```bash
-kepler-bench run <suite> --backend <provider/model> --repeats 3 \
+mars-bench run <suite> --backend <provider/model> --repeats 3 \
     --max-tokens <budget> --out artifacts/bench/<date>-<model>-<suite>
-kepler-bench grade artifacts/bench/<date>-<model>-<suite>
-kepler-bench falsify artifacts/bench/*          # attack the keys
-kepler-bench answers artifacts/bench/* --wrong-only    # read the prose
-kepler-bench compare artifacts/bench/*          # the report above
+mars-bench grade artifacts/bench/<date>-<model>-<suite>
+mars-bench falsify artifacts/bench/*          # attack the keys
+mars-bench answers artifacts/bench/* --wrong-only    # read the prose
+mars-bench compare artifacts/bench/*          # the report above
 ```
 
 Every verb above is offline and free except `run`, and **none of them consults

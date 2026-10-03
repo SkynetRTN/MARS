@@ -1,345 +1,195 @@
-# Installing MARS and serving its tools
+# Installing MARS
 
-How to put MARS (MCP Astronomy Research Suite) on a machine that has **no checkout** of this repository,
-serve its tools to a coding agent's console over MCP, and add the optional
-data. The design behind it is `archive/mcp-tool-surface.md` §3.5 and phases
-C3–C7.
-
-## What a wheel contains
-
-| Part | Where | Size |
-| --- | --- | ---: |
-| `tools/` and `algorithms/` | the wheel | ~4 MB of code |
-| **Core data**: the five pulsar scans, the recorded zero-point references, the Afterglow parity fixtures | the wheel, under `tools/_data/` | ~7 MB |
-| **Optional bundles**: the optical frame library, the Girardi isochrone grid | fetched on request, `mars-mcp fetch-data` | 269 MB, 282 MB |
-| astrometry.net indexes, the ATLAS UCAC5 catalogue | **never bundled**; operator-supplied | 78 GB, 5.3 GB |
-
-Measured in C7 on a clean Python 3.14 virtual environment: MARS itself
-installs to about 10 MB. The environment as a whole is about **640 MB**,
-almost all of it dependencies — `llvmlite` (for `numba`) alone is 168 MB, then
-`scipy`, `pandas`, `astropy` and `matplotlib`. `import tools.registry` takes
-about 4.5 s the first time (bytecode compilation) and 1.3 s after that.
+How to install MARS (MCP Astronomy Research Suite) from PyPI, with no checkout
+of this repository, and register its MCP server with an agent host. How the
+package and its data are built is `tool-architecture.md` §10.3.
 
 ## Install
 
-**You may need a C compiler.** Two dependencies do not publish pre-built
-wheels for every platform, and pip compiles them from source where they are
-missing:
-
-| Dependency | Pre-built wheels | Compiles from source on |
-| --- | --- | --- |
-| `sep` 1.4.1 | Python 3.9–3.13: Linux (x86_64, aarch64), macOS, Windows | **Python 3.14, every platform** |
-| `photutils` 3.0.0 | Linux x86_64, macOS, Windows | **Linux aarch64** (ARM servers, Raspberry Pi, Docker on Apple Silicon) |
-
-**Python 3.13 is MARS's target** — what CI and the release workflow run,
-and the newest Python every dependency ships wheels for; it is the version
-`skynet-mars` requires and tests. Python 3.13 on x86_64 Linux, macOS or
-Windows needs no compiler. Anywhere else, install
-one first: `apt-get install gcc` on Debian or Ubuntu, `dnf
-install gcc` on Fedora, or the Xcode command-line tools on macOS. Without one,
-pip fails with `Failed building wheel for sep` (or `photutils`) and
-`command 'gcc' failed`. Measured on the `v0.1.0rc1` release in a clean
-`python:3.14-slim` container on aarch64.
+With [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
-python3.13 -m venv mars-env
-mars-env/bin/pip install "skynet-mars[mcp]"
-mars-env/bin/mars-mcp self-test
+uv tool install --python 3.13 "skynet-mars[mcp]"
+mars-mcp self-test
 ```
 
-`[mcp]` brings the server. MARS is on PyPI as
-[`skynet-mars`](https://pypi.org/project/skynet-mars/), first as `0.1.0rc4`.
-While every release is a pre-release, pip installs the newest one without
-`--pre`; once a stable release exists, pip prefers it, and a pre-release needs
-`--pre` or an exact version (`"skynet-mars[mcp]==0.1.0rc4"`). Every release is
-also a GitHub release, <https://github.com/SkynetRTN/MARS/releases>, whose
-wheel installs the same way by URL (`"skynet-mars[mcp] @ <wheel URL>"`), as
-does a wheel built with `uv build` in a checkout. `mars-mcp
-self-test` launches the installed server as a host would and checks it end to
-end; `releasing.md` describes what a release is.
+This creates a private environment for MARS and puts its commands
+(`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. uv fetches
+Python 3.13 itself if you do not have it. `self-test` launches the server the
+way a host would. If it passes, the install works. If `mars-mcp` is not
+found, uv's command directory is not on your `PATH` yet: run
+`uv tool update-shell` and open a new shell, or call it by its full path
+(below).
 
-For a verifiable download, fetch the wheel and `SHA256SUMS` from the same
-[GitHub release](https://github.com/SkynetRTN/MARS/releases), run
-`sha256sum --check SHA256SUMS --ignore-missing` in that directory, then install
-the verified local wheel with `[mcp]`. On macOS, use `shasum -a 256` to compare
-the wheel with its line in `SHA256SUMS`. Installing a GitHub wheel by URL is convenient but
-does not independently check the release's checksum.
+**Where it goes.** Hosts need the full path to `mars-mcp`. `uv tool dir --bin`
+prints the directory that holds it:
+
+| OS | `mars-mcp` | The environment |
+| --- | --- | --- |
+| Linux, macOS | `~/.local/bin/mars-mcp` | `~/.local/share/uv/tools/skynet-mars/` |
+| Windows | `%USERPROFILE%\.local\bin\mars-mcp.exe` | `%APPDATA%\uv\data\tools\skynet-mars\` |
+
+Write the path out in full (`/Users/you/.local/bin/mars-mcp`). A config file
+does not expand `~`. Upgrade with `uv tool upgrade skynet-mars`, and remove
+with `uv tool uninstall skynet-mars`.
+
+**Without uv**, use a virtual environment you choose the location of. The
+environment is a directory, and `mars-mcp` is inside it:
+
+```bash
+python3.13 -m venv ~/mars-env
+~/mars-env/bin/pip install "skynet-mars[mcp]"
+~/mars-env/bin/mars-mcp self-test     # Windows: ~\mars-env\Scripts\mars-mcp.exe
+```
+
+**Python 3.13** is the supported version. On Python 3.13 on x86_64 Linux,
+Apple Silicon macOS or x64 Windows, every dependency has a pre-built wheel.
+Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
+Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
+toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about
+700 MB, nearly all of it dependencies.
+
+Every release is a pre-release for now, so the commands above install the
+newest one. To install a specific release, use
+`"skynet-mars[mcp]==0.1.0rc4"`.
+
+**To verify the download**, fetch the wheel and `SHA256SUMS` from the
+[GitHub release](https://github.com/SkynetRTN/MARS/releases), and run
+`sha256sum --check SHA256SUMS --ignore-missing` in that directory (`shasum -a
+256` on macOS). Then install the verified wheel with `[mcp]`.
 
 ## Register the server with a host
 
-`mars-mcp` is a **local stdio server**. The host starts it as a child process
-on your machine and exchanges MCP messages with it over stdin and stdout. It
-opens no port and listens on no network, and it lives as long as the host's
-session does. So it works in any host that can launch a local command: the
-coding-agent CLIs, the IDEs, the Claude desktop app and the ChatGPT desktop
-app (in its Codex threads). It does **not** work in a browser chat (claude.ai
-or ChatGPT on the web): those call a server from the vendor's cloud, over
-HTTPS, which MARS does not provide. Browser support is parked; see
-the [master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4)
-and the [dated host proposal](analysis/mcp-desktop-hosts.md) §6.
+`mars-mcp` is a local stdio server. The host starts it on your machine and
+talks to it over stdin/stdout, with no port and no network listener. So it
+works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
+(in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
+[dated host proposal](analysis/mcp-desktop-hosts.md) §6. Real desktop-host
+validation is still an open gate in the
+[master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
 
-Every host needs the same one thing: the **absolute path** to `mars-mcp` in
-the environment you installed it into. Find it with
-`mars-env/bin/python -c "import pathlib, sysconfig; print(pathlib.Path(sysconfig.get_path('scripts')) / 'mars-mcp')"`, or
-`mars-env\Scripts\mars-mcp.exe` on Windows. A bare `mars-mcp` works only if
-that environment is on the `PATH` the host itself sees, which for a desktop
-app is usually not your shell's. Each host below is shown serving all 55
-tools; add `"args": ["--tools", "databases,timeseries"]` (or the host's
-equivalent) to serve fewer.
+In the examples below, replace `/path/to/mars-mcp` with the full path from
+[Install](#install).
 
-Run `mars-mcp self-test` once before registering. It launches the server
-exactly as a host would, so a failure there is an install problem, not a host
-one.
-
-### Claude Code
+**Claude Code**
 
 ```bash
-claude mcp add mars -- /path/to/mars-env/bin/mars-mcp
-claude mcp add --scope user mars -- /path/to/mars-env/bin/mars-mcp   # every project
+claude mcp add --scope user mars -- /path/to/mars-mcp
 ```
 
-The default scope is the current project, for you only. `--scope project`
-writes `.mcp.json` at the project root, to commit and share:
+**Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
+installs with a double-click and needs no Python or config file, on an Apple
+Silicon Mac or x64 Windows. Releases do
+not carry the extension yet; see
+[`installers/claude-desktop/`](../installers/claude-desktop/README.md) to
+build it. To register it by hand instead, go to Settings → Developer → Edit
+Config and add:
 
 ```json
-{"mcpServers": {"mars": {"type": "stdio", "command": "/absolute/path/to/mars-env/bin/mars-mcp"}}}
+{"mcpServers": {"mars": {"command": "/path/to/mars-mcp"}}}
 ```
 
-`--env ADS_DEV_KEY=...` before the name passes a variable. Check with
-`claude mcp list`, or `/mcp` inside a session. A plate solve can outlast the
-default per-call wait; `MCP_TOOL_TIMEOUT` (milliseconds) raises it.
+Then quit and reopen the app.
 
-### Claude Desktop
-
-Settings → Developer → **Edit Config** opens `claude_desktop_config.json`:
-
-| OS | Path |
-| --- | --- |
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-
-```json
-{
-  "mcpServers": {
-    "mars": {
-      "command": "/path/to/mars-env/bin/mars-mcp",
-      "env": {"ADS_DEV_KEY": "your-token"}
-    }
-  }
-}
-```
-
-Quit and reopen the app (closing the window is not enough). The desktop app
-does not inherit your shell's environment, so a key exported in `.bashrc` or
-`.zshrc` is not seen. Put it under `env`, or for ADS in `~/.ads/dev_key`; an
-installed MARS reads no `.env` file (only a checkout's). If the
-server does not appear, its stderr is in the app's MCP log
-(`~/Library/Logs/Claude/mcp-server-mars.log` on macOS,
-`%APPDATA%\Claude\logs\` on Windows); the root lines `mars-mcp` prints at
-startup are there.
-
-### Codex CLI and the ChatGPT desktop app
-
-The ChatGPT desktop app, the Codex CLI and the Codex IDE extension share one
-MCP configuration. Register once, by any of the routes below, or in the app
-with Settings → MCP servers → Add server.
-
-```bash
-codex mcp add mars -- /path/to/mars-env/bin/mars-mcp
-```
-
-or in `~/.codex/config.toml`:
+**Codex CLI and the ChatGPT desktop app** share `~/.codex/config.toml`
+(in the app: Settings → MCP servers → Add server):
 
 ```toml
 [mcp_servers.mars]
-command = "/path/to/mars-env/bin/mars-mcp"
+command = "/path/to/mars-mcp"
 startup_timeout_sec = 30
 tool_timeout_sec = 600
 default_tools_approval_mode = "writes"
-
-[mcp_servers.mars.env]
-ADS_DEV_KEY = "your-token"
 ```
 
-Raise both timeouts. The first launch compiles bytecode and numba functions
-and can take longer than Codex's default startup wait, and a plate solve or an
-exhaustive VizieR query outlasts its default per-call limit.
+The longer timeouts are needed because the first launch and a plate solve both
+outlast Codex's defaults. `writes` makes Codex ask before any tool that writes
+an artifact.
 
-Codex's `writes` mode prompts for tools that are not marked read-only. MARS
-marks artifact-producing calls as writes, including literature reviews and
-periodograms.
-
-### Cursor
-
-`~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one:
+**Cursor** (`~/.cursor/mcp.json`) and **Gemini CLI**
+(`~/.gemini/settings.json`):
 
 ```json
-{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp"}}}
+{"mcpServers": {"mars": {"command": "/path/to/mars-mcp"}}}
 ```
 
-### VS Code (Copilot agent mode)
+Gemini starts a server only in a folder you have trusted.
 
-`.vscode/mcp.json` in a workspace, or **MCP: Open User Configuration** from
-the command palette. VS Code's key is `servers`, not `mcpServers`, and it
-takes an explicit `type`:
+**VS Code** (`.vscode/mcp.json`) uses a different key:
 
 ```json
-{"servers": {"mars": {"type": "stdio", "command": "/path/to/mars-env/bin/mars-mcp"}}}
+{"servers": {"mars": {"type": "stdio", "command": "/path/to/mars-mcp"}}}
 ```
 
-### Gemini CLI
+**To serve fewer tools**, pass `--tools databases,timeseries` as an argument,
+or set `MARS_MCP_TOOLS`. The groups are `databases`, `optical`, `timeseries`,
+`hr` and `radio`. All 55 tools are served by default.
 
-`~/.gemini/settings.json`, or `.gemini/settings.json` in a project:
+**Keys.** `ADS_DEV_KEY` enables the ADS tools
+([get a token](https://ui.adsabs.harvard.edu/user/settings/token)). Desktop
+apps do not see your shell's environment, so set the key in the host's `env`
+block, or write it to `~/.ads/dev_key`. An installed MARS reads no `.env` file.
+CASDA downloads need `CASDA_OPAL_USERNAME` and that account's OPAL password
+stored in the system keyring under `astroquery:casda.csiro.au`; the server
+never prompts for it.
 
-```json
-{"mcpServers": {"mars": {"command": "/path/to/mars-env/bin/mars-mcp", "timeout": 600000}}}
-```
-
-`timeout` is per call, in milliseconds.
-
-### Any other host
-
-A host that launches stdio servers needs only the command, optionally its
-arguments and environment. What varies is the file and the top-level key.
-
-### What reaches the model
-
-Every host gets the tools. The server also sends **instructions** (the skill
-brief and what this install has) and the full skill as `mars://skill/...`
-**resources**. Whether a host shows those to the model is the host's choice,
-and not all do. Where the model never sees them, give it the skill another way:
-in Claude Code or Claude Desktop, install `skills/mars-tools/` from a release
-or checkout as a skill.
-
-The wheel includes the general `mars-tools` skill and serves it as MCP
-instructions/resources. To make it discoverable as a **native** skill in an
-agent that supports `SKILL.md`, run the opt-in installer with that agent's
-skill directory (it refuses to overwrite a modified copy):
+**The skill.** The server sends its usage guide to the host as instructions
+and `mars://skill/...` resources. For an agent that loads `SKILL.md` skills,
+also install it natively (it refuses to overwrite a modified copy):
 
 ```bash
-mars-env/bin/mars-mcp install-skill ~/.codex/skills/mars-tools
-# Claude Code: ~/.claude/skills/mars-tools
-# Cursor: ~/.cursor/skills/mars-tools
+mars-mcp install-skill ~/.claude/skills/mars-tools
+# or ~/.codex/skills/mars-tools, ~/.cursor/skills/mars-tools
 ```
 
-The repository copy at `skills/mars-tools/` is rendered from the same source.
-Restart the host after changing its MCP or skill configuration. The installed
-skill teaches stage order and scientific caveats; the MCP server supplies the
-actual tool calls.
+**If the server does not appear**, run `mars-mcp self-test` first. When it
+passes, the problem is the host config. Claude Desktop logs the server's
+output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
+`%APPDATA%\Claude\logs\` on Windows.
 
-Actual desktop-host validation remains an open gate in the
-[master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4);
-configuration examples and SDK tests do not establish every host's behavior.
+## Optional data
 
-### Groups and startup facts
+With the Claude Desktop extension there is no `mars-mcp` on your `PATH`; use
+the command in its [README](../installers/claude-desktop/README.md#data-bundles)
+instead.
 
-`mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
-those groups: `databases`, `optical`, `timeseries`, `hr`, `radio`. The default
-is all 55 tools. At startup the server logs to stderr every root it resolved,
-each served group, and whether each data bundle is present. The same facts
-reach the model in the server's instructions.
+```bash
+mars-mcp fetch-data --list        # what exists, and what is installed
+mars-mcp fetch-data optical       # or: isochrones, all
+mars-mcp fetch-data --verify      # rehash what is installed
+mars-mcp self-test --with-data    # exercise the bundles through the server
+```
+
+- **optical** (269 MB) is the bundled frame library. The frame listing,
+  photometry on bundled targets, and the recorded-solve replays
+  (`replay_field_calibration`, `calibrate_zeropoint` with `catalog_fixture`)
+  need it. The zero-point reference tools use data in the package.
+- **isochrones** (282 MB) is the isochrone grid. The H-R diagram fits need it.
+
+Everything else works without these bundles. The database tools query remote
+services. The pulsar and variable-star tools use data in the package. The
+server tells the model which bundles are missing, and the frame listing names
+the command to run. Restart the host after fetching, because the server reads
+data locations at startup. After upgrading MARS, run `mars-mcp fetch-data` again:
+it checks what is installed against the new release's pins, keeps a copy whose
+bytes still match, and downloads only what changed.
+
+Plate solving (`solve_astrometry`) needs astrometry.net index files
+(`ANET_INDEX_PATH`) or a local UCAC catalogue (`ATLAS_CATALOG_ROOT`), which
+you supply yourself. Without them, it reports `solver_unavailable`.
 
 ## Where things go
 
-Everything MARS writes lives under one per-user directory, the **MARS
-home**: `~/.local/share/mars` on Linux (`$XDG_DATA_HOME` honoured),
-`~/Library/Application Support/mars` on macOS, and `%LOCALAPPDATA%\mars`
-on Windows. `MARS_HOME` moves it. Nothing is ever written into the installed
-package.
+MARS writes only under the **MARS home**: `~/.local/share/mars` on Linux,
+`~/Library/Application Support/mars` on macOS, and `%LOCALAPPDATA%\mars` on
+Windows. Set `MARS_HOME` to move it.
 
-| Directory | What | Override |
-| --- | --- | --- |
-| `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `MARS_ARTIFACT_DIR` |
-| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `MARS_FITS_DOWNLOAD_DIR`, or `MARS_DATA_DIR` (downloads then go to its `fits_downloads/`) |
-| `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `MARS_OPTICAL_DATA_DIR`, `MARS_ISOCHRONE_DIR` |
-| `<home>/numba-cache/` | numba's compiled-function cache, which numba would otherwise write into the installed package | `NUMBA_CACHE_DIR` |
-
-Artifacts are never overwritten, even by two servers sharing the directory:
-each name is claimed atomically, and a repeated call writes a new file with a
-numeric suffix. So the directory grows; clear it yourself when you want to.
-The default artifact root is private (`0700`) and new artifact files are
-private (`0600`) on POSIX systems; an explicit `MARS_ARTIFACT_DIR` keeps its
-existing directory permissions.
-`list_artifacts` over MCP returns the newest 100 entries of a directory, and
-says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
-inside the artifact directory, and one that climbs out of it (`..`) is refused.
-
-After `mars-mcp fetch-data`, restart any running `mars-mcp`: the server
-reads its data locations when it starts.
-
-### Upgrading from Kepler
-
-Kepler was renamed MARS in `0.1.0rc3`, which also read Kepler's names for
-that one pre-release. Releases after it do not, so an install configured as
-Kepler is moved over by hand:
-
-- **Install `skynet-mars` into a new environment** (or `pip uninstall kepler`
-  first). The two distributions install the same `tools` and `algorithms`
-  packages: installed over Kepler they share files, and a later
-  `pip uninstall kepler` deletes files MARS needs. If that has happened,
-  reinstall the `skynet-mars` wheel with `--force-reinstall`.
-- **Rename every `KEPLER_*` variable to `MARS_*`**, in your shell, a host's
-  configuration and any `.env`. A `KEPLER_*` variable is ignored.
-- **Point the host at `mars-mcp`** under the key `mars`; the `kepler`,
-  `kepler-mcp` and `kepler-bench` commands no longer exist.
-- **Move what you want to keep** from the Kepler home
-  (`~/.local/share/kepler`, and its macOS and Windows equivalents) into the
-  MARS home -- at least `bundles/`, and `fits_downloads/` and `artifacts/` if
-  you use them -- or set `MARS_HOME` to the old directory. Nothing moves it
-  for you. Do not rename the directory itself if a MARS home already exists:
-  the rename would nest one inside the other.
-
-## The optional data bundles
-
-```bash
-mars-mcp fetch-data --list         # size and status of each
-mars-mcp fetch-data optical        # or: isochrones, all
-mars-mcp fetch-data --verify       # rehash both extracted trees; nonzero if damaged
-mars-mcp self-test --with-data     # exercise both bundles and the MCP surface
-```
-
-Each bundle is one archive whose size and SHA-256 are pinned in the installed
-package's own manifest (`tools/mcp/bundles.json`). An installed MARS accepts
-only the exact bytes it was released with. A download that fails partway
-resumes from where it stopped when you run the command again. A bundle that is
-already installed and verified is left alone. `--from URL_OR_DIR` (or
-`MARS_BUNDLE_URL`) fetches from a mirror or a local directory instead.
-
-What needs which bundle:
-
-| Tools | Needs |
+| Directory | What |
 | --- | --- |
-| the pulsar and variable-star chains; `list_zeropoint_references`, `load_zeropoint_reference`, `compare_zeropoint_to_reference` | nothing; core data |
-| every database tool (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA, ADS, `resolve_target`) | nothing; remote services |
-| `list_optical_frames`, `resolve_optical_frame`, `list_photometry_targets`, `run_photometry_on_target` on a bundled target, `replay_field_calibration`, `calibrate_zeropoint` with `catalog_fixture` | the **optical** bundle |
-| `fit_and_compare_hr_diagram`, `run_full_hr_pipeline`, `run_full_hr_pipeline_from_catalog` (the isochrone fit) | the **isochrones** bundle |
-| `solve_astrometry` | astrometry.net indexes or a local UCAC catalogue, **operator-supplied** |
+| `artifacts/` | tool output files. Never overwritten, so clear it yourself. |
+| `fits_downloads/` | MAST and CASDA downloads |
+| `bundles/` | the optional data |
+| `numba-cache/` | compiled-function cache |
 
-Without its bundle, a frame tool says so with the `bundle_not_installed`
-warning, naming the command to run. An empty listing is never presented as
-the answer.
-
-## Credentials
-
-The server runs as you, with your environment. `ADS_DEV_KEY` enables the ADS
-tools (get one at <https://ui.adsabs.harvard.edu/user/settings/token>), and
-`CASDA_OPAL_USERNAME` enables CASDA downloads. The server tells the model
-whether `ADS_DEV_KEY` is set, never its value.
-
-## Operator-supplied, and what that looks like
-
-Plate solving needs astrometry.net index files (`ANET_INDEX_PATH`) or a local
-UCAC catalogue (`ATLAS_CATALOG_ROOT`). They are tens of gigabytes and are
-never bundled. Without them, `solve_astrometry` returns its result with a
-`solver_unavailable` warning rather than failing. A frame that already has a
-WCS still reports it, and every other tool is unaffected.
-
-## Guards that hold on an install
-
-- `solve_astrometry(write_header=true)` refuses to write into the bundled data
-  and into a fetched bundle (`refusing_to_modify_fixture`). A header written
-  into a bundle frame would silently break its checksum. Downloaded products
-  stay writable.
-- `list_optical_frames` walks a download root recursively only inside the data
-  directory or the MARS home's own `fits_downloads/`. Pointed anywhere else,
-  the root is searched flat and the listing says so.
+On Linux and macOS the default artifact directory and its files are private to
+you (`0700` and `0600`).

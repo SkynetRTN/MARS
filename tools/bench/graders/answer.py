@@ -245,7 +245,7 @@ def _artifact_verdict(evidence: Evidence):
     would not catch. That anti-fabrication purpose is the whole of the check.
 
     **The full path or its basename both count.** A live run had a model write
-    ``/home/claude/Kepler/artifacts/.../preview-is-not-the-answer_search_vizier.ecsv``
+    ``/home/claude/mars/artifacts/.../preview-is-not-the-answer_search_vizier.ecsv``
     -- eliding the middle for readability while quoting the exact filename --
     and a verbatim-only match failed it on three tasks. That is a display
     convention, not a fabrication: the basename is synthesized by the harness

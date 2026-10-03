@@ -213,8 +213,8 @@ state is retained between calls, and no tool writes state another tool reads.
 the twelve event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved
 verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
 `tools/tui/` is the console over it, and the repository's only model-driven
-entry point: `mars`. The `tools/runner.py` shim and its
-`kepler-astro-query` script were deleted once the console replaced them.
+entry point: `mars`. The `tools/runner.py` shim and its console script were
+deleted once the console replaced them.
 
 `run_session()` also takes three optional callables for an interactive caller,
 and behaves exactly as before without them: `on_delta` (receives `TextDelta`

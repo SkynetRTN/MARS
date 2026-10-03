@@ -1,11 +1,5 @@
 # Model Backends and Provider Port
 
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](mars-rebrand.md).
-
 > [!NOTE] Archived 2026-09-18
 > This track is complete and this document is a record, not a plan. Phases
 > −1–3 built `tools/llm/` and `tools/agent/`; phases 4–5 became the benchmark
@@ -34,17 +28,17 @@ directly. Phases 4–5 (the benchmark harness) landed 2026-09-13.
 **Date:** 2026-09-04, consolidated 2026-09-07, implemented 2026-09-09
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
-the Kepler console depends on (now built), and the benchmark
+the MARS console depends on (now built), and the benchmark
 harness of phases 4–5 (now built, under [harness.md](../benchmarking/harness.md)).
 **Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
 maintainer redirected the base from `main` to `dev` at implementation time
 (`dev` carries the current plan doc and the 49-tool registry the design
 describes). The original `agent/model-backends` branch carried PR #46
 (docs only) and is superseded.
-**Consumed by:** the Kepler console (`docs/tool-architecture.md` 10.2), which
+**Consumed by:** the MARS console (`docs/tool-architecture.md` 10.2), which
 drives this port through the headless engine in `tools/agent/`.
 
-Kepler's agent loop is hardwired to one vendor. This document specifies a
+MARS's agent loop is hardwired to one vendor. This document specifies a
 provider-neutral model port that puts Ollama, Anthropic, OpenAI-compatible, and
 Gemini backends behind one interface, the phased rollout that builds it, and a
 benchmark harness — deferred to a later phase — that grades those backends
@@ -133,7 +127,7 @@ deferred (section 10), not forgotten.
 
 | Question | Decision |
 | --- | --- |
-| How are backends driven? | HTTP/SDK APIs only. Kepler keeps owning the agent loop. |
+| How are backends driven? | HTTP/SDK APIs only. MARS keeps owning the agent loop. |
 | Which providers? | Ollama, Anthropic, OpenAI-compatible, Google Gemini. |
 | What is graded? | Trajectory, cost/latency/turns, final-answer correctness, protocol robustness. |
 | Where do tool results come from? | Recorded fixtures, replayed offline. |
@@ -154,7 +148,7 @@ protocol-robustness grader exists to measure — the abstraction would paper ove
 the measurement.
 
 **CLI agent subprocesses** (`claude`, `codex`, `gemini` binaries driven as child
-processes, exposing Kepler tools over MCP). A legitimate architecture and a
+processes, exposing MARS tools over MCP). A legitimate architecture and a
 plausible future backend, but it moves the agent loop out of this repository and
 makes trajectory grading depend on someone else's harness. Deferred; the
 `ModelBackend` protocol does not forbid it.
@@ -308,7 +302,7 @@ ids can themselves contain slashes (`openai/meta-llama/Llama-3-8b` is provider
 
 | Variable | Purpose |
 | --- | --- |
-| `KEPLER_MODEL_BACKEND` | Default backend spec. |
+| `MARS_MODEL_BACKEND` | Default backend spec. |
 | `ANTHROPIC_API_KEY` | Existing; unchanged. |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI and compatible endpoints. |
 | `GEMINI_API_KEY` | Gemini. Header only — never a query parameter (S4). |
@@ -694,14 +688,15 @@ Two rules that are the whole point:
 
 ### S9 — Fix the stale gitleaks allowlist first (LOW-MEDIUM)
 
-*Implemented in Phase −1: the `kepler/` paths corrected to `tools/`, the
+*Implemented in Phase −1: the stale package-directory paths corrected to `tools/`, the
 `docs/*.md` and workflow directory wildcards replaced with exact files, a
 scoping comment added. `OPENAI_API_KEY`/`GEMINI_API_KEY` added in phases 2a/3
 next to their first uses. Probe-verified with the CI's gitleaks image.*
 
 Verified: `.gitleaks.toml` scopes its allowlist of the three
 environment-variable *names* `ADS_DEV_KEY`, `ANTHROPIC_API_KEY`, and
-`NASA_API_KEY` to `kepler/runner.py` and `kepler/tools/ads.py`. **Both paths are
+`NASA_API_KEY` to `runner.py` and `tools/ads.py` under a package directory that does
+not exist. **Both paths are
 missing** — the real files are `tools/runner.py` and `tools/ads.py`. Five
 further files reference those key names outside any allowlisted path:
 `AGENTS.md`, `CLAUDE.md`, `tests/test_runner_session.py`, `tools/registry.py`,
@@ -846,8 +841,8 @@ manifest. A run that cannot state its inputs is not a benchmark.
 
 ### 6.6 CLI
 
-A `kepler-bench` console script in `pyproject.toml` alongside the existing
-`kepler-astro-query`, with three verbs: `run` (a backend against a suite, with
+A `mars-bench` console script in `pyproject.toml` alongside the existing
+`tools/runner.py` console script, with three verbs: `run` (a backend against a suite, with
 an output directory and an optional repeat count), `record` (live, writes a
 fixture for review), and `compare` (renders the matrix across run ids). Reports
 render as JSON plus Markdown. **If an HTML report is added later, every model-
@@ -909,7 +904,7 @@ no daemon.
 * **Security tests**, one per requirement S1–S8, named for the requirement.
 
 Live provider runs sit behind a new `model_api` marker plus an environment gate
-(`KEPLER_TEST_MODEL_API=1`), mirroring the existing `network` convention. Ollama
+(`MARS_TEST_MODEL_API=1`), mirroring the existing `network` convention. Ollama
 tests get an `ollama` marker and skip when the daemon is unreachable.
 `pyproject.toml` gains both markers and nothing else — **no dependency changes.**
 
@@ -944,7 +939,7 @@ each with the full suite green and the Phase 0c gate (an unedited
 
 | Phase | Commit | Outcome |
 | --- | --- | --- |
-| −1 gitleaks allowlist | `security(gitleaks): fix stale allowlist paths…` | stale `kepler/` paths fixed, directory wildcards removed, probe-verified |
+| −1 gitleaks allowlist | `security(gitleaks): fix stale allowlist paths…` | stale package-directory paths fixed, directory wildcards removed, probe-verified |
 | 0a neutral types + protocol | `feat(llm): neutral model-port types…` | `tools/llm/types.py`, `base.py` |
 | 0b Anthropic adapter | `feat(llm): the Anthropic Messages API adapter` | `anthropic_backend.py`, streaming preserved |
 | 0c move the loop | `refactor(agent): move the loop into tools/agent/…` | `tools/agent/` engine + events; `runner.py` a shim; gate empty-diff |
@@ -953,7 +948,7 @@ each with the full suite green and the Phase 0c gate (an unedited
 | 2a OpenAI + factory + HTTP base | `feat(llm): OpenAI-compatible backend, the factory…(S3, S4)` | `openai_backend.py`, `factory.py`, `BaseHTTPBackend`; markers added |
 | 2b Ollama + live check | `feat(llm): Ollama backend, and the live OpenAI-compat measurement` | `ollama_backend.py`; section 11 Q2 measured (below) |
 | 3 Gemini | `feat(llm): Gemini backend — synthetic call ids…(S4)` | `gemini_backend.py`; `call_id_mismatch` raises; cross-backend sweep |
-| — KEPLER_MODEL_BACKEND wiring | `feat(runner): honor KEPLER_MODEL_BACKEND in the console shim` | the shim builds a spec through `build_backend` when the var is set |
+| — MARS_MODEL_BACKEND wiring | 3002edc (the console shim honours the backend variable) | the shim builds a spec through `build_backend` when the var is set |
 | docs | this commit | this document, `tool-architecture.md` §10, `README.md`, `CLAUDE.md` |
 
 Phases 4–5 — the benchmark harness (section 6) and manifest v2 (section 7),
@@ -1039,8 +1034,8 @@ the TUI track's phase C; anything under `algorithms/`.
 Ships first, alone, ahead of the feature. It fixes an already-misconfigured
 control; bundling it with an architecture change would bury it.
 
-- [ ] Confirm the misalignment before changing anything: there is no `kepler/`
-      directory; `tools/runner.py` and `tools/ads.py` both exist; grepping the
+- [ ] Confirm the misalignment before changing anything: the allowlisted package
+      directory does not exist; `tools/runner.py` and `tools/ads.py` both exist; grepping the
       tree for those three key names lists `AGENTS.md`, `CLAUDE.md`,
       `tests/test_runner_session.py`, `tools/registry.py`,
       `tools/claude_photometry_haiku_tool.py`, `tools/runner.py`, `tools/ads.py`
@@ -1140,7 +1135,7 @@ regression here means an import-time side effect.
 
 **What must not change:**
 
-- The module path `tools/runner.py`, and `main()` plus the `kepler-astro-query`
+- The module path `tools/runner.py`, and `main()` plus its
   console script — both still working at the end of this phase, so nothing
   downstream breaks before the console exists.
 - `SYSTEM_PROMPT` re-exported from `tools/runner.py`, so both the module
@@ -1317,7 +1312,7 @@ and behavior changes."* Docs land last and alone.
 - [ ] `docs/tool-architecture.md`: a subsection describing `tools/llm/` — the two
       governing rules, the spec form, the four environment variables, and the
       fact that `complete()` is the only required method.
-- [ ] `README.md`: the `KEPLER_MODEL_BACKEND` variable and a one-line example.
+- [ ] `README.md`: the `MARS_MODEL_BACKEND` variable and a one-line example.
       Write it against the entry point that exists **now**; the console that
       replaces it is retired into place by the TUI track's
       Phase G, which updates this line rather than documenting a script that does
@@ -1344,7 +1339,7 @@ remaining security requirements.
 | **4b** | `ReplayBackend` + the transcript format | `tools/llm/replay_backend.py`; exhaustion raises rather than wrapping. Not reachable from `build_backend`. |
 | **4c** | The tool plane and fixture store (S5, S6, S7) | `tools/bench/plane.py` classifies all 55 tools; B1 asserts the plane is closed. |
 | **4d** | Record mode (S2) | Credential scan refuses the write; third-party prose flagged for review. |
-| **5a** | Task loader, run loop, `kepler-bench run` (S5, S6, B2, B4, B5, B7) | The smoke suite runs end to end offline, no socket, in milliseconds. |
+| **5a** | Task loader, run loop, `mars-bench run` (S5, S6, B2, B4, B5, B7) | The smoke suite runs end to end offline, no socket, in milliseconds. |
 | **5b** | The four graders and `grade` | Three kinds of right answer; four fidelity families; three clocks. |
 | **5c** | The matrix and `compare` | Headline axes first; no blended score by default. |
 | **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is met** (2026-09-14) for every suite but `smoke`, which is exempt — three backends of different tiers, three repeats, 144 sessions; each suite's `calibration.md` records what its run found. |
@@ -1378,7 +1373,7 @@ visible in all four dialects.
   the one-shot `on_text` fallback is used.
 * **No serving surface.** Section 7 of `docs/tool-architecture.md` stands:
   serving is optional and every tool must remain callable from plain Python. The
-  Kepler console is a local interface, not a server — it opens no port, and
+  MARS console is a local interface, not a server — it opens no port, and
   `tools/agent/` imports no UI package, which a test asserts.
 * **No changes to algorithm packages.** This work touches `tools/` only. The
   extraction contract is untouched.
@@ -1461,7 +1456,7 @@ model strategies change.
 * `tools/agent/engine.py`, `tools/agent/prompt.py` — where the loop and
   `SYSTEM_PROMPT` live after Phase 0c moved them out of `tools/runner.py`, and
   the source of the seed benchmark tasks. The shim this rollout refactored was
-  retired with `kepler-astro-query` once the console replaced both.
+  retired with its runner script once the console replaced both.
 * `tools/registry.py:339`, `:380` — the integer-or-null unions.
 * `tools/sessions.py` — the manifest this design extends to v2.
 * `tools/artifacts.py` — existing path controls and the two gaps S7 keeps

@@ -16,9 +16,8 @@ active plans.
 ## Landed
 
 The earlier implementation tracks listed below have landed; their deferred
-decisions and remaining findings are reconciled in the master plan. The MARS rebrand's
-(2026-09-28) and the MCP tool surface's (2026-09-25) completion audits are in
-their own `Archived` blocks. For the others,
+decisions and remaining findings are reconciled in the master plan. The MCP tool
+surface's completion audit (2026-09-25) is in its own `Archived` block. For the others,
 a completion audit on 2026-09-18 re-verified each one against `dev`: the default suite is green
 (2575 passed, 44 skipped), and the asset-gated evidence — the NGC 5286 B
 frames from pixels, the bounded M15 plate solve, the ATLAS backend against the
@@ -27,7 +26,6 @@ from the record.
 
 | Track | Where it went | Finished |
 | --- | --- | --- |
-| MARS rebrand | [`../archive/mars-rebrand.md`](../archive/mars-rebrand.md); `v0.1.0rc3` published | 2026-09-28 (R5, the last phase) |
 | MCP tool surface | [`../archive/mcp-tool-surface.md`](../archive/mcp-tool-surface.md); `v0.1.0rc1` published | 2026-09-25 (C9, the last phase) |
 | Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
 | Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |

@@ -26,6 +26,15 @@ deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
 
+## `installers/`
+
+Build inputs for installers that are not the wheel.
+
+- `claude-desktop/` is the Claude Desktop extension: a `.mcpb` manifest of the
+  `uv` type, its locked environment, and a two-line entry point that runs
+  `mars-mcp`. It pins a release already on PyPI. Its README has the build,
+  test and after-release steps.
+
 ## `skills/`
 
 `skills/mars-tools/` is the rendered repository copy of the agent skill:
@@ -49,6 +58,19 @@ Important files and subfolders:
   core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
   package-data ships.
 - `artifacts.py`: local artifact description and listing helpers.
+- `photometry_pipeline.py`: the reusable automated photometry behind
+  `tools.photometry` -- loads a FITS image, runs source extraction and
+  aperture photometry, resolves an optional verified zero point through a
+  live field-calibration catalog solve, and saves plots. It has no CLI and no
+  model-provider client. Listing and resolving a target are offline; field
+  calibration is not: `run_photometry_on_target` defaults to
+  `use_field_cal=True`, which queries VizieR for reference magnitudes. Pass
+  `use_field_cal=False` for instrumental magnitudes, or `zero_point_mag` when
+  a trusted value is already known. The offline recorded-solve replays are
+  `calibrate_zeropoint(..., catalog_fixture=...)` and
+  `fieldcal_reference.replay_field_calibration` (below, and
+  [data/README.md](../data/README.md)); only `ngc5128_galaxy_b_001.fits` can
+  be driven that way end to end.
 - `astrometry.py`, `calibration.py`, `catalogs.py`, `fieldcal_reference.py`,
   `optical.py`, `pulsar.py`, `photometry.py`, `variable_star.py`,
   `workspace.py`: local plain Python user-facing tool wrappers
@@ -222,6 +244,45 @@ map and the document lifecycle.
 - `archive/` — completed track documents, kept as records.
 - `working/` — plans under active development. Empty today.
 - `examples/` — committed sample output.
+- `assets/` — the brand images and `make_brand.py`, which exports every one
+  of them (see below).
+
+### The brand palette
+
+MARS stays visibly part of Skynet, so its assets (the banner, the mark, the MCP
+server and extension icons) and the console's themes (`tools/tui/theme.py`)
+use the exact Skynet palette, by hex value, never sampled from a raster. The
+source is the Skynet/UNC proposal template, `beamer/beamercolorthemeskynet.sty`.
+
+| Color | Hex | RGB |
+| --- | --- | --- |
+| Brand Navy | `#2B3345` | `43, 51, 69` |
+| Navy (banner) | `#1F2633` | `31, 38, 51` |
+| Deep Night Blue | `#35556E` | `53, 85, 110` |
+| Slate Sky Blue | `#5E86A4` | `94, 134, 164` |
+| Mist Blue | `#B8D2E1` | `184, 210, 225` |
+| Warm Gold | `#D99633` | `217, 150, 51` |
+| Soft Apricot | `#EFC48A` | `239, 196, 138` |
+| Off White | `#F7F6F2` | `247, 246, 242` |
+
+The template also defines `#353E52`, `#414B60` and `#A9B4C4` as derived
+dark-mode interface surfaces. They are not Skynet palette colors, and neither
+is the template's UNC-Chapel Hill palette.
+
+### Names and the package namespace
+
+The distribution is **`skynet-mars`**, not `mars`: `mars` is taken on PyPI (an
+unrelated project), and Alibaba's `pymars` imports as `mars`. `skynet-` adds
+provenance, since the algorithms come from the Skynet Robotic Telescope
+Network.
+
+`tools` and `algorithms` stay top-level packages for now. They are generic
+enough that another installed project's `tools` package can collide with them,
+and moving them under one namespace is the durable fix. That move touches
+every import, test and extraction marker, so it is a change of its own (ARC-02
+in the master continuation plan). Until then no new top-level package is
+added (`tests/test_rebrand_guard.py`), and a namespace choice must not be
+`mars`, for the reason above.
 
 ## `algorithms/fieldcal/`
 
@@ -481,6 +542,17 @@ Current caveats:
 - Live remote calls must stay out of default checks; see the repository
   conventions.
 
+Configuration (environment, read by `config.py`'s `QuerySettings`):
+
+- `VIZIER_SERVER`: VizieR mirror hostname, defaulting to `vizier.cds.unistra.fr`.
+- `VIZIER_CACHE_ENABLED`: whether astroquery caches responses on disk
+  (default on).
+- `VIZIER_CACHE_AGE_DAYS`: cache retention, defaulting to 30.
+
+With the cache enabled, query regions are snapped to a fixed grid so that
+near-identical fields share a cache entry. This is observable near a field
+edge; see [extraction.md](extraction.md), Query §5.1.
+
 ## `algorithms/wcs/`
 
 Extracted Python astrometric WCS-calibration code from Skynet.
@@ -515,3 +587,61 @@ Current caveats:
 - Without solver data, imports still work and solves degrade to no solution.
 - `numba`, `sep`, `scipy`, `astropy`, and Pydantic v2 are required for the real
   runtime path.
+
+Configuration (environment, read by `tools.wcs` into a per-call
+`SolverSettings`):
+
+- `ANET_INDEX_PATH`: astrometry.net index directory, or `os.pathsep`-separated
+  directories that hold index files directly.
+- `ANET_TIMEOUT_S`: astrometry.net low-level solve-attempt limit in seconds
+  (minimum 1).
+- `ATLAS_CATALOG_ROOT`: local UCAC4/UCAC5 catalog root for the ATLAS fallback.
+- `ATLAS_CATALOG`: catalog name, defaulting to `ucac5`.
+- `ATLAS_TIMEOUT_S`: ATLAS matcher timeout in seconds.
+
+The two backends serve different workflows. The normal order is
+astrometry.net first, then ATLAS as its fallback. For a quick local solve of a
+frame with trustworthy pointing and pixel-scale keywords, configure only ATLAS
+(leave `ANET_INDEX_PATH` unset): ATLAS uses the header hints to narrow its
+local UCAC triangle search. For a blind solve, configure astrometry.net: it
+needs `solve-field` on `PATH` (or a supported `SKYLIB_*` override) and indexes
+in `ANET_INDEX_PATH`. If neither is configured the package still imports, but
+plate solving produces no solution.
+
+The UCAC catalog is an operator-owned dependency, like the HR-diagram
+isochrone grid: do not download, copy, or commit it under MARS. The supplied
+UCAC5 tree on the development host is:
+
+```bash
+export ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5
+export ATLAS_CATALOG=ucac5
+```
+
+Supported layouts:
+
+```text
+# UCAC5: ATLAS_CATALOG_ROOT may be either directory
+<root>/u5z/u5index.asc
+<root>/u5z/z001 ... z900
+
+# UCAC4: ATLAS_CATALOG_ROOT is the directory holding zone files
+<root>/Z000.UC4 ... Z179.UC4
+```
+
+Reserve at least 6 GB for a local UCAC5 installation (the supplied tree is
+5.3 GB) and at least 10 GB for UCAC4 (about 8.5 GB). Verify the reader can
+instantiate and query the catalog without network access before a solve:
+
+```bash
+uv run python -c "from pathlib import Path; from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec; import os; root = Path(os.environ['ATLAS_CATALOG_ROOT']); catalog = os.environ.get('ATLAS_CATALOG', 'ucac5'); index = get_catalog_spec(catalog).index_factory(root); result = index.query_box(0.0, 0.25, -0.1, 0.1); print(f'{catalog}: {len(result.ra_deg)} stars in preflight box')"
+```
+
+The operator-only ATLAS validation route:
+
+```bash
+ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5 ATLAS_CATALOG=ucac5 \
+  uv run pytest tests/test_wcs_solution.py::test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window -v
+```
+
+For blind astrometry.net validation on the development host, use the indexes
+under `/srv/agents/catalogs/astrometry` rather than the ATLAS catalog tree.

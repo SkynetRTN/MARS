@@ -1,11 +1,5 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](mars-rebrand.md).
-
 > [!NOTE] Archived 2026-09-18
 > This track is complete and this document is a record, not a plan. Every
 > phase — baseline 1–4, stateless S0–S6, closure P1–P9 — landed on `dev`, and
@@ -57,11 +51,11 @@ repository do not reach it, and the recorded ground truth in
 fixture, never as a tool result. The original twelve findings are supplemented
 by the reference-document drift found in the post-rollout audit, section 1.
 
-**The architecture underneath is the wrong shape.** Kepler exposes astronomy
+**The architecture underneath is the wrong shape.** MARS exposes astronomy
 capabilities as tools an agent invokes one call at a time. It is not the
 automated Skynet batch pipeline several optical algorithms were extracted from.
 The remaining `ProcessingRun` types, ORM-shaped state, module-global dependency
-wiring, and batch exporter force tool callers to emulate a job system Kepler
+wiring, and batch exporter force tool callers to emulate a job system MARS
 neither owns nor needs. Section 3.
 
 They are coupled because the second blocks the first. Every remaining broken-link
@@ -147,7 +141,7 @@ this repository ships**, and could not list an artifact it produced.
 
 The pulsar chain's Stage 0 has: a listing function, a resolver that returns
 either a match or the candidate list, a data directory overridable through
-`KEPLER_PULSAR_DATA_DIR`, name matching that normalizes punctuation (so `PSR
+`MARS_PULSAR_DATA_DIR`, name matching that normalizes punctuation (so `PSR
 B0329+54` and `psr_b0329_54` are the same source), and ambiguity or miss
 handling that returns `ToolError`s rather than raising.
 
@@ -212,7 +206,7 @@ planted. The recorded APASS rows make a real cross-implementation check possible
 The public model field named `zero_point_corr` was populated from
 `calc_solution`'s `m0`, which is the **absolute** zero point —
 `21.147659857998637` where the recorded correction is `1.1476598579986392`.
-Afterglow fixes `zero_point = 20` and reports a correction; Kepler computes the
+Afterglow fixes `zero_point = 20` and reports a correction; MARS computes the
 absolute value. `data/README.md` warns in bold that mixing the two
 conventions "lands 20 magnitudes off in a way that looks entirely plausible" —
 and the public model name was on the wrong side of exactly that trap. Afterglow's
@@ -353,7 +347,7 @@ do through `algorithms/query`. The fourth returned
 isochrone data **already interpolated into colour and absolute-magnitude pairs
 for the requested filter triple**; the server did the grid interpolation and the
 synthetic photometry. Astromancer ships no grid (verified: its assets are two
-font families and a static folder) and neither does Kepler, which is what the
+font families and a static folder) and neither does MARS, which is what the
 PARSEC fetch now supplies at the cost of a network call.
 
 ### BL-10 — variable-star light curve and periodogram
@@ -402,16 +396,16 @@ established, because everything below builds on it.
 | Phase | PR | What it established |
 | --- | --- | --- |
 | 1 — local tools work and are reachable | #43 | The `StrListProxy` fix plus a parametrized sweep over all 39 frames; `astrometry`, `calibration`, `catalogs` and `workspace` registered; `ZeropointSolution.zero_point` renamed to say it holds an absolute zero point; a registry-coverage test that pins every public tool module as represented. |
-| 2 — the optical frame registry | #44 | `tools/optical.py` — `list_optical_frames` and `resolve_optical_frame`, header summary only with no pixel reads, backed by `KEPLER_OPTICAL_DATA_DIR`, returning `OpticalFrame`/`OpticalFrameList` with filter, telescope, WCS presence, field centre, pixel scale and size. Both registered; the photometry CLI's private resolver delegates to it. |
+| 2 — the optical frame registry | #44 | `tools/optical.py` — `list_optical_frames` and `resolve_optical_frame`, header summary only with no pixel reads, backed by `MARS_OPTICAL_DATA_DIR`, returning `OpticalFrame`/`OpticalFrameList` with filter, telescope, WCS presence, field centre, pixel scale and size. Both registered; the photometry CLI's private resolver delegates to it. |
 | 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `data/frame_provenance.json` restoring the OCL join key. |
 | 4 — plate solving as a tool | #47 | `tools/wcs.py`'s `solve_astrometry`, with a timeout bound, backend-attempt reporting, fixture protection, a concurrent-file-change check, and an atomic WCS header write. Behind a `solver` marker by default. |
 
 **Names later phases depend on:** `list_optical_frames`,
-`resolve_optical_frame`, `OPTICAL_DATA_DIR_ENV` (`KEPLER_OPTICAL_DATA_DIR`);
+`resolve_optical_frame`, `OPTICAL_DATA_DIR_ENV` (`MARS_OPTICAL_DATA_DIR`);
 `list_zeropoint_references`, `load_zeropoint_reference`,
 `solve_zeropoint_from_reference`, `solve_zeropoint_from_recorded_solve`,
 `compare_zeropoint_to_reference`, `load_ocl_reference`,
-`replay_catalog_sources`, `FIELDCAL_DATA_DIR_ENV` (`KEPLER_FIELDCAL_DATA_DIR`);
+`replay_catalog_sources`, `FIELDCAL_DATA_DIR_ENV` (`MARS_FIELDCAL_DATA_DIR`);
 `calibrate_zeropoint`; `solve_astrometry`, returning a `WcsSummary`; and
 `ZeropointSolution.zero_point`. The result models are
 `OpticalFrame`/`OpticalFrameList`, `ZeropointReference`, and
@@ -610,7 +604,7 @@ concepts** are: `ProcessingRun`, `ProcessingRunRef`, `ensure_wcs_solution`,
 `build_wcs_for_processing_run`, `wire_fieldcal_deps`, mutable `fieldcal.deps`
 assignments, and the WCS/photometry/zero-point batch driver. Historical prose in
 `docs/extraction.md` may name upstream Skynet types **only** when clearly
-describing provenance, never as a current Kepler API.
+describing provenance, never as a current MARS API.
 
 ### 3.7 Error handling
 
@@ -647,7 +641,7 @@ reconstruct a WCS from a persisted processing-run row.
 
 ### 3.9 Documentation outcome
 
-`docs/tool-architecture.md` states that a tool call is Kepler's execution
+`docs/tool-architecture.md` states that a tool call is MARS's execution
 boundary. `docs/repository-folders.md` and package documentation reference
 explicit algorithm inputs rather than dependency wiring. `docs/extraction.md`
 retains provenance and parity notes while marking ORM and job-runner adapters and
@@ -704,10 +698,10 @@ Every phase inherits these, from `CLAUDE.md` and `docs/tool-architecture.md`.
   session, stage, job, or progress object**, and do not introduce a replacement
   batch command.
 - **Default checks stay offline and deterministic.** Nothing added here opens a
-  socket unless marked `network`, which also requires `KEPLER_TEST_NETWORK=1`.
+  socket unless marked `network`, which also requires `MARS_TEST_NETWORK=1`.
   Keep solver-data and live-query tests opt-in.
 - **No generated files in the repository.** Artifacts go to
-  `KEPLER_ARTIFACT_DIR` (default `artifacts/`, gitignored). Do not add FITS,
+  `MARS_ARTIFACT_DIR` (default `artifacts/`, gitignored). Do not add FITS,
   plots, or caches to `data/`; the one new fixture the remaining phases add
   is a small JSON map.
 - **Keep Python 3.14 and current dependency versions.** Dependencies are pinned
@@ -905,7 +899,7 @@ or renamed equivalent remains in current Python code.
 **Intent:** make the stateless tool boundary durable and leave the next
 broken-links phase a clean base.
 
-- Update `docs/tool-architecture.md` to define one tool call as Kepler's unit
+- Update `docs/tool-architecture.md` to define one tool call as MARS's unit
       of execution.
 - Update `docs/repository-folders.md`, package documentation, and
       `tests/README.md` for the explicit APIs and the new architecture coverage.
@@ -1046,7 +1040,7 @@ attached. Changed at the maintainer's direction during review.
 
 *The map is read from beside the scans, not from a fixed repository path.* P1
 said "load the fixture once at module level". It is loaded once per scan
-directory instead, because `KEPLER_PULSAR_DATA_DIR` points the tools at another
+directory instead, because `MARS_PULSAR_DATA_DIR` points the tools at another
 archive: a hardcoded path would name-match these five periods onto an operator's
 own files and stamp them with a `period_source` naming a document that describes
 different observations. The bundled case is unchanged — the map is in the
@@ -1121,7 +1115,7 @@ tool-correctness bugs listed above were left alone.
 ### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12) — Complete
 
 - [x] Make the optical data directory resolve to a **list** of roots: the
-      `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
+      `MARS_OPTICAL_DATA_DIR` override or the default optical directory, plus
       `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the
       resolver inspect every root; the download root is recursive because MAST
       stores products below its `mastDownload/` directory.
@@ -1170,7 +1164,7 @@ recording that both have landed.
 tools' download warning to name the next step. For CASDA that statement would
 have been false: `download_files` was passed a literal `savedir="fits_downloads"`
 rather than `FITS_DOWNLOAD_DIR`, so an operator who set
-`KEPLER_FITS_DOWNLOAD_DIR` got downloads in one directory and a frame registry
+`MARS_FITS_DOWNLOAD_DIR` got downloads in one directory and a frame registry
 searching another. It uses `FITS_DOWNLOAD_DIR` now. This is a behaviour change
 in a phase that is otherwise plumbing and documentation; it is here because the
 warning cannot be made true without it.
@@ -1196,7 +1190,7 @@ the PR diff. The security review returned no findings: the phase adds no
 privilege boundary, no subprocess, no new network call, no deserialization and
 no secret handling; the path handling it does add reaches nothing that
 `resolve_optical_frame`'s pre-existing "explicit path" contract did not already
-reach, and `KEPLER_FITS_DOWNLOAD_DIR` is a trusted operator input. One new data
+reach, and `MARS_FITS_DOWNLOAD_DIR` is a trusted operator input. One new data
 flow was noted rather than flagged: `list_optical_frames()` now parses FITS
 headers from archive-fetched files automatically, and those header strings
 reach the model. That is the same trust level as every existing remote tool
@@ -1249,7 +1243,7 @@ whichever phase touches this tool next.**
 > **Closed** by the data-root phase below (§5, "Data root and bounded frame
 > discovery"). The maintainer chose a boundary over a parameter: recursion is
 > confined to the data directory and the cap is an operator setting
-> (`KEPLER_MAX_FRAMES`), so the public tool schema is unchanged.
+> (`MARS_MAX_FRAMES`), so the public tool schema is unchanged.
 
 One earlier self-audit finding, fixed before review: `_resolve_roots` tested
 `directory is not None` where the single-root code it replaced tested `if
@@ -1298,7 +1292,7 @@ processing-run and dependency-injection APIs.
 - [x] Remove references to deleted run-shaped photometry adapters and WCS
       reconstruction helpers; retain upstream names only in clearly historical
       provenance text.
-- [x] State that one public tool call is Kepler's execution boundary and list
+- [x] State that one public tool call is MARS's execution boundary and list
       the landed `optical`, `fieldcal_reference`, `photometry`, and `wcs` tools.
 - [x] Correct the photometry documentation: target resolution is offline, but
       default field calibration can query VizieR unless callers use the
@@ -1396,8 +1390,8 @@ until someone added a fixture that silently never got committed.
 
 The bound is two settings, both operator-level rather than tool parameters:
 
-- **`KEPLER_DATA_DIR`** (default `<repo>/data`) is the data root *and* the
-  recursion boundary. `KEPLER_FITS_DOWNLOAD_DIR` defaults inside it, rather
+- **`MARS_DATA_DIR`** (default `<repo>/data`) is the data root *and* the
+  recursion boundary. `MARS_FITS_DOWNLOAD_DIR` defaults inside it, rather
   than to a working-directory-relative `fits_downloads` that moved with
   whatever directory the process started in. `tools/optical.py` walks the
   download root recursively only while it resolves inside the data root;
@@ -1406,7 +1400,7 @@ The bound is two settings, both operator-level rather than tool parameters:
   deliberate: CASDA's `download_files` writes flat, so a refusal would lose
   those products. Containment is decided on the resolved path, so a symlink out
   of the tree does not buy a walk of wherever it lands.
-- **`KEPLER_MAX_FRAMES`** (default 200, rejected below 1) caps how many frames
+- **`MARS_MAX_FRAMES`** (default 200, rejected below 1) caps how many frames
   one listing reads headers for and returns **per root**, with a
   `listing_truncated` warning naming the total. It is applied *before*
   `_summary`, so it bounds the FITS header reads rather than trimming the
@@ -1435,7 +1429,7 @@ maintainer. The ones that changed behaviour:
 
 - **The write guard could be switched off by one environment variable.** The
   first draft exempted whatever `FITS_DOWNLOAD_DIR` named, so
-  `KEPLER_FITS_DOWNLOAD_DIR=<repo>/data` — a plausible misconfiguration —
+  `MARS_FITS_DOWNLOAD_DIR=<repo>/data` — a plausible misconfiguration —
   disabled it for every fixture. The reviewer proposed requiring the download
   root to be strictly inside and disjoint from the fixtures; naming the four
   subtrees directly is simpler and cannot be misconfigured. A test asserts the
@@ -1461,7 +1455,7 @@ maintainer. The ones that changed behaviour:
 - **The default download root moved** from `<cwd>/fits_downloads` with no
   notice. A non-empty directory at the old repository-root location now
   produces a `legacy_download_root_present` warning.
-- `KEPLER_MAX_FRAMES=0` returned empty listings and a negative value sliced
+- `MARS_MAX_FRAMES=0` returned empty listings and a negative value sliced
   from the wrong end; rejected below 1 at load. Per-file `resolve()` for
   dedup replaced by `(st_dev, st_ino)` from the one `stat` already needed.
   The system prompt's "listed on the next call" gained the cap caveat.
@@ -1509,7 +1503,7 @@ typed warnings/errors at the tool boundary.
       `data/`) landed before this phase, and `tools/variable_star.py`'s
       `_fixture_dir()` was written against the old path, so the directory is
       the one pre-rename path left in the tree and the only fixture root that
-      does not sit under `KEPLER_DATA_DIR`. It is tracked and the tools reach
+      does not sit under `MARS_DATA_DIR`. It is tracked and the tools reach
       it, so nothing is broken; moving it is a behaviour change and belongs in
       its own commit, not in this record. Section 7.2's "there is none in
       `data/`" describes the tree as it actually is.
@@ -1552,9 +1546,9 @@ non-browser isochrone-state calculations. Preserve TypeScript numerical
 behavior and known quirks exactly; correctness remediation remains a separate
 effort. Exclude Angular, Highcharts, form state, browser storage, and rendering.
 
-**Local-grid contract:** `KEPLER_ISOCHRONE_DIR`, defined in `tools.config`, is
+**Local-grid contract:** `MARS_ISOCHRONE_DIR`, defined in `tools.config`, is
 the operator-level path to an unpacked legacy Girardi grid. It has no bundled
-or hard-coded default: Kepler neither ships nor downloads model files. The
+or hard-coded default: MARS neither ships nor downloads model files. The
 directory contains exactly named NumPy tracks,
 `Girardi_<log_age>_<metallicity>.npy`; the supplied asset has every 0.05 grid
 point from log-age 6.60--10.20 and metallicity -2.20--+0.70. A missing setting,
@@ -1575,7 +1569,7 @@ argument, bundled cluster catalog, or public model-download API in this phase.
 reference operator archive at `/srv/agents/isochrones/isochrone.zip` contains
 4,307 tracks and has SHA-256
 `83b3cfb7fed46cc766a56f7f34aaa2a0edb50b847ac75548553c4e60936d9f8b`.
-Operators obtain and manage it under the model's applicable terms; Kepler only
+Operators obtain and manage it under the model's applicable terms; MARS only
 reads the configured unpacked directory.
 
 **P5 inventory:** the pure TypeScript calculations now live in
@@ -1597,7 +1591,7 @@ from the Python runtime. Matplotlib is the artifact renderer.
 - [x] Port the unmapped computational functions into focused
       `algorithms/hrdiagram_py/` modules, preserving formulas and input/output
       shape; add `# PORTED:` provenance markers.
-- [x] Add `KEPLER_ISOCHRONE_DIR` configuration and a focused Girardi-grid loader
+- [x] Add `MARS_ISOCHRONE_DIR` configuration and a focused Girardi-grid loader
       that selects exact legacy tracks and filter triples. Replace the live
       PARSEC fetch route; do not add a fallback download or a per-call
       `grid_path` parameter.
@@ -1761,7 +1755,7 @@ missing input between catalog query and the existing zero-point calculation.
 **Validation:** focused `fieldcal_reference` tests with network calls forbidden,
 the default suite, and `git diff --check`.
 
-**Exit:** Kepler reproduces the complete recorded local field-calibration path,
+**Exit:** MARS reproduces the complete recorded local field-calibration path,
 including catalog selection, without live VizieR access.
 
 **P7 record (2026-09-13).** The fixture is two files next to the recorded
@@ -1850,7 +1844,7 @@ global constraints — worth re-running the independent review on the PR.
 `algorithms/` has no diff; the kernels are untouched; every replay path runs
 under a `socket.connect` guard; the fixture is the phase's own requested
 artifact, not a generated one. Three things the audit changed. (1) A
-hand-made `*_response.json` under `KEPLER_FIELDCAL_DATA_DIR` that did not
+hand-made `*_response.json` under `MARS_FIELDCAL_DATA_DIR` that did not
 parse raised `TypeError` out of `np.dtype` inside a registered tool — the
 P6 lesson again — so `_read_response` now validates the shape and rebuilds
 the table itself (cheap), both the provenance loader and the source
@@ -2004,7 +1998,7 @@ cannot choose a different partner.
 pixels and land inside the 0.1-magnitude bound the NGC 5128 end-to-end cases
 already use:
 
-| Field | Measured (Kepler scale) | Recorded + 20.0 | Δ |
+| Field | Measured (MARS scale) | Recorded + 20.0 | Δ |
 | --- | --- | --- | --- |
 | `ngc5286_b_000` | 21.771578 | 21.821497 | −0.049919 |
 | `ngc5286_b_001` | 22.569106 | 22.602478 | −0.033372 |
@@ -2028,7 +2022,7 @@ plus the `lfs_frames` fixture skip the pixel and whole-tree tests with the
 `git lfs pull` line.
 
 *Why they are 31 MB each.* Each file carries **four** Afterglow-aligned
-exposures, of which every Kepler code path reads the primary — they are the only
+exposures, of which every MARS code path reads the primary — they are the only
 multi-HDU frames in `data/optical/`. Shipping the primary alone would have been
 7.74 MB apiece, under the 9 MB plain-git cut-off and no LFS at all; the
 maintainer chose to preserve all four exposures.
@@ -2079,7 +2073,7 @@ Node-subprocess alternative and the proposed cluster registry are rejected.
 | Runtime | **now exists** on `dev` — `algorithms/hrdiagram_py/` plus seven registered tools | none — nothing executes the TypeScript |
 | Input data | none in `data/` | none in `data/` |
 | Catalog access | solvable — `algorithms/query` already queries VizieR for Gaia, 2MASS, APASS, WISE and MWSC | solvable — VizieR, ASAS-SN, ZTF |
-| Model grids | operator-provided local Girardi grid; Kepler does not fetch or bundle it | not applicable |
+| Model grids | operator-provided local Girardi grid; MARS does not fetch or bundle it | not applicable |
 
 **The runtime decision, now settled for BL-10.** `CLAUDE.md` is explicit that a
 Python port is not a general licence: `algorithms/pulsar/` is the one instance,
@@ -2124,7 +2118,7 @@ minimum/maximum pixel-scale bounds; omitted controls retain the all-sky defaults
 **The TypeScript runtime for the variable-star tools (BL-10).** P4 established a
 Python-only, exact-parity port with artifact output and no browser/UI rendering.
 
-**Whether Kepler carries, fetches, or requires an isochrone grid.** P5 requires a
+**Whether MARS carries, fetches, or requires an isochrone grid.** P5 requires a
 maintainer-supplied local Girardi grid and replaces live fetching; it does not add
 a public cluster registry. M67 remains test-only.
 
@@ -2185,7 +2179,7 @@ throughout: no phase moves a numeric expression.
 
 **Not full Skynet parity.** This work validates the *tool seam* — that a tool can
 find local data, run the real code path against it, and return a number
-comparable to recorded ground truth. It does not validate that Kepler's whole
+comparable to recorded ground truth. It does not validate that MARS's whole
 pipeline reproduces Skynet's.
 
 **Not a guaranteed plate solve.** P6 made deliberate search narrowing available

@@ -1,10 +1,13 @@
 # MARS in the Desktop Apps: Claude Desktop and the ChatGPT Desktop App
 
-**Status:** dated proposal from PR #97, 2026-10-01; no phase has started.
+**Status:** dated proposal from PR #97, 2026-10-01. D2 was built ahead of
+order, at the maintainer's direction; no other phase has started.
 Scheduling and acceptance now live in the single
 [master continuation plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
 This snapshot preserves the rationale, host claims and vendor sources for
-rechecking, not a competing execution plan. **Browser support is parked**
+rechecking, not a competing execution plan. D2 has since been built, in
+`installers/claude-desktop/`; its results are below. Its gate, a real
+Claude Desktop install, is open. **Browser support is parked**
 at the maintainer's direction (§6).
 
 **Prerequisites:** the MCP tool surface (archived 2026-09-25) and the per-host
@@ -159,11 +162,59 @@ Each phase is one PR. No phase begins before the one before it has landed.
 - Document the `uv tool install` route as the simplest manual install.
 - **Exit:** a reader with only the docs reproduces D0.
 
-### Phase D2: The `.mcpb` spike
+### Phase D2: The `.mcpb` spike: built, awaiting a real install
 
-- A throwaway `uv`-type extension against a published `skynet-mars` release.
+- A `uv`-type extension against a published `skynet-mars` release.
 - Answer §3's four questions on macOS and Windows.
 - **Exit:** a build/no-build decision recorded here, with measurements.
+
+Done on 2026-10-01. The extension was not thrown away: it is
+`installers/claude-desktop/` (README there), pinned to `0.1.0rc4`, with
+`tests/test_claude_desktop_extension.py`. What was verified, on Linux
+aarch64, where Claude Desktop does not run:
+
+- `mcpb` 2.1.2 validates the manifest and packs a 277 kB `.mcpb`, most of it the icon. Its icon
+  warning, which recommends 512×512, is met by exporting the mark from
+  `docs/assets/make_brand.py`.
+- **Cold first launch, as the host runs it.** The manifest's own `uv run
+  --locked` was run in the unpacked `.mcpb` with an empty uv cache, only
+  uv-managed Pythons (`UV_PYTHON_PREFERENCE=only-managed`), and `env -i`. It
+  downloaded CPython 3.13.14, installed 89 packages, and passed `mars-mcp
+  self-test` in **42 s**: blind detection of B0329+54 at 204σ, the skill
+  resources served, and sonification returned as audio. That time is this
+  host's network; a slower link scales the download, about 640 MB. (A first
+  measurement of 38 s let uv reuse the system's Python 3.13; code review
+  caught it.)
+- **No Anthropic API key.** The same run had no `ANTHROPIC_API_KEY`, no
+  `.env` and an empty home directory. The model is the logged-in Desktop
+  session's; MARS serves tools only. The `anthropic` SDK is installed, because
+  `skynet-mars` depends on it for the `mars` console, but the server process
+  never imports it, `tools.agent` or `tools.llm` (checked in-process).
+- **Unfilled settings.** Whether Desktop passes an empty optional field as
+  `""` or as the unexpanded `${user_config...}` is not documented. The
+  unexpanded form stopped bare `mars-mcp` at startup ("unknown tool
+  group(s)"). An empty `ADS_DEV_KEY` would hide `~/.ads/dev_key`. So
+  `src/server.py` removes both forms first. Driven through the exact
+  manifest command, both forms serve 55 tools, `databases` serves 16, and a
+  token is reported set.
+
+§3's questions, answered so far:
+
+- **`uv` type in Claude Desktop:** the MCPB repository's `hello-world-uv`
+  example says Claude Desktop manages Python and the dependencies.
+  Unconfirmed on a real install.
+- **First launch:** 42 s here, Python download included. Whether Desktop's startup wait tolerates a slow
+  first install is unconfirmed.
+- **Data bundles:** unchanged. `uvx --python 3.13 --from "skynet-mars[mcp]==<version>"
+  mars-mcp fetch-data optical` (verified with `--list`) is the documented route
+  until D0 says otherwise. It must run with the extension's `MARS_HOME`, if one
+  was set.
+- **Releasing:** the pin trails a release (`installers/claude-desktop/README.md`,
+  "After each release"); the `release.yml` step is D3.
+
+**Remaining gate:** install the `.mcpb` in Claude Desktop on macOS (and
+Windows if available), then run the pulsar detection. Record the first-launch
+time and what the settings dialog passes for an empty field.
 
 ### Phase D3: The extension, released (only if D2 says build)
 
