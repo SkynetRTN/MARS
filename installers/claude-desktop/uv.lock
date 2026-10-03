@@ -634,14 +634,14 @@ wheels = [
 
 [[package]]
 name = "mars-claude-desktop"
-version = "0.1.0rc4"
+version = "0.1.0rc5"
 source = { virtual = "." }
 dependencies = [
     { name = "skynet-mars", extra = ["mcp"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "skynet-mars", extras = ["mcp"], specifier = "==0.1.0rc4" }]
+requires-dist = [{ name = "skynet-mars", extras = ["mcp"], specifier = "==0.1.0rc5" }]
 
 [[package]]
 name = "matplotlib"
@@ -1206,7 +1206,7 @@ wheels = [
 
 [[package]]
 name = "skynet-mars"
-version = "0.1.0rc4"
+version = "0.1.0rc5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
@@ -1230,9 +1230,9 @@ dependencies = [
     { name = "textual" },
     { name = "textual-image" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/99/d1/646ad3f877a21edf25ef6b28067755a81c0f79abab253c4c626777d729b7/skynet_mars-0.1.0rc4.tar.gz", hash = "sha256:df2d9101fea5631b9936b2b5d728ab933bdee8cc2df2484d5b5f56f3fdb6285e", size = 2361307, upload-time = "2026-09-28T14:24:43.898Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/6f/7127d5a15d2d68334f309ed92fce0d2d9fad526fbde8a7524cae4ffb360d/skynet_mars-0.1.0rc5.tar.gz", hash = "sha256:c9996333946453b7430742cb91c70400c4c46654045daedce412bc1f65dc6280", size = 2334091, upload-time = "2026-10-03T03:18:04.384Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/63/0f19cb5f7755b00067d456144d9c8af9456c48a0e194d8b7375e8f363bb3/skynet_mars-0.1.0rc4-py3-none-any.whl", hash = "sha256:9d3cfbaf657d0aee2029185514d3e388dd358c7bd4314c666e903c4f46ea9066", size = 2234687, upload-time = "2026-09-28T14:24:42.068Z" },
+    { url = "https://files.pythonhosted.org/packages/46/34/5d4eddb4ab1fc76faac71c68f50c76c544c687c6d6a5aebcf3b3569216df/skynet_mars-0.1.0rc5-py3-none-any.whl", hash = "sha256:d5c8c7d3864906a94e547f7c92853037c6674ae87e37d2b58a1a33b7a56b4b7d", size = 2228576, upload-time = "2026-10-03T03:18:02.768Z" },
 ]
 
 [package.optional-dependencies]

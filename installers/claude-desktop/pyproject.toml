@@ -6,11 +6,11 @@
 # tests/test_claude_desktop_extension.py).
 [project]
 name = "mars-claude-desktop"
-version = "0.1.0rc4"
+version = "0.1.0rc5"
 description = "Claude Desktop extension that runs the skynet-mars MCP server"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "skynet-mars[mcp]==0.1.0rc4",
+    "skynet-mars[mcp]==0.1.0rc5",
 ]
 
 [tool.uv]
