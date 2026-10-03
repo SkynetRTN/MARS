@@ -6,11 +6,13 @@ name: Release
 # docs/releasing.md. workflow_dispatch runs everything but the publishing
 # jobs, as a dry run.
 #
-# Publishing is three steps, in order: the GitHub release (`publish`),
-# TestPyPI (`publish-testpypi`, then `verify-testpypi` installs what the index
-# serves), and PyPI (`publish-pypi`). The two index jobs use PyPI trusted
-# publishing -- no token is stored anywhere -- from the `testpypi` and `pypi`
-# environments, which the maintainer configures (docs/releasing.md).
+# Publishing has two parallel outputs after the same build, install and data
+# gates: the GitHub release (`publish`) and TestPyPI (`publish-testpypi`). The
+# TestPyPI upload is then downloaded, byte-compared and installed by
+# `verify-testpypi`; only that verified path can reach PyPI (`publish-pypi`).
+# The two index jobs use PyPI trusted publishing -- no token is stored anywhere
+# -- from the `testpypi` and `pypi` environments, which the maintainer
+# configures (docs/releasing.md).
 
 on:
   push:
