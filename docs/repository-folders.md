@@ -58,6 +58,19 @@ Important files and subfolders:
   core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
   package-data ships.
 - `artifacts.py`: local artifact description and listing helpers.
+- `photometry_pipeline.py`: the reusable automated photometry behind
+  `tools.photometry` -- loads a FITS image, runs source extraction and
+  aperture photometry, resolves an optional verified zero point through a
+  live field-calibration catalog solve, and saves plots. It has no CLI and no
+  model-provider client. Listing and resolving a target are offline; field
+  calibration is not: `run_photometry_on_target` defaults to
+  `use_field_cal=True`, which queries VizieR for reference magnitudes. Pass
+  `use_field_cal=False` for instrumental magnitudes, or `zero_point_mag` when
+  a trusted value is already known. The offline recorded-solve replays are
+  `calibrate_zeropoint(..., catalog_fixture=...)` and
+  `fieldcal_reference.replay_field_calibration` (below, and
+  [data/README.md](../data/README.md)); only `ngc5128_galaxy_b_001.fits` can
+  be driven that way end to end.
 - `astrometry.py`, `calibration.py`, `catalogs.py`, `fieldcal_reference.py`,
   `optical.py`, `pulsar.py`, `photometry.py`, `variable_star.py`,
   `workspace.py`: local plain Python user-facing tool wrappers
@@ -488,6 +501,17 @@ Current caveats:
 - Live remote calls must stay out of default checks; see the repository
   conventions.
 
+Configuration (environment, read by `config.py`'s `QuerySettings`):
+
+- `VIZIER_SERVER`: VizieR mirror hostname, defaulting to `vizier.cds.unistra.fr`.
+- `VIZIER_CACHE_ENABLED`: whether astroquery caches responses on disk
+  (default on).
+- `VIZIER_CACHE_AGE_DAYS`: cache retention, defaulting to 30.
+
+With the cache enabled, query regions are snapped to a fixed grid so that
+near-identical fields share a cache entry. This is observable near a field
+edge; see [extraction.md](extraction.md), Query §5.1.
+
 ## `algorithms/wcs/`
 
 Extracted Python astrometric WCS-calibration code from Skynet.
@@ -522,3 +546,61 @@ Current caveats:
 - Without solver data, imports still work and solves degrade to no solution.
 - `numba`, `sep`, `scipy`, `astropy`, and Pydantic v2 are required for the real
   runtime path.
+
+Configuration (environment, read by `tools.wcs` into a per-call
+`SolverSettings`):
+
+- `ANET_INDEX_PATH`: astrometry.net index directory, or `os.pathsep`-separated
+  directories that hold index files directly.
+- `ANET_TIMEOUT_S`: astrometry.net low-level solve-attempt limit in seconds
+  (minimum 1).
+- `ATLAS_CATALOG_ROOT`: local UCAC4/UCAC5 catalog root for the ATLAS fallback.
+- `ATLAS_CATALOG`: catalog name, defaulting to `ucac5`.
+- `ATLAS_TIMEOUT_S`: ATLAS matcher timeout in seconds.
+
+The two backends serve different workflows. The normal order is
+astrometry.net first, then ATLAS as its fallback. For a quick local solve of a
+frame with trustworthy pointing and pixel-scale keywords, configure only ATLAS
+(leave `ANET_INDEX_PATH` unset): ATLAS uses the header hints to narrow its
+local UCAC triangle search. For a blind solve, configure astrometry.net: it
+needs `solve-field` on `PATH` (or a supported `SKYLIB_*` override) and indexes
+in `ANET_INDEX_PATH`. If neither is configured the package still imports, but
+plate solving produces no solution.
+
+The UCAC catalog is an operator-owned dependency, like the HR-diagram
+isochrone grid: do not download, copy, or commit it under MARS. The supplied
+UCAC5 tree on the development host is:
+
+```bash
+export ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5
+export ATLAS_CATALOG=ucac5
+```
+
+Supported layouts:
+
+```text
+# UCAC5: ATLAS_CATALOG_ROOT may be either directory
+<root>/u5z/u5index.asc
+<root>/u5z/z001 ... z900
+
+# UCAC4: ATLAS_CATALOG_ROOT is the directory holding zone files
+<root>/Z000.UC4 ... Z179.UC4
+```
+
+Reserve at least 6 GB for a local UCAC5 installation (the supplied tree is
+5.3 GB) and at least 10 GB for UCAC4 (about 8.5 GB). Verify the reader can
+instantiate and query the catalog without network access before a solve:
+
+```bash
+uv run python -c "from pathlib import Path; from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec; import os; root = Path(os.environ['ATLAS_CATALOG_ROOT']); catalog = os.environ.get('ATLAS_CATALOG', 'ucac5'); index = get_catalog_spec(catalog).index_factory(root); result = index.query_box(0.0, 0.25, -0.1, 0.1); print(f'{catalog}: {len(result.ra_deg)} stars in preflight box')"
+```
+
+The operator-only ATLAS validation route:
+
+```bash
+ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5 ATLAS_CATALOG=ucac5 \
+  uv run pytest tests/test_wcs_solution.py::test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window -v
+```
+
+For blind astrometry.net validation on the development host, use the indexes
+under `/srv/agents/catalogs/astrometry` rather than the ATLAS catalog tree.
