@@ -899,7 +899,7 @@ with `docs/releasing.md` as the policy. It:
 - then publishes — the only job with write permission.
 
 Python 3.12 and 3.13 are supported, and CI tests both against `uv.lock`, which
-moves when a change needs it or for a security fix. 3.13 is the newest Python every
+moves when MARS adds support for a newer Python or a change needs it. 3.13 is the newest Python every
 dependency ships wheels for: `sep` has none for 3.14, and `photutils` none
 for Linux aarch64. Installing and registering is `docs/installing.md`.
 
