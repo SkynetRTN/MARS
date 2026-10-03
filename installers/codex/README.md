@@ -41,15 +41,20 @@ The ChatGPT desktop app for Linux is in preview. OpenAI publishes `.rpm`
 packages for Fedora 43 and 44, for x86_64 and aarch64.
 
 1. Install the app from OpenAI's `.rpm` (`sudo dnf install ./<downloaded>.rpm`),
-   and install `uv` and `git` from Fedora:
+   and install `uv`, `git` and `gcc` from Fedora:
 
    ```bash
-   sudo dnf install uv git
+   sudo dnf install uv git gcc
    ```
 
    Use Fedora's `uv`, which lands in `/usr/bin`. An app started from the
    desktop may not see `~/.local/bin`, where uv's own installer puts it, and
-   Codex starts the server with the app's `PATH`.
+   Codex starts the server with the app's `PATH`. Fedora configures its `uv`
+   not to download Python (`python-downloads = "manual"` in
+   `/etc/uv/uv.toml`), and Fedora 44's own Python is 3.14, so the plugin sets
+   `UV_PYTHON_DOWNLOADS=automatic` for its server. `gcc` is needed on aarch64
+   only: `photutils` 3.0.0 has no Python 3.13 wheel for ARM64 Linux, so the
+   first start compiles it.
 
 2. Add the marketplace and install the plugin. With the Codex CLI:
 
@@ -77,9 +82,10 @@ Codex asks before any tool that writes an artifact
 
 ## Settings
 
-The plugin sets no environment of its own. Codex starts the server with a small
-fixed environment (`HOME`, `PATH`, `USER`, `LANG` and a few more), plus these
-variables if the app itself was started with them:
+The plugin sets one variable, `UV_PYTHON_DOWNLOADS=automatic`, and no secret.
+Codex starts the server with a small fixed environment (`HOME`, `PATH`,
+`USER`, `LANG` and a few more), plus these variables if the app itself was
+started with them:
 
 | Variable | Effect |
 | --- | --- |
@@ -107,6 +113,7 @@ twice. Use the version `codex plugin list` shows for `mars@mars`:
 
 ```bash
 P=~/.codex/plugins/cache/mars/mars/0.1.0rc5      # that version
+export UV_PYTHON_DOWNLOADS=automatic             # as the plugin does, for Fedora's uv
 uv run --directory "$P" --locked mars-mcp self-test
 uv run --directory "$P" --locked mars-mcp fetch-data optical    # or: isochrones, all
 ```
@@ -121,6 +128,11 @@ does not look.
 - **`MCP startup failed: No such file or directory (os error 2)`**: Codex
   could not find `uv` on the `PATH` the app was started with. Install it with
   `sudo dnf install uv`, then restart the app.
+- **`handshaking with MCP server failed: connection closed`**: the server
+  exited before it started. Run the self-test above to see why. Two causes
+  seen on a clean Fedora 44: uv refusing to download Python 3.13 (the plugin
+  now allows it), and, on aarch64, no `cc` to build `photutils`
+  (`sudo dnf install gcc`).
 - **A timeout on the first start**: the dependency download outlasted the
   10-minute limit. Run the self-test above once, which installs the same
   environment, then start a new thread.
@@ -167,7 +179,8 @@ that the skill copy is complete.
 
 ## Platforms
 
-Verified on Fedora 44 aarch64, through Codex 0.160's app server. x86_64 Linux,
-macOS and Windows use the same wheels as the Claude Desktop extension, and
-the same limits apply. `numba` and `llvmlite` have no Intel Mac wheels, and
+Verified in clean Fedora 44 containers, x86_64 and aarch64, through Codex
+0.160's app server, installing from GitHub with Fedora's `uv`. On aarch64
+the first start also compiles `photutils` with `gcc`. macOS and Windows use
+the same wheels as the Claude Desktop extension, and the same limits apply. `numba` and `llvmlite` have no Intel Mac wheels, and
 several dependencies have none for Windows on ARM.

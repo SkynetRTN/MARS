@@ -125,7 +125,6 @@ def test_only_variables_mars_reads_are_forwarded():
     data, which the 600 s call limit exists for."""
 
     server = _SERVERS["mars"]
-    assert "env" not in server
     assert len(server["env_vars"]) == len(set(server["env_vars"]))
     assert set(server["env_vars"]) == {
         "ADS_DEV_KEY",
@@ -141,6 +140,16 @@ def test_only_variables_mars_reads_are_forwarded():
         "ATLAS_CATALOG",
         "ATLAS_TIMEOUT_S",
     }
+
+
+def test_uv_may_download_python_3_13():
+    """Fedora's packaged uv ships ``python-downloads = "manual"`` in
+    ``/etc/uv/uv.toml``, and Fedora 44's system Python is 3.14, so without
+    this the server stops at "No interpreter found for Python ==3.13.*"
+    (found in a clean Fedora 44 container). An environment variable outranks
+    uv's configuration files. It is the plugin's only value, and no secret."""
+
+    assert _SERVERS["mars"]["env"] == {"UV_PYTHON_DOWNLOADS": "automatic"}
 
 
 def test_the_plugin_needs_no_model_key():
