@@ -272,7 +272,9 @@ Important files:
   `isochrone_cmd` drops PARSEC/COLIBRI thermally-pulsing-AGB rows (`label`
   column > 7) by default -- a raw PARSEC download's dust/mass-loss modelling
   breaks down there, and left in, it both scribbles the plotted track and
-  biases the optimizer's nearest-point cost.
+  biases the optimizer's cost. That cost measures each star to the resampled
+  track, with a 0.02 mag floor and a per-star cap (`docs/extraction.md`,
+  HR Diagram (Python)).
 - `observations.py`: FITS frame -> detected sources, via `algorithms.photometry`.
   Cheap "auto" Kron-like apertures, no zero-point solve -- the frame's own
   magnitude is discarded once Gaia's is fetched.

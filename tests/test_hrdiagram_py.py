@@ -109,7 +109,36 @@ def test_isochrone_cmd_drops_thermal_pulse_agb_rows():
     assert np.abs(colour).max() < 15 and np.abs(mag).max() < 15, \
         "the thermal-pulse rows' extreme values (mag/colour magnitudes >= 20) must not leak into the kept track"
 
-    # max_label=None is the escape hatch back to the old unfiltered behaviour.
-    colour_raw, mag_raw = hrfit.isochrone_cmd(iso, "Bmag", "Rmag", "Vmag", max_label=None)
+    # max_label=None (and max_abs_mag=None) is the escape hatch back to the old
+    # unfiltered behaviour.
+    colour_raw, mag_raw = hrfit.isochrone_cmd(iso, "Bmag", "Rmag", "Vmag", max_label=None, max_abs_mag=None)
     assert len(colour_raw) == len(iso)
     assert np.abs(colour_raw).max() > 15, "the injected thermal-pulse rows should be the extreme ones"
+
+
+def test_isochrone_cmd_drops_the_grid_sentinel_rows():
+    """The local Girardi grid has no phase labels, and most of its tracks end
+    in a row with every band near 30 mag. Plotted, it drew a line from the
+    track's end down to M ~ 30."""
+    iso = pd.DataFrame({
+        "BP": [10.0, 6.0, 4.5, 30.4],
+        "RP": [8.0, 5.0, 3.9, 29.6],
+        "G": [9.0, 5.5, 4.2, 30.0],
+    })
+    colour, mag = hrfit.isochrone_cmd(iso, "BP", "RP", "G")
+    assert mag.tolist() == [9.0, 5.5, 4.2]
+
+
+def test_the_cost_measures_distance_to_the_track_not_to_its_points():
+    """A track sampled 0.2 mag apart, with a star exactly on it halfway
+    between two points: at Gaia's 3 mmag errors the nearest-point cost read
+    that as a 30-sigma miss."""
+    iso_colour = np.array([0.0, 0.0, 0.0])
+    iso_mag = np.array([4.0, 4.2, 4.4])
+    errors = np.array([0.003])
+    on_track = hrfit._TrackCost(errors, errors, iso_colour, iso_mag, floor=0.0, cap=None)
+    # At most half a resampling step away; the nearest point is 0.1 mag off,
+    # which the old cost scored (0.1 / 0.003)**2 ~ 1,111.
+    assert on_track(np.array([0.0]), np.array([4.1])) <= (hrfit.TRACK_STEP_MAG / 2 / 0.003) ** 2
+    capped = hrfit._TrackCost(errors, errors, iso_colour, iso_mag)
+    assert capped(np.array([1.0]), np.array([4.1])) == hrfit.CHI2_CAP

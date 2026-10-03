@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -200,3 +201,30 @@ def test_hr_tool_reads_operator_grid_from_config(tmp_path, monkeypatch):
 
     assert result.status == "ok"
     assert result.preview[0]["isochrone_path"] == str(tmp_path)
+
+
+_M67 = Path(__file__).parent / "fixtures" / "hrdiagram_m67"
+
+
+@pytest.mark.slow
+def test_m67_fits_near_its_literature_age(tmp_path, monkeypatch):
+    """M67 against Cantat-Gaudin & Anders 2020 (log age 9.63, 0.889 kpc,
+    E(B-V) 0.023), offline: 548 Gaia DR3 members recorded from a live
+    run_full_hr_pipeline_from_catalog on 2026-10-02, and the 16 grid tracks
+    its +-0.4 dex window reads (float32 copies from the isochrones bundle).
+
+    The nearest-vertex, uncapped cost fitted log age 9.25 (1.8 Gyr), 0.815 kpc
+    and E(B-V) 0.092: the young edge of the window. Blue stragglers set that
+    fit; see SYSTEMATIC_FLOOR_MAG and CHI2_CAP in hrfit."""
+    members = pd.read_csv(_M67 / "members.csv")
+    literature = {"log_age": 9.63, "distance_kpc": 0.889, "ebv": 0.022580645257426847, "age_myr": 4265.8}
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", _M67)
+    report = isochrones.fit_and_compare(
+        members, literature, "M67",
+        members_csv_path=tmp_path / "members.csv", out_png=tmp_path / "fit.png",
+        logage_half_width=0.4, max_error=0.2,
+    )
+    fitted = report["fitted"]
+    assert abs(fitted["log_age"] - 9.63) <= 0.1
+    assert abs(fitted["distance_kpc"] - 0.889) / 0.889 < 0.06
+    assert abs(fitted["ebv"] - 0.023) < 0.03

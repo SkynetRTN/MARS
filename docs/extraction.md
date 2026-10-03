@@ -2040,6 +2040,39 @@ against a real PARSEC response:
   and horizontal branch: the fix preserves those genuine features (`label`
   3-5) while still dropping the TP-AGB tail.
 
+**The optimizer's cost, redesigned 2026-10-02.** Against the local Girardi
+grid, every fit came out too young and too reddened: M67 at log age 9.25
+(Cantat-Gaudin & Anders 2020: 9.63), M35 and NGC 2516 likewise, two of three
+at the young edge of the age window. The cost was MARS's own, not Astromancer's
+(which has no optimizer), and had three faults:
+
+- It measured each star to the nearest track **point**. The grid's
+  main-sequence points are 0.08-0.27 mag apart against Gaia's ~3 mmag errors,
+  so a star on the track between two points read as a 10-40 sigma miss; that
+  sampling noise was most of the reduced cost (540-1,010) and set which age
+  won. Tracks are now resampled every 0.005 mag (`TRACK_STEP_MAG`), without
+  joining jumps over 0.5 mag between phases (the grid carries no labels).
+- Its chi-square had no floor and no cap. Blue stragglers, binaries and field
+  stars cost tens of thousands each (eleven M67 blue stragglers, ~32,000 each)
+  and pulled the fit to a younger, bluer turnoff, with extra reddening to put
+  the main sequence back. A 0.02 mag systematic floor (`SYSTEMATIC_FLOOR_MAG`)
+  and a per-star cap of 9 (`CHI2_CAP`) fix it; either alone does not.
+- One Nelder-Mead start at the literature values settled in a second minimum
+  at many ages. A coarse distance/E(B-V) grid now seeds it.
+
+Most grid tracks also end in a ~30 mag sentinel row, which drew a line to
+M ~ 30 on the plot; `isochrone_cmd` drops rows fainter than 25 mag.
+
+After the fix (recorded members, the tool's +-0.4 dex window), as log age /
+distance / E(B-V): M67 9.60 / 0.852 kpc / 0.035 (literature 9.63 / 0.889 /
+0.023); M35 8.55 / 0.879 / 0.242 (8.17 / 0.906 / 0.148); NGC 2516 8.35 /
+0.419 / 0.135 (8.38 / 0.423 / 0.035). M35's and NGC 2516's ages stay loosely
+constrained: the cost is nearly flat over about +-0.3 dex, since few turnoff
+stars are brighter than G = 17. Their higher E(B-V) agrees with the classical
+values (M35 0.20-0.26, NGC 2516 ~0.11) better than with the catalogue's. A
+fit is now 15-30 s, from 5-9 s. `test_m67_fits_near_its_literature_age`
+holds M67 offline, on 548 recorded members and the 16 tracks its window reads.
+
 The `query_object`-based assumption that matches are ordered by increasing
 separation held for the clusters tested so far but is still not exhaustively
 verified -- see `tools/hr_diagram.py`'s docstrings.
