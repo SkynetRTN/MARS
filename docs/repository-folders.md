@@ -36,9 +36,9 @@ Build inputs for installers that are not the wheel.
   release needs no change here. Its README has the build and test steps.
 - `codex/` is the Codex plugin, for the ChatGPT desktop app's Codex threads,
   the Codex CLI and the IDE extension: a `.codex-plugin/plugin.json`, a
-  `.mcp.json` that runs the same entry point as the extension (a byte-for-byte
-  copy of its `src/server.py`), and the skill, rendered by
-  `python -m tools.skill`. `.agents/plugins/marketplace.json` at the root lists
+  `.mcp.json` that runs the newest `mars-mcp` on PyPI with `uv tool run`, and
+  the skill, rendered by `python -m tools.skill`. Like the extension, it names
+  no MARS version. `.agents/plugins/marketplace.json` at the root lists
   it, which makes the repository a Codex marketplace. Its README has the Fedora
   install and test steps.
 

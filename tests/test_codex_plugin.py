@@ -2,12 +2,16 @@
 
 The plugin is what the ChatGPT desktop app (in its Codex threads), the Codex
 CLI and the IDE extension install: a ``.codex-plugin/plugin.json``, a
-``.mcp.json`` that starts ``uv run --locked src/server.py`` in the installed
-plugin, an empty ``pyproject.toml`` and its ``uv.lock``, and the rendered
-skill. ``src/server.py`` is the Claude Desktop extension's entry point,
-byte for byte: it runs the newest ``skynet-mars`` release through
-``uv tool run``, so the plugin names no MARS version and needs no change to
-follow a release. ``.agents/plugins/marketplace.json`` lists the plugin.
+``.mcp.json`` that runs the newest ``skynet-mars`` release with
+``uv tool run --from "skynet-mars[mcp]@latest"``, and the rendered skill. It
+names no MARS version and needs no change to follow a release, as the Claude
+Desktop extension does since #109. ``.agents/plugins/marketplace.json`` lists
+the plugin.
+
+The server runs from uv's cache, never from the plugin's directory: Codex
+replaces that directory while a server starts (seen in a clean Fedora 44
+container: "Current directory does not exist" a few seconds in), so a server
+with its working directory, ``.venv`` or entry point there could lose them.
 
 It uses Codex's own manifest format, not the portable Agent Plugins one,
 because only Codex's ``.mcp.json`` can raise ``startup_timeout_sec`` and
@@ -22,7 +26,6 @@ from __future__ import annotations
 
 import json
 import re
-import tomllib
 from pathlib import Path
 
 from tools.mcp.groups import TOOLS_ENV
@@ -34,7 +37,6 @@ _PLUGIN = _ROOT / "installers" / "codex"
 _MANIFEST = json.loads((_PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
 _SERVERS = json.loads((_PLUGIN / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
 _MARKETPLACE = json.loads((_ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
-_PLUGIN_PROJECT = tomllib.loads((_PLUGIN / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
 
 def test_the_plugin_has_one_version_of_its_own():
@@ -42,33 +44,34 @@ def test_the_plugin_has_one_version_of_its_own():
     and upgrades when this changes. It is the plugin's version, not MARS's."""
 
     assert re.fullmatch(r"\d+\.\d+\.\d+", _MANIFEST["version"]), _MANIFEST["version"]
-    assert _PLUGIN_PROJECT["version"] == _MANIFEST["version"]
 
 
 def test_the_plugin_names_no_mars_version():
     """It runs the newest release, so nothing it ships may pin one."""
 
-    assert _PLUGIN_PROJECT["dependencies"] == []
-    locked = tomllib.loads((_PLUGIN / "uv.lock").read_text(encoding="utf-8"))["package"]
-    assert [p["name"] for p in locked] == ["mars-codex"]
-    for path in ("README.md", ".mcp.json", ".codex-plugin/plugin.json", "src/server.py"):
+    for path in ("README.md", ".mcp.json", ".codex-plugin/plugin.json"):
         text = (_PLUGIN / path).read_text(encoding="utf-8")
         assert "skynet-mars[mcp]==" not in text and "skynet-mars==" not in text, path
         assert not re.search(r"0\.\d+\.\d+rc\d+", text), path
 
 
-def test_the_entry_point_is_the_claude_desktop_extensions():
-    """One launcher, two installers: the refresh-then-serve logic, the offline
-    fallback and the removal of empty settings are tested in
-    ``tests/test_claude_desktop_extension.py``. A copy, because Codex installs
-    only the plugin's own directory."""
+def test_the_server_is_the_newest_release_run_from_uvs_cache():
+    """``@latest`` asks PyPI for the newest release each start and installs it
+    into uv's cache if needed; Python 3.13 is the newest version every MARS
+    dependency ships wheels for. No ``cwd``, and no environment in the plugin:
+    nothing may depend on the plugin's directory, which Codex replaces.
+    ``command`` is a bare name, resolved on the PATH the app was started with."""
 
-    ours = (_PLUGIN / "src" / "server.py").read_bytes()
-    assert ours == (_ROOT / "installers" / "claude-desktop" / "src" / "server.py").read_bytes()
-
-
-def test_the_plugin_runs_python_3_13_a_supported_version():
-    assert _PLUGIN_PROJECT["requires-python"] == ">=3.13,<3.14"
+    (name,) = _SERVERS
+    server = _SERVERS[name]
+    assert name == "mars"
+    assert server["command"] == "uv"
+    assert server["args"] == [
+        "tool", "run", "--python", "3.13", "--from", "skynet-mars[mcp]@latest", "mars-mcp",
+    ]
+    assert "cwd" not in server
+    shipped = {p.name for p in _PLUGIN.iterdir()}
+    assert not shipped & {"pyproject.toml", "uv.lock", "src", ".venv"}
 
 
 def test_the_marketplace_lists_the_plugin_by_a_contained_local_path():
@@ -88,19 +91,6 @@ def test_the_manifest_points_at_files_that_exist():
     interface = _MANIFEST["interface"]
     for key in ("composerIcon", "logo"):
         assert (_PLUGIN / interface[key]).is_file(), key
-
-
-def test_the_server_runs_the_entry_point_from_the_installed_plugin():
-    """A relative ``cwd`` is joined to the installed plugin root, which holds
-    ``pyproject.toml``, ``uv.lock`` and ``src/server.py``. ``command`` is a
-    bare name: Codex resolves it on the PATH the app was started with."""
-
-    (name,) = _SERVERS
-    server = _SERVERS[name]
-    assert name == "mars"
-    assert server["command"] == "uv"
-    assert server["args"] == ["run", "--locked", "src/server.py"]
-    assert server["cwd"] == "."
 
 
 def test_the_timeouts_outlast_a_first_launch_and_a_plate_solve():
@@ -148,8 +138,7 @@ def test_uv_may_download_python_3_13():
     ``/etc/uv/uv.toml``, and Fedora 44's system Python is 3.14, so without
     this the server stops at "No interpreter found for Python ==3.13.*"
     (found in a clean Fedora 44 container). An environment variable outranks
-    uv's configuration files, and the entry point passes its environment on to
-    ``uv tool run``. It is the plugin's only value, and no secret."""
+    uv's configuration files. It is the plugin's only value, and no secret."""
 
     assert _SERVERS["mars"]["env"] == {"UV_PYTHON_DOWNLOADS": "automatic"}
 

@@ -222,9 +222,13 @@ Built at the maintainer's direction for the ChatGPT desktop app on Fedora 44.
 OpenAI's Linux preview ships `.rpm` packages for Fedora 43 and 44, x86_64 and
 aarch64. The plugin is `installers/codex/` (README there), with
 `tests/test_codex_plugin.py`. Like the extension since #109, it pins no MARS
-release: its entry point is the extension's `src/server.py`, which runs the
-newest release through `uv tool run`. The measurements below were taken while
-it still pinned one (`0.1.0rc4`, then `0.1.0rc5`). It is the Codex counterpart of
+release: `.mcp.json` runs `uv tool run --from "skynet-mars[mcp]@latest"
+mars-mcp`, from uv's cache. It does not reuse the extension's `src/server.py`
+launcher, because that runs from the plugin's directory, and Codex replaces
+the directory while a server starts. A clean Fedora 44 container failed with
+"Current directory does not exist" a few seconds in. The measurements below
+were taken while the plugin still pinned a release (`0.1.0rc4`, then
+`0.1.0rc5`). It is the Codex counterpart of
 the `.mcpb`: Codex's plugin format bundles the MCP server's launch
 configuration with skills, and `.agents/plugins/marketplace.json` makes the
 repository a marketplace.

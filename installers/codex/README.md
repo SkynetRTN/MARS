@@ -7,23 +7,25 @@ server's launch configuration and the `mars-tools` skill. It carries no Python,
 no dependencies and no MARS version. Codex starts the server with
 
 ```bash
-uv run --locked src/server.py        # in the installed plugin's directory
+uv tool run --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp
 ```
 
-`src/server.py` is the Claude Desktop extension's entry point, byte for byte.
-It runs the **newest `skynet-mars` release** on PyPI through `uv tool run`. It
-first asks PyPI for the newest release and installs it into uv's cache if it
-is not there yet: Python 3.13 and about 640 MB of dependencies on the first
-start. Then it serves the newest release in the cache. Without a network, the
-last release fetched still starts. So the plugin picks up a new MARS release
-the next time it starts, with no change here.
+which runs the **newest `skynet-mars` release** on PyPI, like the Claude
+Desktop extension. Each start asks PyPI for the newest release and installs it
+into uv's cache if it is not there yet: Python 3.13 and about 640 MB of
+dependencies the first time, a quick check after that. So the plugin picks up
+a new MARS release the next time it starts, with no change here. Starting
+needs that one PyPI lookup; with no network the server does not start.
+
+The server runs from uv's cache, never from the plugin's directory. Codex
+replaces that directory while a server starts, and an earlier design that ran
+from it (`uv run` with a `.venv` and an entry point there) failed in a clean
+Fedora 44 container with "Current directory does not exist".
 
 | File | What |
 | --- | --- |
 | `.codex-plugin/plugin.json` | Name, the plugin's own version, what the Plugins Directory shows, and where the skill and server are |
-| `.mcp.json` | The `uv run` command, the timeouts, the approval mode, and the variables passed to the server |
-| `pyproject.toml`, `uv.lock` | The entry point's environment, deliberately empty |
-| `src/server.py` | The entry point, a copy of `installers/claude-desktop/src/server.py` (a test keeps them identical) |
+| `.mcp.json` | The `uv tool run` command, the timeouts, the approval mode, and the variables passed to the server |
 | `skills/mars-tools/` | The skill, rendered by `python -m tools.skill`. Do not edit it here |
 | `assets/icon.png` | The 512 px mark, exported by `docs/assets/make_brand.py` |
 
@@ -100,8 +102,8 @@ started with them:
 | `CASDA_OPAL_USERNAME` | CASDA downloads. The password is read from the system keyring, which needs `DBUS_SESSION_BUS_ADDRESS` (or `XDG_RUNTIME_DIR`); both are forwarded |
 | `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' index and catalogue data ([installing](../../docs/installing.md)) |
 
-The entry point removes `ADS_DEV_KEY`, `MARS_HOME` and `MARS_MCP_TOOLS` when
-they arrive empty, so an empty `ADS_DEV_KEY` does not hide `~/.ads/dev_key`.
+Codex forwards a variable as the app has it, an empty value included. An
+`ADS_DEV_KEY` exported empty therefore hides `~/.ads/dev_key`.
 
 A desktop app does not see your shell's variables. To restrict tools without
 one, add a policy to `~/.codex/config.toml`:
@@ -158,14 +160,14 @@ login. To measure a true first launch, also put
 machine.
 
 `tests/test_codex_plugin.py` checks the manifest, the launch settings, that
-the plugin names no MARS version, that its entry point is the extension's,
-and that the skill copy is current.
+the plugin names no MARS version and ships nothing the server runs from, and
+that the skill copy is current.
 
 ## After a release
 
 Nothing. The plugin names no MARS version, and picks up a release the next
-time it starts. Change `version` in `.codex-plugin/plugin.json` (and
-`pyproject.toml`) only when the plugin itself changes, so that Codex offers
+time it starts. Change `version` in `.codex-plugin/plugin.json` only when the plugin
+itself changes, so that Codex offers
 the update.
 
 ## Platforms
