@@ -31,9 +31,9 @@ end-to-end validation.
 Build inputs for installers that are not the wheel.
 
 - `claude-desktop/` is the Claude Desktop extension: a `.mcpb` manifest of the
-  `uv` type, its locked environment, and a two-line entry point that runs
-  `mars-mcp`. It pins a release already on PyPI. Its README has the build,
-  test and after-release steps.
+  `uv` type, an empty environment, and an entry point that runs the newest
+  `mars-mcp` on PyPI through `uv tool run`. It names no MARS version, so a
+  release needs no change here. Its README has the build and test steps.
 
 ## `skills/`
 

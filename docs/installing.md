@@ -51,7 +51,7 @@ toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The 
 
 Every release is a pre-release for now, so the commands above install the
 newest one. To install a specific release, use
-`"skynet-mars[mcp]==0.1.0rc4"`.
+`"skynet-mars[mcp]==<version>"`.
 
 **To verify the download**, fetch the wheel and `SHA256SUMS` from the
 [GitHub release](https://github.com/SkynetRTN/MARS/releases), and run
@@ -79,7 +79,7 @@ claude mcp add --scope user mars -- /path/to/mars-mcp
 
 **Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
 installs with a double-click and needs no Python or config file, on an Apple
-Silicon Mac or x64 Windows. Releases do
+Silicon Mac or x64 Windows. It always runs the newest MARS release. Releases do
 not carry the extension yet; see
 [`installers/claude-desktop/`](../installers/claude-desktop/README.md) to
 build it. To register it by hand instead, go to Settings → Developer → Edit
