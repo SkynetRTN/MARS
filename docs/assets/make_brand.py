@@ -11,6 +11,8 @@ maintainer's masters. Everything else is exported from them, never redrawn:
 - ``docs/assets/mars-mark.png`` -- the mark at 512x512, for documentation.
 - ``tools/mcp/icons/mars-{64,128}.png`` -- the MCP server's icons, shipped in
   the wheel (``docs/archive/mars-rebrand.md`` §4).
+- ``installers/claude-desktop/icon.png`` -- the Claude Desktop extension's icon,
+  at the 512x512 the extension format recommends.
 
 Re-run after changing a master:
 
@@ -85,7 +87,9 @@ def square(side: int) -> Image.Image:
 
 def main() -> None:
     banner().save(ROOT / "docs/assets/mars-banner.png", optimize=True)
-    square(512).save(ROOT / "docs/assets/mars-mark.png", optimize=True)
+    mark = square(512)
+    mark.save(ROOT / "docs/assets/mars-mark.png", optimize=True)
+    mark.save(ROOT / "installers/claude-desktop/icon.png", optimize=True)
     for side in (64, 128):
         square(side).save(ROOT / f"tools/mcp/icons/mars-{side}.png", optimize=True)
 

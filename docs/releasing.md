@@ -133,6 +133,10 @@ the `pypi` environment. Approve it from the run's page once the TestPyPI job
 is green.
 The first release published this way was `0.1.0rc4`, on 2026-09-28.
 
+After the release is on PyPI, move the Claude Desktop extension to it
+(`installers/claude-desktop/README.md`, "After each release"). It pins a
+published release, so it cannot be bumped in the same change as `version`.
+
 ## The data release
 
 The two optional bundles are too large for a wheel. They are assets of one
