@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -114,6 +115,36 @@ def test_fit_uses_configured_local_grid_without_socket_access(tmp_path, monkeypa
     assert (tmp_path / "fit.png").is_file()
 
 
+@pytest.mark.parametrize(
+    ("log_age", "half_width", "expected"),
+    [
+        (8.17, 0.4, [round(7.80 + 0.05 * i, 2) for i in range(16)]),  # M35: 7.77..8.57 on the grid
+        (8.60, 0.1, [8.50, 8.55, 8.60, 8.65, 8.70]),
+        (8.17, 0.01, [8.15]),  # no grid age inside: the nearest one
+    ],
+)
+def test_the_age_window_names_only_grid_ages(tmp_path, monkeypatch, log_age, half_width, expected):
+    """The grid holds ages at multiples of 0.05 and a literature age is
+    any two-decimal value. Stepping from the literature age asked for
+    Girardi_7.77, which no grid has, so every such cluster failed."""
+    requested = {}
+
+    def load_tracks(*, ages, metallicity):
+        requested["ages"] = ages
+        raise local_grid.GridUnavailableError("stop after the request")
+
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", tmp_path)
+    monkeypatch.setattr(isochrones.local_grid, "load_tracks", load_tracks)
+    members = pd.DataFrame({"BP": [], "RP": [], "G": [], "BP_err": [], "RP_err": [], "G_err": []})
+    with pytest.raises(local_grid.GridUnavailableError):
+        isochrones.fit_and_compare(
+            members, {"log_age": log_age, "distance_kpc": 1.0, "ebv": 0.0}, "local",
+            members_csv_path=tmp_path / "members.csv", out_png=tmp_path / "fit.png",
+            logage_half_width=half_width,
+        )
+    assert requested["ages"] == expected
+
+
 def test_fit_rejects_nonfinite_age_width_before_expanding_tracks(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ISOCHRONE_DIR", tmp_path)
     members = pd.DataFrame({"BP": [], "RP": [], "G": [], "BP_err": [], "RP_err": [], "G_err": []})
@@ -170,3 +201,30 @@ def test_hr_tool_reads_operator_grid_from_config(tmp_path, monkeypatch):
 
     assert result.status == "ok"
     assert result.preview[0]["isochrone_path"] == str(tmp_path)
+
+
+_M67 = Path(__file__).parent / "fixtures" / "hrdiagram_m67"
+
+
+@pytest.mark.slow
+def test_m67_fits_near_its_literature_age(tmp_path, monkeypatch):
+    """M67 against Cantat-Gaudin & Anders 2020 (log age 9.63, 0.889 kpc,
+    E(B-V) 0.023), offline: 548 Gaia DR3 members recorded from a live
+    run_full_hr_pipeline_from_catalog on 2026-10-02, and the 16 grid tracks
+    its +-0.4 dex window reads (float32 copies from the isochrones bundle).
+
+    The nearest-vertex, uncapped cost fitted log age 9.25 (1.8 Gyr), 0.815 kpc
+    and E(B-V) 0.092: the young edge of the window. Blue stragglers set that
+    fit; see SYSTEMATIC_FLOOR_MAG and CHI2_CAP in hrfit."""
+    members = pd.read_csv(_M67 / "members.csv")
+    literature = {"log_age": 9.63, "distance_kpc": 0.889, "ebv": 0.022580645257426847, "age_myr": 4265.8}
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", _M67)
+    report = isochrones.fit_and_compare(
+        members, literature, "M67",
+        members_csv_path=tmp_path / "members.csv", out_png=tmp_path / "fit.png",
+        logage_half_width=0.4, max_error=0.2,
+    )
+    fitted = report["fitted"]
+    assert abs(fitted["log_age"] - 9.63) <= 0.1
+    assert abs(fitted["distance_kpc"] - 0.889) / 0.889 < 0.06
+    assert abs(fitted["ebv"] - 0.023) < 0.03

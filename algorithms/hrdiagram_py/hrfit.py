@@ -35,6 +35,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from scipy.spatial import cKDTree
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +162,10 @@ def _errors(df, blue, red, lum, err_suffix):
     return s_colour, s_mag
 
 
+#: Magnitudes fainter than this in an isochrone are sentinel rows, not stars.
+SENTINEL_ABS_MAG = 25.0
+
+
 # ---------------------------------------------------------------------------
 # 3. Isochrone loading (PARSEC / CMD style) - native order is PRESERVED
 # ---------------------------------------------------------------------------
@@ -188,7 +193,8 @@ def select_isochrone(iso, logage, mh=None, age_col="logAge", mh_col="MH"):
     return sub[sub[age_col] == ages[np.argmin(np.abs(ages - logage))]].reset_index(drop=True)
 
 
-def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None, label_col="label", max_label=7):
+def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None, label_col="label", max_label=7,
+                  max_abs_mag=SENTINEL_ABS_MAG):
     """
     Colour and absolute magnitude arrays for a selected isochrone, kept in the
     file's NATIVE order (ascending initial mass) so the plotted polyline traces
@@ -207,9 +213,17 @@ def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None, label_col="label"
     `_weighted_cost` a field of spurious near-main-sequence attractor points
     that bias the distance/E(B-V) solve. Rows with `label > max_label` are
     dropped before anything else runs; pass `max_label=None` to disable.
+
+    The local Girardi grid has no `label` column. Most of its tracks end in a
+    sentinel row with every band near 30 mag, which no star is: plotted, it
+    drew a line from the track's end to M ~ 30. Rows with any of the three
+    bands fainter than `max_abs_mag` are dropped; pass `None` to keep them.
     """
     if max_label is not None and label_col in iso.columns:
         iso = iso[iso[label_col] <= max_label].reset_index(drop=True)
+    if max_abs_mag is not None:
+        bands = iso[[blue_col, red_col, lum_col]].to_numpy(dtype=float)
+        iso = iso[~(np.abs(bands) > max_abs_mag).any(axis=1)].reset_index(drop=True)
     colour = iso[blue_col].values - iso[red_col].values
     mag = iso[lum_col].values.astype(float)
     if iskip is not None and 0 < iskip < len(mag):
@@ -222,28 +236,96 @@ def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None, label_col="label"
 # ---------------------------------------------------------------------------
 # 4. Fitting (an ADDITION - Astromancer is a manual by-eye tool, no optimizer)
 # ---------------------------------------------------------------------------
-def _weighted_cost(colour, mag, s_colour, s_mag, iso_colour, iso_mag):
-    ok = np.isfinite(iso_colour) & np.isfinite(iso_mag)
-    ic, im = iso_colour[ok], iso_mag[ok]
-    dc = (colour[:, None] - ic[None, :]) / s_colour[:, None]
-    dm = (mag[:, None] - im[None, :]) / s_mag[:, None]
-    return float((dc**2 + dm**2).min(axis=1).sum())
+#: Added in quadrature to each star's colour and magnitude errors. Gaia DR3
+#: quotes ~3 mmag for a bright star, far below how well any model isochrone
+#: matches a real cluster; without a floor the brightest few stars set the
+#: whole fit.
+SYSTEMATIC_FLOOR_MAG = 0.02
+#: The most one star may add to the cost. Blue stragglers, binaries and field
+#: stars sit far from any single-star isochrone; uncapped, a dozen of them
+#: (32,000 each in M67) outweighed the whole main sequence and pulled the fit
+#: to a younger, bluer turnoff with extra reddening to compensate.
+CHI2_CAP = 9.0
+#: A track's points are 0.08-0.27 mag apart on the main sequence. The cost is
+#: the distance to the track, so it is resampled at this step first; a star on
+#: the track between two points no longer reads as a miss.
+TRACK_STEP_MAG = 0.005
+#: Consecutive points further apart than this are a jump between evolutionary
+#: phases (the grid has no phase labels), and are not joined.
+TRACK_MAX_GAP_MAG = 0.5
+#: How many nearest resampled points are compared exactly for each star.
+_NEIGHBOURS = 16
+
+
+def _resample_track(colour, mag, step=TRACK_STEP_MAG, max_gap=TRACK_MAX_GAP_MAG):
+    ok = np.isfinite(colour) & np.isfinite(mag)
+    colour, mag = colour[ok], mag[ok]
+    xs, ys = [colour[:1]], [mag[:1]]
+    for k in range(len(colour) - 1):
+        length = np.hypot(colour[k + 1] - colour[k], mag[k + 1] - mag[k])
+        if length == 0 or length > max_gap:
+            xs.append(colour[k + 1:k + 2]); ys.append(mag[k + 1:k + 2])
+            continue
+        t = np.arange(1, int(np.ceil(length / step)) + 1) / np.ceil(length / step)
+        xs.append(colour[k] + t * (colour[k + 1] - colour[k]))
+        ys.append(mag[k] + t * (mag[k + 1] - mag[k]))
+    return np.concatenate(xs), np.concatenate(ys)
+
+
+class _TrackCost:
+    """Capped chi-square of each star's distance to a resampled isochrone.
+
+    The nearest point is found with a KD-tree in a frame scaled by the median
+    errors, then the ``_NEIGHBOURS`` candidates are compared with each star's
+    own errors. With the floor the errors are close to uniform, so the scaled
+    nearest points contain the true one."""
+
+    def __init__(self, s_colour, s_mag, iso_colour, iso_mag,
+                 floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP):
+        self.ic, self.im = _resample_track(np.asarray(iso_colour, float), np.asarray(iso_mag, float))
+        self.sc = np.sqrt(s_colour**2 + floor**2)
+        self.sm = np.sqrt(s_mag**2 + floor**2)
+        self.scale = (float(np.median(self.sc)), float(np.median(self.sm)))
+        self.tree = cKDTree(np.c_[self.ic / self.scale[0], self.im / self.scale[1]])
+        self.k = min(_NEIGHBOURS, len(self.ic))
+        self.cap = cap
+
+    def __call__(self, colour, mag):
+        _, idx = self.tree.query(np.c_[colour / self.scale[0], mag / self.scale[1]], k=self.k)
+        idx = np.asarray(idx).reshape(len(colour), -1)
+        dc = (colour[:, None] - self.ic[idx]) / self.sc[:, None]
+        dm = (mag[:, None] - self.im[idx]) / self.sm[:, None]
+        chi2 = (dc**2 + dm**2).min(axis=1)
+        if self.cap is not None:
+            chi2 = np.minimum(chi2, self.cap)
+        return float(chi2.sum())
 
 
 def fit_distance_reddening(df, blue, red, lum, iso_colour, iso_mag,
                            x0=(1.0, 0.1), err_suffix="_err",
-                           d_bounds=(0.05, 100.0), ebv_bounds=(0.0, 3.0), rv=3.1):
-    """Optimize distance (kpc) and E(B-V) so data best overlays a fixed isochrone."""
+                           d_bounds=(0.05, 100.0), ebv_bounds=(0.0, 3.0), rv=3.1,
+                           floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP):
+    """Optimize distance (kpc) and E(B-V) so data best overlays a fixed isochrone.
+
+    ``x0`` centres a coarse grid (distance x0.6-x1.5, E(B-V) from 0 to the
+    larger of 0.8 and twice x0's), and Nelder-Mead polishes its best point.
+    Started at ``x0`` alone, it settled in a second minimum at many ages, which
+    made the ranking of ages close to random."""
     s_colour, s_mag = _errors(df, blue, red, lum, err_suffix)
+    track = _TrackCost(s_colour, s_mag, iso_colour, iso_mag, floor=floor, cap=cap)
 
     def cost(p):
         d, ebv = p
         if not (d_bounds[0] <= d <= d_bounds[1]) or not (ebv_bounds[0] <= ebv <= ebv_bounds[1]):
             return 1e12
         c, m = to_absolute_cmd(df, blue, red, lum, d, ebv, rv)
-        return _weighted_cost(c, m, s_colour, s_mag, iso_colour, iso_mag)
+        return track(c, m)
 
-    res = minimize(cost, x0, method="Nelder-Mead",
+    distances = x0[0] * np.exp(np.linspace(np.log(0.6), np.log(1.5), 37))
+    reddenings = np.linspace(0.0, max(0.8, 2.0 * x0[1]), 41)
+    grid = np.array([[cost((d, e)) for e in reddenings] for d in distances])
+    i, j = np.unravel_index(grid.argmin(), grid.shape)
+    res = minimize(cost, (distances[i], reddenings[j]), method="Nelder-Mead",
                    options={"xatol": 1e-4, "fatol": 1e-4, "maxiter": 2000})
     d, ebv = res.x
     return {"distance_kpc": float(d), "ebv": float(ebv), "cost": float(res.fun),
