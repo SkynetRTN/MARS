@@ -34,6 +34,12 @@ Build inputs for installers that are not the wheel.
   `uv` type, its locked environment, and a two-line entry point that runs
   `mars-mcp`. It pins a release already on PyPI. Its README has the build,
   test and after-release steps.
+- `codex/` is the Codex plugin, for the ChatGPT desktop app's Codex threads,
+  the Codex CLI and the IDE extension: a `.codex-plugin/plugin.json`, a
+  `.mcp.json` that runs `uv run --locked mars-mcp`, the same kind of locked
+  environment, and the skill as that release renders it. `.agents/plugins/marketplace.json`
+  at the root lists it, which makes the repository a Codex marketplace. Its
+  README has the Fedora install, test and after-release steps.
 
 ## `skills/`
 
