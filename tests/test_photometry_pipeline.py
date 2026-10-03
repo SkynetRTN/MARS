@@ -86,6 +86,23 @@ def test_aperture_size_must_be_positive(frame_image, a):
         run_photometry(np.array(data), header, sources, PhotometrySettings(a=a))
 
 
+def test_subpixel_fixed_circle_uses_the_independent_safe_kernel():
+    """ALG-01 containment must not reject small circular apertures."""
+    data = np.ones((5, 5), dtype=float)
+    results = run_photometry(
+        data,
+        {"EXPTIME": 1},
+        [SourceExtractionData(x=3.0, y=3.0)],
+        PhotometrySettings(mode="aperture", a=0.35, apcorr_tol=0),
+        background=np.zeros_like(data),
+        background_rms=np.ones_like(data),
+    )
+
+    assert len(results) == 1
+    assert results[0].aper_a == pytest.approx(0.35)
+    assert results[0].aper_b == pytest.approx(0.35)
+
+
 def test_unknown_mode_is_rejected(frame_image):
     data, header = frame_image("ngc3628")
     sources = [SourceExtractionData(x=100.0, y=100.0)]

@@ -428,10 +428,13 @@ Source: `/home/claude/skynet` (read-only). Current destination:
 `/home/claude/Kepler/algorithms/photometry/`, with shared Skylib code in
 `/home/claude/Kepler/algorithms/skylib_lite/`.
 
-This is a **verbatim extraction**, not a port. Every algorithm, constant, comment,
-and numeric quirk is preserved exactly as it was in Skynet. The only edits are
-import rewiring and the removal of hard dependencies on Skynet's ORM and
-plate-solving stage, each marked in-place with an `# EXTRACTED:` comment.
+This began as a **verbatim extraction**, not a port. Every algorithm, constant,
+comment, and numeric quirk was preserved exactly as it was in Skynet; the
+original edits were import rewiring and removal of hard dependencies on
+Skynet's ORM and plate-solving stage, each marked in-place with an
+`# EXTRACTED:` comment. The current tree has one later, explicitly documented
+MARS containment divergence: ALG-01 rejects unsafe sub-pixel ellipse geometry
+before the preserved overlap arithmetic runs.
 
 Current package note: the copied Skylib files described below now live under
 `algorithms/skylib_lite/`; historical paths in this record describe the original
@@ -447,7 +450,7 @@ algorithms/photometry/
 ├── photometry.py          edited: 3 seams
 ├── source_extraction.py   edited: 2 seams
 └── schemas.py             subset + base-model shim
-algorithms/skylib_lite/    vendored algorithmic core (all files byte-identical)
+algorithms/skylib_lite/    vendored core (documented MARS safety guards)
 ├── photometry/{__init__,aperture,aperture_numba,exposure}.py
 ├── extraction/{__init__,main,centroiding}.py
 ├── calibration/{__init__,background}.py
@@ -463,10 +466,13 @@ library) without retaining a nested pipeline package.
 
 #### 2. What was copied
 
-##### 2.1 Vendored skylib — byte-identical, zero edits
+##### 2.1 Vendored skylib — source-faithful with ALG-01 containment guards
 
 Verified with `diff -q` against the source after copying. All paths below are
-relative to `/home/claude/skynet/packages/py/skylib/skylib/`.
+relative to `/home/claude/skynet/packages/py/skylib/skylib/`. The table records
+that original extraction; `photometry/aperture.py` and
+`photometry/aperture_numba.py` now implement the single deliberate MARS safety
+divergence described immediately below it.
 
 | Source | Lines | Destination |
 |---|---:|---|
@@ -484,7 +490,20 @@ relative to `/home/claude/skynet/packages/py/skylib/skylib/`.
 | `util/fits.py` | 211 | `algorithms/skylib_lite/util/fits.py` |
 | `util/__init__.py` | 8 | `algorithms/skylib_lite/util/__init__.py` |
 
-**3,311 lines, unmodified.** Their intra-package relative imports
+The original **3,311 source lines were vendored unmodified**. Eleven files
+remain byte-identical. `photometry/aperture.py` validates source ellipses before
+the automatic optimal-radius search and after final fixed/automatic axes are
+derived. `photometry/aperture_numba.py` applies the same validation to every
+effective ellipse and elliptical-annulus axis before parallel dispatch, with a
+second initializer check for direct internal kernel calls. Elliptical semi-axes
+must be finite and at least 0.5 pixels before any exact-overlap kernel runs.
+Fixed circles retain the independent circle-overlap path and are not subject to
+the floor. The upstream arithmetic in `aperture.py`, `aperture_numba.py`, and
+`util/overlap.py` is otherwise unchanged; the fatal low-level recursion remains
+pinned in subprocess tests while maintained fixed, auto, annulus, optimizer,
+HR-FITS, and radio-FITS paths now fail cleanly.
+
+Their intra-package relative imports
 (`from ..calibration.background import ...`, `from ..util.stats import ...`,
 `from .aperture_numba import ...`) resolve unchanged inside the vendored tree —
 that is why the skylib directory layout was preserved rather than flattened.
@@ -785,7 +804,10 @@ not on the photometry call path if that import proves inconvenient.
 
 #### 10. Verification performed
 
-- `diff -q` against source for all 13 vendored skylib files — byte-identical.
+- At extraction time, `diff -q` against source for all 13 vendored skylib files
+  was byte-identical. Eleven remain so; the current `photometry/aperture.py`
+  and `photometry/aperture_numba.py` differences are the documented ALG-01
+  containment guards above.
 - `python3 -m compileall` over the whole tree — clean.
 - Import-graph audit: no `skynet_db`, `skynet_sdk`, or absolute `skylib` imports
   remain outside `# EXTRACTED:` comments.
@@ -794,10 +816,9 @@ not on the photometry call path if that import proves inconvenient.
   `zero_point_mag`, annulus derivation, NaN→None dump, alias generation).
 
 **Not** verified: no end-to-end numeric run was possible in this environment —
-`scipy`, `numba`, `sep`, and `photutils` are not installed here. The vendored
-skylib files are byte-identical to their source, so no numeric drift can have
-been introduced there; the untested surface is limited to the import rewiring in
-the top-level photometry modules.
+`scipy`, `numba`, `sep`, and `photutils` were not installed in the original
+extraction environment. Later repository tests cover the deliberate ALG-01
+guard; this paragraph records only the initial extraction-time limitation.
 ## Field Calibration
 
 _Former source: `algorithms/fieldcal/EXTRACTION.md`._
