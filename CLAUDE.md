@@ -71,12 +71,16 @@ python3 -m compileall tools algorithms   # local package syntax smoke
 git diff --check                         # whitespace check
 ```
 
-CI (`.github/workflows/ci.yml`) runs on **Python 3.13** -- the newest Python
-every dependency ships wheels for (`sep` has none for 3.14; see
-`docs/installing.md`), and it is also `pyproject.toml`'s floor: MARS
-supports Python 3.13 and tests nothing else. Resolve paths for containment
+CI (`.github/workflows/ci.yml`) runs on **Python 3.12 and 3.13**, the
+supported versions (`pyproject.toml`'s floor is 3.12; 3.13 is the newest every
+dependency ships wheels for -- `sep` has none for 3.14; see
+`docs/installing.md`). Each runs twice: against `uv.lock`, and against the
+newest releases `pyproject.toml`'s bounds allow, which is what `uv tool
+install` and the Claude Desktop extension resolve. A weekly scheduled run
+catches an upstream release that breaks MARS, and Dependabot
+(`.github/dependabot.yml`) moves `uv.lock` and the actions weekly. Resolve paths for containment
 checks through `tools.config.within`/`safe_resolve`. It gates three jobs: `compileall` over
-`tools algorithms tests`, `uv run --locked --extra mcp pytest` (after the MCP
+`tools algorithms tests` on 3.12, `uv run --locked --extra mcp pytest` (after the MCP
 tests alone without the extra), and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`

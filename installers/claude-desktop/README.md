@@ -1,22 +1,30 @@
 # The Claude Desktop extension
 
 A one-click install of MARS for Claude Desktop: a `.mcpb` desktop extension
-of the MCPB manifest 0.4 `uv` type. The extension carries no Python and no
-dependencies. On first launch, Claude Desktop runs
+of the MCPB manifest 0.4 `uv` type. It **always runs the newest MARS release
+on PyPI** and names no version, so it never needs rebuilding to follow a
+release. Claude Desktop runs
 
 ```bash
 uv run --directory <unpacked extension> --locked src/server.py
 ```
 
-which downloads Python 3.13 and installs exactly what `uv.lock` pins: the
-published `skynet-mars[mcp]` release named in `pyproject.toml`, and its
-dependencies (about 640 MB). Later launches reuse that environment.
+`src/server.py` has no dependencies. It runs `mars-mcp` with `uv tool run`
+(what `uvx` is), in two steps:
+
+1. `--from "skynet-mars[mcp]@latest"` asks PyPI for the newest release and
+   installs it into uv's cache if it is not there yet. The first launch also
+   downloads Python 3.13 and the dependencies (about 700 MB); later launches
+   only check, in well under a second.
+2. `--offline --from "skynet-mars[mcp]"` starts the newest release in the
+   cache. Without a network, step 1 fails and the last release fetched still
+   starts.
 
 | File | What |
 | --- | --- |
-| `manifest.json` | Name, version, the `uv run` command, and three optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, and the MARS home |
-| `pyproject.toml`, `uv.lock` | The environment: one exact `skynet-mars[mcp]` pin, locked for every platform |
-| `src/server.py` | Removes settings the user left empty, then runs `mars-mcp` |
+| `manifest.json` | Name, the extension's own version, the `uv run` command, and three optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, and the MARS home |
+| `pyproject.toml`, `uv.lock` | The entry point's environment, empty on purpose: MARS comes from `uv tool run` |
+| `src/server.py` | Removes settings the user left empty, then runs the newest `mars-mcp` |
 | `icon.png` | The 512 px mark, exported by `docs/assets/make_brand.py` |
 
 This README is not packed (`.mcpbignore`).
@@ -47,11 +55,13 @@ The extension does not fetch the optional data bundles. With
 [uv](https://docs.astral.sh/uv/) installed, run:
 
 ```bash
-uvx --python 3.13 --from "skynet-mars[mcp]==<version>" mars-mcp fetch-data optical
+uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp fetch-data optical
 ```
 
-If you set the extension's MARS home, run this with the same directory in
-`MARS_HOME`. Otherwise the bundle lands where the server does not look.
+`@latest` is the release the extension runs, so the bundle matches what it
+expects. If you set the extension's MARS home, run this with the same
+directory in `MARS_HOME`. Otherwise the bundle lands where the server does
+not look.
 
 ## Test without Claude Desktop
 
@@ -67,33 +77,22 @@ UV_CACHE_DIR="$T/cache" UV_PYTHON_INSTALL_DIR="$T/python" UV_PYTHON_PREFERENCE=o
 rm -rf "$T"
 ```
 
-This proves the environment: Python, the locked dependencies and the server,
-through a blind pulsar detection. It does **not** exercise `src/server.py`'s
-handling of the settings, because `self-test` launches its own server process.
-That handling is covered by `tests/test_claude_desktop_extension.py`.
+This proves the whole launch: the newest release from PyPI, Python and its
+dependencies, and the server, through a blind pulsar detection. It does
+**not** exercise `src/server.py`'s handling of the settings, because
+`self-test` launches its own server process. That handling, and the two
+commands, are covered by `tests/test_claude_desktop_extension.py`.
 
-## After each release
+## After a release
 
-The pin names a release that is already **on PyPI**, so the extension follows a
-release rather than leading it. Once `v<version>` is published:
-
-1. Set the new version in three places: `version` in `pyproject.toml` and
-   the `skynet-mars[mcp]==` pin in PEP 440 form (`0.1.0rc5`), and `version`
-   in `manifest.json` in semver form, as MCPB requires (`0.1.0-rc.5`).
-2. Run `python installers/claude-desktop/sync_lock.py` from the repository
-   root, not a bare `uv lock`. Resolved on its own, the extension's lock picks
-   newer releases than the root `uv.lock` that CI's parity suite runs against;
-   the script locks every package the two share at the root's version.
-3. Build and test as above.
-
-`tests/test_claude_desktop_extension.py` checks that the four version fields
-agree, that the pin is never ahead of the repository's version, and that the
-two locks agree.
+Nothing. The extension names no MARS version, and picks up a release the next
+time it starts. Change `version` in `manifest.json` (and `pyproject.toml`)
+only when the extension itself changes.
 
 ## Platforms
 
-The manifest says macOS and Windows, but MCPB cannot name a CPU. The locked
-`numba` and `llvmlite` publish macOS wheels for **Apple Silicon only**, and
+The manifest says macOS and Windows, but MCPB cannot name a CPU. `numba` and
+`llvmlite` publish macOS wheels for **Apple Silicon only**, and
 `sep`, `photutils` and others have no Windows-on-ARM wheels. On an Intel Mac
 or an ARM Windows machine, the first launch would have to compile them and
 fails. Supported: Apple Silicon Macs and x64 Windows.

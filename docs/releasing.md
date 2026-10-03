@@ -39,8 +39,8 @@ with the build artifact, installed and self-tested.
      variable-star sample, Afterglow fixtures, skill and bundle manifest;
    - classifies the version with `packaging.version`, so every PEP 440
      pre-release spelling publishes as a pre-release.
-2. **verify** runs on a clean runner **with no checkout**, on Python 3.13 --
-   MARS's version, and the newest Python every dependency ships wheels for. It
+2. **verify** runs on clean runners **with no checkout**, on Python 3.12 and
+   3.13, the supported versions. On each it
    installs the wheel with `[mcp]` and runs
    `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
@@ -133,9 +133,9 @@ the `pypi` environment. Approve it from the run's page once the TestPyPI job
 is green.
 The first release published this way was `0.1.0rc4`, on 2026-09-28.
 
-After the release is on PyPI, move the Claude Desktop extension to it
-(`installers/claude-desktop/README.md`, "After each release"). It pins a
-published release, so it cannot be bumped in the same change as `version`.
+The Claude Desktop extension needs nothing: it names no MARS version and
+runs the newest release on PyPI the next time it starts
+(`installers/claude-desktop/README.md`).
 
 ## The data release
 
@@ -181,7 +181,7 @@ outside the repository, so run it by hand.
 ## Testing a release
 
 On a machine with no checkout (and a C compiler unless it is Python 3.13 on
-x86_64 Linux, macOS or Windows; see `installing.md`):
+x86_64 Linux, Apple Silicon macOS or x64 Windows; see `installing.md`):
 
 ```bash
 python3.13 -m venv mars-env

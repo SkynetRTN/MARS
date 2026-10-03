@@ -1,11 +1,10 @@
 """The Claude Desktop extension (``installers/claude-desktop/``) stays consistent.
 
-The extension is a manifest, a ``pyproject.toml`` and its ``uv.lock``, and a
-two-line entry point. Claude Desktop runs ``uv run --locked`` in it, which
-installs a **published** ``skynet-mars`` from PyPI. So the pin trails the
-repository's version between a bump and its release, and these tests require
-only that it never runs ahead, and that the extension's own four version
-fields agree. Nothing here builds the extension or opens a socket.
+The extension is a manifest, an empty ``pyproject.toml`` and its ``uv.lock``,
+and an entry point that runs the newest ``skynet-mars`` release from PyPI
+through ``uv tool run``. It names no MARS version anywhere, so it never needs
+a rebuild to follow a release; these tests keep it that way. Nothing here
+builds the extension, runs uv or opens a socket.
 """
 
 from __future__ import annotations
@@ -17,8 +16,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-from packaging.version import Version
-
 from tools.mcp.groups import TOOLS_ENV
 from tools.paths import MARS_HOME_ENV
 
@@ -27,6 +24,7 @@ _EXT = _ROOT / "installers" / "claude-desktop"
 _MANIFEST = json.loads((_EXT / "manifest.json").read_text(encoding="utf-8"))
 _EXT_PROJECT = tomllib.loads((_EXT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 _REPO_PROJECT = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+_VERSION = re.compile(r"\d+\.\d+(?:\.\d+)?(?:[-.]?(?:a|b|rc|alpha|beta|dev)\.?\d+)?")
 
 
 def _entry_point():
@@ -42,42 +40,24 @@ def _entry_point():
     return module
 
 
-def _pinned_version() -> str:
-    (requirement,) = _EXT_PROJECT["dependencies"]
-    match = re.fullmatch(r"skynet-mars\[mcp\]==(\S+)", requirement)
-    assert match, f"the extension must pin exactly one release: {requirement!r}"
-    return match.group(1)
-
-
-def test_the_extension_version_fields_agree():
-    """The manifest spells the version in semver, as MCPB requires
-    (``0.1.0-rc.4``); the Python side spells the same version in PEP 440
-    (``0.1.0rc4``). Both parse to one ``Version``."""
-
-    locked = tomllib.loads((_EXT / "uv.lock").read_text(encoding="utf-8"))
-    (mars,) = [p for p in locked["package"] if p["name"] == "skynet-mars"]
-    pinned = _pinned_version()
-    assert _EXT_PROJECT["version"] == pinned == mars["version"]
-    assert Version(_MANIFEST["version"]) == Version(pinned)
-
-
-def test_the_manifest_version_is_semver():
+def test_the_extension_has_one_version_of_its_own():
+    """The extension's version is the launcher's, not MARS's: semver, as
+    MCPB requires, and the same in the manifest and pyproject.toml."""
     semver = r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta|rc)\.(0|[1-9]\d*))?"
     assert re.fullmatch(semver, _MANIFEST["version"]), _MANIFEST["version"]
+    assert _EXT_PROJECT["version"] == _MANIFEST["version"]
 
 
-def test_the_pin_never_runs_ahead_of_the_repository():
-    assert Version(_pinned_version()) <= Version(_REPO_PROJECT["version"])
-
-
-def test_the_extension_runs_python_3_13_the_supported_target():
-    """uv installs Python from ``requires-python``. The manifest declares no
-    ``runtimes.python``: Desktop could check that against a system Python the
-    user does not have, when uv would have fetched one."""
+def test_the_extension_runs_python_3_13_a_supported_version():
+    """uv installs Python from ``requires-python``: 3.13, the newest supported
+    version. The manifest declares no ``runtimes.python``: Desktop could check
+    that against a system Python the user does not have, when uv would have
+    fetched one."""
 
     assert _EXT_PROJECT["requires-python"] == ">=3.13,<3.14"
+    assert _entry_point().PYTHON == "3.13"
     assert "runtimes" not in _MANIFEST.get("compatibility", {})
-    assert _REPO_PROJECT["requires-python"] == ">=3.13"
+    assert "Programming Language :: Python :: 3.13" in _REPO_PROJECT["classifiers"]
 
 
 def test_the_manifest_is_the_uv_type_run_locked_from_its_own_directory():
@@ -141,20 +121,52 @@ def test_the_extension_needs_no_model_key():
     assert not any(providers.search(name) for name in _MANIFEST["user_config"])
 
 
-def test_the_extension_locks_the_versions_ci_tests():
-    """Resolved on its own, the extension's lock picked newer numpy, numba and
-    llvmlite than the root lock the parity suite runs against. Every package
-    the two share must be at the root's version (``sync_lock.py``)."""
+def test_the_extension_names_no_mars_version():
+    """It runs the newest release, so nothing it ships may name one: no
+    dependency, no lock entry, no version in its commands or its README's."""
 
-    def versions(lock):
-        return {p["name"]: p["version"] for p in tomllib.loads(lock.read_text(encoding="utf-8"))["package"]}
+    assert _EXT_PROJECT["dependencies"] == []
+    locked = tomllib.loads((_EXT / "uv.lock").read_text(encoding="utf-8"))["package"]
+    assert [p["name"] for p in locked] == ["mars-claude-desktop"]
+    for path in ("src/server.py", "README.md", "manifest.json"):
+        text = (_EXT / path).read_text(encoding="utf-8")
+        assert "skynet-mars[mcp]==" not in text and "skynet-mars==" not in text, path
+    server = (_EXT / "src" / "server.py").read_text(encoding="utf-8")
+    assert not [v for v in _VERSION.findall(server) if v != "3.13"], "only the Python version may appear"
 
-    root, ours = versions(_ROOT / "uv.lock"), versions(_EXT / "uv.lock")
-    # skynet-mars itself is the published pin, which trails a version bump
-    # until the release reaches PyPI (test_the_pin_never_runs_ahead_...).
-    drift = {
-        name: (root[name], ours[name])
-        for name in ours
-        if name in root and name != "skynet-mars" and root[name] != ours[name]
-    }
-    assert drift == {}, f"run installers/claude-desktop/sync_lock.py: {drift}"
+
+def test_the_entry_point_refreshes_to_the_latest_release_then_serves_it():
+    """Step 1 asks PyPI for the newest release, with its output kept off
+    stdout (the MCP stream); step 2 starts the newest one in uv's cache."""
+
+    entry = _entry_point()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return type("Done", (), {"returncode": 0})()
+
+    environ = {"UV": "/opt/uv/bin/uv", "ADS_DEV_KEY": ""}
+    code = entry.main(["--tools", "databases"], environ=environ, run=run, execv=lambda path, argv: calls.append((argv, path)))
+    refresh, _ = calls[0]
+    assert refresh[:3] == ["/opt/uv/bin/uv", "tool", "run"]
+    assert "skynet-mars[mcp]@latest" in refresh and "--offline" not in refresh
+    assert calls[0][1]["stdout"] is sys.stderr
+    serve = calls[1][0]
+    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]" and "--offline" in serve
+    assert serve[-3:] == ["mars-mcp", "--tools", "databases"]
+    assert "ADS_DEV_KEY" not in environ
+    assert code in (0, None)
+
+
+def test_without_a_network_the_last_release_fetched_still_starts(capsys):
+    entry = _entry_point()
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return type("Done", (), {"returncode": 2 if "skynet-mars[mcp]@latest" in command else 0})()
+
+    entry.main([], environ={"UV": "uv"}, run=run, execv=lambda path, argv: commands.append(argv))
+    assert "--offline" in commands[-1]
+    assert "starting the last one fetched" in capsys.readouterr().err
