@@ -92,8 +92,19 @@ Config and add:
 
 Then quit and reopen the app.
 
-**Codex CLI and the ChatGPT desktop app** share `~/.codex/config.toml`
-(in the app: Settings → MCP servers → Add server):
+**Codex CLI and the ChatGPT desktop app** share `~/.codex`. The simplest
+route is the plugin, which needs no Python and no path, only `uv` and `git`
+(on Fedora: `sudo dnf install uv git`, plus `gcc` on aarch64):
+
+```bash
+codex plugin marketplace add SkynetRTN/MARS --sparse .agents/plugins --sparse installers/codex
+codex plugin add mars@mars
+```
+
+It also brings the skill. See [`installers/codex/`](../installers/codex/README.md),
+including the ChatGPT desktop app on Fedora 44. To register the server by hand
+instead, edit `~/.codex/config.toml` (in the app: Settings → MCP servers → Add
+server):
 
 ```toml
 [mcp_servers.mars]
@@ -150,8 +161,10 @@ output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
 
 ## Optional data
 
-With the Claude Desktop extension there is no `mars-mcp` on your `PATH`; use
-the command in its [README](../installers/claude-desktop/README.md#data-bundles)
+With the Claude Desktop extension or the Codex plugin there is no `mars-mcp`
+on your `PATH`; use the command in the extension's
+[README](../installers/claude-desktop/README.md#data-bundles) or the plugin's
+[README](../installers/codex/README.md#data-bundles-and-the-self-test)
 instead.
 
 ```bash

@@ -15,6 +15,10 @@ Every other surface is rendered from it:
 - ``skills/mars-tools/`` in the repository, for a coding agent working in a
   checkout and for a human reading it -- ``python -m tools.skill`` writes it,
   ``python -m tools.skill --check`` reports drift, and a test runs the check;
+- ``installers/codex/skills/mars-tools/``, the same render, carried by the
+  Codex plugin. Codex copies a plugin without its symlinks, so this is a
+  second rendered copy rather than a link, written and checked with the first.
+  The plugin runs the newest release, which is cut from this source;
 - the MCP server (phase C5): :func:`served_brief` is its instructions and
   :func:`served_documents` its resources.
 
@@ -40,6 +44,8 @@ from pathlib import Path
 
 __all__ = [
     "BRIEF_LIMIT",
+    "CODEX_PLUGIN_COPY",
+    "RENDERED_COPIES",
     "REPOSITORY_COPY",
     "SERVED_URI_PREFIX",
     "SKILL_DESCRIPTION",
@@ -71,6 +77,14 @@ SOURCE_DIR = Path(__file__).resolve().parent / "source"
 
 #: The rendered copy in a checkout. It does not exist in an installed MARS.
 REPOSITORY_COPY = Path(__file__).resolve().parents[2] / "skills" / SKILL_NAME
+
+#: The Codex plugin's copy, identical to the repository copy. Checkout only.
+CODEX_PLUGIN_COPY = (
+    Path(__file__).resolve().parents[2] / "installers" / "codex" / "skills" / SKILL_NAME
+)
+
+#: Every rendered copy ``python -m tools.skill`` writes and checks.
+RENDERED_COPIES = (REPOSITORY_COPY, CODEX_PLUGIN_COPY)
 
 _ENTRY = "SKILL.md"
 _BRIEF = "BRIEF.md"
