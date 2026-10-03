@@ -150,5 +150,11 @@ def test_the_extension_locks_the_versions_ci_tests():
         return {p["name"]: p["version"] for p in tomllib.loads(lock.read_text(encoding="utf-8"))["package"]}
 
     root, ours = versions(_ROOT / "uv.lock"), versions(_EXT / "uv.lock")
-    drift = {name: (root[name], ours[name]) for name in ours if name in root and root[name] != ours[name]}
+    # skynet-mars itself is the published pin, which trails a version bump
+    # until the release reaches PyPI (test_the_pin_never_runs_ahead_...).
+    drift = {
+        name: (root[name], ours[name])
+        for name in ours
+        if name in root and name != "skynet-mars" and root[name] != ours[name]
+    }
     assert drift == {}, f"run installers/claude-desktop/sync_lock.py: {drift}"
