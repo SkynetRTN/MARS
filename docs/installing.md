@@ -93,7 +93,7 @@ Then quit and reopen the app.
 
 **Codex CLI and the ChatGPT desktop app** share `~/.codex`. The simplest
 route is the plugin, which needs no Python and no path, only `uv` and `git`
-(on Fedora: `sudo dnf install uv git`):
+(on Fedora: `sudo dnf install uv git`, plus `gcc` on aarch64):
 
 ```bash
 codex plugin marketplace add SkynetRTN/MARS --sparse .agents/plugins --sparse installers/codex
