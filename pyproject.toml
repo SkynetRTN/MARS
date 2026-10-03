@@ -33,7 +33,7 @@ classifiers = [
 # dependency, bounded to the tested major (~=) so an install can share an
 # environment. Exact versions live in uv.lock, which CI syncs with --locked.
 dependencies = [
-    "anthropic>=0.121,<2.0",
+    "anthropic ~= 1.8",
     "anyio ~= 4.14",
     "astropy ~= 8.0",
     "astroquery ~= 0.4.11",

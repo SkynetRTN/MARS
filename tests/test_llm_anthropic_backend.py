@@ -602,3 +602,82 @@ def test_an_unsigned_thinking_block_is_dropped_rather_than_sent(monkeypatch):
 
     rendered = messages.requests[0]["messages"]
     assert [block["type"] for block in rendered[1]["content"]] == ["text"]
+
+
+# --- the real SDK, over a recorded HTTP stream ----------------------------------
+
+
+def _sse(events) -> bytes:
+    import json
+
+    return "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events).encode()
+
+
+_TOOL_CALL_STREAM = [
+    ("message_start", {"type": "message_start", "message": {
+        "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-4-5-20251001",
+        "content": [], "stop_reason": None, "stop_sequence": None,
+        "usage": {"input_tokens": 50, "output_tokens": 1}}}),
+    ("content_block_start", {"type": "content_block_start", "index": 0,
+                             "content_block": {"type": "text", "text": ""}}),
+    ("content_block_delta", {"type": "content_block_delta", "index": 0,
+                             "delta": {"type": "text_delta", "text": "Listing the scans."}}),
+    ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+    ("content_block_start", {"type": "content_block_start", "index": 1, "content_block": {
+        "type": "tool_use", "id": "toolu_1", "name": "list_pulsar_scans", "input": {}}}),
+    ("content_block_delta", {"type": "content_block_delta", "index": 1,
+                             "delta": {"type": "input_json_delta", "partial_json": "{}"}}),
+    ("content_block_stop", {"type": "content_block_stop", "index": 1}),
+    ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+                       "usage": {"output_tokens": 20}}),
+    ("message_stop", {"type": "message_stop"}),
+]
+
+
+def test_the_installed_sdk_streams_a_tool_call_through_the_adapter(monkeypatch):
+    """Every other test here swaps in a fake ``anthropic`` module, so none of
+    them saw SDK 1.x reject ``temperature`` with a TypeError before any request
+    was sent. This one drives the real SDK over a recorded stream (an httpx
+    mock transport; no socket): its own argument checking, request and event
+    parsing all run."""
+    import json
+
+    import importlib
+
+    import anthropic
+
+    # SDK 1.x runs on the httpx2 fork and refuses httpx objects; 0.x on httpx.
+    try:
+        httpx = importlib.import_module("httpx2")
+    except ImportError:
+        httpx = importlib.import_module("httpx")
+    sent = []
+
+    def respond(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=_sse(_TOOL_CALL_STREAM))
+
+    real = anthropic.Anthropic
+    monkeypatch.setattr(
+        anthropic,
+        "Anthropic",
+        lambda **kwargs: real(http_client=httpx.Client(transport=httpx.MockTransport(respond)), **kwargs),
+    )
+    backend = ab.AnthropicBackend(model="claude-haiku-4-5-20251001", api_key="test-key")
+    streamed = []
+    response = backend.complete(
+        messages=(Message(role="user", blocks=(TextBlock(text="How many scans?"),)),),
+        tools=[{"name": "list_pulsar_scans", "description": "List scans.", "input_schema": {"type": "object", "properties": {}}}],
+        system="s",
+        max_tokens=256,
+        temperature=0.0,
+        on_text=streamed.append,
+    )
+
+    assert response.stop_reason == "tool_use"
+    assert [c.name for c in response.tool_calls] == ["list_pulsar_scans"]
+    assert "".join(streamed) == "Listing the scans."
+    assert sent[0]["model"] == "claude-haiku-4-5-20251001" and sent[0]["max_tokens"] == 256
+    takes = ab._takes_temperature(anthropic.resources.Messages.stream)
+    assert ("temperature" in sent[0]) is takes
+    assert backend.temperature_supported is takes

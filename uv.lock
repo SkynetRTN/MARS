@@ -1920,7 +1920,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.121,<2.0" },
+    { name = "anthropic", specifier = "~=1.8" },
     { name = "anyio", specifier = "~=4.14" },
     { name = "astropy", specifier = "~=8.0" },
     { name = "astroquery", specifier = "~=0.4.11" },

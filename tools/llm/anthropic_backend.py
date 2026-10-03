@@ -8,6 +8,7 @@ The only adapter that streams natively. Behaviour is specified by
 
 from __future__ import annotations
 
+import inspect
 import os
 import time
 from typing import Any, Mapping, Sequence
@@ -104,6 +105,9 @@ class AnthropicBackend:
         )
         self.spec = f"anthropic/{model}"
         self.capabilities = _CAPABILITIES
+        # Whether the installed SDK's ``messages.stream`` takes ``temperature``
+        # at all; None until the SDK is first imported.
+        self._sdk_takes_temperature: bool | None = None
 
     def complete(
         self,
@@ -119,6 +123,7 @@ class AnthropicBackend:
         import anthropic
 
         client = anthropic.Anthropic(api_key=self._api_key)
+        self._sdk_takes_temperature = _takes_temperature(client.messages.stream)
         rendered = _render_messages(messages)
         request: dict[str, Any] = {
             "model": self._model,
@@ -132,7 +137,7 @@ class AnthropicBackend:
             budget = None
         if budget is not None:
             request["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        elif self._model not in _TEMPERATURE_REJECTED:
+        elif self._model not in _TEMPERATURE_REJECTED and self._sdk_takes_temperature:
             # Extended thinking and an explicit temperature are mutually
             # exclusive at the provider: thinking requires the default. The
             # caller asked for reasoning, so the caller gets the temperature
@@ -180,7 +185,18 @@ class AnthropicBackend:
         reproducibility.
         """
 
-        return self._thinking_budget is None and self._model not in _TEMPERATURE_REJECTED
+        if self._sdk_takes_temperature is None:
+            try:
+                import anthropic
+
+                self._sdk_takes_temperature = _takes_temperature(anthropic.resources.Messages.stream)
+            except Exception:  # noqa: BLE001 -- no SDK: nothing has been refused yet
+                self._sdk_takes_temperature = True
+        return (
+            self._thinking_budget is None
+            and self._model not in _TEMPERATURE_REJECTED
+            and self._sdk_takes_temperature
+        )
 
     def _stream(
         self,
@@ -445,3 +461,20 @@ def _is_temperature_refusal(exc: Exception) -> bool:
 
     message = str(exc)
     return any(phrase in message for phrase in _TEMPERATURE_REFUSALS)
+
+
+def _takes_temperature(stream: Any) -> bool:
+    """Whether a ``messages.stream`` accepts ``temperature``.
+
+    SDK 0.x took it; SDK 1.x removed it, and passing it raises ``TypeError``
+    in the client before any request is sent, so the API-refusal retry above
+    never sees it. A callable taking ``**kwargs`` (a wrapper, a test double)
+    is assumed to pass it on.
+    """
+
+    target = getattr(stream, "stream", stream)
+    try:
+        parameters = inspect.signature(target).parameters.values()
+    except (TypeError, ValueError):
+        return True
+    return any(p.name == "temperature" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
