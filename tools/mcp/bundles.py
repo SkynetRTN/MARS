@@ -405,10 +405,21 @@ def _install_locked(
         if previous.exists() and previous.is_dir() and not previous.is_symlink():
             shutil.rmtree(previous)
         return target, False
+    # A copy an earlier release fetched carries that release's marker, not
+    # this one's. Its bytes are what decide: if the tree hashes to this
+    # install's pin, mark it and keep it rather than download it again.
+    if target.is_dir() and not target.is_symlink() and _verified_tree(target, spec):
+        _write_marker(target, name, spec)
+        return target, False
 
     downloads = root / ".downloads"
     downloads.mkdir(parents=True, exist_ok=True)
     part = downloads / (spec.archive + ".part")
+    # A partial download of another archive of this bundle (an earlier
+    # release's name or digest) can never be resumed into this one.
+    for stale in downloads.glob(f"*-{name}-*.tar.part"):
+        if stale != part and stale.is_file() and not stale.is_symlink():
+            stale.unlink()
     _obtain(spec, _source_for(spec, source), part, client=client, progress=progress)
 
     size = part.stat().st_size
@@ -439,20 +450,7 @@ def _install_locked(
         shutil.rmtree(staging)
         raise BundleError(f"{spec.archive} holds {len(members)} files, not {spec.files}")
 
-    (staging / config.BUNDLE_MARKER).write_text(
-        json.dumps(
-            {
-                "name": name,
-                "archive": spec.archive,
-                "sha256": spec.sha256,
-                "files": spec.files,
-                "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    _write_marker(staging, name, spec)
     # Preserve an earlier interrupted backup until the new target is in place.
     # A unique fallback is only needed if both target and backup already exist.
     if previous.exists():
@@ -470,6 +468,23 @@ def _install_locked(
             shutil.rmtree(old)
     part.unlink()
     return target, True
+
+
+def _write_marker(directory: Path, name: str, spec: BundleSpec) -> None:
+    (directory / config.BUNDLE_MARKER).write_text(
+        json.dumps(
+            {
+                "name": name,
+                "archive": spec.archive,
+                "sha256": spec.sha256,
+                "files": spec.files,
+                "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _verified_tree(directory: Path, spec: BundleSpec) -> bool:

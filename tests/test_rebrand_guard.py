@@ -24,7 +24,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 #: The earlier name, in pieces.
 _OLD = "kep" + "ler"
 
-#: What is searched: the whole repository but its binary data.
+#: Where the repository's own name is checked (the last test).
 SCOPE = (
     "README.md",
     "CLAUDE.md",
@@ -80,7 +80,9 @@ _NAME = re.compile(r"[\s._-]*".join(_OLD), re.IGNORECASE)
 
 def _hits() -> list[tuple[str, int, str]]:
     result = subprocess.run(
-        ["git", "grep", "-I", "-n", "-i", "-E", _NAME.pattern.replace("\\s", "[:space:]"), "--", *SCOPE],
+        # The whole tracked tree, not SCOPE: uv.lock, LICENSE and the dotfiles
+        # at the top level are where an old distribution name would come back.
+        ["git", "grep", "-I", "-n", "-i", "-E", _NAME.pattern.replace("\\s", "[:space:]"), "--", "."],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,

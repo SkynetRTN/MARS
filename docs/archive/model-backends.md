@@ -695,8 +695,8 @@ next to their first uses. Probe-verified with the CI's gitleaks image.*
 
 Verified: `.gitleaks.toml` scopes its allowlist of the three
 environment-variable *names* `ADS_DEV_KEY`, `ANTHROPIC_API_KEY`, and
-`NASA_API_KEY` to `runner.py` and `tools/ads.py` under a package directory that no
-longer exists. **Both paths are
+`NASA_API_KEY` to `runner.py` and `tools/ads.py` under a package directory that does
+not exist. **Both paths are
 missing** — the real files are `tools/runner.py` and `tools/ads.py`. Five
 further files reference those key names outside any allowlisted path:
 `AGENTS.md`, `CLAUDE.md`, `tests/test_runner_session.py`, `tools/registry.py`,
@@ -948,7 +948,7 @@ each with the full suite green and the Phase 0c gate (an unedited
 | 2a OpenAI + factory + HTTP base | `feat(llm): OpenAI-compatible backend, the factory…(S3, S4)` | `openai_backend.py`, `factory.py`, `BaseHTTPBackend`; markers added |
 | 2b Ollama + live check | `feat(llm): Ollama backend, and the live OpenAI-compat measurement` | `ollama_backend.py`; section 11 Q2 measured (below) |
 | 3 Gemini | `feat(llm): Gemini backend — synthetic call ids…(S4)` | `gemini_backend.py`; `call_id_mismatch` raises; cross-backend sweep |
-| — MARS_MODEL_BACKEND wiring | `feat(runner): honor MARS_MODEL_BACKEND in the console shim` | the shim builds a spec through `build_backend` when the var is set |
+| — MARS_MODEL_BACKEND wiring | 3002edc (the console shim honours the backend variable) | the shim builds a spec through `build_backend` when the var is set |
 | docs | this commit | this document, `tool-architecture.md` §10, `README.md`, `CLAUDE.md` |
 
 Phases 4–5 — the benchmark harness (section 6) and manifest v2 (section 7),

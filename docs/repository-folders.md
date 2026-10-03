@@ -269,6 +269,21 @@ The template also defines `#353E52`, `#414B60` and `#A9B4C4` as derived
 dark-mode interface surfaces. They are not Skynet palette colors, and neither
 is the template's UNC-Chapel Hill palette.
 
+### Names and the package namespace
+
+The distribution is **`skynet-mars`**, not `mars`: `mars` is taken on PyPI (an
+unrelated project), and Alibaba's `pymars` imports as `mars`. `skynet-` adds
+provenance, since the algorithms come from the Skynet Robotic Telescope
+Network.
+
+`tools` and `algorithms` stay top-level packages for now. They are generic
+enough that another installed project's `tools` package can collide with them,
+and moving them under one namespace is the durable fix. That move touches
+every import, test and extraction marker, so it is a change of its own (ARC-02
+in the master continuation plan). Until then no new top-level package is
+added (`tests/test_rebrand_guard.py`), and a namespace choice must not be
+`mars`, for the reason above.
+
 ## `algorithms/fieldcal/`
 
 Extracted Python photometric field-calibration code from Skynet.
