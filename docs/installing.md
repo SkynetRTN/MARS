@@ -16,7 +16,10 @@ mars-mcp self-test
 This creates a private environment for MARS and puts its commands
 (`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. uv fetches
 Python 3.13 itself if you do not have it. `self-test` launches the server the
-way a host would. If it passes, the install works.
+way a host would. If it passes, the install works. If `mars-mcp` is not
+found, uv's command directory is not on your `PATH` yet: run
+`uv tool update-shell` and open a new shell, or call it by its full path
+(below).
 
 **Where it goes.** Hosts need the full path to `mars-mcp`. `uv tool dir --bin`
 prints the directory that holds it:
@@ -40,9 +43,10 @@ python3.13 -m venv ~/mars-env
 ```
 
 **Python 3.13** is the supported version. On Python 3.13 on x86_64 Linux,
-macOS or Windows, every dependency has a pre-built wheel. Elsewhere (Python
-3.14, or Linux on ARM), `sep` or `photutils` builds from source and needs a C
-compiler (`gcc`, or the Xcode command-line tools). The install takes about
+Apple Silicon macOS or x64 Windows, every dependency has a pre-built wheel.
+Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
+Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
+toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about
 700 MB, nearly all of it dependencies.
 
 Every release is a pre-release for now, so the commands above install the
@@ -58,8 +62,8 @@ newest one. To install a specific release, use
 
 `mars-mcp` is a local stdio server. The host starts it on your machine and
 talks to it over stdin/stdout, with no port and no network listener. So it
-works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app,
-but not in a browser chat (claude.ai, ChatGPT on the web). See the
+works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
+(in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
 [dated host proposal](analysis/mcp-desktop-hosts.md) §6. Real desktop-host
 validation is still an open gate in the
 [master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
@@ -74,7 +78,8 @@ claude mcp add --scope user mars -- /path/to/mars-mcp
 ```
 
 **Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
-installs with a double-click and needs no Python or config file. Releases do
+installs with a double-click and needs no Python or config file, on an Apple
+Silicon Mac or x64 Windows. Releases do
 not carry the extension yet; see
 [`installers/claude-desktop/`](../installers/claude-desktop/README.md) to
 build it. To register it by hand instead, go to Settings → Developer → Edit
@@ -86,7 +91,8 @@ Config and add:
 
 Then quit and reopen the app.
 
-**Codex CLI and the ChatGPT desktop app** share `~/.codex/config.toml`:
+**Codex CLI and the ChatGPT desktop app** share `~/.codex/config.toml`
+(in the app: Settings → MCP servers → Add server):
 
 ```toml
 [mcp_servers.mars]
@@ -123,13 +129,17 @@ or set `MARS_MCP_TOOLS`. The groups are `databases`, `optical`, `timeseries`,
 ([get a token](https://ui.adsabs.harvard.edu/user/settings/token)). Desktop
 apps do not see your shell's environment, so set the key in the host's `env`
 block, or write it to `~/.ads/dev_key`. An installed MARS reads no `.env` file.
+CASDA downloads need `CASDA_OPAL_USERNAME` and that account's OPAL password
+stored in the system keyring under `astroquery:casda.csiro.au`; the server
+never prompts for it.
 
 **The skill.** The server sends its usage guide to the host as instructions
 and `mars://skill/...` resources. For an agent that loads `SKILL.md` skills,
 also install it natively (it refuses to overwrite a modified copy):
 
 ```bash
-mars-mcp install-skill ~/.claude/skills/mars-tools   # or ~/.codex/skills/, ~/.cursor/skills/
+mars-mcp install-skill ~/.claude/skills/mars-tools
+# or ~/.codex/skills/mars-tools, ~/.cursor/skills/mars-tools
 ```
 
 **If the server does not appear**, run `mars-mcp self-test` first. When it
@@ -139,6 +149,10 @@ output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
 
 ## Optional data
 
+With the Claude Desktop extension there is no `mars-mcp` on your `PATH`; use
+the command in its [README](../installers/claude-desktop/README.md#data-bundles)
+instead.
+
 ```bash
 mars-mcp fetch-data --list        # what exists, and what is installed
 mars-mcp fetch-data optical       # or: isochrones, all
@@ -146,8 +160,10 @@ mars-mcp fetch-data --verify      # rehash what is installed
 mars-mcp self-test --with-data    # exercise the bundles through the server
 ```
 
-- **optical** (269 MB) is the bundled frame library. The photometry and
-  zero-point tools need it.
+- **optical** (269 MB) is the bundled frame library. The frame listing,
+  photometry on bundled targets, and the recorded-solve replays
+  (`replay_field_calibration`, `calibrate_zeropoint` with `catalog_fixture`)
+  need it. The zero-point reference tools use data in the package.
 - **isochrones** (282 MB) is the isochrone grid. The H-R diagram fits need it.
 
 Everything else works without these bundles. The database tools query remote
