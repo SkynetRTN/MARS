@@ -76,8 +76,10 @@ supported versions (`pyproject.toml`'s floor is 3.12; 3.13 is the newest every
 dependency ships wheels for -- `sep` has none for 3.14; see
 `docs/installing.md`), both against `uv.lock`. Users are assumed to run 3.12
 or 3.13, so neither Python nor the dependencies are chased to their newest:
-`uv.lock` moves when a change needs it or for a security fix (Dependabot's
-security updates, enabled in the repository settings), not on a schedule. Resolve paths for containment
+`uv.lock` moves when MARS adds support for a newer Python, or when a change
+genuinely needs a newer release. Dependabot opens no pull requests (version
+and security updates are both off); its vulnerability alerts stay on, in the
+repository's Security tab, for a maintainer to judge. Resolve paths for containment
 checks through `tools.config.within`/`safe_resolve`. It gates three jobs: `compileall` over
 `tools algorithms tests` on 3.12, `uv run --locked --extra mcp pytest` (after the MCP
 tests alone without the extra), and a `repository-shape` job asserting that
