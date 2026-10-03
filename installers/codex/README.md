@@ -3,23 +3,28 @@
 MARS as a Codex plugin, for the **ChatGPT desktop app** (in its Codex
 threads), the Codex CLI and the Codex IDE extension. All three share
 `~/.codex`, so one install serves all of them. The plugin carries the MCP
-server's launch configuration and the `mars-tools` skill. It carries no Python
-and no dependencies. Codex starts the server with
+server's launch configuration and the `mars-tools` skill. It carries no Python,
+no dependencies and no MARS version. Codex starts the server with
 
 ```bash
-uv run --locked mars-mcp        # in the installed plugin's directory
+uv run --locked src/server.py        # in the installed plugin's directory
 ```
 
-which downloads Python 3.13 the first time and installs exactly what `uv.lock`
-pins: the published `skynet-mars[mcp]` release named in `pyproject.toml`, and
-its dependencies (about 640 MB). Later launches reuse that environment.
+`src/server.py` is the Claude Desktop extension's entry point, byte for byte.
+It runs the **newest `skynet-mars` release** on PyPI through `uv tool run`. It
+first asks PyPI for the newest release and installs it into uv's cache if it
+is not there yet: Python 3.13 and about 640 MB of dependencies on the first
+start. Then it serves the newest release in the cache. Without a network, the
+last release fetched still starts. So the plugin picks up a new MARS release
+the next time it starts, with no change here.
 
 | File | What |
 | --- | --- |
-| `.codex-plugin/plugin.json` | Name, version, what the Plugins Directory shows, and where the skill and server are |
-| `.mcp.json` | The `uv run` command, the timeouts, the approval mode, and the variables forwarded to the server |
-| `pyproject.toml`, `uv.lock` | The environment: one exact `skynet-mars[mcp]` pin, locked for every platform |
-| `skills/mars-tools/` | The skill as the pinned release renders it (`mars-mcp install-skill`). Do not edit it here |
+| `.codex-plugin/plugin.json` | Name, the plugin's own version, what the Plugins Directory shows, and where the skill and server are |
+| `.mcp.json` | The `uv run` command, the timeouts, the approval mode, and the variables passed to the server |
+| `pyproject.toml`, `uv.lock` | The entry point's environment, deliberately empty |
+| `src/server.py` | The entry point, a copy of `installers/claude-desktop/src/server.py` (a test keeps them identical) |
+| `skills/mars-tools/` | The skill, rendered by `python -m tools.skill`. Do not edit it here |
 | `assets/icon.png` | The 512 px mark, exported by `docs/assets/make_brand.py` |
 
 `.agents/plugins/marketplace.json`, at the repository root, lists the plugin.
@@ -31,7 +36,7 @@ Codex also reads the portable Agent Plugins layout (`plugin.json` and
 `mcp.json` at the plugin root). Its `mcp.json` accepts only `command`, `args`,
 `env` and `cwd` for a local server, so it cannot raise Codex's limits of 10 s
 to start a server and 60 s per tool call. A first launch outlasts the first
-limit (44 s measured, on a fast link), and an all-sky plate solve (about
+limit (43 s measured, on a fast link), and an all-sky plate solve (about
 285 s) outlasts the second. Codex's own `.mcp.json` sets
 `startup_timeout_sec` and `tool_timeout_sec`.
 
@@ -53,7 +58,7 @@ packages for Fedora 43 and 44, for x86_64 and aarch64.
    not to download Python (`python-downloads = "manual"` in
    `/etc/uv/uv.toml`), and Fedora 44's own Python is 3.14, so the plugin sets
    `UV_PYTHON_DOWNLOADS=automatic` for its server. `gcc` is needed on aarch64
-   only: `photutils` 3.0.0 has no Python 3.13 wheel for ARM64 Linux, so the
+   only: `photutils` publishes no Python 3.13 wheel for ARM64 Linux, so the
    first start compiles it.
 
 2. Add the marketplace and install the plugin. With the Codex CLI:
@@ -76,9 +81,9 @@ packages for Fedora 43 and 44, for x86_64 and aarch64.
 Codex asks before any tool that writes an artifact
 (`default_tools_approval_mode = "writes"`).
 
-**Updating.** Run `codex plugin marketplace upgrade mars`, then
-`codex plugin add mars@mars`. Each version installs into its own directory,
-`~/.codex/plugins/cache/mars/mars/<version>/`, with its own environment.
+**Updating.** A new MARS release needs nothing: the server starts the newest
+one. A new version of the plugin itself (its launch settings or skill) comes
+with `codex plugin marketplace upgrade mars`, then `codex plugin add mars@mars`.
 
 ## Settings
 
@@ -95,8 +100,8 @@ started with them:
 | `CASDA_OPAL_USERNAME` | CASDA downloads. The password is read from the system keyring, which needs `DBUS_SESSION_BUS_ADDRESS` (or `XDG_RUNTIME_DIR`); both are forwarded |
 | `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' index and catalogue data ([installing](../../docs/installing.md)) |
 
-Codex forwards a variable as the app has it, an empty value included. An
-`ADS_DEV_KEY` exported empty therefore hides `~/.ads/dev_key`.
+The entry point removes `ADS_DEV_KEY`, `MARS_HOME` and `MARS_MCP_TOOLS` when
+they arrive empty, so an empty `ADS_DEV_KEY` does not hide `~/.ads/dev_key`.
 
 A desktop app does not see your shell's variables. To restrict tools without
 one, add a policy to `~/.codex/config.toml`:
@@ -108,20 +113,19 @@ enabled_tools = ["search_simbad", "search_ned"]
 
 ## Data bundles and the self-test
 
-Run `mars-mcp` from the plugin's own environment, so nothing is downloaded
-twice. Use the version `codex plugin list` shows for `mars@mars`:
+Run the release the plugin runs, from uv's cache, so nothing is downloaded
+twice:
 
 ```bash
-P=~/.codex/plugins/cache/mars/mars/0.1.0rc5      # that version
 export UV_PYTHON_DOWNLOADS=automatic             # as the plugin does, for Fedora's uv
-uv run --directory "$P" --locked mars-mcp self-test
-uv run --directory "$P" --locked mars-mcp fetch-data optical    # or: isochrones, all
+uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
+uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp fetch-data optical   # or: isochrones, all
 ```
 
 On a slow connection, running the self-test once before the first thread also
-installs the environment ahead of time. If you set `MARS_HOME` for the app,
-set it for these commands too. Otherwise the bundle lands where the server
-does not look.
+installs the release ahead of time. If you set `MARS_HOME` for the app, set it
+for these commands too. Otherwise the bundle lands where the server does not
+look.
 
 ## If the server does not start
 
@@ -135,7 +139,7 @@ does not look.
   (`sudo dnf install gcc`).
 - **A timeout on the first start**: the dependency download outlasted the
   10-minute limit. Run the self-test above once, which installs the same
-  environment, then start a new thread.
+  release, then start a new thread.
 - Otherwise, run the self-test. When it passes, the problem is in Codex's
   configuration: `codex mcp list` shows how Codex resolved the server.
 
@@ -153,34 +157,22 @@ login. To measure a true first launch, also put
 `.config/uv/uv.toml`. Otherwise uv reuses a Python 3.13 already on the
 machine.
 
-## After each release
+`tests/test_codex_plugin.py` checks the manifest, the launch settings, that
+the plugin names no MARS version, that its entry point is the extension's,
+and that the skill copy is current.
 
-The pin names a release that is already **on PyPI**, so the plugin follows a
-release rather than leading it. Once `v<version>` is published:
+## After a release
 
-1. Set the new version in three places, all in PEP 440 form (`0.1.0rc5`):
-   `version` in `pyproject.toml`, the `skynet-mars[mcp]==` pin, and `version`
-   in `.codex-plugin/plugin.json`.
-2. Run `python installers/codex/sync_lock.py` from the repository root, not a
-   bare `uv lock`. It locks every package shared with the root `uv.lock` at
-   the root's version.
-3. Re-render the skill from the release itself, so it describes the server
-   the plugin runs and not the repository's newer source:
-
-   ```bash
-   rm -rf installers/codex/skills/mars-tools installers/codex/.venv
-   uv run --directory installers/codex --locked mars-mcp install-skill "$PWD/installers/codex/skills/mars-tools"
-   rm -rf installers/codex/.venv
-   ```
-
-`tests/test_codex_plugin.py` checks that the version fields agree, that the
-pin is never ahead of the repository's version, that the two locks agree, and
-that the skill copy is complete.
+Nothing. The plugin names no MARS version, and picks up a release the next
+time it starts. Change `version` in `.codex-plugin/plugin.json` (and
+`pyproject.toml`) only when the plugin itself changes, so that Codex offers
+the update.
 
 ## Platforms
 
 Verified in clean Fedora 44 containers, x86_64 and aarch64, through Codex
 0.160's app server, installing from GitHub with Fedora's `uv`. On aarch64
 the first start also compiles `photutils` with `gcc`. macOS and Windows use
-the same wheels as the Claude Desktop extension, and the same limits apply. `numba` and `llvmlite` have no Intel Mac wheels, and
-several dependencies have none for Windows on ARM.
+the same wheels as the Claude Desktop extension, and the same limits apply.
+`numba` and `llvmlite` have no Intel Mac wheels, and several dependencies
+have none for Windows on ARM.

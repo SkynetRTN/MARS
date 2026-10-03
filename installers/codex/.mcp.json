@@ -5,7 +5,7 @@
       "args": [
         "run",
         "--locked",
-        "mars-mcp"
+        "src/server.py"
       ],
       "cwd": ".",
       "env": {

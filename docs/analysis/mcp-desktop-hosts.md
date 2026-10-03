@@ -220,8 +220,11 @@ time and what the settings dialog passes for an empty field.
 
 Built at the maintainer's direction for the ChatGPT desktop app on Fedora 44.
 OpenAI's Linux preview ships `.rpm` packages for Fedora 43 and 44, x86_64 and
-aarch64. The plugin is `installers/codex/` (README there), pinned to
-`0.1.0rc5` (measured below at `0.1.0rc4`), with `tests/test_codex_plugin.py`. It is the Codex counterpart of
+aarch64. The plugin is `installers/codex/` (README there), with
+`tests/test_codex_plugin.py`. Like the extension since #109, it pins no MARS
+release: its entry point is the extension's `src/server.py`, which runs the
+newest release through `uv tool run`. The measurements below were taken while
+it still pinned one (`0.1.0rc4`, then `0.1.0rc5`). It is the Codex counterpart of
 the `.mcpb`: Codex's plugin format bundles the MCP server's launch
 configuration with skills, and `.agents/plugins/marketplace.json` makes the
 repository a marketplace.
@@ -246,21 +249,25 @@ repository a marketplace.
   `LANG` and a few more (`rmcp-client` `DEFAULT_ENV_VARS`). The plugin
   forwards the settings MARS reads (the ADS key, MARS home and tool groups,
   `XDG_DATA_HOME`, the CASDA user and the session bus its keyring needs, and
-  the plate solvers' data paths) through `env_vars`, and sets no value of its
-  own.
-- **The skill** in the plugin is rendered by the pinned release
-  (`mars-mcp install-skill`), not by `tools/skill`, so it describes the
-  server the plugin actually runs.
-  Because the command is a bare `uv` resolved on the app's `PATH`, the
-  Fedora route is `dnf install uv` (`/usr/bin`).
+  the plate solvers' data paths) through `env_vars`. Because the command is
+  a bare `uv` resolved on the app's `PATH`, the Fedora route is
+  `dnf install uv` (`/usr/bin`).
+- **Fedora's uv** ships `python-downloads = "manual"` (`/etc/uv/uv.toml`),
+  and Fedora 44's Python is 3.14. A clean Fedora 44 container showed the
+  server dying in the handshake, so the plugin sets
+  `UV_PYTHON_DOWNLOADS=automatic`, its only value. The same container showed
+  that `photutils` has no Python 3.13 wheel for aarch64 Linux, so aarch64
+  needs `gcc`. After the fix, clean containers on x86_64 (no compiler) and
+  aarch64 (with gcc) installed from GitHub and passed the whole check.
+- **The skill** in the plugin is rendered by `python -m tools.skill`, the
+  same source the releases are cut from.
 - **No OpenAI key.** The model is the signed-in app session's.
 
 **Remaining gate:** install the `.rpm` on Fedora 44 Workstation, then add the
 marketplace and confirm three things: the Plugins Directory lists MARS, a
 Codex thread starts the server, and the model reads the skill. Run the pulsar
-detection, and record whether the app's own `PATH` finds `uv`. Neither the
-sparse GitHub marketplace add nor the app's UI was exercised before the
-branch was pushed.
+detection, and record whether the app's own `PATH` finds `uv`. The app's UI
+is the only part not yet exercised.
 
 ### Phase D3: The extension, released (only if D2 says build)
 

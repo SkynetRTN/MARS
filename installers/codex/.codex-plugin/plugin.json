@@ -1,6 +1,6 @@
 {
   "name": "mars",
-  "version": "0.1.0rc5",
+  "version": "1.0.0",
   "description": "55 astronomy tools: SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA and ADS queries, and local pulsar, variable-star, photometry, plate-solving, HR-diagram and radio-source pipelines.",
   "author": {
     "name": "Skynet Robotic Telescope Network",
@@ -9,7 +9,14 @@
   "homepage": "https://github.com/SkynetRTN/MARS",
   "repository": "https://github.com/SkynetRTN/MARS",
   "license": "GPL-3.0-only",
-  "keywords": ["astronomy", "pulsar", "photometry", "simbad", "vizier", "ads"],
+  "keywords": [
+    "astronomy",
+    "pulsar",
+    "photometry",
+    "simbad",
+    "vizier",
+    "ads"
+  ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
@@ -18,7 +25,10 @@
     "longDescription": "Runs the skynet-mars MCP server on your own machine. The first start installs Python 3.13 and the dependencies (about 640 MB) with uv, and can take several minutes. Needs uv on the PATH (on Fedora: sudo dnf install uv). Results are written under the per-user MARS home.",
     "developerName": "Skynet Robotic Telescope Network",
     "category": "Research",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://github.com/SkynetRTN/MARS",
     "defaultPrompt": [
       "Measure the period of pulsar B0329+54 from the bundled scan, then compare it with the catalogued value."

@@ -1,17 +1,13 @@
-# The Codex plugin's environment. Codex starts the server with
-# `uv run --locked mars-mcp` in the installed plugin, which installs exactly
-# what uv.lock beside this file pins. The skynet-mars pin names a published
-# release, so it may trail the repository's version but never lead it, and
-# uv.lock holds the root lock's versions (sync_lock.py; both checked by
-# tests/test_codex_plugin.py).
+# The Codex plugin's own environment. It is deliberately empty: src/server.py
+# (a copy of the Claude Desktop extension's) runs the newest skynet-mars
+# release from PyPI through `uv tool run`, so the plugin pins no MARS version
+# and never needs a change to follow a release.
 [project]
 name = "mars-codex"
-version = "0.1.0rc5"
-description = "Codex plugin that runs the skynet-mars MCP server"
+version = "1.0.0"
+description = "Codex plugin that runs the newest skynet-mars MCP server"
 requires-python = ">=3.13,<3.14"
-dependencies = [
-    "skynet-mars[mcp]==0.1.0rc5",
-]
+dependencies = []
 
 [tool.uv]
 package = false
