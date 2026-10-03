@@ -10,19 +10,19 @@
   ],
   "bundles": {
     "optical": {
-      "archive": "kepler-optical-0472c67e2f46.tar",
+      "archive": "mars-optical-0472c67e2f46.tar",
       "size": 268789760,
       "sha256": "0472c67e2f467be394371a8626e17642f8de7938da07f5a9f35bfe0a0acd6f83",
       "files": 42,
-      "url": "https://github.com/SkynetRTN/MARS/releases/download/data/kepler-optical-0472c67e2f46.tar",
+      "url": "https://github.com/SkynetRTN/MARS/releases/download/data/mars-optical-0472c67e2f46.tar",
       "description": "The bundled optical frame library (data/optical/): photometry targets, frame listings, the NGC 5128 end-to-end calibration."
     },
     "isochrones": {
-      "archive": "kepler-isochrones-12f8359efc78.tar",
+      "archive": "mars-isochrones-12f8359efc78.tar",
       "size": 282214400,
       "sha256": "12f8359efc78669abbb5006cb25a98ede05115699312fbc7922c90240cec3ec3",
       "files": 4307,
-      "url": "https://github.com/SkynetRTN/MARS/releases/download/data/kepler-isochrones-12f8359efc78.tar",
+      "url": "https://github.com/SkynetRTN/MARS/releases/download/data/mars-isochrones-12f8359efc78.tar",
       "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (MARS_ISOCHRONE_DIR)."
     }
   }

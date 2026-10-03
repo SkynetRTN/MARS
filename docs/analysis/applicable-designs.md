@@ -1,4 +1,4 @@
-# External Astro-Agent Design Practice Applied to Kepler
+# External Astro-Agent Design Practice Applied to MARS
 
 > **Planning cross-reference, 2026-10-01:** Implemented recommendations and
 > remaining SCI-01 runtime-warning work are reconciled in the
@@ -6,22 +6,16 @@
 > Historical `tools.runner` references below now correspond to `tools.agent`
 > and `tools.sessions`; the dated proposal is retained as evidence.
 
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](../archive/mars-rebrand.md).
-
 Date: 2026-08-11
 Status: proposal, with the session-manifest item implemented in `tools.runner`
 
-This document reads Kepler's current architecture (`docs/tool-architecture.md`, `CLAUDE.md`,
+This document reads MARS's current architecture (`docs/tool-architecture.md`, `CLAUDE.md`,
 `tools/`, `algorithms/`) against how six external astrophysics-AI-agent systems and three
 benchmark/study papers are built, and lists what is directly applicable. It is not a survey —
 it exists to turn outside practice into specific, file-level changes, or to explicitly say
-where Kepler already does the thing and no change is needed.
+where MARS already does the thing and no change is needed.
 
-Every claim about Kepler below was checked against the current repository state on
+Every claim about MARS below was checked against the current repository state on
 2026-08-11, not against the original 2026-08-10 design-only migration plan. Some
 things the original design intended have since shipped differently than planned —
 that is noted where it matters.
@@ -67,17 +61,17 @@ not depend on that vault; it is cited here only for provenance).
 
 ---
 
-## 2. Where Kepler Already Matches External Practice
+## 2. Where MARS Already Matches External Practice
 
 No change needed here — listed so the rest of this document doesn't re-argue settled ground.
 
-| External practice | Kepler equivalent |
+| External practice | MARS equivalent |
 |---|---|
 | ASTER's explicit, inspectable control flow (vs. an opaque agent loop) | The `tools/` → `algorithms/` split itself: tools are thin, algorithms are frozen, and every severed dependency is marked inline with `# EXTRACTED: was <symbol>`. |
 | Astro MCP's high-level tools (`search_objects`, not raw API passthrough) | `tools/registry.py` ships one schema per database (`search_simbad`, `search_atnf`, `search_vizier`, …) instead of one dispatcher with a `database` enum — already a step past what Astro MCP does. |
 | Astro MCP's per-source plugin isolation (new survey doesn't touch core logic) | `algorithms/query/` imports `algorithms/catalogs/`, never the reverse (`CLAUDE.md`, "Python domain boundaries"). Adding a catalog means adding a declaration plus a query binding, not touching `fieldcal`. |
 | Cmbagent's "human-guided beats fully autonomous" finding | `tools.runner`'s agent loop is explicitly optional (`docs/tool-architecture.md` §7: "Serving is optional. A Python caller must be able to import and call every tool without running a server.") — the tools are designed to be called by a human, a script, or an agent equally. |
-| AI Cosplaying's "verification is real labor, make it cheap" | `tools/runner.py`'s `SYSTEM_PROMPT` already encodes a specific, previously observed failure (an agent attributing a fabricated decline-rate figure to a real paper by name) and a structural mitigation: quote `get_paper_abstract`/`search_ads` text before stating a number, or say explicitly the figure is unverified. This is the single closest thing in Kepler to Kosmos-style grounding discipline, and it is already shipped, not proposed. |
+| AI Cosplaying's "verification is real labor, make it cheap" | `tools/runner.py`'s `SYSTEM_PROMPT` already encodes a specific, previously observed failure (an agent attributing a fabricated decline-rate figure to a real paper by name) and a structural mitigation: quote `get_paper_abstract`/`search_ads` text before stating a number, or say explicitly the figure is unverified. This is the single closest thing in MARS to Kosmos-style grounding discipline, and it is already shipped, not proposed. |
 | Preserving rather than silently "fixing" known-wrong behavior | The entire extraction contract (`CLAUDE.md`, "The extraction contract"): documented parity quirks like `_clear_wcs_solution_fields`'s silent no-op are deliberate and must not be "fixed" outside an explicit divergence task. `docs/analysis/algorithm-remediation-plan.md` treats every finding as "provenance, not permission" (§4) before touching it. |
 
 ---
@@ -90,7 +84,7 @@ argument is that inspectable structure beats prose. AI Cosplaying's finding is t
 *ambiguous* output — not wrong output, ambiguous output — is what an agent (or a human
 verifying it) fails on.
 
-**Current state in Kepler, checked 2026-08-11.**
+**Current state in MARS, checked 2026-08-11.**
 
 - `tools/models.py` defines two different warning shapes in the same file:
   `ToolResult.warnings: list[str]` (free text) is what every database tool in `tools/`
@@ -139,7 +133,7 @@ contract but is silently wrong by the domain's contract. AI Cosplaying's finding
 thing from the human side: verifying agent output is expensive, so anything that can be
 surfaced automatically should be.
 
-**Current state in Kepler.** `docs/analysis/algorithm-remediation-plan.md` already does the hard part:
+**Current state in MARS.** `docs/analysis/algorithm-remediation-plan.md` already does the hard part:
 it classifies every one of 110 findings across `wcs/`, `photometry/`+`fieldcal/`,
 `catalogs/`+`query/`, and the TypeScript algorithms into finding classes, and separates
 **"Silent — wrong science, no signal"** from **"Loud — but catastrophic"** (§5). That
@@ -177,19 +171,19 @@ specifically because it decouples the tool surface from any one model vendor —
 ASTER's stated reason for building on a provider-agnostic framework instead of hand-rolling
 model-specific tool-calling.
 
-**Current state in Kepler.** `tools/registry.py` already expresses every tool as a
+**Current state in MARS.** `tools/registry.py` already expresses every tool as a
 name/description/JSON-schema triple — which is structurally almost identical to an MCP tool
 definition. But `tools/runner.py` wires that registry directly to the `anthropic` Python SDK
 (`import anthropic`, `client.messages.stream(...)`), and `pyproject.toml` depends on
 `anthropic==0.121.0` with no `mcp` dependency anywhere in the repository. The only way to
-call Kepler's tools today through an agent loop is Anthropic's Messages API specifically, via
-the `kepler-astro-query` CLI entry point, gated on `ANTHROPIC_API_KEY`.
+call MARS's tools today through an agent loop is Anthropic's Messages API specifically, via
+the runner script `tools/runner.py` installs as a CLI entry point, gated on `ANTHROPIC_API_KEY`.
 
 **Recommendation.** Add an MCP server as a second, optional consumer of
 `tools.registry.TOOL_SCHEMAS`/`TOOL_FUNCTIONS` — not a replacement for `tools.runner`, and not
 a required dependency for anyone using `tools/` as a plain Python library. Concretely:
 
-- A new `tools/mcp_server.py` (or a separate `kepler-mcp` optional dependency group in
+- A new `tools/mcp_server.py` (or a separate `mars-mcp` optional dependency group in
   `pyproject.toml`, matching how `ADS_DEV_KEY`/`ANTHROPIC_API_KEY` are already treated as
   optional, feature-gated credentials) that translates each `TOOL_SCHEMAS` entry into an MCP
   tool definition and dispatches to the same `TOOL_FUNCTIONS` mapping `tools.runner` already
@@ -199,7 +193,7 @@ a required dependency for anyone using `tools/` as a plain Python library. Concr
   than becoming a second design surface. §7 of that document already anticipates exactly
   this: "If a serving surface is added later, generate it from the same tool functions and
   models rather than designing the package around a server."
-- This is what actually gets Kepler in front of the MCP-native tools this research found
+- This is what actually gets MARS in front of the MCP-native tools this research found
   (Claude Code, Cursor, and any other MCP host), instead of only the bespoke Anthropic-loop
   CLI.
 
@@ -240,7 +234,7 @@ manifests `0600`; resume rejects a manifest above 1 MiB or history above 256 KiB
 session artifact directory when it should no longer be retained.
 `tools.workspace.list_sessions()` and `tools.workspace.describe_session()` expose those
 manifests for later review without re-running remote queries. This is the minimum version of
-the Kosmos-style shared-state idea, using Kepler's existing local artifact model rather than
+the Kosmos-style shared-state idea, using MARS's existing local artifact model rather than
 adopting a cross-agent world-model architecture wholesale.
 
 ---
@@ -253,7 +247,7 @@ agent (or a human) cannot tell "this frame has no astrometric solution" (a real 
 result) from "the solver isn't installed" (an environment problem) without inspecting
 configuration directly.
 
-**Current state in Kepler.** `CLAUDE.md` names this explicitly: "Both WCS backends degrade to
+**Current state in MARS.** `CLAUDE.md` names this explicitly: "Both WCS backends degrade to
 'unavailable' rather than failing, so imports succeed and solves simply return no solution
 when the data is absent. This is why full parity has never been validated here." A repository
 `grep` for `no_solution`, `backend_unavailable`, or `unavailable` across `algorithms/wcs/*.py`
@@ -277,7 +271,7 @@ no-solution result.
 ## 8. Deliberately Not Recommended
 
 **A shared base class per data-source tool, matching Astro MCP's plugin pattern.** Astro MCP
-uses inheritance because it has one server process serving many sources. Kepler's `tools/`
+uses inheritance because it has one server process serving many sources. MARS's `tools/`
 already gets the same practical benefit — every provider tool takes bounded arguments, writes
 a full-data artifact via `tools/artifacts.py`, returns a bounded `preview`, and reports
 `status` from the same four-value set (`ok`/`partial`/`not_found`/`error`) — through
@@ -287,15 +281,15 @@ shape that already holds in practice) §3's `Literal` typing gets more cheaply. 
 a future provider tool actually breaks the convention.
 
 **Narrowing `tools/`'s database surface.** Astronomy AI Toolkit's lesson is "compose existing
-servers instead of rebuilding them." Kepler's `tools/` already covers SIMBAD, NED, VizieR,
+servers instead of rebuilding them." MARS's `tools/` already covers SIMBAD, NED, VizieR,
 ATNF, MAST, MPC, CASDA, and ADS directly rather than delegating to something like Astro MCP —
 that was a deliberate choice already made, not an oversight to correct. It is, in effect,
-Kepler independently arriving at Astro MCP's own scope (broad multi-database access) while
+MARS independently arriving at Astro MCP's own scope (broad multi-database access) while
 additionally owning the algorithmic kernels (WCS/photometry/field-cal) that Astro MCP does
 not have. Undoing that now would be a regression, not an application of external practice.
 
 **Adopting Cmbagent's or Kosmos's multi-agent orchestration wholesale.** Both are
-domain-agnostic *agent* architectures. Kepler is explicitly a tool collection, not an
+domain-agnostic *agent* architectures. MARS is explicitly a tool collection, not an
 orchestration framework (`docs/tool-architecture.md` §9, "No orchestration framework"). The
 applicable part of both — human-guided beats fully autonomous; persistent state beats
 re-deriving context — is captured narrowly in §6 above without importing either project's

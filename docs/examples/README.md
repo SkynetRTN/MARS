@@ -98,7 +98,7 @@ uv run mars                         # then ask, in the console:
 > measure, then render the audio.
 
 The original run predates the console and was driven by the retired
-`kepler-astro-query` shim over the same loop and the same registry; what it
+runner shim (`tools/runner.py`) over the same loop and the same registry; what it
 did is unchanged by where it is typed.
 
 Or without an agent, three deterministic calls:

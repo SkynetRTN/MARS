@@ -1507,7 +1507,7 @@ latency and failure folded into someone's scoreboard.
 `mars-bench`, a new `[project.scripts]` entry
 (`tools.bench.cli:main`). No dependency change; no `uv lock` churn.
 
-**Correction (2026-09-18):** this named `kepler-astro-query` as the script it
+**Correction (2026-09-18):** this named the retired runner script as the script it
 sat alongside. That entry point and the `tools/runner.py` shim behind it were
 retired once the console replaced them; the two scripts today are `mars` and
 `mars-bench`.

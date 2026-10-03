@@ -1,6 +1,6 @@
 """The console's colours: the official Skynet palette, as two Textual themes.
 
-MARS stays visibly part of Skynet (``docs/archive/mars-rebrand.md`` §4), so
+MARS stays visibly part of Skynet (``docs/repository-folders.md``, the palette), so
 the console takes the palette the brand assets use, by exact hex value --
 never sampled from a raster. Every widget styles itself through Textual's
 theme variables (``$accent``, ``$surface``, ``$panel``, ``$text-muted``), so

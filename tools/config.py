@@ -140,10 +140,9 @@ MARS_HOME = mars_home().resolve()
 BUNDLES_DIR = MARS_HOME / "bundles"
 
 #: Written into a fetched bundle's directory only after its archive verified.
-#: Kept from before the MARS rename: it is an on-disk format, and a bundle
-#: fetched by Kepler and moved into the MARS home must still be recognised.
-#: Renaming it would orphan every such bundle.
-BUNDLE_MARKER = ".kepler-bundle.json"
+#: A directory without it reads as not installed, and ``mars-mcp fetch-data``
+#: replaces it.
+BUNDLE_MARKER = ".mars-bundle.json"
 
 #: The manifest this install accepts bundles from. Read as a data file, not
 #: imported, so the base configuration module takes no dependency on tools.mcp.

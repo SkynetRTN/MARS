@@ -8,15 +8,9 @@
 > disposition is [the master continuation plan](../../working/master-continuation-plan.md),
 > DOC-01 and related validation rows.
 
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](../../archive/mars-rebrand.md).
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the Kepler TUI a deterministic, CI-tested artifact browser with terminal image and WAV previews.
+**Goal:** Give the MARS TUI a deterministic, CI-tested artifact browser with terminal image and WAV previews.
 
 **Architecture:** Keep capability probing and the two renderers framework-free under `tools/tui/render/`. `ArtifactBrowser` consumes the existing `tools.workspace.list_artifacts` metadata API, selects a renderer by the cached app graphics tier, and leaves tool and engine packages untouched.
 
@@ -33,7 +27,7 @@ when the track landed; git history has it.
 - The Sixel probe uses a short device-attributes timeout; environment detection has priority over the probe.
 - Pillow half-block rendering is the universal path and must be deterministic against a committed 4×4 PNG.
 - Native image tiers use `textual-image`; every artifact view keeps a readable filesystem path.
-- The WAV waveform is presentational only: Kepler sonification ignores source timestamps, so it cannot support a scientific period measurement.
+- The WAV waveform is presentational only: MARS sonification ignores source timestamps, so it cannot support a scientific period measurement.
 - Default tests are offline and deterministic; do not launch an external viewer in tests.
 
 ---
@@ -69,7 +63,7 @@ def test_detect_tier_uses_sixel_only_after_kitty_and_iterm2_checks():
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_render_capability.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_render_capability.py -v`
 
 Expected: FAIL because `tools.tui.render.capability` does not exist.
 
@@ -96,7 +90,7 @@ def detect_tier(environ=None, *, sixel_probe=_probe_sixel) -> GraphicsTier:
 
 - [ ] **Step 4: Run the focused capability tests**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_render_capability.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_render_capability.py -v`
 
 Expected: PASS.
 
@@ -139,7 +133,7 @@ def test_waveform_renders_stereo_pcm_as_a_braille_preview(tmp_path):
 
 - [ ] **Step 2: Run the renderer tests to verify they fail**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
 
 Expected: FAIL because the render modules and committed fixture are absent.
 
@@ -181,7 +175,7 @@ is sample index and cannot be used to infer a pulsar period.
 
 - [ ] **Step 4: Run the focused renderer tests**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
 
 Expected: PASS with exact ANSI output for the PNG fixture.
 
@@ -196,7 +190,7 @@ Expected: PASS with exact ANSI output for the PNG fixture.
 **Interfaces:**
 - Consumes: `tools.workspace.list_artifacts() -> list[ArtifactMetadata]`, `GraphicsTier`, `render_halfblocks`, and `render_waveform`.
 - Produces: `ArtifactBrowser(ModalScreen[None])` with a visible path, keyboard dismissal, a selected preview, and an explicit open-externally action.
-- Produces: `KeplerApp.graphics_tier` cached once at construction, `show_artifacts(args)` command handler, and `F3` browser binding.
+- Produces: `MARSApp.graphics_tier` cached once at construction, `show_artifacts(args)` command handler, and `F3` browser binding.
 
 - [ ] **Step 1: Write failing artifact-browser and app tests**
 
@@ -205,7 +199,7 @@ def test_artifact_browser_lists_metadata_and_keeps_the_path_visible(tmp_path):
     path = tmp_path / "result.txt"
     path.write_text("result", encoding="utf-8")
     browser = ArtifactBrowser([describe_artifact_file(path)])
-    app = KeplerApp(backend=object())
+    app = MARSApp(backend=object())
     async with app.run_test() as pilot:
         app.push_screen(browser)
         await pilot.pause()
@@ -213,7 +207,7 @@ def test_artifact_browser_lists_metadata_and_keeps_the_path_visible(tmp_path):
 
 
 def test_artifacts_command_opens_the_modal_without_starting_the_engine():
-    app = KeplerApp(backend=object())
+    app = MARSApp(backend=object())
     async with app.run_test() as pilot:
         await pilot.press("/", "a", "enter")
         await pilot.pause()
@@ -223,7 +217,7 @@ def test_artifacts_command_opens_the_modal_without_starting_the_engine():
 
 - [ ] **Step 2: Run the browser tests to verify they fail**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_artifacts.py tests/test_tui_app.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_artifacts.py tests/test_tui_app.py -v`
 
 Expected: FAIL because `ArtifactBrowser` and the handler do not exist.
 
@@ -247,12 +241,12 @@ def show_preview(self, artifact: ArtifactMetadata) -> None:
     preview.mount(_preview_widget(artifact, self.tier))
 ```
 
-Add `F3` and `/artifacts` to `KeplerApp`; cache `detect_tier()` in `__init__`
+Add `F3` and `/artifacts` to `MARSApp`; cache `detect_tier()` in `__init__`
 and show the tier in `_status_text`.
 
 - [ ] **Step 4: Run the focused TUI tests**
 
-Run: `UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_app.py tests/test_tui_artifacts.py tests/test_tui_render_capability.py tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
+Run: `UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_app.py tests/test_tui_artifacts.py tests/test_tui_render_capability.py tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
 
 Expected: PASS.
 
@@ -266,13 +260,13 @@ Expected: PASS.
 
 - [ ] **Step 1: Run formatting and focused checks**
 
-Run: `git diff --check && UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest tests/test_tui_app.py tests/test_tui_artifacts.py tests/test_tui_render_capability.py tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
+Run: `git diff --check && UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest tests/test_tui_app.py tests/test_tui_artifacts.py tests/test_tui_render_capability.py tests/test_tui_render_image.py tests/test_tui_render_waveform.py -v`
 
 Expected: clean diff check and every focused test passing.
 
 - [ ] **Step 2: Run the project verification commands**
 
-Run: `python3 -m compileall tools algorithms && UV_CACHE_DIR=/tmp/kepler-uv-cache uv run pytest && git diff --check`
+Run: `python3 -m compileall tools algorithms && UV_CACHE_DIR=/tmp/mars-uv-cache uv run pytest && git diff --check`
 
 Expected: syntax smoke test succeeds, default offline suite succeeds, and the patch has no whitespace errors.
 

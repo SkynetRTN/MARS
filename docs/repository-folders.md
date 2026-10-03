@@ -244,6 +244,45 @@ map and the document lifecycle.
 - `archive/` — completed track documents, kept as records.
 - `working/` — plans under active development. Empty today.
 - `examples/` — committed sample output.
+- `assets/` — the brand images and `make_brand.py`, which exports every one
+  of them (see below).
+
+### The brand palette
+
+MARS stays visibly part of Skynet, so its assets (the banner, the mark, the MCP
+server and extension icons) and the console's themes (`tools/tui/theme.py`)
+use the exact Skynet palette, by hex value, never sampled from a raster. The
+source is the Skynet/UNC proposal template, `beamer/beamercolorthemeskynet.sty`.
+
+| Color | Hex | RGB |
+| --- | --- | --- |
+| Brand Navy | `#2B3345` | `43, 51, 69` |
+| Navy (banner) | `#1F2633` | `31, 38, 51` |
+| Deep Night Blue | `#35556E` | `53, 85, 110` |
+| Slate Sky Blue | `#5E86A4` | `94, 134, 164` |
+| Mist Blue | `#B8D2E1` | `184, 210, 225` |
+| Warm Gold | `#D99633` | `217, 150, 51` |
+| Soft Apricot | `#EFC48A` | `239, 196, 138` |
+| Off White | `#F7F6F2` | `247, 246, 242` |
+
+The template also defines `#353E52`, `#414B60` and `#A9B4C4` as derived
+dark-mode interface surfaces. They are not Skynet palette colors, and neither
+is the template's UNC-Chapel Hill palette.
+
+### Names and the package namespace
+
+The distribution is **`skynet-mars`**, not `mars`: `mars` is taken on PyPI (an
+unrelated project), and Alibaba's `pymars` imports as `mars`. `skynet-` adds
+provenance, since the algorithms come from the Skynet Robotic Telescope
+Network.
+
+`tools` and `algorithms` stay top-level packages for now. They are generic
+enough that another installed project's `tools` package can collide with them,
+and moving them under one namespace is the durable fix. That move touches
+every import, test and extraction marker, so it is a change of its own (ARC-02
+in the master continuation plan). Until then no new top-level package is
+added (`tests/test_rebrand_guard.py`), and a namespace choice must not be
+`mars`, for the reason above.
 
 ## `algorithms/fieldcal/`
 

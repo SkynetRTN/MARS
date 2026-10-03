@@ -616,6 +616,39 @@ def test_a_corrupt_marker_reads_as_not_installed_and_is_replaced(tmp_path, publi
     assert json.loads((target / config.BUNDLE_MARKER).read_text())["sha256"] == spec.sha256
 
 
+def test_a_bundle_an_earlier_release_fetched_is_kept_not_downloaded_again(tmp_path, published):
+    """Earlier releases mark a fetched bundle under another file name. The
+    bytes decide: a tree that hashes to this install's pin is marked and
+    kept, rather than read as missing and fetched again (about 550 MB)."""
+    release, spec = published
+    target = tmp_path / "home" / "optical"
+    _tree(target)
+    (target / ".earlier-release-bundle.json").write_text(json.dumps({"sha256": spec.sha256}))
+    (release / spec.archive).unlink()  # a download would fail
+
+    _, fetched = fetch_bundle(
+        "optical", source=str(release), bundles_dir=tmp_path / "home", manifest={"optical": spec}
+    )
+
+    assert not fetched
+    assert json.loads((target / config.BUNDLE_MARKER).read_text())["sha256"] == spec.sha256
+
+
+def test_a_partial_download_of_another_archive_is_removed(tmp_path, published):
+    release, spec = published
+    downloads = tmp_path / "home" / ".downloads"
+    downloads.mkdir(parents=True)
+    stale = downloads / "earlier-optical-0123456789ab.tar.part"
+    stale.write_bytes(b"x" * 1024)
+    other_bundle = downloads / "mars-isochrones-0123456789ab.tar.part"
+    other_bundle.write_bytes(b"y")
+
+    fetch_bundle("optical", source=str(release), bundles_dir=tmp_path / "home", manifest={"optical": spec})
+
+    assert not stale.exists()
+    assert other_bundle.exists()
+
+
 def test_a_checkout_is_told_a_fetched_grid_needs_its_setting(tmp_path, monkeypatch, capsys):
     """In a checkout the grid is an operator setting; "installed" alone misled."""
     monkeypatch.setattr(bundles, "fetch_bundle", lambda name, **kwargs: (tmp_path / name, True))

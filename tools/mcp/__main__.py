@@ -54,8 +54,9 @@ def _missing_sdk_message(prefix: str | None = None, has_pip: bool | None = None)
     a bare ``pip install`` may be a different environment's pip, and an
     unpinned requirement may upgrade or downgrade the install it is meant to
     complete. So the advice names this environment and the installed
-    version. (Before the rename the bare command was a trap: the PyPI project
-    called ``kepler`` is unrelated, and ``-U`` replaced this install with it.)
+    version. (Under the project's earlier distribution name the bare command
+    was a trap: the PyPI project of that name is unrelated, and ``-U``
+    replaced this install with it.)
 
     An environment uv made has no pip.
 

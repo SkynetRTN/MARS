@@ -1,4 +1,4 @@
-# Kepler Algorithm Remediation Plan
+# MARS Algorithm Remediation Plan
 
 > **Planning cross-reference, 2026-10-01:** All 110 finding IDs now have current
 > dispositions and execution streams in the
@@ -6,12 +6,6 @@
 > The original rollout, duplicate counts and TypeScript targets below are
 > historical; several failures changed or disappeared in later Python/stateless
 > work. Use the master for scheduling and this record for original evidence.
-
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](../archive/mars-rebrand.md).
 
 Date: 2026-08-10
 Status: proposed
@@ -109,9 +103,9 @@ unit-level test for the decision logic whenever possible.
 
 ---
 
-## 3. What makes a finding urgent for Kepler specifically
+## 3. What makes a finding urgent for MARS specifically
 
-Severity alone is the wrong sort key for a tool package. Kepler's callers are
+Severity alone is the wrong sort key for a tool package. MARS's callers are
 LLMs, and an LLM cannot tell a plausible wrong number from a right one. So every
 finding carries a second attribute:
 
@@ -146,7 +140,7 @@ itself broke:
 |---|---|
 | CAT-08 | `docs/extraction.md`, Query §5.7 claims the runner passes a fresh `constraints` dict per catalog. It does not — SkyMapper's `flags=0` leaks into every subsequent catalog **and** into the caller's dict |
 | CAT-17 | `_round_for_cache`'s docstring claims the region "is never shrunk". The centre snap moves by up to ±5″ with no compensating growth |
-| CAT-22 | Kepler moved SIMBAD's probe from import-time to lazy+cached, introducing a latch: one transient failure disables resolution for the process lifetime |
+| CAT-22 | MARS moved SIMBAD's probe from import-time to lazy+cached, introducing a latch: one transient failure disables resolution for the process lifetime |
 | CAT-29 | `query_catalogs_for_image` re-pointed from `CATALOG_OPTIONS` to `CATALOGS`, unlisted in the extraction record |
 | TS-03 | The extraction replaced `this.service.setData(result)` with "return to caller", removing the invariant that populated `errorMSE` — the variable periodogram now returns an all-`NaN` spectrum, silently |
 
@@ -328,8 +322,8 @@ Each remediation PR should include a concise fix note in its PR body or in
 
 ```
 Finding:      <IDs closed>
-Before:       <what Skynet/Astromancer/current Kepler did>
-After:        <what Kepler now does>
+Before:       <what Skynet/Astromancer/current MARS did>
+After:        <what MARS now does>
 Test:         <targeted test added>
 Notes:        <numeric delta or compatibility concern, if relevant>
 ```

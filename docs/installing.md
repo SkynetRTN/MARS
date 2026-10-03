@@ -170,7 +170,9 @@ Everything else works without these bundles. The database tools query remote
 services. The pulsar and variable-star tools use data in the package. The
 server tells the model which bundles are missing, and the frame listing names
 the command to run. Restart the host after fetching, because the server reads
-data locations at startup.
+data locations at startup. After upgrading MARS, run `mars-mcp fetch-data` again:
+it checks what is installed against the new release's pins, keeps a copy whose
+bytes still match, and downloads only what changed.
 
 Plate solving (`solve_astrometry`) needs astrometry.net index files
 (`ANET_INDEX_PATH`) or a local UCAC catalogue (`ATLAS_CATALOG_ROOT`), which
@@ -191,12 +193,3 @@ Windows. Set `MARS_HOME` to move it.
 
 On Linux and macOS the default artifact directory and its files are private to
 you (`0700` and `0600`).
-
-### Upgrading from Kepler
-
-Kepler was renamed MARS in `0.1.0rc3`, and later releases do not read Kepler's
-names. Install `skynet-mars` into a new environment rather than over
-`kepler`. The two share files, and uninstalling `kepler` afterwards breaks
-MARS. Rename `KEPLER_*` variables to `MARS_*`, and point hosts at `mars-mcp`.
-Copy `bundles/` (and anything else you want) from `~/.local/share/kepler`
-into the MARS home, or set `MARS_HOME` to the old directory.

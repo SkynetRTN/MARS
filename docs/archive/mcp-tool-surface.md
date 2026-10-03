@@ -1,18 +1,12 @@
 # The MCP Tool Surface and the Agent Skill
 
-> [!NOTE] Renamed 2026-09-25
-> Kepler was renamed **MARS** (MCP Astronomy Research Suite), and the code
-> carries the new names from `0.1.0rc3`. This record keeps the names in use
-> when it was written: `kepler`, `kepler-mcp`, `KEPLER_*`. See [the rebrand
-> plan](mars-rebrand.md).
-
 > [!NOTE] Archived 2026-09-25
 > This track is complete and this document is a record, not a plan. Phases
 > C0–C9 landed on the `mcp-support` integration branch between 2026-09-23 and
-> 2026-09-25. Kepler's 55 tools are served over MCP by `kepler-mcp` to a
+> 2026-09-25. MARS's 55 tools are served over MCP by `mars-mcp` to a
 > coding agent's console on a machine with no checkout, with the agent skill
 > as instructions and resources. A wheel carries the core data, and
-> `kepler-mcp fetch-data` installs checksum-pinned optional bundles.
+> `mars-mcp fetch-data` installs checksum-pinned optional bundles.
 > **`v0.1.0rc1` is published** as a GitHub pre-release, and the repository was
 > made public for it.
 >
@@ -63,7 +57,7 @@
 >
 > **Correction, 2026-09-26 — second review, after those fixes.** It confirmed
 > 15 more, several introduced by the first round. The most serious:
-> - `pin_roots` exports `KEPLER_DATA_DIR`, which the first round's download
+> - `pin_roots` exports `MARS_DATA_DIR`, which the first round's download
 >   rule took as the user's choice, so every installed server downloaded into
 >   `site-packages`;
 > - a tool's `print()` reached the protocol stream;
@@ -80,7 +74,7 @@
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
 §3 and §5.
-**Unblocks:** Kepler's tools become callable from a console this repository
+**Unblocks:** MARS's tools become callable from a console this repository
 does not own, on a machine where **this repository is not checked out**.
 **Scope:** a fourth consumer of `tools/registry.py`; the skill that teaches a
 model which tool to reach for and which results are silently wrong; and the
@@ -96,8 +90,8 @@ that satisfies them.
 > §7 recorded four open questions for the maintainer. All four are answered as
 > of 2026-09-23 and the answers are now decisions, not options:
 >
-> 1. **Local.** Kepler is **packaged and installed by the user**, data
->    included. There is no Kepler-operated server and no data service.
+> 1. **Local.** MARS is **packaged and installed by the user**, data
+>    included. There is no MARS-operated server and no data service.
 > 2. **The user installs everything.** Their machine, their disk, their keys.
 > 3. **One server, not five.** The five workflow groups survive as a
 >    launch-time filter on one server, not as five servers.
@@ -113,14 +107,14 @@ that satisfies them.
 
 ## 1. Three instruments, divided by what the caller has
 
-Everything Kepler ships today assumes the caller is standing in the
+Everything MARS ships today assumes the caller is standing in the
 repository. That assumption is load-bearing in more places than it looks, and
 this track is about the case where it does not hold.
 
 | Instrument | For | What the caller has |
 | --- | --- | --- |
-| `tools/tui/` — the `kepler` console | A **human** at the tools. One model, one session, artifacts rendered in place, `/backend` to switch providers, resume from a session manifest. | **A checkout.** It is the entry point that proves the surface works with no third-party host installed at all. |
-| `tools/bench/` — `kepler-bench` | Measuring **models** on the tool surface. It ran 144 sessions across four providers, produced [`../benchmarking/report.json`](../benchmarking/report.json), and answered its question. An instrument, not a product; dormant until a new model is worth measuring. | **A checkout.** It substitutes `run_session`'s `tool_functions=` mapping and reads fixtures off local disk. |
+| `tools/tui/` — the `mars` console | A **human** at the tools. One model, one session, artifacts rendered in place, `/backend` to switch providers, resume from a session manifest. | **A checkout.** It is the entry point that proves the surface works with no third-party host installed at all. |
+| `tools/bench/` — `mars-bench` | Measuring **models** on the tool surface. It ran 144 sessions across four providers, produced [`../benchmarking/report.json`](../benchmarking/report.json), and answered its question. An instrument, not a product; dormant until a new model is worth measuring. | **A checkout.** It substitutes `run_session`'s `tool_functions=` mapping and reads fixtures off local disk. |
 | **This track** — the MCP server and the skill | A **coding agent in its own console** — Claude Code, Codex, Cursor — doing astronomy work. | **An installed package, and no checkout.** |
 
 The first two are instruments for someone who already has this checkout. They
@@ -136,7 +130,7 @@ everything that depended on a *checkout*:
 - The tools are not importable from the user's project, so
   `uv run python -c "from tools.pulsar import …"` is not the normal path and
   the skill cannot teach it as one.
-- There is no `skills/kepler-tools/SKILL.md` on the client's disk, because
+- There is no `skills/mars-tools/SKILL.md` on the client's disk, because
   there is no repository on the client's disk. **The skill has to travel with
   the server** (§3.4). This is the premise that survives the hosting decision
   intact, and it is why C1 and C5 are not optional.
@@ -177,7 +171,7 @@ generated from the tool functions and sits on no import path a plain Python
 caller touches.
 
 One structural property makes the whole thing cheap. *"One public tool call is
-Kepler's execution boundary"* — no run, stage or session object spans two
+MARS's execution boundary"* — no run, stage or session object spans two
 calls, and no tool writes state another tool reads. There is nothing to bridge.
 A stateful surface would have made this track a rewrite; instead it is a
 translation.
@@ -188,7 +182,7 @@ translation.
 
 ### 3.1 The result contract: the path still works, the media does not
 
-Every Kepler tool today returns the same shape: a **bounded inline preview**
+Every MARS tool today returns the same shape: a **bounded inline preview**
 plus an **artifact path**, with the full data written to a file.
 `../tool-architecture.md` §7 makes it policy — *"large payloads returned as
 artifacts plus summaries"* — and it is the right design when the caller shares
@@ -215,7 +209,7 @@ tools use it. This is C4 and it is the only part of the old §3.1 that the
 hosting decision left standing at full size.
 
 **Where the artifacts went has to be discoverable.** The artifact directory is
-whatever `KEPLER_ARTIFACT_DIR` names, or `artifacts/` beside whatever working
+whatever `MARS_ARTIFACT_DIR` names, or `artifacts/` beside whatever working
 directory the host happened to launch the server from (§3.2). Under a packaged
 install the user has no `data/` to look in and no checkout to orient by.
 `describe_artifact` and `list_artifacts` (`tools.workspace`) are therefore
@@ -230,8 +224,8 @@ for, and §3.3 no longer contains a deployment where the path fails. Recorded as
 a known extension; see §4.3.
 
 Nothing relaxes the caps. `PREVIEW_ROWS` defaults to 10, and
-`KEPLER_MAX_FRAMES` (200), `KEPLER_MAX_CATALOGS` (20) and
-`KEPLER_MAX_OBSERVATIONS` (25) exist to keep a result out of a model's
+`MARS_MAX_FRAMES` (200), `MARS_MAX_CATALOGS` (20) and
+`MARS_MAX_OBSERVATIONS` (25) exist to keep a result out of a model's
 context. A client that wants the whole table reads the artifact — which, here,
 it can.
 
@@ -239,7 +233,7 @@ it can.
 
 A host launches a server with a working directory the server did not choose —
 under the local model, almost always *the user's own project directory*, which
-has nothing to do with Kepler. Verified on `dev` at 2026-09-18 and again at
+has nothing to do with MARS. Verified on `dev` at 2026-09-18 and again at
 C0 on 2026-09-23, `tools/config.py` splits two ways on this:
 
 - `DATA_DIR = env_path(DATA_DIR_ENV, _REPO_ROOT / "data").resolve()` — anchored
@@ -253,12 +247,12 @@ C0 on 2026-09-23, `tools/config.py` splits two ways on this:
 The module's own comment explains why it resolves at import — *"a bare
 `artifacts/…` silently means something different in each of those"* — and that
 reasoning applies with more force here. **The server resolves and pins
-`KEPLER_ARTIFACT_DIR` at startup** and does not leave it implicit. Whether the
+`MARS_ARTIFACT_DIR` at startup** and does not leave it implicit. Whether the
 pinned value should be the launch cwd (artifacts land in the user's project,
 where their agent is already looking) or a fixed per-user directory is C3's
 call; what is not optional is that the server states the answer, logs it, and
 reports it through `describe_artifact`/`list_artifacts`. *(Archive note:
-decided in C3 — a fixed per-user directory, the Kepler home's `artifacts/`.)*
+decided in C3 — a fixed per-user directory, the MARS home's `artifacts/`.)*
 
 Two related notes:
 
@@ -280,15 +274,15 @@ leaves one target and one rehearsal:
 
 | Shape | Transport | Who holds the data and keys | Status |
 | --- | --- | --- | --- |
-| **(a) From a checkout** — the host launches the server out of a development tree | stdio | The developer, on their own machine | **The rehearsal.** How (c) is built and tested; how a Kepler developer wires their own console to their own checkout. C3. |
+| **(a) From a checkout** — the host launches the server out of a development tree | stdio | The developer, on their own machine | **The rehearsal.** How (c) is built and tested; how a MARS developer wires their own console to their own checkout. C3. |
 | **(c) Packaged** — installed by the user, launched by the host | stdio | The user, on their own machine, after installing | **The target.** C7, released for testing in C8. |
-| ~~(b) Detached — server over the network, operator-held data~~ | ~~HTTP~~ | ~~An operator~~ | **Deleted.** No HTTP transport, no network authentication, no Kepler-operated service. |
+| ~~(b) Detached — server over the network, operator-held data~~ | ~~HTTP~~ | ~~An operator~~ | **Deleted.** No HTTP transport, no network authentication, no MARS-operated service. |
 
 Deleting (b) removes four things from the track, and they are removed rather
 than deferred: the HTTP transport, the authentication design, the server-side
 ceilings a client could not raise (§4.1), and the credential-isolation
 requirement — the keys are the user's own, in the user's own environment,
-exactly as they are for the `kepler` console today.
+exactly as they are for the `mars` console today.
 
 What it adds is §3.5. A detached server was a way of *not* shipping 175 MB and
 a 5 GB catalogue to anybody. Local installation means the data problem is now
@@ -299,7 +293,7 @@ the user's, which means it is now the packaging's.
 This is the premise the hosting decision did **not** touch, and it is worth
 being explicit about why: "local" answers *where the server runs*, not *what
 the client has*. The client is a coding agent in a user's own project. A skill
-file living at `skills/kepler-tools/SKILL.md` in this repository is not on that
+file living at `skills/mars-tools/SKILL.md` in this repository is not on that
 disk and nothing will ever read it.
 
 **The server serves the skill.** MCP delivers instructions from the server to
@@ -317,9 +311,9 @@ the client at connection time, and exposes further documents as resources. So:
   place the track uses resources, and it is content the model needs rather
   than data it might want.
 
-The repository keeps a copy at `skills/kepler-tools/` for the checkout case and
+The repository keeps a copy at `skills/mars-tools/` for the checkout case and
 for a human reading it, but that copy is **rendered from the same source** as
-the served text, and a test asserts they agree. `.claude/skills/kepler-tools`
+the served text, and a test asserts they agree. `.claude/skills/mars-tools`
 is a symlink to it; `AGENTS.md` and `CLAUDE.md` gain one pointer line each.
 Those two files are about working *on* the repository, which is a different
 axis and stays that way.
@@ -348,7 +342,7 @@ Three findings follow, and each is a C7 requirement rather than a remark.
 
 **Nothing under `data/` is packaged.** There is no `MANIFEST.in`, and
 `[tool.setuptools.packages.find]` includes `tools*` and `algorithms*` only, so
-`data/` appears in no distribution. A `pip install` of Kepler today yields a
+`data/` appears in no distribution. A `pip install` of MARS today yields a
 `DATA_DIR` pointing at a directory that does not exist, and every bundled-data
 tool — `list_pulsar_scans`, `list_optical_frames`, `list_zeropoint_references`,
 `list_variable_star_fixtures` — enumerates nothing.
@@ -375,16 +369,16 @@ what belongs in a wheel and past PyPI's per-file limit, but the user's ask —
   the optical bundle; the zero-point references themselves are core.
 - **Optional bundles, fetched on demand:** the optical frame library (257 MB)
   and the isochrone grid (364 MB), published as **GitHub release assets** —
-  which is also what C8 is for — fetched by a `kepler-mcp fetch-data` command
+  which is also what C8 is for — fetched by a `mars-mcp fetch-data` command
   into a user-writable directory, checksum-verified, and pointed at by
-  `KEPLER_DATA_DIR`/`KEPLER_OPTICAL_DATA_DIR`/`KEPLER_ISOCHRONE_DIR`.
+  `MARS_DATA_DIR`/`MARS_OPTICAL_DATA_DIR`/`MARS_ISOCHRONE_DIR`.
 - **Never bundled:** the astrometry.net indexes and the ATLAS catalogue. They
   stay operator-supplied and opt-in exactly as `CLAUDE.md` describes, and
   `solve_astrometry` keeps degrading to "unavailable" when they are absent,
   which it already does correctly.
 
 One thing that looked like a dependency is not: `/srv/agents/catalogs/photometry`
-(40 GB — APASS, VSX, Landolt, Stetson) is **read by no Kepler code**. A grep of
+(40 GB — APASS, VSX, Landolt, Stetson) is **read by no MARS code**. A grep of
 `tools/` and `algorithms/` finds no reference to it. It belongs to Skynet's
 pipeline, not this one, and it is not a packaging input.
 
@@ -405,8 +399,8 @@ missing — and under local installation they would all be the same process
 launched five times off the same disk. **One server.** The grouping survives as
 a launch-time filter, not as a product:
 
-- `kepler-mcp` is one script entry and serves all 55 tools by default.
-- `kepler-mcp --tools databases,timeseries` (or `KEPLER_MCP_TOOLS`) serves only
+- `mars-mcp` is one script entry and serves all 55 tools by default.
+- `mars-mcp --tools databases,timeseries` (or `MARS_MCP_TOOLS`) serves only
   those groups, for a user who wants a quarter of the surface in their context.
 - The groups live in **one module** as a declared mapping, and a test asserts
   they partition the registry exactly — every tool in exactly one group, no
@@ -432,7 +426,7 @@ isochrone grid (§3.5).
 
 **A dispatcher is not the answer**, and this is settled ground:
 [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md) §2
-credits Kepler for shipping one schema per database *instead of* one dispatcher
+credits MARS for shipping one schema per database *instead of* one dispatcher
 with a `database` enum — *"already a step past what Astro MCP does."*
 Collapsing to `query_database(database=…, …)` to save tokens would walk that
 back and discard the per-database argument validation that makes the schemas
@@ -547,14 +541,14 @@ recorded here so a later reader knows it was considered and priced, not missed.
 
 ### 4.4 Third-party console sessions are unmeasured
 
-`kepler-bench` grades trajectories by substituting `run_session`'s
+`mars-bench` grades trajectories by substituting `run_session`'s
 `tool_functions=` mapping to replay the 22 remote tools. Under MCP the loop
 belongs to the host: there is no substitution seam and no fixture replay. A
 Claude Code or Codex session on this surface produces no graded trajectory, and
 B2 — *nothing opens a socket under a plain `uv run pytest`* — says nothing
 about it, because it is not running under pytest.
 
-The benchmark continues to measure models through Kepler's own loop, which is
+The benchmark continues to measure models through MARS's own loop, which is
 the only place it can. **This is a reason the console and the harness stay**,
 not a defect in the MCP surface.
 
@@ -642,7 +636,7 @@ its output is what the rest of this document is written against. Measured on
       `run_photometry_on_target`, `select_cluster_members`,
       `solve_astrometry`. `DEFAULT_BLOCKED` is `{solve_astrometry}`.
 - [x] **The cwd finding of §3.2 reproduces.** Importing `tools.config` with
-      cwd `/tmp` and `KEPLER_ARTIFACT_DIR` unset gives
+      cwd `/tmp` and `MARS_ARTIFACT_DIR` unset gives
       `ARTIFACT_DIR=/tmp/artifacts`, `DATA_DIR=<repo>/data`,
       `FITS_DOWNLOAD_DIR=<repo>/data/fits_downloads`, `ISOCHRONE_DIR=None`,
       `DEFAULT_MAX_FRAMES=200`. The artifact root follows the host's launch
@@ -661,7 +655,7 @@ its output is what the rest of this document is written against. Measured on
       assets that will never be bundled; **no `MANIFEST.in` and no `data/` in
       any distribution today**; the fixture-write guard and the download root
       both re-anchor to `site-packages` under a wheel; and
-      `/srv/agents/catalogs/photometry` (40 GB) is referenced by no Kepler
+      `/srv/agents/catalogs/photometry` (40 GB) is referenced by no MARS
       code and is not a packaging input.
 - [x] **Guidance inventory.** `SYSTEM_PROMPT` in `tools/agent/prompt.py` is
       the authority. It is restated in `CLAUDE.md` (PERIOD SOURCING, the
@@ -699,7 +693,7 @@ different shape, and it is much better to learn that now.
 - [x] Author the skill source: an entry document plus per-domain references
       (databases, pulsar, optical, HR, radio). One source, per §3.4. It lives
       at **`tools/skill/source/`** — inside the `tools` package, because the
-      source has to ship with an installed Kepler for C5 to serve it, and
+      source has to ship with an installed MARS for C5 to serve it, and
       `skills/` at the repository root is in no distribution.
       `pyproject.toml` gains one `package-data` line for it; a wheel built
       from this branch carries all seven documents. A sixth reference,
@@ -716,8 +710,8 @@ different shape, and it is much better to learn that now.
       section name, in a `> Authority:` block. Rules the prompt does not cover
       — the variable-star chain, the recorded zero-point references — cite the
       registry description instead, and say so.
-- [x] Render the repository copy to `skills/kepler-tools/`;
-      `.claude/skills/kepler-tools` → symlink; one pointer line each in
+- [x] Render the repository copy to `skills/mars-tools/`;
+      `.claude/skills/mars-tools` → symlink; one pointer line each in
       `AGENTS.md` and `CLAUDE.md`. `python -m tools.skill` renders and
       `--check` reports drift. The rendered copy differs from the source only
       by the `SKILL.md` frontmatter a skill loader reads and a
@@ -732,7 +726,7 @@ different shape, and it is much better to learn that now.
       checks the pulsar stages appear in dependency order in both, and fails
       if a cited section is not in the text it cites, if a registered tool is
       named nowhere in the skill, if a named call is not registered, if a
-      relative link is dead, or if `skills/kepler-tools/` is stale.
+      relative link is dead, or if `skills/mars-tools/` is stale.
       `tools.skill` is in `NOT_TOOL_MODULES`.
 
 **Gate:** a fresh agent session, given only the skill and this checkout,
@@ -825,7 +819,7 @@ in both directions, and the scan is a test.
       nothing from `tools`), `surface` (what is served — tool list, the
       stringified-null pre-check, result shape — with **no SDK import**, so a
       plain `uv run pytest` tests it), `server` (the only SDK import) and
-      `__main__` (`kepler-mcp`). Nothing under `tools/agent/` or `tools/llm/` is
+      `__main__` (`mars-mcp`). Nothing under `tools/agent/` or `tools/llm/` is
       imported; `surface.normalize_result` mirrors the engine's
       `_normalize_result` rather than importing it.
 - [x] Pick and justify the dependency option from §3.8 in the PR. **Option
@@ -848,17 +842,17 @@ in both directions, and the scan is a test.
       (`tool_exception`) is the call's error result, never a dead session;
       both new codes are declared in `tools/codes.py`. Calls run in a worker
       thread under a lock: one at a time, as every tool was written for.
-- [x] **Resolve and pin `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` at
+- [x] **Resolve and pin `MARS_ARTIFACT_DIR` and `MARS_DATA_DIR` at
       startup** (§3.2), and state in the PR which root the artifact directory
       was pinned to and why. Log both at startup; a user must be able to see
       where artifacts are going without reading code. **Pinned to a per-user
-      directory** — `$XDG_DATA_HOME/kepler/artifacts` (default
-      `~/.local/share`), `~/Library/Application Support/kepler/artifacts` on
-      macOS, `%LOCALAPPDATA%\kepler\artifacts` on Windows — not the launch
+      directory** — `$XDG_DATA_HOME/mars/artifacts` (default
+      `~/.local/share`), `~/Library/Application Support/mars/artifacts` on
+      macOS, `%LOCALAPPDATA%\mars\artifacts` on Windows — not the launch
       directory. A host launches a server wherever it likes; the launch
       directory default would put an untracked `artifacts/` into the user's
       repository unasked, or fail on a directory they cannot write.
-      `KEPLER_ARTIFACT_DIR` still wins. Both roots are written into the
+      `MARS_ARTIFACT_DIR` still wins. Both roots are written into the
       environment **before** `tools.config` is imported — several modules copy
       `ARTIFACT_DIR` at import, so reassigning it later would move nothing —
       and a test asserts importing the entry point does not import
@@ -869,8 +863,8 @@ in both directions, and the scan is a test.
       registry addition cannot silently miss the surface. Twice:
       `surface.served_tools()` against the registry in every run, and the
       in-process SDK client's `tools/list` when the extra is installed.
-- [x] `kepler-mcp` in `[project.scripts]`, alongside `kepler` and
-      `kepler-bench`.
+- [x] `mars-mcp` in `[project.scripts]`, alongside `mars` and
+      `mars-bench`.
 
 **Gate:** a host connects over stdio **from a working directory outside this
 repository**, lists tools, and completes one local call (`list_pulsar_scans`)
@@ -878,16 +872,16 @@ and one remote call against a real service. Transcript and resolved roots in
 the PR. `uv run pytest` green and still socket-free.
 
 **Gate: met, 2026-09-24.** From a scratch directory outside the checkout, with
-the server launched as `uv run --project <checkout> --extra mcp kepler-mcp`:
+the server launched as `uv run --project <checkout> --extra mcp mars-mcp`:
 
 - **The SDK's stdio client** listed 55 tools, ran `list_pulsar_scans` (5
   scans) and `search_simbad(name="M31")` against live SIMBAD (1 row,
   artifact written under the per-user root). The server's stderr:
-  `artifact root: ~/.local/share/kepler/artifacts (per-user default)`,
+  `artifact root: ~/.local/share/mars/artifacts (per-user default)`,
   `data root: <checkout>/data (package default)`,
   `download root: <checkout>/data/fits_downloads`, isochrone grid unset.
 - **Claude Code as the host** (`--mcp-config`, `--strict-mcp-config`, Opus
-  5.5) reported the server connected with 55 `mcp__kepler__*` tools, called
+  5.5) reported the server connected with 55 `mcp__mars__*` tools, called
   both, and answered from the structured results — including the artifact
   path under the per-user root.
 
@@ -917,7 +911,7 @@ should say so.
       speculatively (§4.3). `structuredContent` is unchanged; media is
       additional content, never a replacement for the path.
 - [x] Keep row-oriented artifacts fetch-on-demand. `PREVIEW_ROWS` and the
-      `KEPLER_MAX_*` caps are **not** relaxed to compensate.
+      `MARS_MAX_*` caps are **not** relaxed to compensate.
 - [x] Promote `describe_artifact` and `list_artifacts` and say in their
       descriptions which directory they enumerate and that the server pinned
       it at startup. The registry is read-only here, so the server **appends**
@@ -992,12 +986,12 @@ PERIOD SOURCING entirely, silently. The served skill is therefore two-tier:
       characters. The pulsar tools' own descriptions carry measure-first too,
       so that rule depends on neither tier.
 - [x] Publish the per-domain references as resources the client reads on
-      demand. `kepler://skill/SKILL.md` and `kepler://skill/references/
+      demand. `mars://skill/SKILL.md` and `mars://skill/references/
       {databases,pulsar,optical,hr,radio}.md`, `text/markdown`, with relative
       links rewritten to those URIs. `references/checkout.md` is not served —
       it is how to call the tools as Python functions from a checkout. An
       unknown URI is a protocol error, not an empty document.
-- [x] A test asserting the served text and the `skills/kepler-tools/` copy are
+- [x] A test asserting the served text and the `skills/mars-tools/` copy are
       rendered from the same source and agree. Undoing each surface's
       rendering gives back the source exactly: the served documents with the
       URI prefix removed (and the checkout row restored), the repository copy
@@ -1022,7 +1016,7 @@ scratch directory, with only this server configured, its MCP resource tools
 allowed, and **Bash, Read, Glob, Grep, Write and Edit denied** — no way to reach
 the checkout or a skill file — and never told about provenance:
 
-- read `kepler://skill/references/pulsar.md` **first**, as the brief directs;
+- read `mars://skill/references/pulsar.md` **first**, as the brief directs;
 - **B0329+54:** blind search, refined to 0.714459 s, fold 265σ, compared to the
   curated 0.7145197 s only after measuring, reported as an independent
   detection;
@@ -1041,7 +1035,7 @@ the checkout or a skill file — and never told about provenance:
       covers, not by tool names: a tool added to an existing module joins its
       group with no edit, and a tool in a new module belongs to none until a
       group names it — which the partition test catches.
-- [x] `--tools` / `KEPLER_MCP_TOOLS` filters the served surface to named
+- [x] `--tools` / `MARS_MCP_TOOLS` filters the served surface to named
       groups; the default is all 55. The filter narrows what is **callable**
       as well as what is listed (a filtered-out tool is `unknown_tool`). An
       unknown group name fails at startup, naming the valid ones, before the
@@ -1081,7 +1075,7 @@ group exceeds ~4,000 tokens, and `--tools databases` serves exactly 16 tools.
 
 **Gate: met, 2026-09-24, with the served margin stated.** Over stdio from
 outside the checkout: the default serves 55 tools, `--tools databases`
-**exactly 16**, `KEPLER_MCP_TOOLS=timeseries,radio` 15, with the annotations
+**exactly 16**, `MARS_MCP_TOOLS=timeseries,radio` 15, with the annotations
 arriving as derived (`search_mast`: read-only false, destructive false, open
 world true). The schema payloads sum as required and none exceeds ~3,860
 tokens. **On the wire**, `databases` (~4,115) and `optical` (~4,272) sit 3–7%
@@ -1119,27 +1113,27 @@ The phase the hosting decision created. §3.5 is its specification.
       `data/` in a clone made without symlink support. And the recursion
       boundary was anchored at the download root itself, so a symlinked root
       earned a walk of wherever it pointed. Both are fixed: the data root falls
-      back to the checkout's `data/`, and the boundary is the Kepler home.)*
+      back to the checkout's `data/`, and the boundary is the MARS home.)*
       - the fixture guard's root is `BUNDLED_DATA_DIR` (the same directory in a
         checkout; the shipped core in a wheel, where `parents[1] / "data"`
         matched nothing), and it now also covers fetched bundles, which are
         copies of those fixtures. Still reads no setting;
-      - on an install `FITS_DOWNLOAD_DIR` defaults to `<kepler home>/
-        fits_downloads` — `tools/paths.py`'s per-user Kepler home, shared with
+      - on an install `FITS_DOWNLOAD_DIR` defaults to `<mars home>/
+        fits_downloads` — `tools/paths.py`'s per-user MARS home, shared with
         C3's artifact default. A checkout is unchanged;
       - `tools.optical`'s recursion boundary — a third guard §4.2 missed —
-        gains exactly one directory, that Kepler-owned download tree. Without
-        it an installed Kepler searched its own downloads flat and never saw a
+        gains exactly one directory, that MARS-owned download tree. Without
+        it an installed MARS searched its own downloads flat and never saw a
         nested MAST product. Anywhere else outside the data directory is still
         searched flat.
-- [x] `kepler-mcp fetch-data` for the optional bundles — the optical frame
+- [x] `mars-mcp fetch-data` for the optional bundles — the optical frame
       library and the isochrone grid — into a user-writable directory,
       checksum-verified, idempotent, resumable enough to survive a dropped
       connection. It must never write into the installed package.
       `tools/mcp/bundles.py`. Bundles are **deterministic plain `.tar`**
       (sorted, fixed mode/owner/mtime; not gzipped, whose output varies by zlib
-      version), content-addressed (`kepler-optical-0472c67e2f46.tar`, 268.8
-      MB, 42 files; `kepler-isochrones-12f8359efc78.tar`, 282.2 MB, 4,307
+      version), content-addressed (the optical archive, digest prefix `0472c67e2f46`, 268.8
+      MB, 42 files; the isochrone archive, `12f8359efc78`, 282.2 MB, 4,307
       `.npy` — the 93 MB source zip excluded). `tools/mcp/bundles.json` **ships
       in the wheel** and pins each archive's size and SHA-256, so a wheel
       accepts only its own bundles — C8's version-matching concern, settled
@@ -1154,13 +1148,13 @@ The phase the hosting decision created. §3.5 is its specification.
       from `list_optical_frames`, `resolve_optical_frame`,
       `list_photometry_targets` (which returned an empty library with no
       signal at all) and `replay_field_calibration`, each naming
-      `kepler-mcp fetch-data optical`. The isochrone fit already errors
+      `mars-mcp fetch-data optical`. The isochrone fit already errors
       clearly from `algorithms/`, which this track does not touch.
 - [x] Verify a clean install end to end: a fresh virtual environment, `pip
       install` the built wheel, launch the server, list tools, run
       `list_pulsar_scans` and one full pulsar chain. **Record installed size
-      and cold-import time** (§4.5). Python 3.14 venv, `uv pip install
-      'kepler-0.1.0-py3-none-any.whl[mcp]'`: Kepler ~10 MB (`tools` 8.1 MB
+      and cold-import time** (§4.5). Python 3.14 venv, `uv pip install` of
+      the 0.1.0 wheel with its `[mcp]` extra: MARS ~10 MB (`tools` 8.1 MB
       including the core data, `algorithms` 2.3 MB); the environment **639
       MB**, `llvmlite` alone 168 MB, then scipy 88, pandas 43, astropy 41.
       `import tools.registry`: **4.5 s cold** (bytecode compile), 1.3 s warm,
@@ -1175,13 +1169,13 @@ checkout serves the tools, runs the pulsar chain offline, refuses a write into
 its own installed fixture tree, and fetches the optical bundle on request.
 
 **Gate: met, 2026-09-25**, from a scratch directory with a scratch
-`KEPLER_HOME`, on the installed wheel (`tools` imported from the venv,
+`MARS_HOME`, on the installed wheel (`tools` imported from the venv,
 `is_checkout()` false). This machine has a checkout; nothing on the server's
 import path or data path was in it.
 
 - **Serves, and runs the pulsar chain offline:** 55 tools; the five scans from
   `site-packages/tools/_data/pulsar`; B0329+54 to 0.71479 s, `peak_fold_snr`
-  204.4, fold 204.4σ, the sonification inline. Artifacts in the Kepler home.
+  204.4, fold 204.4σ, the sonification inline. Artifacts in the MARS home.
   Before any fetch, `list_optical_frames` and `list_photometry_targets` warn
   `bundle_not_installed`.
 - **Fetches the optical bundle on request, and resumes:** against a local
@@ -1211,7 +1205,7 @@ that, the releases API answered 404 without a token.
       - **verify** installs the wheel with `[mcp]` on a clean runner with **no
         checkout**, on Python **3.12** (the floor) and 3.14 *(3.13 since #83 —
         archive note)*, and runs the new
-        **`kepler-mcp self-test`**: it launches the installed server over
+        **`mars-mcp self-test`**: it launches the installed server over
         stdio and detects B0329+54 from a measured period through the protocol;
       - **data** checks the standing `data` release holds every pinned archive
         at the pinned size and SHA-256, reading GitHub's own asset `digest`;
@@ -1230,7 +1224,7 @@ that, the releases API answered 404 without a token.
       `contents: write` on `publish` alone; `persist-credentials: false`
       everywhere; every `${{ }}` reaches a script through `env:`.
 - [x] Version and tag policy: what a pre-release means here, and how
-      `fetch-data` resolves which bundle version matches an installed Kepler.
+      `fetch-data` resolves which bundle version matches an installed MARS.
       A wheel fetching a mismatched bundle is a silent-wrong-answer bug of
       exactly the kind this track exists to prevent. `docs/releasing.md`: the
       tag is `v<pyproject version>`, enforced; a PEP 440 pre-release (`a`, `b`,
@@ -1242,8 +1236,8 @@ that, the releases API answered 404 without a token.
       and repeat C7's gate there. A clean `python:3.14-slim` container
       (aarch64; nothing from the development host, not even its home
       directory), installing anonymously from the public release URL with
-      `SHA256SUMS` verified: `kepler-mcp self-test` passed, and
-      `kepler-mcp fetch-data optical` fetched 269 MB from the `data` release
+      `SHA256SUMS` verified: `mars-mcp self-test` passed, and
+      `mars-mcp fetch-data optical` fetched 269 MB from the `data` release
       and verified it. **This found an install prerequisite no earlier step
       could:** `sep` 1.4.1 ships no Python 3.14 wheels on any platform, and
       `photutils` 3.0.0 no Linux aarch64 wheel, so pip compiles them and a
@@ -1254,7 +1248,7 @@ that, the releases API answered 404 without a token.
       `docs/installing.md` now says so, with the table. The environment is 844
       MB on aarch64 with the compiled builds.
 
-**Gate:** a tagged pre-release from which a tester installs Kepler, registers
+**Gate:** a tagged pre-release from which a tester installs MARS, registers
 the server with their own console, and completes a pulsar run.
 
 **Gate: met, 2026-09-25.** `v0.1.0rc1` was tagged at `fa9bdd1`, and the release
@@ -1262,11 +1256,11 @@ workflow passed all five jobs (build; `data` against the live release; verify
 on Python 3.12 and 3.14 on clean runners; publish). It published a
 pre-release with the wheel, the sdist and `SHA256SUMS`. The tester container
 above was committed as an image and registered with Claude Code as the MCP
-server (`docker run -i … /opt/kepler/bin/kepler-mcp`). A fresh session with
+server (`docker run -i … /opt/mars/bin/mars-mcp`). A fresh session with
 **only** that server — no checkout, no skill file, Bash/Read/Glob/Grep/Write/
 Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
 
-- read `kepler://skill/references/pulsar.md` first;
+- read `mars://skill/references/pulsar.md` first;
 - ran the chain on the scan in the container's `site-packages/tools/_data`,
   named the 0.016665 s peak as 60 Hz mains, excluded it (`start=0.05`),
   retuned `back_scale` 1.5/3/6, and found a stable 1.1912 s candidate at
@@ -1275,7 +1269,7 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
   independent detection, because the period came from outside the data"*, and
   named the two sonifications by the period each used;
 - listed **42 frames** from the container's fetched bundle,
-  `/root/.local/share/kepler/bundles/optical`.
+  `/root/.local/share/mars/bundles/optical`.
 
 ### Phase C9 — Documentation outcome — **complete, 2026-09-25**
 
@@ -1294,7 +1288,7 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
       enforces the direction**: an AST scan of `tools/mcp/` for `tools.agent`,
       `tools.llm` and `tools.tui`, and of `algorithms/` for `tools.mcp`.
 - [x] `README.md` documents installing the package, fetching the bundles, and
-      registering the server with a host: "Using Kepler from Your Own Coding
+      registering the server with a host: "Using MARS from Your Own Coding
       Agent", and the new folders in its tree. `technical-summary.md`'s
       "a proposal, not a delivered capability" paragraph is rewritten.
 - [x] Archive this document per `README.md`'s lifecycle. Every reference to
@@ -1310,8 +1304,8 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
 
 | Path | Phase |
 | --- | --- |
-| `tools/skill/` (source + renderer) + `skills/kepler-tools/` rendered copy | C1 |
-| `.claude/skills/kepler-tools` (symlink) | C1 |
+| `tools/skill/` (source + renderer) + `skills/mars-tools/` rendered copy | C1 |
+| `.claude/skills/mars-tools` (symlink) | C1 |
 | `tools/skill/source/BRIEF.md`, `tools/mcp/install.py` | C5 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
 | `tools/mcp/` (`roots`, `surface`, `server`, `__main__`; C5 `install`, C6 `groups`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
@@ -1327,7 +1321,7 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
 | `tools/bench/graders/__init__.py` | C2: three docstrings correcting the old `list[str]` asymmetry. No behaviour change. |
 | `docs/analysis/applicable-designs.md` | C2: a dated correction to §3's "exactly three values". |
 | `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C1: `tools.skill`. C3: `tools.mcp`. |
-| `pyproject.toml`, `uv.lock` | C1: package data for `tools/skill/source/`. C3: the `[mcp]` optional group (`mcp`, `jsonschema`) and the `kepler-mcp` entry. C7: the core data. |
+| `pyproject.toml`, `uv.lock` | C1: package data for `tools/skill/source/`. C3: the `[mcp]` optional group (`mcp`, `jsonschema`) and the `mars-mcp` entry. C7: the core data. |
 | `tools/config.py`, `tools/wcs.py`, `tools/optical.py`, `tools/pulsar.py`, `tools/fieldcal_reference.py`, `tools/photometry.py`, `tools/models.py` | C7: `BUNDLED_DATA_DIR` for the four hard-coded data paths; re-anchor the download root, the fixture-write guard and the recursion boundary; `bundle_not_installed`. |
 | `tools/_data` (symlink), `tools/paths.py`, `tools/mcp/bundles.py`, `tools/mcp/bundles.json`, `docs/installing.md` | C7 |
 | `docs/tool-architecture.md`, `docs/repository-folders.md`, `README.md` | C9. |
@@ -1348,8 +1342,8 @@ deletes `tools/registry.py`, `tools/agent/engine.py` or `tools/tui/app.py`.
 Recorded 2026-09-23. These are the decisions §§1, 3.1, 3.3, 3.5, 3.6, 4.1 and
 the phase list are written against; they are not open.
 
-1. **Hosting model — local.** The user installs a packaged Kepler containing
-   the data it needs. No Kepler-operated server, no data service. The
+1. **Hosting model — local.** The user installs a packaged MARS containing
+   the data it needs. No MARS-operated server, no data service. The
    consequence is §3.5: the data problem becomes a packaging problem, and it is
    the hardest one left in the track.
 2. **Who installs — the user.** Their machine, their disk, their keys. This is
@@ -1365,10 +1359,10 @@ the phase list are written against; they are not open.
 ### Still to decide, inside a phase rather than ahead of it
 
 - ~~**C3:** which root the artifact directory pins to.~~ **Decided in C3:** a
-  fixed per-user directory, logged at startup; `KEPLER_ARTIFACT_DIR` overrides.
+  fixed per-user directory, logged at startup; `MARS_ARTIFACT_DIR` overrides.
 - ~~**C3:** the §3.8 dependency choice.~~ **Decided in C3:** the SDK, option (1).
 - ~~**C7:** whether the optical frame library ships as one 257 MB bundle or is
   split further. Three 30 MB `ngc5286_globular_b` frames are a third of
   `data/optical/` between them.~~ **Decided in C7:** one bundle,
-  `kepler-optical-0472c67e2f46.tar`. Resumable downloads made a split
+  the `0472c67e2f46` optical archive. Resumable downloads made a split
   unnecessary.
