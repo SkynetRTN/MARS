@@ -164,8 +164,9 @@ def search_simbad_measurements(name: str, table: str = "flux") -> ToolResult:
 def search_simbad_bibliography(name: str) -> ToolResult:
     """Return every paper SIMBAD has on file that discusses ``name``.
 
-    A partial, incidental substitute for literature search while ADS support
-    is deferred -- not equivalent to it.
+    This is SIMBAD's object-linked bibliography, not a general literature
+    search. Use ``tools.ads.search_ads`` for fielded ADS search and the other
+    ``tools.ads`` functions for citation traversal and literature reviews.
     """
     if not name or not name.strip():
         return _blank_name_error()

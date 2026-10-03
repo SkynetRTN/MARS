@@ -1,18 +1,20 @@
 # MARS Master Continuation Plan
 
-**Status:** Active planning and evidence reconciliation, 2026-10-01. This is
-the single execution index for known continuing work. Items are sequenced below;
-implementation owners and calendar dates are unassigned until a phase starts.
+**Status:** M0 closed and M1 queued, 2026-10-02. This is the single execution
+index for known continuing work. Items are sequenced below; implementation
+owners and calendar dates are unassigned until a phase starts.
 **Baseline:** fetched `origin/dev` at `38bf06a`, plus the remediation on
 `feature/audit-remediation` at `a981c06`. The branch was rebased onto that `dev`
 commit before this inventory was written.
 The 2026-10-01 refresh found no further `dev` commits beyond `38bf06a`.
 PR #98 subsequently integrated `origin/main` at `858b074` (the merge of that
-same `dev` baseline; no additional source changes).
-During CI, `main` advanced to `666f2db` (PR #97). Its per-host installation
-documentation and desktop-host proposal are reconciled here; `dev` remains
-at `38bf06a`. Desktop D0–D4 joins M4 as proposed, gated work, not implementation
-performed by this remediation PR. Browser support remains expressly parked.
+same `dev` baseline; no additional source changes), then incorporated PR #97's
+per-host installation documentation and desktop-host proposal. PR #98 merged
+to `main` as `81017e6`; `dev` remains at `38bf06a`. Desktop D0–D4 joins M4 as
+proposed, gated work, not implementation performed by the remediation PR.
+Browser support remains expressly parked. The M0 closure branch subsequently
+merged current `main` at `eacb1a7` (the urllib3 2.8 lock update) and repeated
+the release-target gates recorded in §6.
 **Prerequisites:** the extraction/preservation contract in `AGENTS.md` and
 `CLAUDE.md`; current reference documents; explicit scientific-divergence scope
 before changing preserved numerical behavior.
@@ -66,7 +68,7 @@ No numerical fix is authorized merely by this documentation update.
 
 | Phase | Ordered scope | Prerequisites / owner role | Exit gate |
 | --- | --- | --- | --- |
-| M0 — integrated baseline | Reconcile current `dev`, retain rc4/Python 3.13/bounded dependency policy, exercise remediation and wheel/data release gates; DOC-01. | Repository/release maintainer | Locked environment and metadata checks; focused regression suite; built wheel and distribution checker; installed MCP/data self-test. Record omitted platform, live and slow checks explicitly. |
+| M0 — integrated baseline — **closed 2026-10-02** | Reconcile current `dev`, retain rc4/Python 3.13/bounded dependency policy, exercise remediation and wheel/data release gates; DOC-01. | Repository/release maintainer | Met by the current-main, clean Python 3.13 wheel/data evidence in §6. Platform, actual-host, publishing and live-service checks remain explicitly assigned to later phases. |
 | M1 — resource and containment | ALG-01; S1 algorithm rows; PUL-02/03/05/06; ART-01; AUD-01/02/03; MCP-01. First reproduce with bounded tests, then guard, isolate or intentionally correct. | Tool/runtime maintainer plus domain reviewer for numerical changes | Dangerous inputs fail with bounded structured results; crashing geometry is tested in a subprocess; destination containment and approval classifications are covered; valid fixtures preserve the declared contract. |
 | M2 — scientific meaning | PUL-01/04/08; S2 algorithm rows; SCI-01; BEN-01. Start with channel labels and confirmed HR coordinate/unit/join bugs; CAT-01 band-selection safeguards are already assigned to M1. | Astronomy reviewer and tool/algorithm owner; preservation decision per finding | Independent scientific reference tests, explicit units/modes, before/after numeric effects, updated preservation assertions/provenance; saved benchmark transcripts regraded. |
 | M3 — recoverable failures | S3 algorithm rows; PUL-07 after ART-01; VAL-01/02/05. | Provider/tool maintainer | Malformed/empty/provider inputs cannot escape the result contract; retries and missing-data distinctions are deterministic; schemas expose intended bounded arguments. |
@@ -94,8 +96,8 @@ historical duplicate-file counts and TypeScript paths are obsolete.
 
 ## 3. Already implemented or superseded
 
-These are not queued for implementation again. Branch-only changes still need
-normal review/merge and release before they reach installed users.
+These are not queued for implementation again. Changes on `main` still need a
+release before they reach installed users.
 
 | Item | Current disposition / evidence |
 | --- | --- |
@@ -130,7 +132,7 @@ required in addition to the shared gates in §2.
 | AUD-01 / P1 / M1 | `tools/agent/policy.py` and MCP effect annotations differ: many table/time-series/HR calls write private artifacts but have no agent write tag. | Define whether routine private artifacts require consent and document deliberate exemptions. Use a shared effect inventory where practical; test every registered writer plus download/header flags. Retain per-risk approvals. Do not claim current headless policy blocks every filesystem write. |
 | AUD-02 / P2 / M1→M4 | Partially completed in PR #98: all workflow actions use verified commit SHAs, and CI/release uv is consistently version-pinned. Container images remain mutable tags and twine is major-pinned. | Pin reviewed container digests and remaining tool versions; add an update policy. Verify with actionlint, zizmor, secret scan and actual workflows. Action pins were required by the initial PR zizmor failure; record rerun evidence below before closing. |
 | AUD-03 / P2 / M1 | Local artifacts/downloads accumulate; trusted stdio calls can read caller-selected paths. Private permissions do not provide a server sandbox. | Document supported local single-user trust and intentional absolute-path access. Define retention/disk budgets and safe cleanup boundaries. Any shared-service proposal requires a separate auth/containment design; test cleanup never removes operator datasets. |
-| AUD-04 / P3 / M0 | Release comment describes GitHub → TestPyPI → PyPI as sequential; GitHub/TestPyPI jobs actually share prerequisites and run in parallel. | Choose intended publication order and align narrative/DAG. Check PyPI remains transitively gated by data verification and served-wheel comparison. |
+| AUD-04 / P3 / M0 | Closed 2026-10-02: GitHub and TestPyPI publication intentionally run in parallel after the same build/install/data gates; `verify-testpypi` then byte-compares and self-tests the served wheel before PyPI. | Workflow comments and `docs/releasing.md` now describe the actual DAG. Parsed `needs` edges confirm both parallel jobs depend on `build`, `verify`, `data` and `verify-data`, while `publish-pypi` depends on `verify-testpypi`. |
 | AUD-05 / P3 / M4 | `mars-bench` entry point ships, while benchmark assets are documented as checkout-only. | Exercise installed invocation with no checkout. Provide an actionable diagnostic or intentionally package the required assets; document the chosen scope. |
 | ARC-01 / P2 / M4 | `tools/registry.py` imports all domains eagerly; filtering MCP groups does not isolate heavy imports or mandatory base dependencies. | Separate import-light definitions from callable loading; choose domain extras after measuring startup/size. A selected group avoids unrelated heavy domains and missing optional dependencies return structured errors; registry/schema/group identity stays compatible. |
 | ARC-02 / P2 / M4 | Generic top-level `tools`/`algorithms` packages collide with other distributions; [`repository-folders.md`](../repository-folders.md#names-and-the-package-namespace) defers migration. | Choose a namespace and compatibility/version policy after checking conflicts, including that note's warning about another project's `mars` import. Migrate imports, package data, entry points, extraction markers and distribution checks together; installed coexistence tests pass. |
@@ -158,7 +160,7 @@ required in addition to the shared gates in §2.
 | VAL-03 / P2 / M4 | A legacy blind WCS test omits configured solver settings and skips on no solution even when data exists. | Pass configured settings; skip only for absent/incompatible resources. A supported configured fixture must assert a solution or fail with diagnostic evidence. |
 | VAL-04 / P2 / M4 | ATLAS tests establish UCAC reachability/bounded attempts, not blind triangle convergence. | Operator-gated known-solution case asserts position/scale/rotation tolerances and useful failures; missing catalog clearly skips. |
 | VAL-05 / P2 / M3 | ADS `abs:`/`object:` grouping is a precaution without a confirmed parser fix (`tools/ads.py`, agent prompt). | Run a credential-gated minimal query matrix, isolate failure/retry behavior, then pin query construction and returned shapes offline; no default key/network requirement. |
-| DOC-01 / P3 / M0→M5 | Partial: this change updates indexes/source crosslinks, moves the external snapshot and annotates TUI completion. Other stale source/doc statements can still exist, including SIMBAD's deferred-ADS wording. | Keep planning sources routed here and replace named stale statements with current code/evidence locators. Preserve dated history with corrections. Working contains this plan and its index; full closure records final checks and any retained documentation debt. |
+| DOC-01 / P3 / M0→M5 | M0 portion closed: the master update fixed indexes/source crosslinks, moved the external snapshot, annotated TUI completion and replaced SIMBAD's obsolete deferred-ADS wording with current `tools.ads` locators. General stale-statement follow-through remains for M5. | Keep planning sources routed here and replace named stale statements with current code/evidence locators. Preserve dated history with corrections. Working contains this plan and its index; full closure records final checks and any retained documentation debt. |
 
 ## 5. Complete historical algorithm disposition register
 
@@ -335,10 +337,12 @@ the named helper behavior, not all public-tool reachability or fitting impacts.
 | --- | --- | --- |
 | Pre-rebase rc3 remediation | 2,765 non-slow tests passed; installed no-checkout wheel self-test exercised both verified bundles, 55 tools, six skill resources, five pulsar scans, 42 optical frames and a 597-row isochrone track. | Historical evidence only for the rc3 tree; not a claim about latest rc4. |
 | Integrated rc4 tests, 2026-10-01 | Focused paths: 186 passed. Non-slow MCP-enabled suite: **2,779 passed, 10 skipped, 92 deselected**, 182 warnings. Local runtime is Python 3.14.7/Linux aarch64; supported CI target is Python 3.13. Lock, syntax, skill-rendering and diff checks passed. | The 92 slow tests were not run. Skips include absent solver/model/provider resources and unavailable saved benchmark directories. Python 3.13 and other platforms remain separate evidence gates; do not treat this as the full default suite. |
+| M0 `main` baseline and reconciliation, 2026-10-01–02, from `81017e6` | Full default suite, including slow tests: **2,833 passed, 48 skipped**, 188 warnings before the M0 edits; the post-edit suite repeated the same counts in 7m27s on Python 3.14.7/Linux aarch64. | Skips cover 38 opt-in live catalog cases, four absent saved benchmark directories, one live model, one additional live query, unavailable ATLAS/astrometry resources and one uncovered local solver fixture. Python 3.13 and other platforms remain separate evidence gates. |
 | Integrated rc4 wheel/data, 2026-10-01 | Built rc4 wheel passes expanded distribution/licence check. Installed into a pre-existing dependency environment without checkout, it passes `self-test --with-data`: both bundle digests, 597-row track, 55 tools, six skill resources, five pulsar scans, detection/audio and 42 optical frames. All 93 installed packages satisfy dependency constraints. | This was wheel replacement with existing dependencies, not a clean Python 3.13 dependency installation. Release/INS-01 must supply that target/platform evidence. |
-| PR #98 initial CI, 2026-10-01, `3a8b228` | GitHub CI run `36900477409`: Python 3.13 tests, syntax, package and repository shape passed. Secret scan run `36900477414` passed. Workflow safety run `36900477308`: actionlint passed; zizmor 1.30.1 rejected 25 mutable action references. Verified upstream tag commits replaced those references, without suppressing the audit. Local zizmor 1.30.1 offline audit then passed (zero unsuppressed findings; three existing suppressions retained). | Required workflow safety failed on the initial revision; online CI rerun on the action-pin fix is required before merge. Release publishing, platform and actual host gates remain separate. |
+| M0 release-target closure, 2026-10-02, after merging `main` at `eacb1a7` | `uv lock --check`, syntax compilation and the rebuilt optical-manifest check passed. The 221-test packaging/MCP focus passed on Python 3.14.7/Linux aarch64. A fresh rc4 wheel and sdist passed strict Twine metadata and the distribution/licence checker. From outside the checkout, the wheel installed with its MCP extra and no pre-existing packages into Python **3.13.15**; `pip check` passed with urllib3 2.8.0 and MCP 2.2.0. Both published, manifest-pinned bundles downloaded and verified, then `self-test --with-data` passed: 597-row isochrone, 55 tools, six skill resources, five scans, detection/audio and 42 optical frames. | Linux aarch64 only. The previously recorded full default suite supplies the slow-test gate because M0 changed only documentation/comments and then merged the urllib3 lock-only update. Opt-in live providers/models, unavailable solver/catalog resources, publishing, Windows/macOS and actual desktop hosts remain assigned to VAL/INS/M4 rather than inferred here. |
+| PR #98 CI, 2026-10-01, merged as `81017e6` | Initial runs at `3a8b228`: Python 3.13 tests, syntax, package, repository shape and secret scan passed; zizmor 1.30.1 rejected 25 mutable action references. Verified upstream commits replaced those references without suppressing the audit. Final head `3a602bc`: CI run `36914768038`, secret scan `36914768075` and workflow-safety run `36914767931` all passed, including actionlint, zizmor and both required aggregate checks. | PR #98's required online checks are closed. Release publishing, platform and actual host gates remain separate. |
 | Master completeness, 2026-10-01 | Automated comparison confirms every original algorithm ID occurs exactly once: 110/110. Pulsar/validation/external rows and local master/index links/anchors checked. | Refresh inventory when code or source reviews change; source review completeness does not prove absence of undiscovered bugs. |
-| Platforms/hosts/workflows | Source/DAG inspection, parsed workflow YAML, assertions that data gates both GitHub/TestPyPI and transitively PyPI, SDK-level tests and documented host configuration; actual PR check evidence is recorded above. | No claim of current Windows/macOS or actual Claude/Cursor validation; INS-01. Passing workflow-security rerun and publishing workflow execution still need actual evidence. |
+| Platforms/hosts/workflows | Source/DAG inspection, parsed workflow YAML, assertions that data gates both GitHub/TestPyPI and transitively PyPI, SDK-level tests and documented host configuration; final passing PR #98 check evidence is recorded above. | No claim of current Windows/macOS or actual Claude/Cursor validation; INS-01. Publishing workflow execution remains a separate evidence gate. |
 
 Update this ledger as checks run. A skipped test is not a successful solver or
 provider verification. Each closed finding gets its PR/commit, test locator,
