@@ -54,6 +54,8 @@ Three consequences shape everything here:
 | `test_skylib_geometry.py` | Pixel/aperture overlap, spherical angles, orientation decomposition |
 | `test_skylib_fits.py` | Gain, exposure, observation time, field of view |
 | `test_skylib_exposure.py` | Exposure-time calculators |
+| `test_pulsar_limits.py` | M1 PUL-02/03: kill/reap-bounded direct/public stall probes; pre-allocation work/input/audio rejection; degenerate-spectrum structured failures; accepted audio control. Preservation arithmetic stays covered by `test_pulsar_sonification.py`. |
+| `test_pulsar_registry_failures.py` | M1 PUL-06: readable-neighbor recovery, explicit-path/root/read/stat failures, disappearing files and bounded header reads. |
 | `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
 | `test_photometry_registry_smoke.py` | `tools/photometry.py`'s `list_photometry_targets`/`run_photometry_on_target` -- bundled-target resolution, fast offline runs, exposure-time consistency, and the sky-position/source-table fields that bridge into `tools.hr_diagram`. |
 | `test_radio_sources.py` | `algorithms/radio/`'s spectral-index/log-parabola fitting (injected-value recovery) and RA/Dec-column-guessing catalog matching, plus `tools/radio_sources.py`'s offline/error paths. New capability, no upstream to match -- see `docs/extraction.md`, "Radio Sources (Python)". |

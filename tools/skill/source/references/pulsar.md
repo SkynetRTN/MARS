@@ -63,6 +63,21 @@ dedispersion. Expect the fallback there.
 
 ## Pulsar: reporting the period
 
+Check `errors` before following an artifact path. The pulsar stages reject
+unsafe/degenerate input with `invalid_input` and no artifact: input files are
+limited to 16 MiB/100,000 samples; folds to 10,000 bins and bounded subtraction
+work; spectra to 200,000 steps **and** 200,000,000 sample-grid units. A constant,
+non-finite or fewer-than-three-distinct-time spectrum is not a measurement.
+Narrow the grid/window rather than blindly retrying a rejected request.
+
+Audio has both a 600-second cap and a 4,000,000-frame cap, with integer sample
+rates up to 192,000 Hz and bounded interpolation work. At 44,100 Hz the frame
+cap allows about 90.7 seconds; the 60-second default fits. Reduce duration/rate
+on a size rejection. Listings retain readable scans and warn `scan_unreadable`
+for failed neighbors; explicit scan read failures carry `read_failed` or
+`parse_error`. Inspect those warnings rather than treating a partial listing
+as a complete archive. Full limits: `docs/pulsar-tool-pipeline.md` §6a.
+
 The answer must let a reader tell a detection from a fit. State, for every
 scan:
 

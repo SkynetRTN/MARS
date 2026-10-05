@@ -316,6 +316,38 @@ background-subtraction settings read the same at every stage.
 Failures are returned as `errors` on the model, never raised, so an agent loop
 can report them and continue.
 
+### 6a. Bounded input and computation
+
+Stages 1–4 reject unsafe requests with `invalid_input` and no artifact. These
+limits are checked before the relevant expensive loops or output allocations:
+
+| Boundary | Limit / required input |
+| --- | --- |
+| Scan or light-curve artifact | 16 MiB file; 100,000 samples per vector |
+| Background subtraction | Ordered finite times, positive finite `back_scale`; at most 20,000,000 samples summed across running-median windows |
+| Folding | Positive finite period; finite phase/calibration; 1–10,000 bins; at most 100,000 repeated-subtraction iterations and 100,000,000 sample-iterations |
+| Periodogram | At least three distinct finite times; finite positive variance; 1–200,000 steps; at most 200,000,000 sample-grid units; finite progressing grid and spectral products |
+| Sonification | Positive finite speed/durations, finite calibration; integer sample rate 1–192,000 Hz; 1–4,000,000 output frames **and** at most 600 seconds; at most 4,000,000 interpolated points per channel |
+
+The limits compose: 600 seconds is not available at every rate. At the default
+44,100 Hz, the frame budget permits approximately 90.7 seconds; the default
+60-second render is within it. Reduce duration/rate or narrow the spectrum
+grid/window when a limit is hit. Do not blindly retry the same invalid request.
+Constant, all-NaN, too-short or degenerate-time spectra are failures, not
+successful measurements. The existing sonification window still drops NaN
+rows; other calculation inputs must be finite. Accepted-input arithmetic and
+the documented upstream quirks remain unchanged.
+
+Discovery reads at most 256 comment lines and 65,536 decoded characters per
+header (including its first non-comment line). A listing skips unreadable or
+disappearing files with `scan_unreadable` warnings and keeps readable scans.
+Direct-path read/stat failures return `read_failed`, and oversized headers
+return `parse_error`; check both warnings and errors before choosing a scan.
+
+These are local-work acceptance limits, not wall-clock cancellation, an OS
+sandbox or general plot/archive budgets. The remaining boundaries are tracked
+under M1/MCP-01 and PUL-07 in the master continuation plan.
+
 ---
 
 ## 7. Not covered

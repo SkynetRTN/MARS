@@ -24,15 +24,17 @@ All four are local: no network, no solver data, no external binaries.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 from astropy.table import Table
 
-from algorithms.pulsar import charts, folding, ingest, periodogram, sonification
+from algorithms.pulsar import charts, folding, ingest, limits, periodogram, sonification
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
 from tools.models import (
@@ -59,13 +61,9 @@ __all__ = [
     "plot_pulsar",
 ]
 
-#: Audio longer than this is refused rather than silently truncated: a minute
-#: of 44.1 kHz stereo is already ~10 MB on disk.
-_MAX_AUDIO_SECONDS = 600.0
-
 #: Guard on the periodogram grid. Each step is an O(n) pass over every sample,
-#: so this bounds a single call to a few seconds on a typical scan.
-_MAX_STEPS = 200_000
+#: with a separate sample-times-grid work budget in the algorithm layer.
+_MAX_STEPS = limits.MAX_STEPS
 
 
 class _LoadError(Exception):
@@ -137,6 +135,11 @@ def _describe(path: str | Path) -> FileMetadata:
     return artifacts.describe_file(path)
 
 
+def _check_file_budget(file: FileMetadata) -> None:
+    if file.size_bytes is not None and file.size_bytes > limits.MAX_INPUT_BYTES:
+        raise _LoadError("invalid_input", "pulsar input exceeds the 16 MiB file budget")
+
+
 def _load(
     file: FileMetadata,
     *,
@@ -150,6 +153,7 @@ def _load(
         raise _LoadError("file_not_found", "Pulsar file does not exist.")
     if not file.is_file:
         raise _LoadError("not_a_file", "Path is not a regular file.")
+    _check_file_budget(file)
 
     if (file.suffix or "").lower() == ".ecsv":
         return _load_artifact(file)
@@ -165,6 +169,23 @@ def _load(
             "No usable samples. A cal file needs rows whose last column is "
             "non-zero; the leading noise-diode block is dropped by design.",
         )
+
+    try:
+        times = limits.vector(observation.time_s, "time_s")
+        limits.vector(observation.source1, "source1", allow_nan=True)
+        if observation.source2 is not None:
+            limits.vector(observation.source2, "source2", allow_nan=True)
+        if subtract_background:
+            limits.finite(back_scale, "back_scale", positive=True)
+            if (np.diff(times) < 0).any():
+                raise ValueError("background subtraction requires time-ordered samples")
+            # Bound the preserved per-row running median before entering it.
+            low = np.searchsorted(times, times - back_scale / 2, side="left")
+            high = np.searchsorted(times, times + back_scale / 2, side="right")
+            if int(np.sum(high - low)) > limits.MAX_BACKGROUND_WORK:
+                raise ValueError("background subtraction exceeds the window work budget")
+    except ValueError as exc:
+        raise _LoadError("invalid_input", str(exc)) from exc
 
     source1 = observation.source1
     source2 = observation.source2
@@ -230,6 +251,7 @@ def _load(
 def _load_artifact(file: FileMetadata) -> _LightCurve:
     """Re-read a stage-1 light-curve artifact."""
 
+    _check_file_budget(file)
     try:
         table = Table.read(file.path, format="ascii.ecsv")
     except Exception as exc:  # noqa: BLE001
@@ -244,14 +266,18 @@ def _load_artifact(file: FileMetadata) -> _LightCurve:
             "file or an artifact from load_pulsar_lightcurve.",
         )
 
-    source2 = (
-        np.asarray(table["source2"], dtype=float)
-        if "source2" in table.colnames
-        else None
-    )
+    try:
+        times = limits.vector(table["time_s"], "time_s", allow_nan=True)
+        source1 = limits.vector(table["source1"], "source1", allow_nan=True)
+        source2 = (
+            limits.vector(table["source2"], "source2", allow_nan=True)
+            if "source2" in table.colnames else None
+        )
+    except (TypeError, ValueError) as exc:
+        raise _LoadError("invalid_input", str(exc)) from exc
     return _LightCurve(
-        np.asarray(table["time_s"], dtype=float),
-        np.asarray(table["source1"], dtype=float),
+        times,
+        source1,
         source2,
         dict(table.meta),
     )
@@ -406,13 +432,15 @@ def compute_pulsar_periodogram(
     file = _describe(path)
     warnings: list[ToolWarning] = []
 
-    if steps <= 0 or steps > _MAX_STEPS:
+    try:
+        limits.integer(steps, "steps", _MAX_STEPS)
+    except ValueError as exc:
         return PulsarPeriodogram(
             file=file,
             errors=[
                 ToolError(
                     code="invalid_input",
-                    message=f"steps must be in (0, {_MAX_STEPS}], got {steps!r}.",
+                    message=str(exc),
                 )
             ],
         )
@@ -566,22 +594,16 @@ def fold_pulsar_lightcurve(
     file = _describe(path)
     warnings: list[ToolWarning] = []
 
-    if bins <= 0:
-        return PulsarFoldedProfile(
-            file=file,
-            errors=[
-                ToolError(
-                    code="invalid_input", message=f"bins must be positive, got {bins!r}."
-                )
-            ],
-        )
-    if display_period not in (1, 2):
+    try:
+        limits.fold_settings(bins, phase, cal, display_period)
+        limits.finite(period_s, "period_s", positive=True)
+    except ValueError as exc:
         return PulsarFoldedProfile(
             file=file,
             errors=[
                 ToolError(
                     code="invalid_input",
-                    message=f"display_period must be 1 or 2, got {display_period!r}.",
+                    message=str(exc),
                 )
             ],
         )
@@ -719,29 +741,22 @@ def sonify_pulsar(
     file = _describe(path)
     warnings: list[ToolWarning] = []
 
-    if audio_seconds <= 0 or audio_seconds > _MAX_AUDIO_SECONDS:
+    try:
+        limits.audio_settings(speed, cal, sample_rate, audio_seconds)
+        limits.finite(max_input_seconds, "max_input_seconds", positive=True)
+        if period_s is not None:
+            limits.finite(period_s, "period_s", positive=True)
+            limits.fold_settings(bins, phase, cal)
+    except ValueError as exc:
         return PulsarSonification(
             file=file,
             errors=[
                 ToolError(
                     code="invalid_input",
-                    message=f"audio_seconds must be in (0, {_MAX_AUDIO_SECONDS:g}], "
-                    f"got {audio_seconds!r}.",
+                    message=str(exc),
                 )
             ],
         )
-    for name, value in (("speed", speed), ("sample_rate", sample_rate)):
-        if value <= 0:
-            return PulsarSonification(
-                file=file,
-                errors=[
-                    ToolError(
-                        code="invalid_input",
-                        message=f"{name} must be positive, got {value!r}.",
-                    )
-                ],
-            )
-
     try:
         lc = _load(
             file,
@@ -804,9 +819,14 @@ def sonify_pulsar(
             )
     else:
         # --- Light-curve rendering: upstream's secondary path. -------------
-        _, render1, render2, pass_seconds = sonification.window_sonification_input(
-            lc.time_s, lc.source1, source2, max_seconds=max_input_seconds
-        )
+        try:
+            _, render1, render2, pass_seconds = sonification.window_sonification_input(
+                lc.time_s, lc.source1, source2, max_seconds=max_input_seconds
+            )
+        except ValueError as exc:
+            return PulsarSonification(
+                file=file, errors=[ToolError(code="invalid_input", message=str(exc))], **info
+            )
         rendering = "lightcurve"
         render_cal = cal
         warnings.append(
@@ -1088,9 +1108,16 @@ def _scan_summary(path: Path, directory: Path | None = None) -> PulsarScan:
 
     header: dict[str, str] = {}
     with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
+        characters = 0
+        for index in range(257):
+            line = handle.readline(65_537 - characters)
+            characters += len(line)
+            if characters > 65_536:
+                raise ValueError("scan header exceeds the 64-Ki-character read budget")
             if not line.startswith("#"):
                 break
+            if index == 256:
+                raise ValueError("scan header exceeds the 256-line read budget")
             match = re.match(r"^#\s*([A-Za-z_][A-Za-z0-9_()]*)\s*=\s*(.*)$", line.strip())
             if match:
                 header.setdefault(match.group(1), match.group(2).strip())
@@ -1141,7 +1168,16 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
     errors: list[ToolError] = []
 
-    if not root.is_dir():
+    try:
+        is_directory = stat.S_ISDIR(root.stat().st_mode)
+    except FileNotFoundError:
+        is_directory = False
+    except OSError as exc:
+        return PulsarScanList(
+            scans=[], search_root=str(root), count=0,
+            errors=[ToolError(code="read_failed", message=f"Cannot inspect {root}: {exc}")],
+        )
+    if not is_directory:
         errors.append(
             ToolError(
                 code="directory_not_found",
@@ -1151,9 +1187,29 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
         )
         return PulsarScanList(scans=[], search_root=str(root), count=0, errors=errors)
 
-    scans = [_scan_summary(p, root) for p in sorted(root.glob("*.txt")) if p.is_file()]
     entries, _ = _curated_map(root)
     warnings = [] if entries else [_curated_unavailable(root)]
+    scans = []
+    try:
+        # glob() suppresses directory I/O errors on supported/newer Python.
+        # Iterate explicitly so an unreadable root is not a successful empty
+        # archive; fnmatch keeps the platform's ordinary filename matching.
+        paths = sorted(path for path in root.iterdir() if fnmatch.fnmatch(path.name, "*.txt"))
+    except OSError as exc:
+        return PulsarScanList(
+            scans=[], search_root=str(root), count=0,
+            errors=[ToolError(code="read_failed", message=f"Cannot list {root}: {exc}")],
+        )
+    for path in paths:
+        try:
+            # Explicit stat preserves disappearing/permission failures as
+            # warnings even on Python versions where is_file suppresses them.
+            if stat.S_ISREG(path.stat().st_mode):
+                scans.append(_scan_summary(path, root))
+        except (OSError, ValueError) as exc:
+            warnings.append(ToolWarning(
+                code="scan_unreadable", message=f"Skipped unreadable scan {path}: {exc}"
+            ))
     return PulsarScanList(
         scans=scans, search_root=str(root), count=len(scans), warnings=warnings
     )
@@ -1178,10 +1234,21 @@ def resolve_pulsar_scan(
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
 
     direct = Path(name).expanduser()
-    if direct.is_file():
-        return _scan_summary(direct)  # curation read from beside that file
-    if (root / name).is_file():
-        return _scan_summary(root / name, root)
+    candidate = direct
+    try:
+        if direct.is_file():
+            return _scan_summary(direct)  # curation read from beside that file
+        candidate = root / name
+        if candidate.is_file():
+            return _scan_summary(candidate, root)
+    except (OSError, ValueError) as exc:
+        return PulsarScanList(
+            scans=[], search_root=str(root), count=0,
+            errors=[ToolError(
+                code="read_failed" if isinstance(exc, OSError) else "parse_error",
+                message=f"Cannot read scan {candidate}: {exc}",
+            )],
+        )
 
     listing = list_pulsar_scans(root)
     if listing.errors:
@@ -1202,6 +1269,9 @@ def resolve_pulsar_scan(
     ]
 
     if len(matches) == 1:
+        matches[0].warnings.extend(
+            warning for warning in listing.warnings if warning.code == "scan_unreadable"
+        )
         return matches[0]
 
     known = ", ".join(sorted({s.source_name or Path(s.path).name for s in listing.scans}))

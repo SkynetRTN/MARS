@@ -2781,6 +2781,40 @@ The four tools that sit on these are documented in
    parsed by the upstream regexes, not from that dict.
 4. **`sample_cadence_s`** (median sample spacing) is new. Nothing upstream
    needs it; it exists so `tools/pulsar.py` can quantify §7.2 below.
+5. **M1 acceptance guards (2026-10-05, PUL-02/03).** First-party
+   `algorithms/pulsar/limits.py` bounds inputs and work before the preserved
+   subtraction, spectrum, interpolation and audio allocation paths run.
+   Tool input files are capped at 16 MiB and vectors at 100,000 samples.
+   Folding accepts at most 10,000 bins, 100,000 subtraction iterations and
+   100,000,000 sample-iterations; background subtraction accepts at most
+   20,000,000 window samples and requires ordered times. The fold budget was
+   calibrated against all five bundled scans, including their short-period
+   mains peaks; a lower 20,000,000 budget rejected ordinary diagnostic folds.
+   Spectra accept at most 200,000 steps and 200,000,000 sample-grid units,
+   with finite progressing increments, at least three distinct times and
+   finite positive flux variance. Non-finite products, singular trials and
+   a quantized-zero/overflowed default Nyquist interval are validation errors,
+   not NaN successes or escaping arithmetic exceptions. Audio accepts integer
+   rates up to 192,000 Hz, at most 600 seconds **and** 4,000,000 frames, and
+   at most 4,000,000 interpolated points per channel. Inputs/derived settings
+   must be finite (the existing window's NaN-drop rule remains).
+
+   This deliberately narrows acceptance of unsafe/degenerate inputs; accepted
+   inputs retain the original subtraction sequence, exact-multiple phases,
+   bin endpoints, spectral formula/grid, confidence statistics, interpolation
+   weights and PCM floor. It does **not** replace subtraction with modulo,
+   change the variable-star weighted spectrum or correct the science quirks
+   below. Direct algorithm rejection is `ValueError`; the stage-1–4 tool
+   wrappers return `invalid_input` without advertising an artifact. Tests in
+   `test_pulsar_limits.py` use kill/reap-bounded subprocesses for stalled work
+   and pre-allocation sentinels for oversized requests. These are work limits,
+   not server deadlines, sandboxing or general archive/plot resource limits.
+
+   PUL-06 additionally bounds discovery header reads to 256 comment lines and
+   65,536 decoded characters (including the first non-comment line). Per-file
+   read/stat failures yield `scan_unreadable` warnings while retaining readable
+   scans; explicit-path failures return `read_failed` or `parse_error`.
+   `test_pulsar_registry_failures.py` pins this first-party recovery contract.
 
 ### 7. Preserved upstream behaviours (do not "fix")
 
