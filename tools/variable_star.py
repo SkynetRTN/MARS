@@ -9,7 +9,7 @@ from typing import Sequence
 
 from astropy.table import Table
 
-from algorithms.variable_star.folding import fold_with_error
+from algorithms.variable_star.folding import fold_with_error, validate_fold_work
 from algorithms.variable_star.lightcurve import VariableDataRow, merge_sources_by_mjd, with_error_mse
 from algorithms.variable_star.periodogram import variable_periodogram
 from tools import artifacts
@@ -37,7 +37,6 @@ _MAX_INPUT_BYTES = 5 * 1024 * 1024
 _MAX_ROWS = 2_000
 _MAX_FIXTURES = 100
 _MAX_SOURCE_ID_LENGTH = 128
-_MAX_FOLD_OPERATIONS = 10_000_000
 
 
 def _fixture_dir() -> Path:
@@ -129,15 +128,7 @@ def _validate_periodogram_range(start: float, stop: float) -> tuple[float, float
 
 def _validate_fold_period(period: float, times: Sequence[float]) -> float:
     period_value = _finite(period, "period", positive=True)
-    if not times:
-        raise ValueError("light-curve artifact contains no rows.")
-    baseline = max(times) - min(times)
-    if baseline:
-        cycles = baseline / period_value
-        if not math.isfinite(cycles):
-            raise ValueError("period is too small to fold representably over this observation.")
-        if cycles * len(times) > _MAX_FOLD_OPERATIONS:
-            raise ValueError("period exceeds the fold work limit for this observation.")
+    validate_fold_work(period_value, times)
     return period_value
 
 

@@ -2651,6 +2651,33 @@ class extracted here.
 - No test files were extracted; the 16 Astromancer spec files are TestBed stubs
   that assert only `expect(component).toBeTruthy()`.
 
+#### 12b. Python M1 acceptance bounds (2026-10-05, TS-02)
+
+The live `algorithms/variable_star/folding.py` now guards direct calls as well
+as the public tool. At most 2,000 input rows, 100,000 subtraction iterations
+per sample and 10,000,000 conservative sample-iterations are accepted. The
+sample count is checked before differential arrays/sorts; finite positive
+chosen periods, finite times/baselines, finite phase shifts and derived display
+coordinates, and the aggregate work estimate are checked before/around the
+preserved subtraction loop. A runtime counter also bounds that loop. The tool
+and algorithm share `validate_fold_work`; invalid requests raise `ValueError`
+directly or return `invalid_input` with no artifact from the public tool.
+
+This is an explicit first-party acceptance divergence, not a modulo or
+photometric rewrite. Accepted inputs keep repeated subtraction (exact multiples
+still map to the period, not zero), the negative-period default-baseline
+sentinel, the zero-period empty result, phase wrapping, two-period duplication
+and descending sorting. The distinct empty-data and missing-error alignment
+failures in §9 remain pinned; TS-04 and weighted-spectrum TS-03/09/17 are not
+closed by this guard. `tests/test_variable_star_fold_limits.py` reproduces six
+stalled direct calls with 5 s kill/reap-bounded subprocesses and checks aggregate
+pre-loop/pre-allocation limits, finite/overflowed settings, public structured
+errors and the preserved sentinel/exact-multiple behavior. Ordinary algorithm
+and bundled-pipeline parity tests remain unchanged; the older work-budget test
+now uses 2,000 rather than 2,001 rows to exercise work rather than the row cap.
+These limits do not establish a general server deadline or bound the separately
+ported direct weighted-spectrum loop.
+
 ## Pulsar Sonification
 
 _New section, 2026-08-11. Supersedes the "left behind as out of scope" entry in
