@@ -65,3 +65,6 @@ htmlcov/
 Thumbs.db
 *.swp
 *~
+
+# A built Claude Desktop extension (installers/claude-desktop/README.md).
+*.mcpb

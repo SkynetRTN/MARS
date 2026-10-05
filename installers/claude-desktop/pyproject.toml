@@ -1,0 +1,13 @@
+# The Claude Desktop extension's own environment. It is deliberately empty:
+# src/server.py runs the newest skynet-mars release from PyPI through
+# `uv tool run`, so the extension pins no MARS version and never needs a
+# new build to follow a release.
+[project]
+name = "mars-claude-desktop"
+version = "1.0.0"
+description = "Claude Desktop extension that runs the newest skynet-mars MCP server"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[tool.uv]
+package = false

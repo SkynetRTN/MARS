@@ -1,10 +1,13 @@
 # MARS in the Desktop Apps: Claude Desktop and the ChatGPT Desktop App
 
-**Status:** dated proposal from PR #97, 2026-10-01; no phase has started.
+**Status:** dated proposal from PR #97, 2026-10-01. D2 was built ahead of
+order, at the maintainer's direction; no other phase has started.
 Scheduling and acceptance now live in the single
 [master continuation plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
 This snapshot preserves the rationale, host claims and vendor sources for
-rechecking, not a competing execution plan. **Browser support is parked**
+rechecking, not a competing execution plan. D2 has since been built, in
+`installers/claude-desktop/`; its results are below. Its gate, a real
+Claude Desktop install, is open. **Browser support is parked**
 at the maintainer's direction (§6).
 
 **Prerequisites:** the MCP tool surface (archived 2026-09-25) and the per-host
@@ -159,11 +162,116 @@ Each phase is one PR. No phase begins before the one before it has landed.
 - Document the `uv tool install` route as the simplest manual install.
 - **Exit:** a reader with only the docs reproduces D0.
 
-### Phase D2: The `.mcpb` spike
+### Phase D2: The `.mcpb` spike: built, awaiting a real install
 
-- A throwaway `uv`-type extension against a published `skynet-mars` release.
+- A `uv`-type extension against a published `skynet-mars` release.
 - Answer §3's four questions on macOS and Windows.
 - **Exit:** a build/no-build decision recorded here, with measurements.
+
+Done on 2026-10-01. The extension was not thrown away: it is
+`installers/claude-desktop/` (README there), pinned to `0.1.0rc4`, with
+`tests/test_claude_desktop_extension.py`. What was verified, on Linux
+aarch64, where Claude Desktop does not run:
+
+- `mcpb` 2.1.2 validates the manifest and packs a 277 kB `.mcpb`, most of it the icon. Its icon
+  warning, which recommends 512×512, is met by exporting the mark from
+  `docs/assets/make_brand.py`.
+- **Cold first launch, as the host runs it.** The manifest's own `uv run
+  --locked` was run in the unpacked `.mcpb` with an empty uv cache, only
+  uv-managed Pythons (`UV_PYTHON_PREFERENCE=only-managed`), and `env -i`. It
+  downloaded CPython 3.13.14, installed 89 packages, and passed `mars-mcp
+  self-test` in **42 s**: blind detection of B0329+54 at 204σ, the skill
+  resources served, and sonification returned as audio. That time is this
+  host's network; a slower link scales the download, about 640 MB. (A first
+  measurement of 38 s let uv reuse the system's Python 3.13; code review
+  caught it.)
+- **No Anthropic API key.** The same run had no `ANTHROPIC_API_KEY`, no
+  `.env` and an empty home directory. The model is the logged-in Desktop
+  session's; MARS serves tools only. The `anthropic` SDK is installed, because
+  `skynet-mars` depends on it for the `mars` console, but the server process
+  never imports it, `tools.agent` or `tools.llm` (checked in-process).
+- **Unfilled settings.** Whether Desktop passes an empty optional field as
+  `""` or as the unexpanded `${user_config...}` is not documented. The
+  unexpanded form stopped bare `mars-mcp` at startup ("unknown tool
+  group(s)"). An empty `ADS_DEV_KEY` would hide `~/.ads/dev_key`. So
+  `src/server.py` removes both forms first. Driven through the exact
+  manifest command, both forms serve 55 tools, `databases` serves 16, and a
+  token is reported set.
+
+§3's questions, answered so far:
+
+- **`uv` type in Claude Desktop:** the MCPB repository's `hello-world-uv`
+  example says Claude Desktop manages Python and the dependencies.
+  Unconfirmed on a real install.
+- **First launch:** 42 s here, Python download included. Whether Desktop's startup wait tolerates a slow
+  first install is unconfirmed.
+- **Data bundles:** unchanged. `uvx --python 3.13 --from "skynet-mars[mcp]==<version>"
+  mars-mcp fetch-data optical` (verified with `--list`) is the documented route
+  until D0 says otherwise. It must run with the extension's `MARS_HOME`, if one
+  was set.
+- **Releasing:** the pin trails a release (`installers/claude-desktop/README.md`,
+  "After each release"); the `release.yml` step is D3.
+
+**Remaining gate:** install the `.mcpb` in Claude Desktop on macOS (and
+Windows if available), then run the pulsar detection. Record the first-launch
+time and what the settings dialog passes for an empty field.
+
+### Phase D2 for Codex: the plugin, built ahead of order (2026-10-02)
+
+Built at the maintainer's direction for the ChatGPT desktop app on Fedora 44.
+OpenAI's Linux preview ships `.rpm` packages for Fedora 43 and 44, x86_64 and
+aarch64. The plugin is `installers/codex/` (README there), with
+`tests/test_codex_plugin.py`. Like the extension since #109, it pins no MARS
+release: `.mcp.json` runs `uv tool run --from "skynet-mars[mcp]@latest"
+mars-mcp`, from uv's cache. It does not reuse the extension's `src/server.py`
+launcher, because that runs from the plugin's directory, and Codex replaces
+the directory while a server starts. A clean Fedora 44 container failed with
+"Current directory does not exist" a few seconds in. The measurements below
+were taken while the plugin still pinned a release (`0.1.0rc4`, then
+`0.1.0rc5`). It is the Codex counterpart of
+the `.mcpb`: Codex's plugin format bundles the MCP server's launch
+configuration with skills, and `.agents/plugins/marketplace.json` makes the
+repository a marketplace.
+
+- **Format.** Codex's own `.codex-plugin/plugin.json` and `.mcp.json`, not
+  the portable Agent Plugins layout. The portable `mcp.json` accepts only
+  `command`, `args`, `env` and `cwd` for a stdio server, and the
+  user-side `[plugins."<id>".mcp_servers.<name>]` policy has no timeout
+  either. Only Codex's `.mcp.json` can raise the 10 s start limit and the
+  60 s per-call limit (read in `openai/codex` at `d42aecc`:
+  `codex-mcp/src/agent_plugin_config.rs`, `config/src/types.rs`).
+- **Cold first launch, as the app runs it.** With Codex CLI 0.160 (the same
+  core as the app), a throwaway `CODEX_HOME`, an empty `HOME` and only
+  uv-managed Pythons, `codex app-server` started the server through
+  `mcpServerStatus/list` in **44 s**. That run downloaded CPython 3.13 and
+  installed the locked environment (737 MB of uv cache). It listed 55 tools,
+  and `mcpServer/tool/call` ran `list_pulsar_scans` and
+  `compute_pulsar_periodogram` without a model login. A warm start took
+  1.8 s. `mars-mcp self-test`, run from the installed plugin's environment,
+  passed: B0329+54 at 204σ.
+- **Environment.** Codex gives a stdio server only `HOME`, `PATH`, `USER`,
+  `LANG` and a few more (`rmcp-client` `DEFAULT_ENV_VARS`). The plugin
+  forwards the settings MARS reads (the ADS key, MARS home and tool groups,
+  `XDG_DATA_HOME`, the CASDA user and the session bus its keyring needs, and
+  the plate solvers' data paths) through `env_vars`. Because the command is
+  a bare `uv` resolved on the app's `PATH`, the Fedora route is
+  `dnf install uv` (`/usr/bin`).
+- **Fedora's uv** ships `python-downloads = "manual"` (`/etc/uv/uv.toml`),
+  and Fedora 44's Python is 3.14. A clean Fedora 44 container showed the
+  server dying in the handshake, so the plugin sets
+  `UV_PYTHON_DOWNLOADS=automatic`, its only value. The same container showed
+  that `photutils` has no Python 3.13 wheel for aarch64 Linux, so aarch64
+  needs `gcc`. After the fix, clean containers on x86_64 (no compiler) and
+  aarch64 (with gcc) installed from GitHub and passed the whole check.
+- **The skill** in the plugin is rendered by `python -m tools.skill`, the
+  same source the releases are cut from.
+- **No OpenAI key.** The model is the signed-in app session's.
+
+**Remaining gate:** install the `.rpm` on Fedora 44 Workstation, then add the
+marketplace and confirm three things: the Plugins Directory lists MARS, a
+Codex thread starts the server, and the model reads the skill. Run the pulsar
+detection, and record whether the app's own `PATH` finds `uv`. The app's UI
+is the only part not yet exercised.
 
 ### Phase D3: The extension, released (only if D2 says build)
 

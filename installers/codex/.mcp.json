@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "mars": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--python",
+        "3.13",
+        "--from",
+        "skynet-mars[mcp]@latest",
+        "mars-mcp"
+      ],
+      "env": {
+        "UV_PYTHON_DOWNLOADS": "automatic"
+      },
+      "env_vars": [
+        "ADS_DEV_KEY",
+        "MARS_HOME",
+        "MARS_MCP_TOOLS",
+        "XDG_DATA_HOME",
+        "CASDA_OPAL_USERNAME",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "XDG_RUNTIME_DIR",
+        "ANET_INDEX_PATH",
+        "ANET_TIMEOUT_S",
+        "ATLAS_CATALOG_ROOT",
+        "ATLAS_CATALOG",
+        "ATLAS_TIMEOUT_S"
+      ],
+      "startup_timeout_sec": 600,
+      "tool_timeout_sec": 600,
+      "default_tools_approval_mode": "writes"
+    }
+  }
+}

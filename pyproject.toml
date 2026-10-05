@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools==80.10.2", "wheel==0.46.2"]
+requires = ["setuptools==80.10.2", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "skynet-mars"
-version = "0.1.0rc4"
+version = "0.1.0rc6"
 description = "MARS, the MCP Astronomy Research Suite: astronomy tools for LLM agents and Python, built on algorithms extracted from Skynet."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 # Copyright the Skynet Robotic Telescope Network; the licence of the Skynet
 # projects MARS grew from (README.md, License).
 license = "GPL-3.0-only"
@@ -25,6 +25,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]

@@ -71,12 +71,15 @@ python3 -m compileall tools algorithms   # local package syntax smoke
 git diff --check                         # whitespace check
 ```
 
-CI (`.github/workflows/ci.yml`) runs on **Python 3.13** -- the newest Python
-every dependency ships wheels for (`sep` has none for 3.14; see
-`docs/installing.md`), and it is also `pyproject.toml`'s floor: MARS
-supports Python 3.13 and tests nothing else. Resolve paths for containment
+CI (`.github/workflows/ci.yml`) runs on **Python 3.12 and 3.13**, the
+supported versions (`pyproject.toml`'s floor is 3.12; 3.13 is the newest every
+dependency ships wheels for -- `sep` has none for 3.14; see
+`docs/installing.md`), both against `uv.lock`. Users are assumed to run 3.12
+or 3.13, so neither Python nor the dependencies are chased to their newest:
+`uv.lock` moves when a change needs it or for a security fix (Dependabot's
+security updates, enabled in the repository settings), not on a schedule. Resolve paths for containment
 checks through `tools.config.within`/`safe_resolve`. It gates three jobs: `compileall` over
-`tools algorithms tests`, `uv run --locked --extra mcp pytest` (after the MCP
+`tools algorithms tests` on 3.12, `uv run --locked --extra mcp pytest` (after the MCP
 tests alone without the extra), and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
@@ -213,8 +216,8 @@ state is retained between calls, and no tool writes state another tool reads.
 the twelve event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved
 verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
 `tools/tui/` is the console over it, and the repository's only model-driven
-entry point: `mars`. The `tools/runner.py` shim and its
-`kepler-astro-query` script were deleted once the console replaced them.
+entry point: `mars`. The `tools/runner.py` shim and its console script were
+deleted once the console replaced them.
 
 `run_session()` also takes three optional callables for an interactive caller,
 and behaves exactly as before without them: `on_delta` (receives `TextDelta`

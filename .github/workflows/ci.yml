@@ -22,9 +22,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # The oldest supported Python, so syntax only a newer one accepts fails.
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Compile Python files
         run: python -m compileall -q tools algorithms tests
@@ -35,10 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Python 3.13 is MARS's version: pyproject.toml's floor, the one
-        # classifier PyPI shows, and the newest Python every dependency ships
-        # wheels for (docs/installing.md). It is the only one tested.
-        python: ["3.13"]
+        # The supported Pythons: pyproject.toml's classifiers, each tested
+        # (tests/test_packaging_metadata.py). 3.13 is the newest every
+        # dependency ships wheels for (docs/installing.md).
+        python: ["3.12", "3.13"]
     env:
       UV_PYTHON: ${{ matrix.python }}
     steps:
@@ -80,8 +81,14 @@ jobs:
   # request rather than first at a tag: an index accepts a broken wheel as
   # readily as a good one, and a PyPI version can never be re-uploaded.
   package:
-    name: package
+    name: package (${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The wheel is built once per runner but installed on each supported
+        # Python, as a user's would be.
+        python: ["3.12", "3.13"]
     steps:
       # No LFS: nothing the wheel ships is an LFS object (.gitattributes).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -90,7 +97,7 @@ jobs:
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python }}
 
       - name: Install uv
         run: python -m pip install uv==0.12.3

@@ -61,8 +61,15 @@ def fit_and_compare(
     if logage_half_width == 0:
         ages = [round(center, 2)]
     else:
-        count = int(round((2 * logage_half_width) / dlage))
-        ages = [round(center - logage_half_width + index * dlage, 2) for index in range(count + 1)]
+        # The grid's ages are multiples of dlage; a literature age need not be
+        # (Cantat-Gaudin & Anders give 8.17 for M35). Stepping from the
+        # literature age itself named tracks no grid holds, so take the grid
+        # ages inside the window instead, and never fewer than the nearest one.
+        low = math.ceil(round((center - logage_half_width) / dlage, 6))
+        high = math.floor(round((center + logage_half_width) / dlage, 6))
+        if high < low:
+            low = high = round(center / dlage)
+        ages = [round(index * dlage, 2) for index in range(low, high + 1)]
     iso_all = local_grid.load_tracks(ages=ages, metallicity=mh)
 
     members_csv_path = Path(members_csv_path)
