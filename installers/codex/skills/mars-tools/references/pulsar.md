@@ -109,6 +109,17 @@ compact paired-source CSV fixtures rather than radio scans:
    is where the period comes from.
 3. `fold_variable_star_lightcurve` — folds at an explicit `period`.
 
+Check `errors` before using the next artifact. The weighted stage accepts
+paired observations with finite positive combined uncertainties; it excludes
+unpaired observations and reports their count as `unpaired_rows_skipped`.
+Missing/zero/non-finite combined uncertainties on a **paired** observation, or
+empty/constant/non-finite spectra, return `invalid_input` without an artifact.
+Do not interpret those failures as a period measurement or retry unchanged.
+The public grid remains fixed at 2,000 steps (normally 2,001 output rows due
+to float accumulation); it shares finite/progress/work guards with the direct
+algorithm. Input artifacts remain limited to 5 MiB/2,000 rows. These guards
+do not correct the preserved weighted-normalization or uncertainty formula.
+
 A period you fold at came from step 2 or from somewhere else, and the answer
 says which.
 

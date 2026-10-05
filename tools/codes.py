@@ -131,6 +131,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "sources_skipped": "Identified sources were skipped; the count above covers the rest only.",
     "stat_failed": "A file could not be stat'd while building a listing.",
     "unfolded_rendering": "No period was given, so the raw scan plays through once rather than folded.",
+    "unpaired_rows_skipped": "Observations without a time and both sources were excluded from the weighted variable-star periodogram.",
     "unsupported_filter": "The catalog has no reference-band mapping for the image's filter.",
     "variable_sources_not_recorded": "The recorded run's variable-star filter is skipped, so the selection may differ.",
     "wcs_from_header": "The header already carried a celestial WCS, so solving was skipped.",

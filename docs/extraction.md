@@ -3279,3 +3279,43 @@ Target language level: the code uses `**`, optional chaining, and
   operating instructions was **not accessible** from this environment, so no
   vault notes were consulted or updated. The repo was treated as the source
   of truth.
+
+#### Python M1 weighted-periodogram acceptance contract (2026-10-05)
+
+The retired TypeScript record above is historical. The current Python port in
+`algorithms/variable_star/periodogram.py` adds first-party ALG-02/TS-03 guards,
+not a replacement for its weighted Lomb--Scargle formula:
+
+- Direct arrays must have the same nonzero length, at most **2,000 samples**,
+  finite times/values and finite positive uncertainties whose inverse-square
+  weights and sum are representable. Invalid weights/derived normalization
+  fail with `ValueError` rather than accidental division/overflow exceptions.
+- Steps must be an integer in **1–200,000**. The conservative work budget is
+  **20,000,000 sample-grid units**, calculated as samples × (steps + 1).
+  Validate before weighted allocation. The accumulating range must be finite,
+  positive, ordered, and progress at every point; shared direct/tool preflight
+  and independent runtime guards bound it to steps + 1 iterations. Frequency,
+  time-product and shifted-coordinate overflow are rejected explicitly.
+- The variable driver uses one paired-row selection for both differential
+  values and uncertainties. Unpaired rows (missing time or either source)
+  remain excluded as upstream; a paired row missing `error_mse` now raises an
+  explicit **combined uncertainty** error, never silently shifting weights.
+  The shared artifact adapter accepts object/null and numeric masked ECSV
+  missing cells as `None` rather than casting numeric masks to NaN. Nonscalar
+  cells are invalid. Successful public spectra report omitted rows using
+  `unpaired_rows_skipped`.
+- The public periodogram requires nonempty finite output; constant/degenerate
+  spectra return `invalid_input` and no artifact. This is a deliberate
+  **public-result acceptance divergence** (TS-17 containment), not a direct
+  formula correction. The direct constant-series NaN parity remains pinned.
+
+Accepted finite fixtures keep the logarithmic-period/linear-counter grid,
+normal 2,001-row floating-drift output at 2,000 steps, weighted numerator,
+unweighted denominator/variance and upstream differential-error MSE. TS-09
+(weighted normalization), TS-14 (uncertainty convention), TS-04 (fold alignment)
+and the remaining direct-helper TS-16/17 contracts require separate review.
+Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
+`tests/test_variable_star_weighted_contract.py`, existing
+`tests/test_variable_star_algorithms.py` and `tests/test_variable_star_tool.py`.
+Delivery scope and check counts are maintained in
+`docs/working/master-continuation-plan.md`, not inferred from this local change.
