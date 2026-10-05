@@ -11,7 +11,7 @@ active plans.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Active. Reconciled against `origin/dev` at `38bf06a` and `origin/main` at `666f2db`: all 110 historical algorithm IDs, current security/architecture/install findings, pulsar/benchmark issues, validation gaps, external Skynet evidence gates and the desktop-host D0–D4 proposal (§9). Browser support remains parked. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-05 against `origin/main` at `6d966de` (released rc6) and `origin/dev` at `38bf06a`. M0 closed; M1 partial, with branch-only ALG-01/ART-01/PUL-05 work and an explicit next queue. Reconciles all 110 historical algorithm IDs and the implemented-but-partially-validated desktop rollout (§9). Browser support remains parked. |
 
 ## Landed
 
