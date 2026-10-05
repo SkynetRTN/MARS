@@ -874,7 +874,7 @@ unless noted. `OPD/` abbreviates
 |---|---|---|---|---|
 | `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
-| `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
+| `ref_mag.py` | 217 at extraction | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Originally verbatim (one blank line lost trailing whitespace); first-party PHOT-15 bounded arithmetic/literal substitution added 2026-10-05 (§5a). Accepted transforms, resolution precedence and numeric error propagation remain unchanged. |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
 | batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
 | `__init__.py` | 58 | — | — | **New file.** Public API surface. |
@@ -1071,6 +1071,46 @@ directory, persisting run state, or aggregating CSV output.
    unfiltered list — a failed VSX query is indistinguishable from "no variables
    found". Preserved.
 
+#### 5a. PHOT-15 expression acceptance guards (2026-10-05)
+
+The custom-filter path in Python `PhotometricCalibrationSettings` reaches
+`resolve_ref_mag_for_filter` through `_collect_calibration_sources`. The
+registered `calibrate_zeropoint`/photometry tool schemas do **not** expose custom
+expression settings; this is a direct Python API boundary, not a newly proven
+MCP code-execution exploit. The character allowlist was insufficient to bound
+integer powers, tree work or regex substitutions. Test-first sentinels proved
+unsafe expressions reached `eval` without actually executing large powers;
+`r.r` used as a regex changed unrelated `r+r` arithmetic, and a `(` band name
+raised a regex exception outside the unresolved-value contract.
+
+First-party `_safe_eval_expr` now parses/evaluates only a bounded numeric AST,
+without `eval` or compilation. Accepted operators are `+`, `-`, `*`, `/`, `//`,
+`**`, unary signs and single-argument `sqrt`/`log10`. Powers require a numeric
+literal exponent (optionally signed) of absolute value **≤16**; exponent
+expressions/towers, control flow, booleans, attributes and other calls are
+rejected. Constants/intermediates must be real, finite and at most **1,024
+integer bits**. With bounded operands and exponent, even a rejected integer
+power cannot allocate an unbounded result.
+
+The limits are **2,048 expression characters**, **256 AST nodes**, **32 levels**
+(including parentheses before parsing), **64 bands**, **128 characters per
+band name**, and **32 alias hops**. Band count is checked before flattening or
+propagating errors; finite namespace values and unambiguous sanitized names
+are required. Regex substitutions escape band names literally. Invalid or
+over-budget transforms retain the existing unresolved `None`/`(None, None)`
+result; explicit failed mappings do not fall back to an unrelated preferred
+band, and calibration collection skips the unusable source.
+
+These are intentional custom-input acceptance divergences, not new transform
+coefficients or a catalog-registry merge. Existing registry polynomials retain
+exact Python operation order/results, and the 1e-7 finite-difference uncertainty
+propagation is unchanged. Direct-band precedence, strict parity, explicit/wildcard
+ordering and preferred-band gates remain. The guards do not establish a global
+source-count, calibration-call deadline or MCP resource budget (MCP-01 remains).
+Tests: `tests/test_fieldcal_expression_limits.py`, existing
+`tests/test_fieldcal_ref_mag.py` and recorded calibration/query parity checks.
+Delivery scope and validation counts live in the master continuation plan.
+
 ---
 
 #### 6. Catalog-backend code — now extracted
@@ -1136,8 +1176,10 @@ Removed: `sqlalchemy`, `skynet_db`, `skynet_sdk`, `boto3`/S3, `astroquery`
 - NaN-cleaning serializer confirmed active on `model_dump()`.
 - `apcorr_tol` override confirmed: `1e-4` default → `0.0` after the
   `model_copy`.
-- Byte-level diffs against every Skynet original confirm no algorithmic drift;
-  `solution.py`'s body is byte-identical to `utils.py:468-603`.
+- At extraction time, byte-level diffs against every Skynet original confirmed
+  no algorithmic drift; `solution.py`'s body is byte-identical to
+  `utils.py:468-603`. Later first-party reference-expression bounds are recorded
+  explicitly in §5a rather than claimed as a verbatim body.
 
 **Caveat:** `scipy` and `numba` are not installed in this environment. The
 runtime checks above ran against minimal stand-ins for

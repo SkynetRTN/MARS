@@ -38,7 +38,8 @@ Three consequences shape everything here:
 | `conftest.py` | Fixtures, frame aliases, skip guards, the `network` opt-in |
 | `test_fieldcal_solution.py` | **`calc_solution` bit-exact parity** against four recorded Skynet fits |
 | `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
-| `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms, the `eval` guardrail |
+| `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms and lexical/numeric-AST guardrails |
+| `test_fieldcal_expression_limits.py` | M1 PHOT-15: bounded numeric AST (no eval), pre-parser/pre-evaluator sentinels, literal regex band matching, namespace/alias/integer work limits, kill/reap-bounded powers and direct calibration-collection failures; exact shipped-polynomial arithmetic and existing uncertainty propagation stay preserved. |
 | `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
 | `test_fieldcal_reference.py` | The recorded ground truth as tool results (`tools/fieldcal_reference.py`), the offline replays, and the end-to-end **selection** replay: NGC 5128 B's 35 calibration stars re-chosen from the recorded 132-row APASS cone (45 candidates once clipped to the frame, minus the recorded VSX variables) with bit-exact reference magnitudes and solution, under a `socket.connect` guard |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |

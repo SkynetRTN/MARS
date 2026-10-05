@@ -3,7 +3,9 @@
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/utils.py
 lines 605-799 (``_SAFE_NAMES``, ``_ALLOWED_TOKENS``, ``_get_catalog_filter_lookup``,
 ``_safe_eval_expr``, ``_resolve_filter_lookup_candidate``,
-``_ref_mag_filter_token_candidates``, ``resolve_ref_mag_for_filter``), verbatim.
+``_ref_mag_filter_token_candidates``, ``resolve_ref_mag_for_filter``).
+PHOT-15 adds first-party bounded arithmetic evaluation and literal band matching;
+accepted transforms and the resolution/propagation order remain unchanged.
 
 The legacy-Afterglow-parity notes in the docstrings and the gated
 ``allow_preferred_band_fallback`` behaviour are preserved exactly — they are the
@@ -11,7 +13,9 @@ documented numeric-parity contract with the previous system.
 """
 from __future__ import annotations
 
+import ast
 import math
+import operator
 import re
 
 from algorithms.catalogs import CATALOG_OPTIONS
@@ -23,6 +27,94 @@ __all__ = ["resolve_ref_mag_for_filter"]
 _SAFE_NAMES = {k: getattr(math, k) for k in ("sqrt", "log10")}
 _ALLOWED_TOKENS = re.compile(r"[A-Za-z0-9_+\-*/().\s]+")
 
+# First-party expression acceptance limits, not photometric formula changes.
+MAX_EXPRESSION_LENGTH = 2_048
+MAX_EXPRESSION_NODES = 256
+MAX_EXPRESSION_DEPTH = 32
+MAX_EXPRESSION_EXPONENT = 16
+MAX_EXPRESSION_INTEGER_BITS = 1_024
+MAX_EXPRESSION_BANDS = 64
+MAX_EXPRESSION_BAND_NAME = 128
+MAX_LOOKUP_HOPS = 32
+_BINARY_OPERATORS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Pow: operator.pow,
+}
+_UNARY_OPERATORS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _numeric(value: object) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Expressions require real numeric values.")
+    if isinstance(value, int):
+        if value.bit_length() > MAX_EXPRESSION_INTEGER_BITS:
+            raise ValueError("Expression integer exceeds the bit limit.")
+    elif not math.isfinite(value):
+        raise ValueError("Expression value is not finite.")
+    return value
+
+
+def _literal_exponent(node: ast.AST) -> int | float:
+    sign = 1
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        sign = -1 if isinstance(node.op, ast.USub) else 1
+        node = node.operand
+    if not isinstance(node, ast.Constant):
+        raise ValueError("Power exponents must be numeric literals, not expressions.")
+    value = sign * _numeric(node.value)
+    if abs(value) > MAX_EXPRESSION_EXPONENT:
+        raise ValueError("Power exponent exceeds the expression limit.")
+    return value
+
+
+def _validate_expression(tree: ast.AST, namespace: dict) -> None:
+    allowed = (ast.Expression, ast.Constant, ast.Name, ast.Load, ast.BinOp,
+               ast.UnaryOp, ast.Call, *_BINARY_OPERATORS, *_UNARY_OPERATORS)
+    pending = [(tree, 1)]
+    count = 0
+    while pending:
+        node, depth = pending.pop()
+        count += 1
+        if count > MAX_EXPRESSION_NODES or depth > MAX_EXPRESSION_DEPTH:
+            raise ValueError("Expression exceeds the node/depth limit.")
+        if not isinstance(node, allowed):
+            raise ValueError("Expression syntax is not numeric arithmetic.")
+        if isinstance(node, ast.Constant):
+            _numeric(node.value)
+        elif isinstance(node, ast.Name) and node.id not in namespace:
+            raise ValueError("Expression names an unavailable band.")
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            _literal_exponent(node.right)
+        elif isinstance(node, ast.Call):
+            if (not isinstance(node.func, ast.Name)
+                    or node.func.id not in _SAFE_NAMES
+                    or namespace.get(node.func.id) is not _SAFE_NAMES[node.func.id]
+                    or len(node.args) != 1 or node.keywords):
+                raise ValueError("Only unshadowed sqrt/log10 single-argument calls are supported.")
+        pending.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
+
+
+def _evaluate_expression(node: ast.AST, namespace: dict) -> int | float:
+    """Evaluate only the prevalidated bounded tree; never compile or use eval."""
+    if isinstance(node, ast.Expression):
+        return _evaluate_expression(node.body, namespace)
+    if isinstance(node, ast.Constant):
+        value = node.value
+    elif isinstance(node, ast.Name):
+        value = namespace[node.id]
+    elif isinstance(node, ast.UnaryOp):
+        value = _UNARY_OPERATORS[type(node.op)](_evaluate_expression(node.operand, namespace))
+    elif isinstance(node, ast.BinOp):
+        left = _evaluate_expression(node.left, namespace)
+        right = _evaluate_expression(node.right, namespace)
+        value = _BINARY_OPERATORS[type(node.op)](left, right)
+    elif isinstance(node, ast.Call):
+        value = _SAFE_NAMES[node.func.id](_evaluate_expression(node.args[0], namespace))
+    else:
+        raise ValueError("Unsupported expression node.")
+    return _numeric(value)
+
+
 def _get_catalog_filter_lookup(catalog_name: str | None) -> dict[str, str]:
     if not catalog_name:
         return {}
@@ -33,18 +125,36 @@ def _get_catalog_filter_lookup(catalog_name: str | None) -> dict[str, str]:
     return catalog.filter_lookup
 
 def _safe_eval_expr(expr: str, bands: dict[str, float]) -> float | None:
-    if not expr or not _ALLOWED_TOKENS.fullmatch(expr):
+    """Return a finite bounded arithmetic result or the legacy unresolved None."""
+    if (not expr or len(expr) > MAX_EXPRESSION_LENGTH
+            or len(bands) > MAX_EXPRESSION_BANDS or not _ALLOWED_TOKENS.fullmatch(expr)):
         return None
-    ns = dict(_SAFE_NAMES)
-    expr2 = expr
-    for k, v in bands.items():
-        kid = re.sub(r"[^A-Za-z0-9_]", "_", k)
-        ns[kid] = float(v)
-        expr2 = re.sub(rf"\b{k}\b", kid, expr2)
     try:
-        val = eval(expr2, {"__builtins__": {}}, ns)
-        return float(val) if val is not None and math.isfinite(val) else None
-    except Exception:
+        # Parentheses disappear in the AST: bound nesting before parsing too.
+        depth = 0
+        for char in expr:
+            if char == "(":
+                depth += 1
+                if depth > MAX_EXPRESSION_DEPTH:
+                    return None
+            elif char == ")":
+                depth -= 1
+        ns = dict(_SAFE_NAMES)
+        identifiers: set[str] = set()
+        expr2 = expr
+        for k, v in bands.items():
+            if not isinstance(k, str) or not k or len(k) > MAX_EXPRESSION_BAND_NAME:
+                return None
+            kid = re.sub(r"[^A-Za-z0-9_]", "_", k)
+            if kid in identifiers:
+                return None  # Two bands must not silently share a rewritten name.
+            identifiers.add(kid)
+            ns[kid] = _numeric(float(v))
+            expr2 = re.sub(rf"\b{re.escape(k)}\b", kid, expr2)
+        tree = ast.parse(expr2.strip(), mode="eval")
+        _validate_expression(tree, ns)
+        return float(_evaluate_expression(tree, ns))
+    except (ValueError, TypeError, ArithmeticError, SyntaxError, RecursionError):
         return None
 
 
@@ -56,9 +166,11 @@ def _resolve_filter_lookup_candidate(
     propagate_error: bool,
 ) -> tuple[float | None, float | None]:
     """Resolve a lookup target, following aliases such as SII -> rprime."""
+    if len(band_vals) > MAX_EXPRESSION_BANDS:
+        return None, None
     seen: set[str] = set()
     current = candidate
-    while current and current not in seen:
+    while current and current not in seen and len(seen) < MAX_LOOKUP_HOPS:
         seen.add(current)
 
         v, e = band_vals.get(current, (None, None))
@@ -144,7 +256,7 @@ def resolve_ref_mag_for_filter(
     ``False`` so an unresolved filter returns ``(None, None)`` instead of
     silently substituting a wrong reference band.
     """
-    if not cs_mags:
+    if not cs_mags or len(cs_mags) > MAX_EXPRESSION_BANDS:
         return None, None
 
     # flatten to {band: (value, error)}
