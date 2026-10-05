@@ -1305,7 +1305,12 @@ def plot_pulsar(
             raise _LoadError("not_a_file", "Path is not a regular file.")
 
         if (file.suffix or "").lower() == ".ecsv":
-            table = Table.read(file.path, format="ascii.ecsv")
+            try:
+                table = Table.read(file.path, format="ascii.ecsv")
+            except Exception as exc:  # noqa: BLE001 - parser/read errors are results
+                raise _LoadError(
+                    "parse_error", f"Not a readable pulsar artifact: {exc}"
+                ) from exc
         else:
             # A raw scan: ingest it so there is something to draw.
             lc = _load(

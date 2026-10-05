@@ -133,6 +133,46 @@ def _png_size(path: Path) -> tuple[int, int]:
     return width, height
 
 
+@pytest.mark.parametrize("content", [
+    "",
+    "# %ECSV 1.0\n# ---\n# datatype: [\n",
+    "# %ECSV 1.0\n# ---\n# datatype:\n"
+    "# - {name: time_s, datatype: float64}\n"
+    "# - {name: source1, datatype: float64}\n"
+    "# schema: astropy-2.0\ntime_s source1\n0.0 not-a-number\n",
+])
+def test_unreadable_ecsv_plot_returns_parse_error(tmp_path, artifact_dir, content):
+    """PUL-05: malformed input cannot escape the public result contract."""
+    source = tmp_path / "bad.ecsv"
+    source.write_text(content, encoding="utf-8")
+
+    result = plot_pulsar(str(source))
+
+    assert [error.code for error in result.errors] == ["parse_error"]
+    assert result.artifact is None
+    assert not list(artifact_dir.rglob("*.png"))
+
+
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError])
+def test_ecsv_plot_read_failure_is_structured(tmp_path, artifact_dir, monkeypatch, failure):
+    """A file can be unreadable or disappear after metadata was obtained."""
+    from tools import pulsar
+
+    source = tmp_path / "unreadable.ecsv"
+    source.touch()
+
+    def refuse(*args, **kwargs):
+        raise failure("injected read failure")
+
+    monkeypatch.setattr(pulsar.Table, "read", refuse)
+    result = plot_pulsar(str(source))
+
+    assert [error.code for error in result.errors] == ["parse_error"]
+    assert "injected read failure" in result.errors[0].message
+    assert result.artifact is None
+    assert not list(artifact_dir.rglob("*.png"))
+
+
 @pytest.fixture
 def staged(pulsar_path, artifact_dir):
     """The three artifacts a plot can be asked for."""
