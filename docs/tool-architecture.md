@@ -715,7 +715,12 @@ launch-directory default would drop an untracked `artifacts/` into the user's
 repository. Everything MARS writes is under the per-user **MARS home**
 (`tools/paths.py`: `~/.local/share/mars`, macOS Application Support,
 `%LOCALAPPDATA%`, or `MARS_HOME`), and the server logs every root at
-startup.
+startup. The shared artifact writer rejects absolute or parent-traversing
+subdirectories, symlinks that resolve outside the pinned root, and extensions
+that contain path syntax. Session scopes are checked both when entered and
+again at write time. A Python API with an explicit `output_dir` treats that
+caller-selected directory as its root while still confining generated names
+to one direct child.
 
 **The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the
 loop, so the server carries its guidance. **Claude Code delivers only about

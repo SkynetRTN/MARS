@@ -140,9 +140,7 @@ def test_a_content_ref_that_leaves_the_content_directory_is_rejected(
 
 @pytest.mark.parametrize("key", ["path", "subdir", "ext"])
 def test_a_fixture_may_not_choose_where_a_byte_lands(fixture_root, key):
-    """The whole of S7. Rejecting these keeps _write_directory()'s
-    unvalidated subdir join and reserve_artifact_path()'s loosely-stripped ext
-    unreachable from recorded data."""
+    """S7: remote fixture content has no authority to choose a local path."""
 
     path = write(
         fixture_root,

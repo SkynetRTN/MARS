@@ -12,6 +12,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from mimetypes import guess_type
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Iterator
 from typing import Optional
 
@@ -53,13 +54,47 @@ def current_artifact_subdir() -> str | None:
     return _ACTIVE_ARTIFACT_SUBDIR.get()
 
 
+def _relative_directory(value: str | Path, *, label: str) -> Path:
+    """Return one portable relative directory or reject path traversal."""
+
+    text = os.fspath(value)
+    path_flavours = (PurePosixPath(text), PureWindowsPath(text))
+    if any(path.is_absolute() or path.drive or ".." in path.parts for path in path_flavours):
+        raise ValueError(
+            f"{label} must be relative and cannot contain a parent path: {value!r}"
+        )
+    return Path(text)
+
+
+def _contained_directory(root: Path, value: str | Path, *, label: str) -> Path:
+    """Join a relative directory to ``root`` without following an escape."""
+
+    relative = _relative_directory(value, label=label)
+    candidate = root / relative
+    resolved_root = root.expanduser().resolve(strict=False)
+    if not candidate.expanduser().resolve(strict=False).is_relative_to(resolved_root):
+        raise ValueError(f"{label} must resolve beneath the artifact root: {value!r}")
+    return candidate
+
+
+def _artifact_suffix(ext: str) -> tuple[str, str]:
+    """Return a single filename suffix and its normalized format name."""
+
+    normalized = ext[1:] if ext.startswith(".") else ext
+    if not normalized or re.fullmatch(r"[A-Za-z0-9]+", normalized) is None:
+        raise ValueError(
+            "artifact extension must be a non-empty alphanumeric suffix, "
+            f"not a path: {ext!r}"
+        )
+    return f".{normalized}", normalized
+
+
 @contextmanager
 def scoped_artifacts(subdir: str | Path) -> Iterator[None]:
     """Route artifact writes through ``subdir`` for the current context."""
 
-    relative = Path(subdir)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"artifact scope must be a relative subdirectory: {subdir!r}")
+    relative = _relative_directory(subdir, label="artifact scope")
+    _contained_directory(Path(ARTIFACT_DIR), relative, label="artifact scope")
     token = _ACTIVE_ARTIFACT_SUBDIR.set(str(relative))
     try:
         yield
@@ -225,7 +260,8 @@ def reserve_path_in(directory: str | Path, name: str, ext: str) -> Path:
     ``output_dir``) rather than an artifact subdirectory; same guarantee as
     :func:`reserve_artifact_path`.
     """
-    return _reserve_path(Path(directory), _safe_stem(name), f".{ext.lstrip('.')}")
+    suffix, _format = _artifact_suffix(ext)
+    return _reserve_path(Path(directory), _safe_stem(name), suffix)
 
 
 def discard_placeholder(path: str | Path | None) -> None:
@@ -251,12 +287,20 @@ def discard_placeholder(path: str | Path | None) -> None:
 def _write_directory(subdir: Optional[str]) -> Path:
     """Return the artifact write directory, including an active session scope."""
 
-    directory = ARTIFACT_DIR
+    root = Path(ARTIFACT_DIR)
+    directory = root
     active_subdir = current_artifact_subdir()
     if active_subdir:
-        directory = directory / active_subdir
+        directory = _contained_directory(root, active_subdir, label="artifact scope")
     if subdir:
-        directory = directory / subdir
+        relative = _relative_directory(subdir, label="artifact subdirectory")
+        candidate = directory / relative
+        resolved_root = root.expanduser().resolve(strict=False)
+        if not candidate.expanduser().resolve(strict=False).is_relative_to(resolved_root):
+            raise ValueError(
+                f"artifact subdirectory must resolve beneath the artifact root: {subdir!r}"
+            )
+        directory = candidate
     return directory
 
 
@@ -273,7 +317,8 @@ def reserve_artifact_path(
     active ``scoped_artifacts`` session like every other write does; resolving
     against ``ARTIFACT_DIR`` directly would drop files outside the session.
     """
-    return _reserve_path(_write_directory(subdir), _safe_stem(name), f".{ext.lstrip('.')}")
+    suffix, _format = _artifact_suffix(ext)
+    return _reserve_path(_write_directory(subdir), _safe_stem(name), suffix)
 
 
 def write_table(
@@ -329,14 +374,15 @@ def write_text(
 ) -> ArtifactRef:
     """Write arbitrary text to disk and return a reference to it."""
 
+    suffix, normalized_ext = _artifact_suffix(ext)
     directory = _write_directory(subdir)
-    path = _reserve_path(directory, _safe_stem(name), f".{ext.lstrip('.')}")
+    path = _reserve_path(directory, _safe_stem(name), suffix)
     try:
         path.write_text(text, encoding="utf-8")
     except BaseException:
         discard_placeholder(path)
         raise
-    return ArtifactRef(path=str(path), format=ext.lstrip("."), row_count=None)
+    return ArtifactRef(path=str(path), format=normalized_ext, row_count=None)
 
 
 def describe_artifact(path: str) -> dict:

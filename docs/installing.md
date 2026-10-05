@@ -260,6 +260,11 @@ numeric suffix. So the directory grows; clear it yourself when you want to.
 The default artifact root is private (`0700`) and new artifact files are
 private (`0600`) on POSIX systems; an explicit `MARS_ARTIFACT_DIR` keeps its
 existing directory permissions.
+Artifact subdirectories and session scopes must remain beneath that root:
+absolute paths, parent traversal, escaping symlinks and path-like filename
+extensions are rejected before a file is created. Python APIs that explicitly
+accept an `output_dir` may instead use that caller-selected directory as their
+write root; generated names are still confined to it.
 `list_artifacts` over MCP returns the newest 100 entries of a directory, and
 says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
 inside the artifact directory, and one that climbs out of it (`..`) is refused.
