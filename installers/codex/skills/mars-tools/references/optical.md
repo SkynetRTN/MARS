@@ -33,7 +33,13 @@ Three calls can reach the network: `run_photometry_on_target` with
 - `solve_astrometry` — plate-solve. It needs astrometry.net index files or a
   local UCAC catalogue that are **not** bundled; without them it reports the
   backend unavailable, which is an answer to relay, not a failure to retry. An
-  all-sky solve (the default) can run for many minutes to a miss.
+  all-sky solve (the default search) can still take multiple attempts to a miss.
+  `timeout_s` bounds each low-level attempt, not the whole call: omitted limits
+  use 300 seconds (or the configured backend environment setting), and explicit
+  values must be 1–900 seconds. Astrometry.net adds a 30-second wall-clock grace
+  before terminating its process group; ATLAS bounds only its blind matcher,
+  not catalog loading/extraction or its oriented path. Do not equate a host's
+  tool timeout with server cancellation or retry indefinitely after a timeout.
   `search_radius_deg` and a `min_scale_arcsec`/`max_scale_arcsec` pair narrow
   it — set them only from something you know, because a wrong window is a
   silent miss. `write_header=true` writes the solution back into the file, and

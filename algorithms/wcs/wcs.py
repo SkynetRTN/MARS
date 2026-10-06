@@ -11,6 +11,8 @@
 # is applied to the freshly built WcsCalibrationSettings exactly where
 # `solve_settings` already is; every `search_bounds`/`SearchRadiusWithoutHint`
 # line below is post-extraction. See docs/extraction.md, WCS.
+# WCS-02 adds shared finite attempt validation to the config builders; it does
+# not change the numerical search or provide a preprocessing/full-call deadline.
 
 from __future__ import annotations
 
@@ -53,6 +55,7 @@ from algorithms.skylib_lite.astrometry.anet.backend import (
     solve_field_glob as anet_solve_field_glob,
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+from algorithms.skylib_lite.astrometry.limits import normalize_solver_timeout
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
 from .config import WcsSearchBounds
@@ -328,12 +331,8 @@ def build_anet_config(cfg) -> AstrometryNetConfig | None:
     elif not isinstance(index_path, str):
         index_path = [str(path) for path in index_path]
 
-    timeout_raw = getattr(cfg, "ANET_TIMEOUT_S", None)
-    try:
-        timeout_s = float(timeout_raw) if timeout_raw else None
-    except (TypeError, ValueError):
-        logger.warning("ANET_TIMEOUT_S=%r is not a number; ignoring", timeout_raw)
-        timeout_s = None
+    # WCS-02: missing/invalid settings may not silently remove the deadline.
+    timeout_s = normalize_solver_timeout(getattr(cfg, "ANET_TIMEOUT_S", None))
 
     return AstrometryNetConfig(index_path=index_path, timeout_s=timeout_s)
 
@@ -349,12 +348,7 @@ def build_atlas_config(cfg) -> AtlasConfig | None:
     if catalog == "ucac5" and root.name.lower() == "u5z":
         root = root.parent
 
-    timeout_raw = getattr(cfg, "ATLAS_TIMEOUT_S", None)
-    try:
-        timeout_s = float(timeout_raw) if timeout_raw else None
-    except (TypeError, ValueError):
-        logger.warning("ATLAS_TIMEOUT_S=%r is not a number; ignoring", timeout_raw)
-        timeout_s = None
+    timeout_s = normalize_solver_timeout(getattr(cfg, "ATLAS_TIMEOUT_S", None))
 
     return AtlasConfig(catalog=catalog, catalog_roots={catalog: root}, timeout_s=timeout_s)
 

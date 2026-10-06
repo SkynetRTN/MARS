@@ -25,10 +25,11 @@ _Former source: `algorithms/wcs/EXTRACTION.md`._
 ### WCS extraction from Skynet
 
 Astrometric (WCS) calibration, lifted out of the Skynet monorepo into
-`algorithms/wcs/`. This is an **extraction, not a rewrite**: every algorithm,
-numeric expression and comment is byte-identical to the source. The only edits
-are import rewiring and severed infrastructure dependencies, each marked inline
-with an `# EXTRACTED:` comment.
+`algorithms/wcs/`. At extraction, every algorithm,
+numeric expression and comment was byte-identical to the source. The only edits
+were import rewiring and severed infrastructure dependencies, each marked inline
+with an `# EXTRACTED:` comment. Later first-party attempt-budget/process-cleanup
+changes are explicitly recorded in §5.7; numerical/search formulas stay preserved.
 
 Source tree: `/home/claude/skynet` (read-only; nothing in it was modified).
 
@@ -123,7 +124,7 @@ Models taken from `runners/common/schemas.py` into `schemas.py`:
 
 ##### 3.2 Solver stack (from `skylib`, source root `skylib/skylib/`)
 
-Every file below is **byte-identical** to its source except where the "Change"
+In this extraction-time inventory, every file was **byte-identical** to its source except where the "Change"
 column says otherwise. `__init__.py` files with 0 lines are empty in both.
 
 | Destination (`algorithms/skylib_lite/`) | Source (`skylib/skylib/`) | Lines | Change |
@@ -224,13 +225,14 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
   object to `solve_wcs`; a direct algorithm call with no settings has no
   configured backend. Optional caller-owned attempt/failure lists expose
   backend diagnostics alongside the explicit `WcsSolveResult` output.
-- **Behaviour:** the extracted solver logic is unchanged. `build_anet_config` /
+- **Behaviour at extraction:** the solver logic was unchanged. `build_anet_config` /
   `build_atlas_config` read configuration only through
   `getattr(cfg, NAME, None)`, and both already handle `None` (anet
   logs a warning and disables itself; atlas returns `None`). `ANET_TIMEOUT_S`
   is new caller-facing plumbing to the vendored backend's existing
   `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
   object to the builders or pass it to `solve_wcs`.
+  The first-party finite timeout policy introduced later is recorded in §5.7.
 - **Search bounds (P6, 2026-09-12):** `wcs/config.py` also carries
   `WcsSearchBounds(radius_deg, min_scale_arcsec, max_scale_arcsec)`, passed as
   `solve_wcs(..., search_bounds=)`. Upstream exposed none of these — its
@@ -289,6 +291,41 @@ time per backend), so they were left exactly as they are, including
 `solver.py`'s module-level `logging.basicConfig(...)` call.
 
 ---
+
+##### 5.7 First-party finite attempt budgets and process cleanup (2026-10-06)
+
+WCS-02 deliberately changes the unbounded timeout acceptance contract, not the
+search arithmetic: omitted/`None` attempt limits select **300 seconds**, and
+explicit values must be finite **1–900 seconds** (booleans are invalid).
+The shared `astrometry/limits.py` validator is used by direct backend configs,
+duck-typed WCS builders and the public tool; invalid settings no longer silently
+disable deadlines. Mutable configs are revalidated at backend entry and the
+astrometry.net run boundary. Public/backend environment precedence is retained:
+the explicit tool argument wins, otherwise that backend's environment value
+wins, otherwise the finite default. Bad configured values return `invalid_timeout`
+from the tool; an unconfigured backend still stays disabled.
+
+Astrometry.net receives the integer CPU allowance and an outer wall-clock
+backstop of the attempt allowance plus the existing **30-second grace**. Its
+POSIX child is started in a new session: cleanup signals that owned group with
+SIGTERM, then SIGKILL even if the leader exits or was already reaped. Waiting
+only for the leader was insufficient: bounded offline probes reproduced a
+SIGTERM-resistant child surviving both situations. The leader is reaped and
+pipes are drained; termination/reap/drain waits remain finite (5 + 5 + 10 seconds
+in the worst case). This covers the owned process group, not descendants that
+deliberately escape the session. The non-POSIX fallback kills only the direct
+process; no Windows process-tree validation is claimed.
+
+ATLAS's finite allowance still covers only the blind matcher loop, not catalog
+loading, extraction, its oriented path or all retry work. No full-call deadline,
+general cancellation, solver stdout-byte cap or source/catalog memory bound is
+claimed: WCS-01/04/21/25 and MCP-01 remain separate. Default all-sky/scale search,
+retry policy, quality/parity acceptance and accepted numerical fixtures are
+unchanged; a solve needing more than its allowance now stops. The 300-second
+default is an operational budget, not a guaranteed solution-time envelope.
+`tests/test_wcs_timeout_limits.py` checks direct/builders/public boundaries,
+CPU/outer-backstop propagation and native owned-group termination using short
+Python processes, without live services or operator astronomy indexes/catalogs.
 
 #### 6. External dependencies
 

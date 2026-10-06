@@ -6,13 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Optional
 
+from ..limits import DEFAULT_SOLVER_TIMEOUT_S, normalize_solver_timeout
 
 @dataclass
 class AtlasConfig:
     catalog: str = "ucac5"
     catalog_roots: Mapping[str, Path] = field(default_factory=dict)
     # Deadline for the blind triangle matcher, measured from the start of each
-    # attempt. None = unbounded; pass a number to bound it.
+    # attempt. None selects 300 s; explicit values must be 1–900 s (WCS-02).
     #
     # Scope is the matcher loop only: not extraction, not the catalog query, not
     # the oriented path, and the matched-extraction retry gets its own fresh
@@ -20,7 +21,7 @@ class AtlasConfig:
     # clock themselves — SkyNode does exactly this, wrapping the call at 90 s
     # and setting this field a margin below so the uncancellable executor thread
     # self-aborts first.
-    timeout_s: Optional[float] = None
+    timeout_s: Optional[float] = DEFAULT_SOLVER_TIMEOUT_S
     max_catalog_stars: int = 10000
     max_image_stars: int = 500
     # Source extraction: PSF-matched peak detector (see extract.sources). The
@@ -75,6 +76,9 @@ class AtlasConfig:
     oriented_tight_tol_arcsec: float = 1.5   # "tight core" residual tolerance
     oriented_min_tight_inliers: int = 6      # min matches inside the tight core
     oriented_min_tight_fraction: float = 0.25  # min frac of loose inliers in the core
+
+    def __post_init__(self) -> None:
+        self.timeout_s = normalize_solver_timeout(self.timeout_s)
 
     def resolve_catalog(self) -> tuple[str, Path]:
         catalog = self.catalog.strip().lower()

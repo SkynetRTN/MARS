@@ -210,6 +210,14 @@ attempted-backend reporting, and guarded FITS-header persistence. A single tool
 call is MARS's execution boundary: no run or stage state is retained between
 calls.
 
+Omitted attempt timeouts use 300 seconds unless that backend's environment
+setting overrides it; explicit values are finite 1–900 seconds. Astrometry.net
+adds a 30-second outer wall-clock grace and terminates its owned POSIX process
+group, including children surviving the leader. ATLAS bounds only the blind
+matcher loop. Extraction, catalog loading, oriented matching and fresh retry
+allowances mean this is **not** a total-call deadline or general cancellation
+contract (WCS-21/MCP-01).
+
 The three search bounds are opt-in (P6). Unset, the solve is the extracted
 all-sky search over 0.1–60 arcsec/px; set, they are validated at the tool
 boundary (`invalid_search_bounds`), reach the algorithm as one
