@@ -11,7 +11,7 @@ active plans.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-06; remote baseline last fetched 2026-10-05 at `origin/main` `6d966de` (released rc6) and `origin/dev` `38bf06a`. M0 closed; M1 partial, with branch-only photometry/artifact, pulsar/variable, custom-expression and SDSS bounds/transport fixes and an explicit remaining queue. Reconciles all 110 historical algorithm IDs, new ALG-01–03 findings and the implemented-but-partially-validated desktop rollout (§9). Browser support remains parked. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-06; remote baseline last fetched 2026-10-05 at `origin/main` `6d966de` (released rc6) and `origin/dev` `38bf06a`. M0 closed; M1 partial, with branch-only photometry/artifact, pulsar/variable, custom-expression, SDSS bounds/transport and finite WCS attempt/owned-group cleanup fixes and an explicit remaining queue. Reconciles all 110 historical algorithm IDs, new ALG-01–03 findings and the implemented-but-partially-validated desktop rollout (§9). Browser support remains parked. |
 
 ## Landed
 
