@@ -1,6 +1,6 @@
 # MARS Master Continuation Plan
 
-**Status:** M0 closed; M1 **partial, not complete**, refreshed 2026-10-05.
+**Status:** M0 closed; M1 **partial, not complete**, refreshed 2026-10-06.
 This is the single execution index for known continuing work. Items are
 sequenced below; implementation
 owners and calendar dates are unassigned until a phase starts.
@@ -11,7 +11,8 @@ which merges that main into the earlier M1 photometry branch. ALG-01 at
 `0be6f8c` and ART-01 at `dcea645` are **branch-only**, not fixes in main or
 the published rc6 wheel. PUL-02/03/06 are at `ca9fb4f`, PUL-05 at `9ea0002`;
 TS-02 is at `712c0a4`; ALG-02/TS-03 and the TS-17 public weighted-spectrum
-containment are at `1042f70`, recorded below. All are branch-only;
+containment are at `1042f70`; PHOT-15 is at `a3e152a`, recorded below.
+All are branch-only;
 their local acceptance evidence is not a claim of merged/released protection.
 
 **Historical baseline:** fetched `origin/dev` at `38bf06a`, plus the remediation on
@@ -87,7 +88,7 @@ No numerical fix is authorized merely by this documentation update.
 | Phase | Ordered scope | Prerequisites / owner role | Exit gate |
 | --- | --- | --- | --- |
 | M0 — integrated baseline — **closed 2026-10-02** | Historical rc4/Python 3.13 wheel/data gate; DOC-01. Current main is rc6 and now supports/tests Python 3.12 and 3.13; retain its bounded dependencies and locked CI. | Repository/release maintainer | Historical closure remains valid for its stated baseline. The newer rc6 CI/release evidence is in §6; platform, actual-host and live-service gaps remain later-phase gates. |
-| M1 — resource and containment — **partial** | ALG-01/02; S1 algorithm rows; PUL-02/03/05/06; ART-01; AUD-01/02/03; MCP-01. First reproduce with bounded tests, then guard, isolate or intentionally correct. | Tool/runtime maintainer plus domain reviewer for numerical changes | Not met: branch-only ALG-01/02, ART-01, PUL-02/03/05/06 and TS-02/03 do not close remaining S1, effects, retention and cancellation work. Dangerous inputs must fail with bounded structured results; crashing geometry is tested in a subprocess; destination containment and approval classifications are covered; valid fixtures preserve the declared contract. |
+| M1 — resource and containment — **partial** | ALG-01/02; S1 algorithm rows; PUL-02/03/05/06; ART-01; AUD-01/02/03; MCP-01. First reproduce with bounded tests, then guard, isolate or intentionally correct. | Tool/runtime maintainer plus domain reviewer for numerical changes | Not met: branch-only ALG-01/02, ART-01, PUL-02/03/05/06, TS-02/03 and PHOT-15 do not close remaining S1, effects, retention and cancellation work. Dangerous inputs must fail with bounded structured results; crashing geometry is tested in a subprocess; destination containment and approval classifications are covered; valid fixtures preserve the declared contract. |
 | M2 — scientific meaning | PUL-01/04/08; S2 algorithm rows; SCI-01; BEN-01. Start with channel labels and confirmed HR coordinate/unit/join bugs; CAT-01 band-selection safeguards are already assigned to M1. | Astronomy reviewer and tool/algorithm owner; preservation decision per finding | Independent scientific reference tests, explicit units/modes, before/after numeric effects, updated preservation assertions/provenance; saved benchmark transcripts regraded. |
 | M3 — recoverable failures | S3 algorithm rows; PUL-07 after ART-01; VAL-01/02/05. | Provider/tool maintainer | Malformed/empty/provider inputs cannot escape the result contract; retries and missing-data distinctions are deterministic; schemas expose intended bounded arguments. |
 | M4 — install and architecture — **partial desktop implementation** | ARC-01–04; AUD-02 follow-through; INS-01–04; MCP-02; VAL-03/04; PUL-09; desktop D0–D4 in §9. Installers already exist; validate their actual behavior before further refactoring or extension work. | Packaging/MCP maintainer, platform and domain reviewers | Import/dependency isolation, installed resource/entry-point parity, actual host/platform matrix evidence, solver convergence when correctly configured, safe skill upgrades; explicit installer/update policy and recorded desktop outcome. |
@@ -114,16 +115,17 @@ historical duplicate-file counts and TypeScript paths are obsolete.
 
 ### 2.1 M1 checkpoint and next execution queue
 
-As of 2026-10-05, **do not mark M1 complete**. Main does not contain the
+As of 2026-10-06, **do not mark M1 complete**. Main does not contain the
 ALG-01/ART-01 fixes, and inspection still finds missing bounds and policy
 coverage in solver/catalog paths, `tools/agent/policy.py` and
 `tools/mcp/server.py`. Pulsar computation bounds
 and scan recovery, direct/tool variable-fold and weighted-spectrum bounds, and
-the paired-row weighted-error contract are now implemented on this branch
+the paired-row weighted-error contract and bounded custom reference-magnitude
+arithmetic are now implemented on this branch
 (§4/§6), not in rc6.
 The continuation order is:
 
-1. Deliver the branch-only ALG-01/02/ART-01/PUL-02/03/05/06/TS-02/03 fixes: local
+1. Deliver the branch-only ALG-01/02/ART-01/PUL-02/03/05/06/TS-02/03/PHOT-15 fixes: local
    regression evidence is in §6; continuation PR CI, review/merge and release
    remain. Preserve the conservative ellipse contract and valid numerical
    fixtures. The new first-party pulsar/variable limits deliberately reject
@@ -132,7 +134,12 @@ The continuation order is:
    numeric-mask/null handoffs and bounded regressions at `1042f70`. The public
    variable-spectrum TS-17 containment is implemented; direct constant NaN and
    TS-09/14 scientific arithmetic remain separately preserved.
-2. Next code work — remaining S1 rows: WCS-01/02/04/21/25, PHOT-15,
+   PHOT-15 at `a3e152a` removes Python evaluation from custom magnitude
+   expressions, bounds arithmetic/namespace/alias work and uses literal band
+   substitutions. Invalid mappings stay unresolved; accepted registry transforms
+   and uncertainty propagation are unchanged. Custom settings are a Python API
+   path, not an exposed registered-tool argument.
+2. Next code work — remaining S1 rows: WCS-01/02/04/21/25,
    CAT-01/02/27 and TS-01.
    Prove public reachability, finite solver/query/expression limits and a
    documented decision on any legacy numerical divergence; CAT-27 first needs
@@ -285,7 +292,7 @@ test before fixes. Closed/protected rows have no independent fix queued.
 | PHOT-12 | S2 / recheck / H | Growth-curve neighbor guard may be dead; use controlled neighboring-source flux and aperture correction. |
 | PHOT-13 | S4 / open / C | SNR conversions/fit weights differ; quantify against chosen scientific SNR definition before changing thresholds. |
 | PHOT-14 | S2 / open / C | Gain=1 is overridden by FITS header; preservation tests pin behavior. Define explicit electrons/header/default gain semantics. |
-| PHOT-15 | S1 / open / C | Arithmetic eval permits extreme exponentiation; band regex interpolation is unescaped. Bound AST/node/depth/exponent work and escape substitutions. Arbitrary-code exploitability is not established by this review. |
+| PHOT-15 | S1 / closed **branch-only** / R+C | `a3e152a` replaces custom reference-expression `eval` with bounded numeric AST arithmetic: 2,048 characters, 256 nodes, 32 levels, literal exponent magnitude ≤16, 1,024-bit integers, 64 bands/128-character names and 32 alias hops. Namespace flattening/error propagation are band-count bounded; substitutions escape regex literals and reject ambiguous sanitized names. Safe pre-evaluator sentinels, wrong-arithmetic and escaped-regex failures reproduce the old mechanism without executing huge powers; a kill/reap-bounded post-fix child terminates normally. Invalid transforms return unresolved None/(None, None), preserving explicit-failure/no-preferred-fallback and source-skip semantics. Shipped reference polynomials keep exact arithmetic and numeric uncertainty propagation (§6); provenance: `extraction.md`, Field Calibration §5a. The Python settings/collection path is tested; registered tools do not expose custom expressions. No arbitrary-code/MCP exploit is claimed. Merge/release outstanding; this is not a global calibration-call/MCP budget. |
 | PHOT-16 | S5 / recheck / H | Reference-driver swallowed exceptions/parity settings need reassessment against current recorded replay tests. |
 | PHOT-17 | S4 / partial / C | Global deps module removed; sources/reference magnitudes/Header still mutate. Define caller ownership and test copy/reuse semantics. |
 | PHOT-18 | S4 / recheck / H | Test RA-wrap matching and clarify arcsec/pixel tolerances independently. |
@@ -409,6 +416,8 @@ the named helper behavior, not all public-tool reachability or fitting impacts.
 | ALG-02 direct weighted-loop probe, 2026-10-05 | A subprocess importing `lomb_scargle_with_error` emitted `READY` then stalled for three finite varying samples, positive errors, start=1, stop=`math.nextafter(1,2)`, steps=1000. It was killed/reaped after **5 s**, exit -9, with no stderr. Existing public range validation rejects the same non-progressing grid under the fixed-2,000-step tool contract. | New direct-library finding scheduled in M1/ALG-02. This probe does not establish served-tool reachability or authorize a weighted-formula change; retain TS-09/17 parity until separately reviewed. |
 | M1 ALG-02 / TS-03 weighted continuation, 2026-10-05, `1042f70` | Initial test-first run: **23 failed, 10 passed**, including two direct grid stalls killed/reaped after 5 s each. Separate adapter characterization: object/null missing cells passed both controls; **two numeric masked-cell cases failed** by conversion to NaN. Post-fix variable/preservation/error-code/MCP focus passed **195 tests** in 17.91 s, including **52 new regressions** across the two new files. Shared and runtime grid guards, pre-allocation/work sentinels, weights, numeric-mask/null handoffs, raw partial-source ingest, warnings and degenerate public failures are covered. Skill source regenerated both copies; skill-creator, renderer parity, lock, syntax and whitespace checks passed. | Branch-only on `feature/m1-status-continuation`; TS-03 and ALG-02 acceptance paths are contained without changing the weighted/error formulas, 2,001-row fixture grid or direct constant-series NaN. The full-suite gate follows; supported Python 3.12/3.13 PR CI, merge/release and real-host/platform gates remain outstanding. Remaining S1 and AUD/MCP policies are next; M1 remains partial. |
 | M1 weighted continuation full regression and wheel gate, 2026-10-05, `1042f70` | `uv run --locked --extra mcp pytest -q`: **3,018 passed, 48 skipped, 188 warnings** in 268.23 s on Python 3.14.7/Linux aarch64, including slow tests, all 52 new weighted-contract cases and existing numeric/parity/MCP coverage. A temporary offline wheel passed the distribution/licence check; its weighted algorithm, public adapter, code vocabulary and skill source match this checkout byte-for-byte. Master has **110/110 unique historical IDs**, with its 17 local file-link destinations resolving; lock, syntax, skill validation/render parity and whitespace checks passed. | Local branch-only evidence with the existing rc6 version string, **not** a new published rc6 wheel or clean supported-target install. The 48 live/saved-run/solver skips retain prior dispositions. Supported Python 3.12/3.13 PR CI, review/merge, release and actual-host/platform gates remain outstanding. M1 stays partial; next are remaining S1 solver/catalog/legacy rows and AUD-01/02/03/MCP-01. |
+| M1 PHOT-15 expression continuation, 2026-10-05–06, `a3e152a` | Safe test-first probes: **22 failed, 14 passed, two deselected**, with dangerous expressions intercepted before execution; the two deselections excluded an uncapped direct-power call and the parser sentinel while its patch scope was corrected. Earlier parser interception interfered with pytest reporting, not an acceptance run. Post-fix final calibration/reference/query/MCP focus passed **342 tests**, two existing warnings, in 13.51 s, including **48 new regressions**. Covers pre-parser/evaluator limits, literal/invalid regex keys, namespace/alias/integer budgets, calibration collection, exact reference-registry polynomial arithmetic, error propagation and a 5 s kill/reap-bounded child (with 64 MiB incremental mapped-memory cap on Linux). Lock, syntax, generated-skill parity and whitespace checks passed. | Branch-only on `feature/m1-status-continuation`. The initial 22 failing new acceptance cases are not 22 independently proven vulnerabilities. No giant power was executed in the old implementation and no arbitrary-code/MCP exploit is claimed. New custom-input acceptance bounds are explicit in Field Calibration §5a; known catalog scientific mappings and preserved zero-point math are unchanged. Full-suite evidence follows; remaining solver/catalog/legacy S1 and AUD/MCP work stays scheduled in §2.1. |
+| M1 PHOT-15 full regression and wheel gate, 2026-10-06, `a3e152a` | `uv run --locked --extra mcp pytest -q`: **3,066 passed, 48 skipped, 188 warnings** in 265.61 s on Python 3.14.7/Linux aarch64, including slow tests and all 48 new expression cases. Temporary offline wheel passes the distribution/licence check and its expression implementation matches the checkout byte-for-byte. Syntax, lock, generated-skill parity and whitespace checks passed. | Local branch-only evidence at the existing rc6 version, not a published rc6 replacement or supported Python 3.12/3.13 clean install/CI. The 48 live/saved-run/solver skips retain prior dispositions; PR CI, review/merge, release and actual host/platform gates remain outstanding. PHOT-15 is closed branch-only; M1 remains partial. |
 | Platforms/hosts/workflows | Source/DAG inspection, SDK tests, documented host configuration and the current-main CI/release outcomes above. Codex installer README records Fedora 44 app-server/container evidence and its scope; Claude launcher tests establish configuration/refresh/fallback behavior, not a GUI installation. | Actual macOS/Windows/Claude/Cursor validation remains INS-01/D0; do not infer it from config, app-server or package tests. Repeat online checks for any continuation PR before merge. |
 
 Update this ledger as checks run. A skipped test is not a successful solver or
