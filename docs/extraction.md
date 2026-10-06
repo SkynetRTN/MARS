@@ -1379,7 +1379,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 | MARS file | Upstream source | Lines | Fidelity |
 |---|---|---|---|
 | `vizier.py` | `afterglow_core/resources/catalog_plugins/vizier_catalogs.py` | 373 | Engine verbatim; Flask config → `config.py`; cache patch → `cache.py`; custom-catalog loop → a function |
-| `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 | SQL generation byte-identical |
+| `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 at extraction | SQL originally byte-identical; first-party row/identifier/input bounds and pinned-SDK SQL transport in §5.11 |
 | `skymapper.py` | `afterglow_core/.../skymapper_catalog.py` lines 39–58 | 20 | `query_region` override verbatim |
 | `cache.py` | `vizier_catalogs.py` lines 27–72 + `skynet_db/runners/utils.py::prune_vizier_cache` lines 132–158 | ~60 | Two copies of the same idea, merged |
 | `selection.py` | `skynet/.../optical_data_processing/catalog_query.py` lines 20–191 | 172 | Verbatim apart from the registry import |
@@ -1477,7 +1477,8 @@ service infrastructure and was left behind.
 
 ##### 4.8 Class renames
 
-`AfterglowSDSS` → `MARSSDSS`. Generated SQL unchanged. See
+`AfterglowSDSS` → `MARSSDSS`. Generated SQL was unchanged at extraction;
+the first-party acceptance/transport changes are recorded in §5.11. See
 the Catalogs section of this document, §3 for the rest.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
@@ -1549,6 +1550,43 @@ handles rotation and the cos(dec) narrowing. `image_boxes_from_wcs` multiplies
 pixel scale by axis length, which is blind to both but works without
 `array_shape`. Upstream had both; they return different widths for the same WCS
 (verified: 1.02297° vs 1.02400° on a 1024² TAN field). Prefer the former.
+
+##### 5.11 First-party SDSS acceptance/transport contract (2026-10-06)
+
+CAT-02 deliberately diverges from the unbounded upstream SQL: region queries
+emit `SELECT DISTINCT TOP N`, default to the declaration's 5,000-row limit,
+accept only integer limits in 1–5,000 and slice returned tables before source
+mapping even if a provider ignores `TOP`. This bounds mapped rows, not HTTP
+response bytes, SDK parsing memory or the whole-call deadline (MCP-01). Without
+an ordering/completeness contract, the subset is not a full or unbiased catalog
+sample; CAT-19 remains separate.
+
+CAT-27 bounds projections to 1–64 literal ASCII SQL identifiers, each at most
+64 characters. Expressions, comments, qualified names and missing projections
+fail locally; missing coordinates/regions cannot invoke an SDK metadata lookup
+or unbounded fallback. Shipped SDSS fields were already trusted. The custom
+metadata/native Python payload boundary is now guarded; no registered tool
+exposes arbitrary projection fields, and this is not evidence of an MCP SQL
+injection exploit. Non-finite/non-positive dimensions and cache-rounding
+overflow are rejected before work; an unrepresentable polar RA span raises
+rather than sending `NaN` SQL. That guard does not correct CAT-11's preserved
+box geometry.
+
+The pinned `astroquery==0.4.11` cone path passes a coordinate list into the old
+scalar `_args_to_payload` seam and expects a cross-ID rather than SQL payload;
+its rectangular interface also differs. This newly reproduced compatibility
+finding (ALG-03) is repaired for MARS's `query_box`/`query_circ` backend by
+building the quality-filtered SQL explicitly and using the SDK's supported
+`query_sql` endpoint/parser. Offline tests exercise native request construction
+and CSV/error parsing with stub responses, not a live SkyServer. The inherited
+native `MARSSDSS.query_region` interface remains unsupported; backend code must
+not return to it. Named-object queries (CAT-18) remain a separate broken path
+and must reuse the bounded contract when repaired.
+
+Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
+mapping remain preserved; ignored constraints (§5.8) and public schemas are
+unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
+regressions.
 
 #### 6. External dependencies
 

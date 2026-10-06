@@ -46,6 +46,7 @@ Three consequences shape everything here:
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |
 | `test_query_binding_runner.py` | The `(Declaration, Backend)` MRO contract, region validation, config |
+| `test_sdss_query_limits.py` | M1 CAT-02/27 and ALG-03: finite server/client row bounds, literal projection identifiers, geometry/cache preflight, quality-predicate preservation and the pinned SDK's native SQL request/CSV/error contract with offline stubs; named-object and whole-call/HTTP-byte budgets remain separate. |
 | `test_photometry_extraction.py` | SEP extraction on real frames, crop regions, WCS construction |
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
