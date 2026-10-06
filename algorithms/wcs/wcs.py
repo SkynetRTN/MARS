@@ -55,6 +55,7 @@ from algorithms.skylib_lite.astrometry.anet.backend import (
     solve_field_glob as anet_solve_field_glob,
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+from algorithms.skylib_lite.astrometry.atlas.catalog.limits import validate_catalog_radius
 from algorithms.skylib_lite.astrometry.limits import normalize_solver_timeout
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
@@ -401,18 +402,6 @@ def _load_atlas_catalog_sources(
     if ra0_deg is None or dec0_deg is None:
         return []
 
-    try:
-        catalog_name, catalog_root = atlas_config.resolve_catalog()
-    except Exception:
-        logger.exception("Failed to resolve Atlas catalog configuration")
-        return []
-
-    try:
-        catalog_index = get_catalog_spec(catalog_name).index_factory(catalog_root)
-    except Exception:
-        logger.exception("Failed to initialize Atlas catalog index for %s", catalog_name)
-        return []
-
     if max_scale <= 0:
         return []
 
@@ -420,6 +409,15 @@ def _load_atlas_catalog_sources(
     fov_h = (max_scale * height) / 3600.0
     half_diag = 0.5 * float(np.hypot(fov_w, fov_h)) * (1.0 + float(atlas_config.catalog_pad_frac))
     if half_diag <= 0:
+        return []
+
+    validate_catalog_radius(half_diag, atlas_config.catalog_max_radius_deg)
+
+    try:
+        catalog_name, catalog_root = atlas_config.resolve_catalog()
+        catalog_index = get_catalog_spec(catalog_name).index_factory(catalog_root)
+    except Exception:
+        logger.exception("Failed to initialize Atlas catalog index")
         return []
 
     cos_dec = max(0.2, abs(float(np.cos(np.deg2rad(dec0_deg)))))
@@ -432,6 +430,8 @@ def _load_atlas_catalog_sources(
             dec0_deg - dec_half, dec0_deg + dec_half,
             thin=atlas_config.thin,
         )
+    except ValueError:
+        raise  # Operational budgets must not masquerade as an empty catalog.
     except Exception:
         logger.exception("Failed to query Atlas catalog %s", catalog_name)
         return []

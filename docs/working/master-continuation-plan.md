@@ -260,7 +260,7 @@ test before fixes. Closed/protected rows have no independent fix queued.
 
 | ID | Stream / status / evidence | Current problem, correction or next evidence |
 | --- | --- | --- |
-| WCS-01 | S1 / open / C | Missing scale can cause oversized ATLAS catalog loading before the cap; establish safe default radius/load cap with WCS-25. |
+| WCS-01 | S1 / implemented branch-only / R+C | ATLAS rejects padded footprints above a constructible default 2-degree radius before initialization; explicit limits must be finite in (0, 5]. Chunked UCAC queries reject candidate/row/zone/index budgets rather than truncating. Synthetic bounded tests pass with existing WCS controls; provenance is extraction §5.8. No operator catalog compatibility claim; merge/release and full-call isolation remain outstanding. |
 | WCS-02 | S1 / closed branch-only / R+C | `1dddb41` (provider snapshots `dfdfc7b`): omitted/None attempt limits select 300 s; configs/builders/public arguments validate finite 1–900 s, mutable backend inputs are revalidated, and malformed settings cannot silently remove a deadline. Astrometry.net receives CPU allowance plus the existing 30 s outer grace; owned POSIX group cleanup sends SIGKILL even after its leader exits. Two bounded native probes reproduced surviving children before the fix; final tests prove child termination, leader reaping, closed pipes, diagnostics and finite retry budgets. ATLAS still bounds only its blind matcher. Full-call/preprocessing/cancellation/output-byte work stays WCS-21/MCP-01; no Windows process-tree or configured astronomy solve evidence is claimed. Search/scale/parity formulas and retry policy are preserved. Merge/release outstanding; WCS extraction §5.7 and §6 ledger. |
 | WCS-03 | S2 / open / C | No-scale acceptance uses a weak default-scale separation gate; test a deliberately wrong solution before changing header acceptance. |
 | WCS-04 | S1 / partial / C | Explicit bounded search hints now reach backends; default radius 180 remains deliberately all-sky. Decide safe default policy and preserve explicit blind use. |
@@ -284,7 +284,7 @@ test before fixes. Closed/protected rows have no independent fix queued.
 | WCS-22 | S3 / recheck / H | Synthetic `EQUINOX='J2000'` must exercise current hint path and return an actionable diagnostic. |
 | WCS-23 | S3 / partial / C | Broad exception now records detail; wrapper distinguishes unavailable solver. Test missing binary/bad root/full disk taxonomy before further changes. |
 | WCS-24 | S5 / recheck / H | Recheck FOV estimate on stripped temporary FITS and whether missing-FOV guard is reachable. |
-| WCS-25 | S1 / open / C | Radius/padding config remain unannotated class attributes; make intended cap constructible and test with WCS-01. |
+| WCS-25 | S1 / implemented branch-only / R+C | Radius/padding are annotated constructible dataclass fields with finite bounds; dataclass-copy and invalid-setting tests pass. WCS-01 records their enforced pre-load contract. Merge/release outstanding. |
 | WCS-26 | S4 / open / C | `_write_xylist` source limit applies only with a flux array; test absent/bad flux cases. |
 | WCS-27 | S2 / open / C | Southern-declination fallback returns zero; tests deliberately preserve it. Correct shared helper with southern/equatorial/northern cases. |
 | WCS-28 | S4 / partial / C | Caller extraction settings still mutate; print-to-stdout half is gone. Establish copy/ownership semantics and repeated-call test. |

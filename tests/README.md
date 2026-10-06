@@ -53,6 +53,7 @@ Three consequences shape everything here:
 | `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_wcs_timeout_limits.py` | M1 WCS-02: finite default/validated attempt budgets at direct config, duck-typed builder, mutable backend and public/environment boundaries; CPU/backstop and retry propagation; actual POSIX owned-group termination with stubborn children and an exited leader, pipe closure and structured timeout diagnostics. Whole-call/ATLAS preprocessing/cancellation budgets remain WCS-21/MCP-01. |
+| `test_atlas_catalog_limits.py` | M1 WCS-01/25: constructible footprint/padding limits, rejection before catalog initialization, bounded chunked UCAC conversion with preserved thinning/arithmetic, candidate/row/zone/index rejection. Synthetic offline records, not native catalog compatibility. |
 | `test_skylib_stats.py` | `chauvenet` and the statistics under the zero-point solve |
 | `test_skylib_geometry.py` | Pixel/aperture overlap, spherical angles, orientation decomposition |
 | `test_skylib_fits.py` | Gain, exposure, observation time, field of view |

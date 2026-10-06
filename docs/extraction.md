@@ -327,6 +327,29 @@ default is an operational budget, not a guaranteed solution-time envelope.
 CPU/outer-backstop propagation and native owned-group termination using short
 Python processes, without live services or operator astronomy indexes/catalogs.
 
+##### 5.8 First-party ATLAS pre-load budgets (2026-10-06)
+
+WCS-01/25 replace the post-load-only cap with a constructible, revalidated
+footprint contract: the padded half-diagonal must fit `catalog_max_radius_deg`
+(default 2 degrees, explicit finite values in (0, 5], `None` restores 2).
+`catalog_pad_frac` is constructible in [0, 2]. Blind and oriented requests and
+the reference-source follow-up reject oversized footprints before catalog
+initialization, rather than clipping the radius and silently omitting stars.
+The follow-up still uses the legacy maximum scale, not the solved scale
+(WCS-14); a broad legacy requery can therefore explicitly fail an otherwise
+viable solve. This is a deliberate operational acceptance restriction, not a
+scientific correction to the follow-up footprint.
+
+UCAC queries retain coordinate conversion, order and thinning, but process
+16,384-record chunks and reject more than 2,000,000 examined candidates or
+200,000 returned rows. Zones above 4,000,000 records and UCAC5 ASCII indexes
+above 128 MiB, 1,500,000 lines or 256 characters per line are rejected before
+unbounded conversion/parsing; indexed spans must be nonnegative and fit the
+zone-record budget. No query is silently truncated to meet these limits.
+`tests/test_atlas_catalog_limits.py` uses synthetic records and sentinel loaders;
+no operator catalog or native catalog-size compatibility validation is claimed.
+Whole-call/matcher memory, cancellation and solver output remain WCS-21/MCP-01.
+
 #### 6. External dependencies
 
 Required to import and run:

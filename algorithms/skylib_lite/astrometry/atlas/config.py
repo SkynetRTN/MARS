@@ -41,8 +41,8 @@ class AtlasConfig:
     refine_center: bool = True
     thin: int = 1
     debug: bool = False
-    catalog_pad_frac = 1.0  # +50% radius
-    catalog_max_radius_deg = None  # or e.g. 2.0
+    catalog_pad_frac: float = 1.0  # preserved multiplier: radius * (1 + pad)
+    catalog_max_radius_deg: float | None = 2.0  # reject larger footprints, never silently clip
 
     # ---- Oriented ("on-the-fly check") fast path knobs ----
     # Used only when a rotation prior is supplied (rotation/parity/scale known).
@@ -79,6 +79,10 @@ class AtlasConfig:
 
     def __post_init__(self) -> None:
         self.timeout_s = normalize_solver_timeout(self.timeout_s)
+        from .catalog.limits import normalize_catalog_radius_limit
+        self.catalog_max_radius_deg = normalize_catalog_radius_limit(self.catalog_max_radius_deg)
+        if not isinstance(self.catalog_pad_frac, (int, float)) or not 0 <= self.catalog_pad_frac <= 2:
+            raise ValueError("ATLAS catalog padding must be finite and between 0 and 2.")
 
     def resolve_catalog(self) -> tuple[str, Path]:
         catalog = self.catalog.strip().lower()
