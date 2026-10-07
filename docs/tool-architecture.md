@@ -665,6 +665,17 @@ result to the model and the loop continues. The headless default denies risky
 calls; trusted callers such as the benchmark replay plane opt in explicitly
 with `auto_approve`.
 
+**Private-artifact exemption (AUD-01).** `tools/effects.py` is the closed,
+shared inventory for MCP local-effect hints and agent consent. Routine tables,
+intermediate time-series/HR products and solver logs deliberately do not need
+write confirmation. The three explicitly tagged audio/plot tools still do;
+download and FITS-header flags override any routine-artifact exemption. Slow
+and keyed tags remain independent. An MCP hint describes the effect, not the
+consent decision: every artifact writer remains non-read-only. Unknown or new
+unreviewed tools require write consent, and a registry-partition test requires
+an explicit disposition before they can pass CI. Headless default approval is
+not a filesystem sandbox and does not block all private-artifact writes.
+
 Two properties of the ask itself:
 
 - **Risk can live in an argument, not only in a tool.** `search_mast` and

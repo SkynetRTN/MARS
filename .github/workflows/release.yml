@@ -69,7 +69,7 @@ jobs:
           cd dist && sha256sum -- *.whl *.tar.gz > SHA256SUMS && cat SHA256SUMS
 
       - name: Check the metadata renders as PyPI will show it
-        run: uvx twine@6 check --strict dist/*.whl dist/*.tar.gz
+        run: uvx twine@6.2.0 check --strict dist/*.whl dist/*.tar.gz
 
       # The core data reaches the wheel through the tools/_data symlink: a tree
       # without it (a clone made with core.symlinks=false) builds a wheel with
