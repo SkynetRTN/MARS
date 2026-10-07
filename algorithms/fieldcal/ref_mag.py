@@ -19,6 +19,7 @@ import operator
 import re
 
 from algorithms.catalogs import CATALOG_OPTIONS
+from algorithms.catalogs.filters import filter_token_candidates
 from .schemas import Mag  # noqa: F401  (referenced by the type annotation below)
 
 __all__ = ["resolve_ref_mag_for_filter"]
@@ -210,18 +211,7 @@ def _ref_mag_filter_token_candidates(image_filter: str) -> list[str]:
     token's casing first so meaningful tokens like ``g'`` / ``Halpha`` are not
     rewritten before the lookup-based steps get a chance to run.
     """
-    seen: list[str] = []
-    for t in (
-        image_filter,
-        image_filter.strip(),
-        image_filter.lower(),
-        image_filter.upper(),
-        # Normalize typographic single-quote variants to ASCII apostrophe
-        image_filter.replace("′", "'").replace("’", "'"),
-    ):
-        if t and t not in seen:
-            seen.append(t)
-    return seen
+    return [token for token in filter_token_candidates(image_filter) if token]
 
 
 def resolve_ref_mag_for_filter(
@@ -315,6 +305,11 @@ def resolve_ref_mag_for_filter(
         )
         if v is not None:
             return v, e
+
+    # CAT-01: without an explicit transform, SkyMapper has no Johnson V.
+    # Do not reintroduce the band substitution through the permissive fallback.
+    if catalog_name == "SkyMapper" and f == "V":
+        return None, None
 
     # 4. Preferred-band fallback (NON-legacy; gated). Legacy Afterglow skips a
     #    source whose filter resolves to no direct band or mapping expression.

@@ -1387,6 +1387,19 @@ rather than normalized, and the classes are private to that module.
 no transforms (USNO-B1, Stetson) has no such attribute at all — not an empty
 dict. Every reader uses `getattr(..., {})`. Upstream had the same shape.
 
+##### 5.6 CAT-01 deliberate passband safeguard (2026-10-06)
+
+The shared first-party `catalogs/filters.py` candidate builder no longer
+case-folds Johnson `V` into SkyMapper violet `v`, or vice versa. Both catalog
+selection and reference-magnitude resolution use it, including padded inputs.
+Without an explicit resolving transform, a SkyMapper/Johnson V request stays
+unresolved even in preferred-band fallback mode. Native `v`, explicit custom
+transforms, other legacy token variants and the two distinct registries remain
+supported. No colour-transform coefficients were changed. The advisory
+no-compatible-catalog selection fallback is retained; reference resolution
+still rejects the unsafe pairing. This deliberately supersedes V/v token
+preservation assertions, tested in `test_m1_science_safeguards.py`.
+
 #### 6. Dependencies
 
 `pydantic` v2 only. Deliberately no `astroquery`, no `astropy` except
@@ -2237,6 +2250,19 @@ holds M67 offline, on 548 recorded members and the 16 tracks its window reads.
 The `query_object`-based assumption that matches are ordered by increasing
 separation held for the clusters tested so far but is still not exhaustively
 verified -- see `tools/hr_diagram.py`'s docstrings.
+
+### TS-01 deliberate legacy longitude correction (2026-10-06)
+
+`legacy.equatorial_to_galactic` now uses `atan2(numerator, denominator)` and
+wraps longitude into [0, 360), rather than discarding the quotient's quadrant.
+This intentionally changes legacy cluster-summary longitude and any downstream
+galaxy projections by 180 degrees in affected quadrants (including M67).
+Finite RA and finite Dec in [-90, 90] are required. The legacy pole/node
+constants and latitude arithmetic remain unchanged; they differ from Astropy's
+ICRS transform by about 0.0013 degrees. Independent Astropy checks allow 0.002
+degrees, cover all quadrants and both poles, and retain unaffected summary/mass
+fixtures. The new `hrfit.py` fitter does not call this helper and is unchanged.
+TS-20's dispersion statistic and TS-21's protected unit factors were not edited.
 
 ## Radio Sources (Python)
 
