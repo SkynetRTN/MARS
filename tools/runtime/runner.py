@@ -114,10 +114,10 @@ async def _stop(proc: subprocess.Popen, work: Path, birth: str | None,
         raise RuntimeError("Owned worker could not be reaped within the cleanup budget.")
 
 
-def _diagnostics(work: Path, returncode: int | None) -> None:
+def _diagnostics(work: Path, returncode: int | None, pid: int | None = None) -> None:
     """Bounded operator stderr, never diagnostic text in an MCP response."""
     if returncode not in (None, 0):
-        sys.stderr.write(f"MARS worker exited with code {returncode}; diagnostics: {work}\n")
+        sys.stderr.write(f"MARS worker exited with code {returncode} (pid={pid}); diagnostics: {work}\n")
     for name in ("stdout.log", "stderr.log"):
         try:
             with (work / name).open("rb") as handle:
@@ -233,7 +233,7 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
         with anyio.CancelScope(shield=True):
             if proc is not None:
                 await _stop(proc, work, birth, windows_job)
-                _diagnostics(work, proc.returncode)
+                _diagnostics(work, proc.returncode, proc.pid)
             elif windows_job is not None:
                 windows_job.close()
             if work is not None:

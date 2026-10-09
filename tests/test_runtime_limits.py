@@ -24,6 +24,28 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def keep_windows_process_identities(monkeypatch):
+    """Retain process handles until assertions; Windows can otherwise reuse PIDs.
+
+    https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-process_information
+    Keeping a Popen object alive does not keep its process running, but prevents
+    OpenProcess(pid) from inspecting an unrelated recycled identifier.
+    """
+    if os.name != "nt":
+        yield []
+        return
+    from tools.runtime import runner
+    processes = []
+    original = runner.subprocess.Popen
+    def retain(*args, **kwargs):
+        proc = original(*args, **kwargs)
+        processes.append(proc)
+        return proc
+    monkeypatch.setattr(runner.subprocess, "Popen", retain)
+    yield processes
+
+
 def _running(pid):
     if os.name == "nt":
         # os.kill(pid, 0) is NOT a safe existence probe on Windows.
@@ -58,7 +80,7 @@ async def _ready(path):
 
 
 @pytest.mark.anyio
-async def test_cancel_stops_writer_and_next_call_can_run(tmp_path):
+async def test_cancel_stops_writer_and_next_call_can_run(tmp_path, keep_windows_process_identities):
     ready = tmp_path / "ready"
     root = tmp_path / "artifacts"
     scope = anyio.CancelScope()
@@ -68,6 +90,8 @@ async def test_cancel_stops_writer_and_next_call_can_run(tmp_path):
     async with anyio.create_task_group() as tasks:
         tasks.start_soon(call)
         pid = await _ready(ready)
+        if os.name == "nt":
+            assert keep_windows_process_identities[0].pid == pid
         scope.cancel()
     assert not _running(pid)
     calls = [p for p in (root / ".mars-runtime").iterdir() if p.is_dir()]
@@ -243,18 +267,56 @@ def test_macos_allowance_is_added_once_to_measured_bootstrap(monkeypatch):
     assert darwin.memory_ceiling(128 * 1024**2) == 400 * 1024**3 + 128 * 1024**2
 
 
+@pytest.mark.parametrize("received,virtual", [(0, 0), (48, 100), (96, 0)])
+def test_macos_bootstrap_measurement_fails_closed(monkeypatch, received, virtual):
+    from unittest.mock import Mock
+    from tools.runtime import darwin
+    query = Mock()
+    def read(pid, flavor, arg, pointer, size):
+        assert pid == os.getpid() and flavor == 4 and arg == 0 and size == 96
+        pointer._obj.virtual_size = virtual
+        return received
+    query.side_effect = read
+    monkeypatch.setattr(darwin.ctypes, "CDLL", lambda *args, **kwargs: Mock(proc_pidinfo=query))
+    with pytest.raises(OSError, match="Cannot measure"):
+        darwin.bootstrap_size()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX hard allocation ceiling")
+def test_memory_ceiling_blocks_allocation_after_successful_setup():
+    import subprocess
+    import sys
+    script = (
+        "from tools.runtime.worker import _limits\n"
+        "from tools.runtime.limits import CallLimits\n"
+        "_limits(CallLimits(memory_bytes=64*1024**2))\n"
+        "print('setup-ok', flush=True)\n"
+        "try:\n"
+        "    allocation = bytearray(512*1024**2)\n"
+        "except MemoryError:\n"
+        "    print('allocation-blocked', flush=True)\n"
+        "else:\n"
+        "    raise AssertionError('Allocation exceeded the finite budget')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                            text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["setup-ok", "allocation-blocked"]
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX memory setup seam")
-@pytest.mark.parametrize("inherited", [-1, 256 * 1024**2])
+@pytest.mark.parametrize("inherited", ["unlimited", 256 * 1024**2])
 def test_macos_memory_setup_is_finite_and_respects_inherited_limit(monkeypatch, inherited):
     import resource
     from tools.runtime import worker, darwin
+    inherited = resource.RLIM_INFINITY if inherited == "unlimited" else inherited
     calls = []
     monkeypatch.setattr(worker.sys, "platform", "darwin")
     monkeypatch.setattr(darwin, "memory_ceiling", lambda allowance: 400 * 1024**3 + allowance)
     monkeypatch.setattr(resource, "getrlimit", lambda kind: (inherited, inherited))
     monkeypatch.setattr(resource, "setrlimit", lambda kind, values: calls.append((kind, values)))
     worker._limits(CallLimits())
-    expected = 404 * 1024**3 if inherited == -1 else inherited
+    expected = 404 * 1024**3 if inherited == resource.RLIM_INFINITY else inherited
     assert calls[0] == (resource.RLIMIT_AS, (expected, expected))
     assert expected > 0
 
@@ -347,6 +409,41 @@ async def test_windows_job_failure_is_not_reported_as_success():
     with pytest.raises(OSError, match="job termination failed"):
         await _stop_windows(None, job)
     assert job.closed
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job allocation control")
+async def test_windows_job_blocks_allocation_after_successful_join():
+    import subprocess
+    from tools.runtime.runner import _worker_command, _stop_windows
+    from tools.runtime.windows import OwnedJob
+    job = OwnedJob(64 * 1024**2)
+    env = {**os.environ, "MARS_RUNTIME_JOB": job.name}
+    executable = _worker_command(Path.cwd(), env, windows=True)[0]
+    script = (
+        "import os\n"
+        "from tools.runtime.windows import join_job\n"
+        "join_job(os.environ['MARS_RUNTIME_JOB'])\n"
+        "print('setup-ok', flush=True)\n"
+        "try:\n"
+        "    allocation = bytearray(512*1024**2)\n"
+        "except MemoryError:\n"
+        "    print('allocation-blocked', flush=True)\n"
+        "else:\n"
+        "    raise AssertionError('Allocation exceeded the finite budget')\n"
+    )
+    proc = None
+    try:
+        proc = subprocess.Popen([executable, "-c", script], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out, err = proc.communicate(timeout=10)
+        assert proc.returncode == 0, err
+        assert out.splitlines() == ["setup-ok", "allocation-blocked"]
+    finally:
+        if proc is not None:
+            await _stop_windows(proc, job)
+        else:
+            job.close()
 
 
 @pytest.mark.anyio
