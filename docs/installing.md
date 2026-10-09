@@ -251,7 +251,8 @@ resume and unbounded-content shortcuts are disabled. Atomic publication needs
 filesystem hard-link support.
 
 Windows launches the actual interpreter while preserving its virtual environment,
-so launcher exit cannot stand in for worker exit. Cleanup also waits for job-wide
+so launcher exit cannot stand in for worker exit. Cleanup requires the native
+process handle to signal, not merely a cached Python exit code, and waits for job-wide
 active-process accounting to reach zero. Worker failures forward at most 64 KiB
 from each stdout/stderr log to **operator stderr**, never into client results;
 the private managed logs retain diagnostic context for troubleshooting.

@@ -61,13 +61,14 @@ async def _stop_windows(proc: subprocess.Popen, job: OwnedJob) -> None:
     try:
         job.terminate()
         # Also covers cancellation before the interpreter has joined the job.
-        if proc.poll() is None:
+        if not job.worker_exited(proc):
             proc.kill()
         with anyio.move_on_after(5):
-            while proc.poll() is None:
+            while not job.worker_exited(proc):
                 await anyio.sleep(.02)
-        if proc.poll() is None:
+        if not job.worker_exited(proc):
             raise RuntimeError("Owned Windows interpreter could not be reaped.")
+        proc.poll()  # Collect the exit code only after the handle has signalled.
         # The interpreter can no longer join/spawn after this point. Terminate
         # again to cover a join concurrent with the first termination request.
         job.terminate()

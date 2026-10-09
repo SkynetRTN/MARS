@@ -38,11 +38,11 @@ def keep_windows_process_identities(monkeypatch):
     from tools.runtime import runner
     processes = []
     original = runner.subprocess.Popen
-    def retain(*args, **kwargs):
-        proc = original(*args, **kwargs)
-        processes.append(proc)
-        return proc
-    monkeypatch.setattr(runner.subprocess, "Popen", retain)
+    class RetainedPopen(original):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            processes.append(self)
+    monkeypatch.setattr(runner.subprocess, "Popen", RetainedPopen)
     yield processes
 
 
@@ -362,6 +362,8 @@ async def test_windows_stop_waits_for_job_even_after_interpreter_exit():
             pytest.fail("Exited process must not be killed.")
     class Job:
         polls = 0
+        def worker_exited(self, proc):
+            return proc.poll() is not None
         def terminate(self):
             events.append("terminate")
         def empty(self):
@@ -386,6 +388,8 @@ async def test_windows_stop_kills_interpreter_not_yet_in_job():
             events.append("kill")
             self.alive = False
     class Job:
+        def worker_exited(self, proc):
+            return proc.poll() is not None
         def terminate(self):
             events.append("terminate")
         def empty(self):
@@ -394,6 +398,41 @@ async def test_windows_stop_kills_interpreter_not_yet_in_job():
             events.append("close")
     await _stop_windows(Process(), Job())
     assert events == ["terminate", "kill", "terminate", "close"]
+
+
+@pytest.mark.anyio
+async def test_windows_stop_does_not_trust_cached_exit_code():
+    from tools.runtime.runner import _stop_windows
+    class Process:
+        def poll(self):
+            return 1  # Cached before actual termination has completed.
+        def kill(self):
+            pass
+    class Job:
+        waits = 0
+        def terminate(self):
+            pass
+        def worker_exited(self, proc):
+            self.waits += 1
+            return self.waits >= 4
+        def empty(self):
+            assert self.waits >= 4
+            return True
+        def close(self):
+            assert self.waits >= 4
+    await _stop_windows(Process(), Job())
+
+
+@pytest.mark.parametrize("native_status,expected", [(0, True), (0x102, False)])
+def test_windows_worker_exit_uses_native_handle_not_python_cache(native_status, expected):
+    from unittest.mock import Mock
+    from tools.runtime.windows import OwnedJob
+    job = OwnedJob.__new__(OwnedJob)
+    job.kernel = Mock(WaitForSingleObject=Mock(return_value=native_status))
+    proc = Mock(_handle=123, returncode=1)
+    assert job.worker_exited(proc) is expected
+    job.kernel.WaitForSingleObject.assert_called_once_with(123, 0)
+    proc.poll.assert_not_called()
 
 
 @pytest.mark.anyio

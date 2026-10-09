@@ -863,7 +863,8 @@ POSIX cleanup stops the worker group and separately recorded owned solver
 groups, including stubborn helpers. Linux birth ticks reject live reused PIDs;
 the server's own group is never signalled. Windows joins a server-owned memory-limited
 kill-on-close job before scientific imports or fails closed. The server bypasses
-the venv redirector (retaining the venv), waits for the real interpreter to exit,
+the venv redirector (retaining the venv), waits for the real interpreter's native
+handle to signal (a cached `Popen` exit code is insufficient during termination),
 and verifies zero active job processes before finishing/releasing the call.
 Failed-worker diagnostics are bounded and forwarded to operator stderr, not
 client payloads. macOS measures pre-tool virtual mappings and applies a finite

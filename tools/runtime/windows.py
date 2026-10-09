@@ -54,6 +54,8 @@ def _kernel():
     kernel.QueryInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int,
                                                ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p]
     kernel.QueryInformationJobObject.restype = ctypes.c_int
+    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel.WaitForSingleObject.restype = ctypes.c_uint32
     return kernel
 
 
@@ -89,6 +91,18 @@ class OwnedJob:
                                                     ctypes.sizeof(accounting), None):
             raise ctypes.WinError(ctypes.get_last_error())
         return accounting.active_processes == 0
+
+    def worker_exited(self, proc) -> bool:
+        # Popen.kill() can cache an exit code on ERROR_ACCESS_DENIED before
+        # asynchronous termination finishes. poll()/wait() then return that
+        # cache without waiting. Require the actual kernel handle to signal.
+        # https://github.com/python/cpython/blob/3.13/Lib/subprocess.py
+        result = self.kernel.WaitForSingleObject(int(proc._handle), 0)
+        if result == 0:  # WAIT_OBJECT_0
+            return True
+        if result == 0x102:  # WAIT_TIMEOUT
+            return False
+        raise ctypes.WinError(ctypes.get_last_error())
 
     def close(self):
         if self.handle:
