@@ -92,6 +92,20 @@ async def _stop(proc: subprocess.Popen, work: Path, birth: str | None) -> None:
         raise RuntimeError("Owned worker could not be reaped within the cleanup budget.")
 
 
+def _diagnostics(work: Path, returncode: int | None) -> None:
+    """Bounded operator stderr, never diagnostic text in an MCP response."""
+    if returncode not in (None, 0):
+        sys.stderr.write(f"MARS worker exited with code {returncode}; diagnostics: {work}\n")
+    for name in ("stdout.log", "stderr.log"):
+        try:
+            with (work / name).open("rb") as handle:
+                diagnostic = handle.read(65_536).decode("utf-8", "replace")
+        except OSError:
+            continue
+        if diagnostic:
+            sys.stderr.write(diagnostic)
+
+
 async def run_call(name, arguments, functions, artifact_root: Path, limits: CallLimits) -> dict:
     function = functions.get(name)
     if function is None:
@@ -168,11 +182,6 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
             payload = json.loads(data)
             if not isinstance(payload, dict):
                 raise ValueError("Worker result is not a JSON object.")
-            for path in (work / "stdout.log", work / "stderr.log"):
-                with path.open("rb") as handle:
-                    diagnostic = handle.read(65_536).decode("utf-8", "replace")
-                if diagnostic:
-                    sys.stderr.write(diagnostic)
             state = "failed" if payload.get("status") == "error" else "complete"
             return payload
     except TimeoutError:
@@ -186,6 +195,7 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
         with anyio.CancelScope(shield=True):
             if proc is not None:
                 await _stop(proc, work, birth)
+                _diagnostics(work, proc.returncode)
             if work is not None:
                 finish_call(work, state)
             if download is not None:

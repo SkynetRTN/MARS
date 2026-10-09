@@ -92,6 +92,27 @@ async def test_whole_call_deadline_stops_worker(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_failed_worker_diagnostics_are_operator_only(tmp_path, capsys):
+    result = await run_call("fail", {}, {"fail": fake.fail_before_reply},
+                            tmp_path / "artifacts", CallLimits(timeout_s=10))
+    assert result["errors"][0]["code"] == "resource_limit"
+    assert "private-worker-diagnostic" not in json.dumps(result)
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert "private-worker-diagnostic" in captured.err
+    assert "exited with code 17" in captured.err
+
+
+def test_operator_diagnostics_are_byte_bounded(tmp_path, capsys):
+    from tools.runtime.runner import _diagnostics
+    (tmp_path / "stderr.log").write_bytes(b"x" * 100_000 + b"never-forward-this-tail")
+    _diagnostics(tmp_path, 0)
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert captured.err == "x" * 65_536
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("function,changes", [
     (fake.oversized_reply, {"reply_bytes": 1024}),
     (fake.overflow_work, {"work_bytes": 10_000}),

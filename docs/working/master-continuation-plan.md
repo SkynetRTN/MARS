@@ -157,6 +157,16 @@ M1 execution queue, in order (completed local gates retained for provenance):
    and new **native Windows/macOS runtime** gates. Linux subprocess/Win32 ABI
    stubs are not evidence of native behavior. Fix any failing native boundary;
    do not silently defer these new runtime checks to M4's broader GUI matrix.
+   PR [#118](https://github.com/SkynetRTN/MARS/pull/118), reviewed at `d0893ee`,
+   passes both Python suites/package jobs and security/workflow checks, but
+   [run 37946072585](https://github.com/SkynetRTN/MARS/actions/runs/37946072585)
+   fails native containment: Windows cancellation/deadline return with the
+   actual worker still alive (two failures); macOS valid-call controls fail
+   before a usable reply (five failures). Both are P1 M1 blockers. Remediation:
+   verify Windows interpreter/tree exit before finishing owned work or releasing
+   capacity; expose bounded operator-only failed-worker diagnostics and repair
+   native macOS startup/memory enforcement. Keep the existing assertions; neither
+   skipping native tests nor passing Linux ABI stubs closes these findings.
 4. **Delivery gate open.** Review/merge the feature branch and record its delivery/release scope. A new
    release must supersede rc6; do not re-publish its permanent version. M1 can
    close only with row acceptance and delivery evidence or explicit reviewed

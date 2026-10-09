@@ -13,6 +13,12 @@ def noisy():
     return ToolResult(status="ok", count=0)
 
 
+def fail_before_reply():
+    # A failure outside the tool wrapper must still reach operator diagnostics.
+    print("private-worker-diagnostic", file=sys.stderr, flush=True)
+    os._exit(17)
+
+
 def render(png, wav):
     from tools.models import ArtifactRef, ToolResult
     return ToolResult(status="ok", artifacts=[ArtifactRef(path=png, format="png"),
