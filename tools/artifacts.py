@@ -304,6 +304,11 @@ def _write_directory(subdir: Optional[str]) -> Path:
     return directory
 
 
+def artifact_write_directory(subdir: str | None = None) -> Path:
+    """Default writer directory honoring a caller's artifact scope."""
+    return _write_directory(subdir)
+
+
 def reserve_artifact_path(
     name: str, *, subdir: Optional[str] = None, ext: str = "bin"
 ) -> Path:

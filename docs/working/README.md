@@ -11,7 +11,7 @@ active plans.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-06; remote baseline last fetched 2026-10-05 at `origin/main` `6d966de` (released rc6) and `origin/dev` `38bf06a`. M0 closed; M1 partial, with branch-only photometry/artifact, pulsar/variable, custom-expression, SDSS bounds/transport and finite WCS attempt/owned-group cleanup fixes and an explicit remaining queue. Reconciles all 110 historical algorithm IDs, new ALG-01–03 findings and the implemented-but-partially-validated desktop rollout (§9). Browser support remains parked. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed/re-fetched 2026-10-09; unchanged `origin/main` `6d966de` (released rc6), `origin/dev` `38bf06a`. M0 closed; M1 branch implementation includes catalog/science/effects/pins, owned MCP workers, streamed download limits, safe retention and mandatory wheel/source parity (INS-05). Final Python 3.13 regression (3,367 passed), no-MCP and installed-wheel gates pass; required native runtime/security CI and delivery remain explicitly queued. M1 is not complete. Reconciles all 110 historical IDs, ALG-01–03 and the partially validated desktop rollout (§9). Browser support remains parked. |
 
 ## Landed
 

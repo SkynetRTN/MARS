@@ -69,6 +69,8 @@ TOOL_ERROR_CODES: dict[str, str] = {
     "target_not_found": "The named target is not in the local FITS library.",
     "too_many_fixtures": "The fixture listing exceeds its file limit.",
     "tool_exception": "A served tool raised instead of returning a result; the MCP server reports it as this call's error.",
+    "tool_timeout": "A served call or capacity wait reached its whole-call deadline; owned work was stopped.",
+    "resource_limit": "A call exceeded an operational memory, disk, output or retained-storage budget.",
     "unknown_catalog": "The named photometric catalog is not in the registry.",
     "unknown_catalog_fixture": "The named catalog fixture is not one of the recorded ones.",
     "unknown_tool": "The MCP server was asked for a tool the registry does not serve.",

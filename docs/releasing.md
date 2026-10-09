@@ -65,7 +65,12 @@ with the build artifact, installed and self-tested.
 
 The build job and CI's `package` job, which runs on every pull request, both
 run `twine check --strict` and `.github/scripts/check_dist.py`: the core data,
-the package data the server reads, and nothing that must not ship.
+the package data the server reads, exact Python-source parity with the checkout,
+and nothing that must not ship. The distribution checker rejects missing,
+obsolete and byte-different Python modules, including retired files left in
+setuptools' incremental `build/lib` cache. Build with a fresh build directory
+when that happens; do not bypass the check or assume a successful wheel build
+proved source parity. Release CI uses a fresh checkout.
 
 `secret-scan.yml` and `workflow-safety.yml` (actionlint, zizmor) run on the
 pull request that changes any workflow, this one included.

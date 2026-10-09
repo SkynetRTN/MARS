@@ -16,6 +16,9 @@ NOT_TOOL_MODULES = {
     # docstring; tests/test_tool_codes.py is what keeps it honest.
     "tools.codes",
     "tools.config",
+    "tools.effects",
+    "tools.downloads",
+    "tools.runtime",
     "tools.models",
     "tools.registry",
     "tools.sessions",

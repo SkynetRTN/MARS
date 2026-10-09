@@ -346,7 +346,11 @@ def inline_media(payload: Mapping[str, Any], artifact_root: Path) -> list[dict[s
 
     blocks: list[dict[str, Any]] = []
     seen: set[str] = set()
+    encoded_total = 0
     for ref in _artifact_refs(payload):
+        if len(seen) >= 32:
+            blocks.append({"type": "text", "text": "Not inlined: media-reference budget reached; read remaining artifact paths."})
+            break
         media = MEDIA_FORMATS.get(ref["format"].lower())
         if media is None or ref["path"] in seen:
             continue
@@ -363,18 +367,29 @@ def inline_media(payload: Mapping[str, Any], artifact_root: Path) -> list[dict[s
         # every three. Comparing the file's own size let a 3.75-5 MB PNG
         # through as a 5-6.7 MB block, over the size model APIs accept.
         encoded = 4 * -(-size // 3)
-        if encoded > limit:
+        if encoded > limit or encoded_total + encoded > 20_000_000:
+            reason = (f"over the {limit:,}-byte {kind} limit" if encoded > limit
+                      else "over the 20,000,000-byte aggregate media limit")
             blocks.append(
                 {
                     "type": "text",
                     "text": (
                         f"Not inlined: {path} is {size:,} bytes ({encoded:,} encoded), "
-                        f"over the {limit:,}-byte {kind} limit. Read it from the path."
+                        f"{reason}. Read it from the path."
                     ),
                 }
             )
             continue
-        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        # Bound the read itself too: stat/read races must not load a growing
+        # file in full. This is resource containment, not filesystem isolation.
+        with path.open("rb") as handle:
+            raw = handle.read(min(3 * (limit // 4), 3 * ((20_000_000 - encoded_total) // 4)) + 1)
+        encoded = 4 * -(-len(raw) // 3)
+        if encoded > limit or encoded_total + encoded > 20_000_000:
+            blocks.append({"type": "text", "text": f"Not inlined: {path} grew beyond the media byte budget."})
+            continue
+        encoded_total += encoded
+        data = base64.b64encode(raw).decode("ascii")
         blocks.append({"type": kind, "mime_type": mime_type, "data": data})
     return blocks
 
@@ -501,6 +516,8 @@ def call_tool(
         if name == "list_artifacts" and function is TOOL_FUNCTIONS.get(name):
             return _served_artifact_listing(**arguments)
         return normalize_result(name, function(**arguments))
+    except MemoryError:
+        return error_payload(ToolError(code="resource_limit", message="Tool worker exhausted its memory budget."))
     except Exception as exc:  # noqa: BLE001 -- reported to the caller, not swallowed
         return error_payload(
             ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")

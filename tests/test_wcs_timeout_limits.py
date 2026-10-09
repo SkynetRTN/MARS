@@ -132,15 +132,18 @@ def test_anet_deadline_reaches_cpu_and_subprocess_limits(monkeypatch, tmp_path, 
 
 
 def test_invoke_omission_has_finite_outer_backstop(monkeypatch, tmp_path):
+    import algorithms.skylib_lite.astrometry.anet.backend as backend_module
     captured = []
 
     class Process:
         returncode = 0
 
-        def communicate(self, *, timeout):
-            captured.append(timeout)
-            return "", ""
-
+    def capture(proc, timeout):
+        captured.append(timeout)
+        return "", ""
+    monkeypatch.setattr(backend_module, "bounded_communicate", capture)
+    monkeypatch.setattr(backend_module, "record_owned_group", lambda proc: None)
+    monkeypatch.setattr(AstrometryNetBackend, "_kill_process_group", lambda proc: None)
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: Process())
     AstrometryNetBackend._invoke_solve_field(["fake"], tmp_path, None)
     assert captured == [330.]

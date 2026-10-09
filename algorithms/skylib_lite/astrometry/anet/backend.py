@@ -41,6 +41,7 @@ from astropy.wcs import WCS
 # EXTRACTED: was `from skylib.util.angle import angdist` — shared under
 # algorithms.skylib_lite.util.angle.
 from algorithms.skylib_lite.util.angle import angdist
+from algorithms.skylib_lite.util.processes import bounded_communicate, record_owned_group
 
 from ..types import SolveRequest, SolveSolution
 from ..limits import DEFAULT_SOLVER_TIMEOUT_S, MAX_SOLVER_TIMEOUT_S, normalize_solver_timeout
@@ -333,23 +334,33 @@ class AstrometryNetBackend:
         except FileNotFoundError as exc:
             raise SolveFieldNotFoundError([cmd[0]]) from exc
 
+        receipt = None
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            receipt = record_owned_group(proc)
+            stdout, stderr = bounded_communicate(proc, timeout)
         except subprocess.TimeoutExpired as exc:
             # Kill the entire process group, then drain pipes / reap so no
             # solve-field or astrometry-engine child is left running and no
             # zombie or open pipe leaks.
             AstrometryNetBackend._kill_process_group(proc)
-            try:
-                stdout, stderr = proc.communicate(timeout=10)
-            except (subprocess.TimeoutExpired, ValueError):
-                stdout, stderr = None, None
             raise SolveFieldTimeout(
                 cmd,
                 timeout if timeout is not None else 0.0,
-                stdout=_as_text(getattr(exc, "stdout", None)) or stdout,
-                stderr=_as_text(getattr(exc, "stderr", None)) or stderr,
+                stdout=_as_text(getattr(exc, "stdout", None)),
+                stderr=_as_text(getattr(exc, "stderr", None)),
             ) from exc
+        except ValueError as exc:
+            raise SolveFieldFailed(cmd, -1, stderr=str(exc)) from exc
+        finally:
+            # Also clean up on cancellation/KeyboardInterrupt and successful
+            # leaders that left helpers behind. Only this owned group is sent
+            # signals; capture never falls back to unbounded communicate().
+            AstrometryNetBackend._kill_process_group(proc)
+            for stream in (getattr(proc, "stdout", None), getattr(proc, "stderr", None)):
+                if stream is not None:
+                    stream.close()
+            if receipt is not None:
+                receipt.unlink(missing_ok=True)
 
         if proc.returncode != 0:
             raise SolveFieldFailed(

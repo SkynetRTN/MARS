@@ -810,8 +810,10 @@ argument validation that makes the schemas worth having.
 | --- | --- |
 | `roots` | Pins `MARS_ARTIFACT_DIR` and `MARS_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
 | `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
-| `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
-| `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
+| `server` | The serving SDK import (`mcp`, optional `[mcp]`). Registry-schema validation rejects undeclared arguments and floats for integers. Calls run sequentially in owned, cancellable worker processes under finite whole-call deadlines. |
+| `tools.runtime` | Worker lifetime, OS memory/file limits, sampled work/log/download byte/entry limits, bounded input/reply, private owned call trees and explicit cleanup. No SDK import; private parent-generated callable jobs are never client-supplied pickle. |
+| `tools.downloads` | Per-provider bounded HTTP streaming: actual decoded bytes, product/file counts, path checks, response closure and exclusive atomic publication. SDK authentication/selection remain; cloud/resume/unbounded-content shortcuts are disabled. |
+| `groups` | Five groups; open-world hints from `TOOL_CLASSES`, write effects from closed shared `tools/effects.py`, with download/header overrides. Routine private writers remain non-read-only even where agent consent exempts them. |
 | `install` | The facts about this install that the instructions carry: artifact root, which data bundles are present, whether plate solving is configured, and whether `ADS_DEV_KEY` is set (never its value). |
 | `bundles` | Builds and fetches the optional data bundles (below). |
 | `selftest` | `mars-mcp self-test`: launches the installed server over stdio and detects B0329+54 from a measured period through the protocol. |
@@ -820,10 +822,12 @@ argument validation that makes the schemas worth having.
 serialised so NaN becomes `null`. `isError` follows the loop's
 `status == "error"`. A failed validation (`invalid_input`), an unknown tool
 (`unknown_tool`) or a raising tool (`tool_exception`) is that call's error
-result, never a dead session. The artifact path contract stands unchanged,
+result, never a dead session. `tool_timeout`/`resource_limit` reject stopped or
+over-budget work without advertising partial files. The absolute artifact path contract stands unchanged,
 because the caller shares the filesystem. On top of it, a PNG or WAV artifact
 also comes back **inline** as an image or audio block (5 MB and 16 MB limits, measured base64-encoded),
-read only from inside the pinned artifact root. No `outputSchema` is declared:
+read only from inside the pinned artifact root, additionally bounded to 32 media
+references / 20,000,000 encoded bytes total. No `outputSchema` is declared:
 clients validate against one, and a NaN-as-`null` in a `number` field would
 then fail on a user's machine.
 
@@ -845,6 +849,28 @@ that contain path syntax. Session scopes are checked both when entered and
 again at write time. A Python API with an explicit `output_dir` treats that
 caller-selected directory as its root while still confining generated names
 to one direct child.
+
+**Runtime ownership and retention (MCP-01/AUD-03).** A process per call avoids
+abandoning writing threads on cancellation; sequential locking remains. The
+deadline includes capacity waiting. Private `.mars-runtime/<id>/` trees hold
+job/reply, bounded logs, redirected scientific caches and `artifacts/`; downloads
+have separately marked trees under their root. Matplotlib draws on the worker's
+main thread with Agg. Prior successful artifacts remain readable at returned
+paths. `build_server` substitutions must be importable callables, not local
+closures; production workers import this install, never checkout test helpers.
+
+POSIX cleanup stops the worker group and separately recorded owned solver
+groups, including stubborn helpers. Linux birth ticks reject live reused PIDs;
+the server's own group is never signalled. Windows joins a memory-limited
+kill-on-close job before scientific imports or fails closed. Native Windows and
+macOS runtime checks are required CI gates. These are trusted-tool resource
+controls, not a hostile-code/filesystem sandbox: absolute inputs and explicit
+header writes remain intentional. Disk/log checks are sampled, POSIX memory
+limits are per-process, and retained admission is not an atomic multi-server
+quota. Abrupt parent death and deliberately escaped POSIX sessions are not
+certified containment scenarios. Defaults and permanent dry-run-first cleanup
+are documented in `installing.md`; legacy/console outputs and operator datasets
+are never adopted for deletion.
 
 **The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the
 loop, so the server carries its guidance. **Claude Code delivers only about

@@ -311,15 +311,22 @@ POSIX child is started in a new session: cleanup signals that owned group with
 SIGTERM, then SIGKILL even if the leader exits or was already reaped. Waiting
 only for the leader was insufficient: bounded offline probes reproduced a
 SIGTERM-resistant child surviving both situations. The leader is reaped and
-pipes are drained; termination/reap/drain waits remain finite (5 + 5 + 10 seconds
-in the worst case). This covers the owned process group, not descendants that
+pipes are closed; termination/reap waits remain finite (5 + 5 seconds in the
+worst case). Combined stdout/stderr capture is bounded to 8 MiB before buffer
+extension. Cleanup also runs after interruption, capture failure and success.
+The generic first-party process helper writes private fresh-child ownership
+receipts when a containing runtime requests them; it imports no application
+code. This covers the owned process group, not descendants that
 deliberately escape the session. The non-POSIX fallback kills only the direct
 process; no Windows process-tree validation is claimed.
 
 ATLAS's finite allowance still covers only the blind matcher loop, not catalog
-loading, extraction, its oriented path or all retry work. No full-call deadline,
-general cancellation, solver stdout-byte cap or source/catalog memory bound is
-claimed: WCS-01/04/21/25 and MCP-01 remain separate. Default all-sky/scale search,
+loading, extraction, its oriented path or all retry work. MCP dispatch additionally
+contains the complete call in an owned worker with a 600-second default and
+finite memory/file/work/reply budgets and cancellation cleanup (`tools/runtime`,
+`docs/installing.md`). This includes preprocessing, oriented work and retries;
+arbitrary direct Python calls still require caller-owned whole-call supervision.
+WCS-01/25 pre-load limits are recorded below. Default all-sky/scale search,
 retry policy, quality/parity acceptance and accepted numerical fixtures are
 unchanged; a solve needing more than its allowance now stops. The 300-second
 default is an operational budget, not a guaranteed solution-time envelope.
@@ -348,7 +355,17 @@ unbounded conversion/parsing; indexed spans must be nonnegative and fit the
 zone-record budget. No query is silently truncated to meet these limits.
 `tests/test_atlas_catalog_limits.py` uses synthetic records and sentinel loaders;
 no operator catalog or native catalog-size compatibility validation is claimed.
-Whole-call/matcher memory, cancellation and solver output remain WCS-21/MCP-01.
+MCP whole-call/memory/cancellation and solver-output containment are described in
+§5.7; accepted matcher/coordinate arithmetic is unchanged.
+
+##### 5.9 WCS-04 default search policy (2026-10-07)
+
+The 180-degree default remains deliberately blind/all-sky. Inventing a narrow
+pointing/scale window would turn unknown pointing into a silent scientific miss.
+Known hints can narrow it; `test_wcs_solution.py` and `test_wcs_solve_tool.py`
+preserve both modes. Safety comes from finite attempts, pre-load catalog/work
+guards and MCP whole-call isolation, not a claim that blind searching is cheap.
+A valid explicit blind solve can exhaust its operational budget and fail.
 
 #### 6. External dependencies
 
