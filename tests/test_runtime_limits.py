@@ -15,7 +15,8 @@ from tools.runtime.limits import CallLimits
 from tools.runtime.runner import run_call, _owned_groups, _signal_group
 from tools.runtime.storage import (CALL_FILE, cleanup, create_call, finish_call,
                                    managed_root, private_write, tree_size)
-from tools.runtime.windows import ExtendedLimits
+from tools.runtime.windows import Accounting, ExtendedLimits
+from tools.runtime.darwin import TaskInfo
 
 
 @pytest.fixture
@@ -222,9 +223,130 @@ def test_own_or_reused_pid_receipts_never_get_signalled(tmp_path, monkeypatch):
 
 
 def test_windows_job_uses_windows_widths_not_host_long_width():
+    assert ctypes.sizeof(Accounting) == 48
+    assert Accounting.active_processes.offset == 40
     if ctypes.sizeof(ctypes.c_void_p) == 8:
         assert ctypes.sizeof(ExtendedLimits) == 144
         assert ExtendedLimits.job_memory.offset == 120
+
+
+def test_macos_task_info_matches_native_abi():
+    assert ctypes.sizeof(TaskInfo) == 96
+    assert TaskInfo.virtual_size.offset == 0
+    assert TaskInfo.resident_size.offset == 8
+    assert TaskInfo.policy.offset == 48
+
+
+def test_macos_allowance_is_added_once_to_measured_bootstrap(monkeypatch):
+    from tools.runtime import darwin
+    monkeypatch.setattr(darwin, "bootstrap_size", lambda: 400 * 1024**3)
+    assert darwin.memory_ceiling(128 * 1024**2) == 400 * 1024**3 + 128 * 1024**2
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX memory setup seam")
+@pytest.mark.parametrize("inherited", [-1, 256 * 1024**2])
+def test_macos_memory_setup_is_finite_and_respects_inherited_limit(monkeypatch, inherited):
+    import resource
+    from tools.runtime import worker, darwin
+    calls = []
+    monkeypatch.setattr(worker.sys, "platform", "darwin")
+    monkeypatch.setattr(darwin, "memory_ceiling", lambda allowance: 400 * 1024**3 + allowance)
+    monkeypatch.setattr(resource, "getrlimit", lambda kind: (inherited, inherited))
+    monkeypatch.setattr(resource, "setrlimit", lambda kind, values: calls.append((kind, values)))
+    worker._limits(CallLimits())
+    expected = 404 * 1024**3 if inherited == -1 else inherited
+    assert calls[0] == (resource.RLIMIT_AS, (expected, expected))
+    assert expected > 0
+
+
+def test_windows_worker_command_bypasses_redirector_without_losing_venv(tmp_path, monkeypatch):
+    from tools.runtime import runner
+    monkeypatch.setattr(runner.sys, "executable", "C:/venv/Scripts/python.exe")
+    monkeypatch.setattr(runner.sys, "_base_executable", "C:/Python313/python.exe")
+    env = {}
+    command = runner._worker_command(tmp_path, env, windows=True)
+    assert command == ["C:/Python313/python.exe", "-m", "tools.runtime.worker", str(tmp_path)]
+    assert env["__PYVENV_LAUNCHER__"] == "C:/venv/Scripts/python.exe"
+    env = {}
+    assert runner._worker_command(tmp_path, env, windows=False)[0] == "C:/venv/Scripts/python.exe"
+    assert not env
+
+
+@pytest.mark.anyio
+async def test_interpreter_pid_and_venv_match_the_launched_process(tmp_path, monkeypatch):
+    from tools.runtime import runner
+    launched = []
+    original = runner.subprocess.Popen
+    def record(*args, **kwargs):
+        proc = original(*args, **kwargs)
+        launched.append(proc.pid)
+        return proc
+    monkeypatch.setattr(runner.subprocess, "Popen", record)
+    result = await run_call("identity", {}, {"identity": fake.identity},
+                            tmp_path / "artifacts", CallLimits(timeout_s=10))
+    assert result["status"] == "ok"
+    assert result["preview"] == [{"pid": launched[0], "prefix": runner.sys.prefix}]
+    assert not _running(launched[0])
+
+
+@pytest.mark.anyio
+async def test_windows_stop_waits_for_job_even_after_interpreter_exit():
+    from tools.runtime.runner import _stop_windows
+    events = []
+    class Process:
+        def poll(self):
+            return 0
+        def kill(self):
+            pytest.fail("Exited process must not be killed.")
+    class Job:
+        polls = 0
+        def terminate(self):
+            events.append("terminate")
+        def empty(self):
+            self.polls += 1
+            return self.polls >= 3
+        def close(self):
+            assert self.polls >= 3
+            events.append("close")
+    await _stop_windows(Process(), Job())
+    assert events == ["terminate", "terminate", "close"]
+
+
+@pytest.mark.anyio
+async def test_windows_stop_kills_interpreter_not_yet_in_job():
+    from tools.runtime.runner import _stop_windows
+    events = []
+    class Process:
+        alive = True
+        def poll(self):
+            return None if self.alive else 1
+        def kill(self):
+            events.append("kill")
+            self.alive = False
+    class Job:
+        def terminate(self):
+            events.append("terminate")
+        def empty(self):
+            return True
+        def close(self):
+            events.append("close")
+    await _stop_windows(Process(), Job())
+    assert events == ["terminate", "kill", "terminate", "close"]
+
+
+@pytest.mark.anyio
+async def test_windows_job_failure_is_not_reported_as_success():
+    from tools.runtime.runner import _stop_windows
+    class Job:
+        closed = False
+        def terminate(self):
+            raise OSError("job termination failed")
+        def close(self):
+            self.closed = True
+    job = Job()
+    with pytest.raises(OSError, match="job termination failed"):
+        await _stop_windows(None, job)
+    assert job.closed
 
 
 @pytest.mark.anyio
@@ -282,6 +404,9 @@ async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
     result = await run_call("child", {}, {"child": fake.leave_child}, tmp_path / "artifacts", CallLimits(timeout_s=10))
     assert result["status"] == "ok"
     pid = result["preview"][0]["child"]
+    if os.name == "nt":
+        # Job accounting, not a delay in the test, must establish this boundary.
+        assert not _running(pid)
     with anyio.fail_after(5):
         while _running(pid):
             await anyio.sleep(.02)

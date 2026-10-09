@@ -861,8 +861,14 @@ closures; production workers import this install, never checkout test helpers.
 
 POSIX cleanup stops the worker group and separately recorded owned solver
 groups, including stubborn helpers. Linux birth ticks reject live reused PIDs;
-the server's own group is never signalled. Windows joins a memory-limited
-kill-on-close job before scientific imports or fails closed. Native Windows and
+the server's own group is never signalled. Windows joins a server-owned memory-limited
+kill-on-close job before scientific imports or fails closed. The server bypasses
+the venv redirector (retaining the venv), waits for the real interpreter to exit,
+and verifies zero active job processes before finishing/releasing the call.
+Failed-worker diagnostics are bounded and forwarded to operator stderr, not
+client payloads. macOS measures pre-tool virtual mappings and applies a finite
+4-GiB address-space growth allowance above that bootstrap; Linux retains its
+absolute 4-GiB ceiling. Stricter inherited ceilings are preserved. Native Windows and
 macOS runtime checks are required CI gates. These are trusted-tool resource
 controls, not a hostile-code/filesystem sandbox: absolute inputs and explicit
 header writes remain intentional. Disk/log checks are sampled, POSIX memory

@@ -72,6 +72,11 @@ def cache_roots():
                                              "numba": os.environ["NUMBA_CACHE_DIR"]}])
 
 
+def identity():
+    from tools.models import ToolResult
+    return ToolResult(status="ok", preview=[{"pid": os.getpid(), "prefix": sys.prefix}])
+
+
 def leave_child():
     from tools.models import ToolResult
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])

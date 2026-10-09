@@ -19,6 +19,7 @@ from tools.models import ToolError
 from tools.mcp.surface import error_payload
 from .limits import CallLimits
 from .storage import create_call, finish_call, managed_root, private_write, tree_size
+from .windows import OwnedJob
 
 
 def _signal_group(pid: int, sig: int, birth: str | None = None) -> None:
@@ -55,7 +56,32 @@ def _owned_groups(work: Path) -> list[tuple[int, str | None]]:
     return groups
 
 
-async def _stop(proc: subprocess.Popen, work: Path, birth: str | None) -> None:
+async def _stop_windows(proc: subprocess.Popen, job: OwnedJob) -> None:
+    """Wait for the actual interpreter AND the job to exit, not a launcher."""
+    try:
+        job.terminate()
+        # Also covers cancellation before the interpreter has joined the job.
+        if proc.poll() is None:
+            proc.kill()
+        with anyio.move_on_after(5):
+            while proc.poll() is None:
+                await anyio.sleep(.02)
+        if proc.poll() is None:
+            raise RuntimeError("Owned Windows interpreter could not be reaped.")
+        # The interpreter can no longer join/spawn after this point. Terminate
+        # again to cover a join concurrent with the first termination request.
+        job.terminate()
+        with anyio.move_on_after(5):
+            while not job.empty():
+                await anyio.sleep(.02)
+        if not job.empty():
+            raise RuntimeError("Owned Windows job did not empty within the cleanup budget.")
+    finally:
+        job.close()
+
+
+async def _stop(proc: subprocess.Popen, work: Path, birth: str | None,
+                job: OwnedJob | None = None) -> None:
     """Shielded, finite termination/reaping of this worker and owned groups."""
     if os.name == "posix":
         try:
@@ -70,15 +96,11 @@ async def _stop(proc: subprocess.Popen, work: Path, birth: str | None) -> None:
         # KILL also after a leader exits; TERM-resistant helpers are not done.
         for pid, started in [*groups, (proc.pid, birth)]:
             _signal_group(pid, signal.SIGKILL, started)
-    elif proc.poll() is None:
-        # The supported Windows runtime has taskkill; retain a finite direct
-        # fallback if it is unavailable. Native tree tests are required M1 CI.
-        command = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/taskkill.exe"
-        try:
-            subprocess.run([str(command), "/PID", str(proc.pid), "/T", "/F"],
-                           timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except (OSError, subprocess.TimeoutExpired):
-            proc.kill()
+    else:
+        if job is None:
+            raise RuntimeError("Windows worker has no parent-owned job.")
+        await _stop_windows(proc, job)
+        return
     # Poll instead of a blocking wait in the async server, with a hard backstop.
     with anyio.move_on_after(5):
         while proc.poll() is None:
@@ -106,6 +128,19 @@ def _diagnostics(work: Path, returncode: int | None) -> None:
             sys.stderr.write(diagnostic)
 
 
+def _worker_command(work: Path, env: dict, *, windows: bool) -> list[str]:
+    executable = sys.executable
+    if windows:
+        # CPython multiprocessing uses this same venv-launcher bypass. The
+        # Popen PID must identify the interpreter, not a redirector which can
+        # exit before its child. Preserve this venv's prefix/site-packages.
+        # https://github.com/python/cpython/blob/3.13/Lib/multiprocessing/popen_spawn_win32.py
+        executable = sys._base_executable
+        if os.path.normcase(executable) != os.path.normcase(sys.executable):
+            env["__PYVENV_LAUNCHER__"] = sys.executable
+    return [executable, "-m", "tools.runtime.worker", str(work)]
+
+
 async def run_call(name, arguments, functions, artifact_root: Path, limits: CallLimits) -> dict:
     function = functions.get(name)
     if function is None:
@@ -116,7 +151,7 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
         return error_payload(ToolError(code="invalid_input", message="Served functions must be importable Python callables (not local closures)."))
     if len(job) > limits.input_bytes:
         return error_payload(ToolError(code="invalid_input", message="Tool arguments exceed the 1 MiB call-input budget."))
-    work = download = proc = birth = None
+    work = download = proc = birth = windows_job = None
     state = "failed"
     try:
         root = managed_root(Path(artifact_root))
@@ -157,7 +192,10 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
         with (work / "stdout.log").open("xb") as out, (work / "stderr.log").open("xb") as err:
             os.chmod(out.name, 0o600)
             os.chmod(err.name, 0o600)
-            proc = subprocess.Popen([sys.executable, "-m", "tools.runtime.worker", str(work)],
+            if os.name == "nt":
+                windows_job = OwnedJob(limits.memory_bytes)
+                env["MARS_RUNTIME_JOB"] = windows_job.name
+            proc = subprocess.Popen(_worker_command(work, env, windows=os.name == "nt"),
                                     env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                     start_new_session=(os.name == "posix"))
             birth = process_birth(proc.pid)
@@ -194,8 +232,10 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
     finally:
         with anyio.CancelScope(shield=True):
             if proc is not None:
-                await _stop(proc, work, birth)
+                await _stop(proc, work, birth, windows_job)
                 _diagnostics(work, proc.returncode)
+            elif windows_job is not None:
+                windows_job.close()
             if work is not None:
                 finish_call(work, state)
             if download is not None:

@@ -234,7 +234,7 @@ result. Check `tool_timeout`, `resource_limit` and partial-result errors.
 
 | Per-call budget | Default / enforcement |
 | --- | --- |
-| Memory | 4 GiB per POSIX process via `RLIMIT_AS`, inherited by native children; Windows job-wide committed memory limit with kill-on-close ownership. Setup failure refuses the call. Native macOS/Windows behavior is gated in CI, not inferred from Linux. |
+| Memory | Linux: absolute 4 GiB address space per process via `RLIMIT_AS`. macOS: finite `RLIMIT_AS` ceiling equal to the worker's measured pre-tool bootstrap mappings plus a 4 GiB additional address-space allowance; large OS/loader mappings are not a tool allocation. POSIX children inherit the ceiling; stricter inherited limits are preserved. Windows: 4 GiB job-wide committed memory, owned by the server with kill-on-close and verified empty-job cleanup. Setup failure refuses the call. Native behavior is gated in CI, not inferred from Linux. |
 | Managed work/artifacts/caches | 256 MiB, 10,000 entries; supervised every 50 ms |
 | Downloads | 32 products, 512 MiB actual decoded streamed bytes; CASDA permits 64 URLs including checksums, counted in the same byte budget |
 | Logs / reply / input | 1 MiB combined stdout/stderr; 4 MiB JSON reply; 1 MiB serialized call input |
@@ -249,6 +249,12 @@ adopted as runtime outputs. Downloads are not silently sliced: narrow filters
 after a refusal. Existing download files are never overwritten; SDK cloud,
 resume and unbounded-content shortcuts are disabled. Atomic publication needs
 filesystem hard-link support.
+
+Windows launches the actual interpreter while preserving its virtual environment,
+so launcher exit cannot stand in for worker exit. Cleanup also waits for job-wide
+active-process accounting to reach zero. Worker failures forward at most 64 KiB
+from each stdout/stderr log to **operator stderr**, never into client results;
+the private managed logs retain diagnostic context for troubleshooting.
 
 Finished owned trees are kept until explicitly cleaned; **30 days** is the
 default retention selection. Inspect first:

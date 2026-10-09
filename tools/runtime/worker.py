@@ -15,14 +15,22 @@ def _interrupt(signum, frame):
 def _limits(limits):
     if os.name == "posix":
         import resource
-        resource.setrlimit(resource.RLIMIT_AS, (limits.memory_bytes, limits.memory_bytes))
+        maximum_memory = limits.memory_bytes
+        if sys.platform == "darwin":
+            from .darwin import memory_ceiling
+            maximum_memory = memory_ceiling(maximum_memory)
+        # Respect a stricter inherited ceiling; never try to raise a hard limit.
+        inherited = resource.getrlimit(resource.RLIMIT_AS)[1]
+        if inherited != resource.RLIM_INFINITY:
+            maximum_memory = min(maximum_memory, inherited)
+        resource.setrlimit(resource.RLIMIT_AS, (maximum_memory, maximum_memory))
         # A hard per-file backstop accompanies the parent's aggregate checks.
         maximum = max(limits.work_bytes, limits.download_bytes)
         resource.setrlimit(resource.RLIMIT_FSIZE, (maximum, maximum))
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     elif os.name == "nt":
-        from .windows import own_job
-        return own_job(limits.memory_bytes)
+        from .windows import join_job
+        join_job(os.environ["MARS_RUNTIME_JOB"])
     else:
         raise RuntimeError("No bounded worker runtime for this platform.")
 
@@ -35,7 +43,7 @@ def main():
     if len(raw) > 4096:
         raise ValueError("Oversized worker limits record.")
     limits = CallLimits(**json.loads(raw))
-    owned_job = _limits(limits)  # Lifetime intentionally spans the worker.
+    _limits(limits)
     # File is private and created by this install's parent; the callable is
     # from the validated served registry, not serialized by an MCP caller.
     with (work / "input.pickle").open("rb") as handle:
