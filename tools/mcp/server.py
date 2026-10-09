@@ -12,10 +12,13 @@ its own beyond two things the SDK's low-level server leaves to its caller:
 - **The skill** (C5): the instructions are ``surface.served_instructions()``
   -- the skill brief and this install's facts -- and the skill's documents are
   resources, ``mars://skill/...``, read on demand.
-- **One call at a time.** Tool calls are dispatched to a worker thread, so the
-  event loop keeps answering the host, but under a lock: every MARS tool was
+- **One call at a time.** Tool calls run in finite owned worker processes, so
+  the event loop keeps answering the host, but under a lock: every MARS tool was
   written and tested to be called sequentially, and the stdio transport has
   one client (``docs/archive/mcp-tool-surface.md`` §3.2).
+- **Whole-call containment.** Capacity waiting and execution have finite
+  deadlines; cancellation terminates/reaps owned workers and solver groups
+  before releasing the lock. Resource defaults live in ``tools.runtime``.
 
 Each result carries the payload twice, as the protocol recommends: as
 ``structuredContent`` and as the same JSON in a text block, for a host that
@@ -28,7 +31,6 @@ against a ``number`` field would then fail on a host rather than in a test.
 
 from __future__ import annotations
 
-import functools
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -45,6 +47,8 @@ from tools import config
 from tools.models import ToolError
 from tools.mcp import surface
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+from tools.runtime.limits import CallLimits
+from tools.runtime.runner import run_call
 
 __all__ = ["build_server", "serve_stdio"]
 
@@ -114,6 +118,7 @@ def build_server(
     *,
     instructions: str | None = None,
     artifact_root: Path | None = None,
+    call_limits: CallLimits | None = None,
 ) -> Server[Any]:
     """One server over every tool in ``schemas``, dispatching to ``functions``.
 
@@ -129,6 +134,7 @@ def build_server(
     """
 
     root = config.ARTIFACT_DIR if artifact_root is None else artifact_root
+    limits = CallLimits.from_environment() if call_limits is None else call_limits
     if instructions is None:
         instructions = surface.served_instructions(root)
     documents = {doc["uri"]: doc for doc in surface.served_resources()}
@@ -198,11 +204,14 @@ def build_server(
                 where = "/".join(str(part) for part in error.absolute_path)
                 return _invalid(f"{where + ': ' if where else ''}{error.message}")
 
-        async with lock:
-            payload = await anyio.to_thread.run_sync(
-                functools.partial(surface.call_tool, name, arguments, functions)
-            )
-            media = await anyio.to_thread.run_sync(surface.inline_media, payload, root)
+        try:
+            with anyio.fail_after(limits.timeout_s):
+                async with lock:
+                    payload = await run_call(name, arguments, functions, root, limits)
+                    media = await anyio.to_thread.run_sync(surface.inline_media, payload, root)
+        except TimeoutError:
+            return _result(surface.error_payload(ToolError(
+                code="tool_timeout", message="Tool call or capacity wait exceeded the whole-call budget; owned work was stopped.")))
         return _result(payload, media)
 
     return Server(

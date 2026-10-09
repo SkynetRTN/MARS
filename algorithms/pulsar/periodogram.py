@@ -26,6 +26,8 @@ from typing import Optional
 
 import numpy as np
 
+from . import limits
+
 __all__ = [
     "Periodogram",
     "CONFIDENCE_LEVELS",
@@ -117,8 +119,8 @@ def lomb_scargle(
     The power is the standard normalized Lomb-Scargle periodogram; upstream
     reaches it through ``ArrMath.dot(v)``, which is ``dot(v, v)``.
     """
-    ts = np.asarray(ts, dtype=np.float64)
-    ys = np.asarray(ys, dtype=np.float64)
+    ts = limits.vector(ts, "time_s")
+    ys = limits.vector(ys, "flux")
     if ts.size != ys.size:
         # Upstream calls alert() and returns []; a library cannot do that.
         raise ValueError(
@@ -127,6 +129,13 @@ def lomb_scargle(
         )
     if ts.size == 0:
         return np.empty(0), np.empty(0)
+    if ts.size < 3 or np.unique(ts).size < 3:
+        raise ValueError("need at least three samples at distinct times")
+    limits.finite(start, "start", positive=True)
+    limits.finite(stop, "stop", positive=True)
+    limits.integer(steps, "steps", limits.MAX_STEPS)
+    if ts.size * (steps + 2) > limits.MAX_PERIODOGRAM_WORK:
+        raise ValueError("periodogram exceeds the sample-times-grid work budget")
     if start <= 0 or stop <= 0:
         raise ValueError(
             f"start and stop must be positive (the grid is logarithmic in "
@@ -138,10 +147,14 @@ def lomb_scargle(
         raise ValueError(f"steps must be positive, got {steps!r}")
 
     step = (stop - start) / steps
+    if not math.isfinite(step) or step <= 0 or start + step == start:
+        raise ValueError("periodogram grid increment cannot make finite progress")
 
     h_residue = ys - ys.mean()
     # ArrMath.var is the population variance (divides by N).
-    two_var_of_y = 2 * float(np.var(ys))
+    with np.errstate(over="ignore", invalid="ignore"):
+        two_var_of_y = 2 * float(np.var(ys))
+    limits.finite(two_var_of_y, "flux variance", positive=True)
 
     log_start = math.log(start)
     log_stop = math.log(stop)
@@ -155,6 +168,8 @@ def lomb_scargle(
     x_val = start
     i = 0
     while x_val < stop:
+        if i >= steps + 2:
+            raise ValueError("periodogram grid exceeded its iteration budget")
         log_x_val = math.exp(log_start + (log_stop - log_start) * i / steps)
         frequency = log_x_val if freq_mode else 1.0 / log_x_val
         if freq_mode:
@@ -162,7 +177,11 @@ def lomb_scargle(
             log_x_val = x_val
 
         omega = 2.0 * math.pi * frequency
-        two_omega_t = 2 * omega * ts
+        limits.finite(omega, "angular frequency", positive=True)
+        with np.errstate(over="ignore", invalid="ignore"):
+            two_omega_t = 2 * omega * ts
+        if not np.isfinite(two_omega_t).all():
+            raise ValueError("time-frequency products must remain finite")
         tau = math.atan2(
             float(np.sum(np.sin(two_omega_t))),
             float(np.sum(np.cos(two_omega_t))),
@@ -172,10 +191,14 @@ def lomb_scargle(
         cos_term = np.cos(omega_t_minus_tau)
         sin_term = np.sin(omega_t_minus_tau)
 
-        power = (
-            float(np.dot(h_residue, cos_term)) ** 2.0 / float(np.dot(cos_term, cos_term))
-            + float(np.dot(h_residue, sin_term)) ** 2.0 / float(np.dot(sin_term, sin_term))
-        ) / two_var_of_y
+        try:
+            power = (
+                float(np.dot(h_residue, cos_term)) ** 2.0 / float(np.dot(cos_term, cos_term))
+                + float(np.dot(h_residue, sin_term)) ** 2.0 / float(np.dot(sin_term, sin_term))
+            ) / two_var_of_y
+        except (ZeroDivisionError, OverflowError) as exc:
+            raise ValueError("singular periodogram trial") from exc
+        limits.finite(power, "spectral power")
 
         xs.append(log_x_val)
         powers.append(power)
@@ -224,12 +247,16 @@ def nyquist_periodogram_range(
     Nyquist limit, the shortest period the data can resolve — and is rounded
     to 5 decimals, which is a real quantization of the lower bound.
     """
-    ts = np.asarray(ts, dtype=np.float64)
+    ts = limits.vector(ts, "time_s")
     if ts.size < 2:
         return None
 
-    total_diff = float(np.sum(np.diff(ts)))
-    avg_diff = round(total_diff / (ts.size - 1) * 2 * 100000) / 100000
+    with np.errstate(over="ignore", invalid="ignore"):
+        total_diff = float(np.sum(np.diff(ts)))
+    scaled_interval = total_diff / (ts.size - 1) * 2 * 100000
+    limits.finite(scaled_interval, "Nyquist interval", positive=True)
+    avg_diff = round(scaled_interval) / 100000
+    limits.finite(avg_diff, "Nyquist interval", positive=True)
 
     if freq_mode:
         start_period = 0.1
@@ -260,7 +287,9 @@ def compute_periodogram(
     ``start``/``stop`` default to :func:`nyquist_periodogram_range` for the
     given mode — the same defaults the astromancer form seeds from the file.
     """
-    ts = np.asarray(ts, dtype=np.float64)
+    ts = limits.vector(ts, "time_s")
+    if ts.size < 3:
+        raise ValueError("need at least three samples to compute a periodogram")
     if start is None or stop is None:
         bounds = nyquist_periodogram_range(ts, freq_mode)
         if bounds is None:

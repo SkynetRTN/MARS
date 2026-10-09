@@ -9,6 +9,8 @@ from typing import Iterable, Tuple
 
 import numpy as np
 
+from .limits import MAX_ZONE_RECORDS, QUERY_CHUNK_ROWS, check_query_budget, validate_query_box
+
 _UCAC4_DTYPE = np.dtype(
     [
         ("pad", "u1", 4),
@@ -49,6 +51,8 @@ class Ucac4Index:
 
         file_size = path.stat().st_size
         data_size = file_size
+        if data_size > MAX_ZONE_RECORDS * _RECORD_SIZE:
+            raise ValueError("UCAC4 zone exceeds the record budget.")
         if data_size <= 0 or data_size % _RECORD_SIZE != 0:
             raise ValueError(
                 "UCAC4 zone file size is not a multiple of the record size "
@@ -78,6 +82,8 @@ class Ucac4Index:
     ) -> Ucac4QueryResult:
         """Query catalog stars inside a RA/Dec rectangle in degrees."""
 
+        validate_query_box(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
+
         thin = max(1, int(thin))
         ra_min_deg %= 360.0
         ra_max_deg %= 360.0
@@ -89,6 +95,7 @@ class Ucac4Index:
 
         ra_out: list[np.ndarray] = []
         dec_out: list[np.ndarray] = []
+        candidates = rows = 0
         dec_min_mas = dec_min_deg / _MAS_TO_DEG
         dec_max_mas = dec_max_deg / _MAS_TO_DEG
 
@@ -105,13 +112,18 @@ class Ucac4Index:
                 hi = np.searchsorted(ra_mas, ra_end_mas, side="right")
                 if hi <= lo:
                     continue
-                ra_slice = ra_mas[lo:hi:thin]
-                dec_slice = dec_mas[lo:hi:thin]
-                mask = (dec_slice >= dec_min_mas) & (dec_slice <= dec_max_mas)
-                if not np.any(mask):
-                    continue
-                ra_out.append(ra_slice[mask].astype(np.float64) * _MAS_TO_DEG)
-                dec_out.append(dec_slice[mask].astype(np.float64) * _MAS_TO_DEG)
+                candidates += (hi - lo + thin - 1) // thin
+                check_query_budget(candidates, rows)
+                ra_view, dec_view = ra_mas[lo:hi:thin], dec_mas[lo:hi:thin]
+                for offset in range(0, len(ra_view), QUERY_CHUNK_ROWS):
+                    ra_slice = ra_view[offset:offset + QUERY_CHUNK_ROWS]
+                    dec_slice = dec_view[offset:offset + QUERY_CHUNK_ROWS]
+                    mask = (dec_slice >= dec_min_mas) & (dec_slice <= dec_max_mas)
+                    rows += int(np.count_nonzero(mask))
+                    check_query_budget(candidates, rows)
+                    if np.any(mask):
+                        ra_out.append(ra_slice[mask].astype(np.float64) * _MAS_TO_DEG)
+                        dec_out.append(dec_slice[mask].astype(np.float64) * _MAS_TO_DEG)
 
         if not ra_out:
             return Ucac4QueryResult(np.empty(0), np.empty(0))

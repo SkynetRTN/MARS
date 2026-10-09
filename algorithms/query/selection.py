@@ -29,6 +29,7 @@ import logging
 from typing import Optional, Sequence
 
 from algorithms.catalogs import CATALOGS
+from algorithms.catalogs.filters import filter_token_candidates
 
 __all__ = [
     "catalog_supports_filter",
@@ -73,18 +74,7 @@ def _filter_token_candidates(image_filter: str) -> list[str]:
     ``G'`` would match the wrong entry, and some catalogs distinguish ``v`` (a
     SkyMapper band) from ``V`` (Johnson V).
     """
-    seen: list[str] = []
-    for t in (
-        image_filter,
-        image_filter.strip(),
-        image_filter.lower(),
-        image_filter.upper(),
-        # Normalize typographic single-quote variants to ASCII apostrophe
-        image_filter.replace("′", "'").replace("’", "'"),
-    ):
-        if t not in seen:
-            seen.append(t)
-    return seen
+    return filter_token_candidates(image_filter)
 
 
 def normalize_filter_token(image_filter: Optional[str]) -> Optional[str]:

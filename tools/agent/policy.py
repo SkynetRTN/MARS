@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping
 
 from tools.agent.approval import Approver, Decision, auto_approve
+from tools.effects import DOWNLOAD_FLAGS, WRITE_FLAGS, artifact_write_requires_consent
 
 if TYPE_CHECKING:
     from tools.agent.events import ToolCallProposed
@@ -47,21 +48,9 @@ TOOL_RISK: dict[str, frozenset[RiskTag]] = {
     "plot_field_sed": frozenset({"writes"}),
 }
 
-#: Tools whose risk is carried by one argument rather than by being called at
-#: all: the argument that turns a search into a fetch. A plain archive query
-#: returns a table and is cheap; the same call with the flag set pulls the
-#: matched products into the data tree over the network, which is the most
-#: expensive thing on this surface -- 121,515 products for Cassiopeia A, by
-#: ``tools.mast.search_mast``'s own measured docstring. Tagging the tool
-#: outright would put a dialog in front of every ordinary search; this asks
-#: only when the call would actually write.
-DOWNLOAD_FLAGS: dict[str, str] = {
-    "search_mast": "download",
-    "search_casda": "download",
-}
-
-# A solve only modifies its input FITS when this flag is set.
-WRITE_FLAGS: dict[str, str] = {"solve_astrometry": "write_header"}
+# Routine archive-table writes are explicit private-artifact exemptions.
+# The shared DOWNLOAD_FLAGS add consent/cost risk only for a fetch; WRITE_FLAGS
+# independently protects modification of an input FITS header.
 
 
 def risk_tags(
@@ -74,6 +63,8 @@ def risk_tags(
     """
 
     tags = TOOL_RISK.get(name, frozenset())
+    if artifact_write_requires_consent(name):
+        tags |= frozenset({"writes"})
     flag = DOWNLOAD_FLAGS.get(name)
     if flag and arguments and arguments.get(flag):
         tags |= frozenset({"writes", "slow"})

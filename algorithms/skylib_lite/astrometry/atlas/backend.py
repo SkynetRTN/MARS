@@ -16,6 +16,7 @@ from ..types import (
     SolveRequest,
     SolveSolution,
 )
+from ..limits import normalize_solver_timeout
 
 from .config import AtlasConfig
 from .solve.solver import solve as atlas_solve
@@ -66,6 +67,8 @@ class AtlasBackend:
     def solve(self, request: SolveRequest, config: Optional[AtlasConfig]) -> SolveSolution:
         if not isinstance(config, AtlasConfig):
             raise ValueError("Atlas config is required")
+        # Revalidate mutable/direct settings before any catalog or extraction work.
+        config = replace(config, timeout_s=normalize_solver_timeout(config.timeout_s))
         if request.image_path is None:
             raise ValueError("image_path must be provided for Atlas backend")
 

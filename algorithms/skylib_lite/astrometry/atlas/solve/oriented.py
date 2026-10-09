@@ -31,6 +31,7 @@ import numpy as np
 
 # EXTRACTED: were absolute `skylib.astrometry.atlas.*` imports — made relative.
 from ..config import AtlasConfig
+from ..catalog.limits import validate_catalog_radius
 from ..extract.sources import extract_sources
 from ..wcs.build import decompose_linear as _decompose_linear
 from ..wcs.build import wcs_from_similarity
@@ -145,6 +146,7 @@ def solve_oriented(
     fov_w = scale_arcsec_per_pix * width / 3600.0
     fov_h = scale_arcsec_per_pix * height / 3600.0
     half_deg = float(pointing_radius_deg) + 0.5 * float(np.hypot(fov_w, fov_h))
+    validate_catalog_radius(half_deg, config.catalog_max_radius_deg)
     cos_dec = max(0.2, float(abs(np.cos(np.deg2rad(dec0_deg)))))
     catalog_name, catalog_root = config.resolve_catalog()
     cat = _catalog_index(catalog_name, catalog_root).query_box(

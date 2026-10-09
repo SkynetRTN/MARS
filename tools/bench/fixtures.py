@@ -16,9 +16,9 @@ Four properties matter more than the format:
 * **A fixture carries content, never a path** (S7). It may not set ``path``,
   ``subdir`` or ``ext`` on an artifact; the shim reserves its own path inside
   the session's ``scoped_artifacts`` context and copies the recorded body
-  there. That keeps ``_write_directory()``'s unvalidated ``subdir`` join and
-  ``reserve_artifact_path()``'s loosely-stripped ``ext`` unreachable from
-  recorded data.
+  there. The shared writer now validates both fields too; the fixture rule
+  remains because recorded remote content has no authority to choose any
+  local destination.
 * **``yaml.safe_load``, always** (S5). Fixture files are reviewed as
   adversarial input, not as test data.
 * **Every file states its provenance.** A recorded fixture and a hand-authored

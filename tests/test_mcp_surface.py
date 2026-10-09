@@ -4,7 +4,7 @@ Two layers, tested separately. :mod:`tools.mcp.surface` and
 :mod:`tools.mcp.roots` import no SDK, so the tests of *what* is served run in
 every ``uv run pytest``. The tests of the adapter drive a real
 :class:`mcp.server.Server` through the SDK's in-process client -- no
-subprocess and no socket -- and skip when the optional ``[mcp]`` group is not
+socket (tool dispatch uses owned subprocesses) -- and skip when the optional ``[mcp]`` group is not
 installed (``uv sync --extra mcp``).
 """
 
@@ -484,20 +484,15 @@ def test_a_media_result_carries_the_image_and_audio_after_the_json(tmp_path):
     from mcp.client.client import Client
 
     from tools.mcp.server import build_server
-    from tools.models import ArtifactRef
+    from functools import partial
+    from tests.runtime_fakes import render
 
     png, wav = tmp_path / "p.png", tmp_path / "s.wav"
     png.write_bytes(_PNG)
     wav.write_bytes(_WAV)
 
-    def render():
-        return ToolResult(
-            status="ok",
-            artifacts=[ArtifactRef(path=str(png), format="png"), ArtifactRef(path=str(wav), format="wav")],
-        )
-
     schemas = [{"name": "render", "description": "d", "input_schema": {"type": "object", "properties": {}}}]
-    server = build_server(schemas, {"render": render}, artifact_root=tmp_path)
+    server = build_server(schemas, {"render": partial(render, str(png), str(wav))}, artifact_root=tmp_path)
 
     async def run():
         async with Client(server) as client:
@@ -973,12 +968,8 @@ def test_the_media_limit_is_measured_after_base64(tmp_path, monkeypatch):
 
 _PRINTING_SERVER = """
 import anyio
-from tools.models import ToolResult
 from tools.mcp.server import build_server, serve_stdio
-
-def noisy():
-    print("[source_extraction] total_flux=1.0 num_sources=3")
-    return ToolResult(status="ok", count=0)
+from tests.runtime_fakes import noisy
 
 schema = {"name": "noisy", "description": "prints",
           "input_schema": {"type": "object", "properties": {}}}

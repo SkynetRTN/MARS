@@ -12,10 +12,32 @@ from numba import njit, prange
 
 from algorithms.skylib_lite.calibration.background import estimate_background, sep_compatible
 from algorithms.skylib_lite.util.stats import weighted_median
-from .aperture_numba import sum_circle, sum_ellipse, sum_circann, sum_ellipann, _sum_circle, _sum_ellipse
+from .aperture_numba import (
+    _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX,
+    _sum_circle,
+    _sum_ellipse,
+    sum_circle,
+    sum_circann,
+    sum_ellipse,
+    sum_ellipann,
+)
 
 
 __all__ = ['aperture_photometry']
+
+
+def _validate_safe_ellipse_axes(a: float | np.ndarray, b: float | np.ndarray) -> None:
+    """Contain the fatal exact-overlap recursion before entering numba."""
+    ellipse_axes = np.concatenate((np.atleast_1d(a), np.atleast_1d(b)))
+    if (
+        not np.isfinite(ellipse_axes).all()
+        or np.any(ellipse_axes < _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX)
+    ):
+        raise ValueError(
+            "Elliptical aperture semi-axes must be finite and at least "
+            f"{_MIN_SAFE_ELLIPSE_SEMI_AXIS_PX} pixels; smaller ellipses can "
+            "trigger fatal overlap recursion"
+        )
 
 
 @njit(nogil=True, error_model='numpy', cache=True)
@@ -324,6 +346,7 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
 
         # Obtain the optimal aperture radius from the brightest non-saturated source
         if not k:
+            _validate_safe_ellipse_axes(a, b)
             aper = np.empty(4, np.float64)
             aper[3] = 1
             noise = np.zeros((1, 1), np.float64)
@@ -375,6 +398,14 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
             a_in = a*k_in
             a_out, b_out = a*k_out, b*k_out
             theta_out = theta
+
+    # MARS safety divergence: the vendored exact-overlap recursion can exhaust
+    # the native stack for a pixel-centred ellipse smaller than one pixel. Keep
+    # the upstream numerical implementation unchanged, but stop unsafe ellipse
+    # geometry before any numba kernel can terminate the interpreter. Fixed
+    # circles use the independent circle-overlap path and need no such floor.
+    if not (fixed_aper and a == b):
+        _validate_safe_ellipse_axes(a, b)
 
     # Calculate mean and RMS of background; to get the pure sigma, set error to 1 and don't pass the gain; use
     # sum_*() instead of analytic expressions to calculate the aperture and annulus area accounting for masked

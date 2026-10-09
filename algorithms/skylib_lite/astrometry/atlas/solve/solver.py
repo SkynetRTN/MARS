@@ -15,6 +15,7 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 
 # EXTRACTED: were absolute `skylib.astrometry.atlas.*` imports — made relative.
 from ..catalog import CatalogIndex, get_catalog_spec
+from ..catalog.limits import validate_catalog_radius
 from ..config import AtlasConfig
 from ..extract.sources import ExtractedSources, extract_sources
 from ..match.triangles import TriangleSet, build_kdtree, sample_triangles
@@ -164,8 +165,7 @@ def solve(
     if half_diag_deg <= 0:
         return _miss("bad_fov_or_scale", start=start, n_extracted=n_sources)
 
-    if catalog_max_radius_deg is not None:
-        half_diag_deg = min(float(half_diag_deg), float(catalog_max_radius_deg))
+    validate_catalog_radius(float(half_diag_deg), catalog_max_radius_deg)
 
     # Convert "radius" into a RA/Dec box (box is conservative; good for your zone-based catalog query)
     cos_dec = np.cos(np.deg2rad(dec0_deg))

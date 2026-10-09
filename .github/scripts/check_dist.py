@@ -9,6 +9,8 @@ this covers what it would accept and then ship broken:
   symlink -- a clone without symlinks builds a wheel with none, silently;
 - the package data the installed server reads: the bundle manifest, the
   skill source, the server icons;
+- exact Python-module parity with this checkout, so incremental build caches
+  cannot reintroduce deleted modules or ship outdated implementations;
 - nothing that must never ship: tests, the fetched optical frame library,
   a ``.env``, compiled caches, or a top-level package other than ``tools`` and
   ``algorithms`` (a generic top-level name collides with other projects);
@@ -34,6 +36,14 @@ REQUIRED = (
     "tools/mcp/icons/mars-128.png",
     "tools/skill/source/SKILL.md",
     "tools/skill/source/BRIEF.md",
+    "tools/runtime/worker.py",
+    "tools/runtime/runner.py",
+    "tools/runtime/limits.py",
+    "tools/runtime/storage.py",
+    "tools/runtime/windows.py",
+    "tools/downloads.py",
+    "tools/effects.py",
+    "algorithms/skylib_lite/util/processes.py",
     "algorithms/skylib_lite/astrometry/anet/ngc2000.dat",
     "tools/_data/pulsar/curated_periods.json",
     "tools/_data/fieldcal/zp_solutions/ngc5128_b_002/fit_summary.json",
@@ -65,13 +75,26 @@ def _metadata(archive: zipfile.ZipFile) -> email.message.Message | None:
     return email.parser.Parser().parsestr(archive.read(names[0]).decode("utf-8"))
 
 
-def check_wheel(path: Path, *, require_license: bool = False) -> list[str]:
+def check_wheel(path: Path, *, require_license: bool = False,
+                verify_source: bool = False) -> list[str]:
     """Every problem with the wheel at ``path``; empty when it is fit to ship."""
 
     problems: list[str] = []
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         metadata = _metadata(archive)
+        if verify_source:
+            root = Path(__file__).resolve().parents[2]
+            expected = {str(p.relative_to(root)).replace("\\", "/")
+                        for package in TOP_LEVEL for p in (root / package).rglob("*.py")
+                        if "_data" not in p.relative_to(root).parts}
+            modules = {name for name in names if name.endswith(".py")
+                       and name.split("/", 1)[0] in TOP_LEVEL
+                       and "_data" not in name.split("/")}
+            problems += [f"missing source module {name}" for name in sorted(expected - modules)]
+            problems += [f"stale/unknown module {name}" for name in sorted(modules - expected)]
+            problems += [f"source differs for {name}" for name in sorted(expected & modules)
+                         if archive.read(name) != (root / name).read_bytes()]
 
     present = set(names)
     problems += [f"missing {name}" for name in REQUIRED if name not in present]
@@ -114,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
 
     status = 0
     for wheel in args.wheels:
-        problems = check_wheel(wheel, require_license=args.require_license)
+        problems = check_wheel(wheel, require_license=args.require_license, verify_source=True)
         for problem in problems:
             print(f"::error::{wheel.name}: {problem}")
         print(f"{wheel.name}: {'FAILED' if problems else 'ok'}")

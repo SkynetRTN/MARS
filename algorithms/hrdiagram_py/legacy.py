@@ -394,6 +394,9 @@ def reset_distance(fsr_params: Mapping[str, Any]) -> float:
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::equatorial2Galactic
 def equatorial_to_galactic(ra: float, dec: float) -> dict[str, float]:
+    """Legacy frame constants with TS-01's deliberate quadrant correction."""
+    if not math.isfinite(ra) or not math.isfinite(dec) or not -90 <= dec <= 90:
+        raise ValueError("Equatorial coordinates must be finite with Dec in [-90, 90].")
     ra_ngp = rad(192.8595)
     dec_ngp = rad(27.1284)
     l_ngp = rad(122.93314)
@@ -403,14 +406,12 @@ def equatorial_to_galactic(ra: float, dec: float) -> dict[str, float]:
         math.sin(dec_ngp) * math.sin(dec_rad)
         + math.cos(dec_ngp) * math.cos(dec_rad) * math.cos(ra_rad - ra_ngp)
     )
-    temp = math.cos(dec_rad) * math.sin(ra_rad - ra_ngp) / (
+    numerator = math.cos(dec_rad) * math.sin(ra_rad - ra_ngp)
+    denominator = (
         math.sin(dec_rad) * math.cos(dec_ngp)
         - math.cos(dec_rad) * math.sin(dec_ngp) * math.cos(ra_rad - ra_ngp)
     )
-    temp = math.atan(temp)
-    temp = temp + math.pi if temp < 0 else temp
-    longitude = l_ngp - temp
-    longitude = longitude + 2 * math.pi if longitude < 0 else longitude
+    longitude = (l_ngp - math.atan2(numerator, denominator)) % (2 * math.pi)
     return {"l": deg(longitude), "b": deg(b)}
 
 

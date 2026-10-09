@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tools.artifacts import describe_file, discard_placeholder, reserve_path_in
+from tools.artifacts import artifact_write_directory, describe_file, discard_placeholder, reserve_path_in
 from tools.photometry_pipeline import (
     compute_photometry,
     list_bundled_targets,
@@ -236,7 +236,7 @@ def run_photometry_on_target(
     )
     magnitude_label = magnitude_label_for(zero_point)
 
-    artifact_dir = artifact_directory(output_dir)
+    artifact_dir = artifact_directory(output_dir) if output_dir is not None else artifact_write_directory()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     plot_path = reserve_path_in(artifact_dir, f"{fits_path.stem}_photometry", "png")

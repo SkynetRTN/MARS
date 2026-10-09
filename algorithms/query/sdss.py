@@ -22,6 +22,9 @@ through to ``super()``, which newer astroquery rejects.
 from __future__ import annotations
 
 import logging
+import math
+import re
+from numbers import Integral
 from typing import Dict as TDict, List as TList, Optional
 
 import numpy as np
@@ -38,12 +41,57 @@ __all__ = ["MARSSDSS", "SDSSQueryBackend"]
 logger = logging.getLogger(__name__)
 
 
+# First-party CAT-02/27 acceptance bounds. SQL quality/geometry stay upstream.
+MAX_SDSS_ROWS = 5_000
+MAX_SDSS_FIELDS = 64
+MAX_SDSS_FIELD_LENGTH = 64
+_SQL_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*", re.ASCII)
+
+
+def _row_limit(limit: int | None, default: int | None = MAX_SDSS_ROWS) -> int:
+    value = (MAX_SDSS_ROWS if default is None else default) if limit is None else limit
+    if not isinstance(value, Integral) or isinstance(value, bool) or not 1 <= value <= MAX_SDSS_ROWS:
+        raise ValueError(f"SDSS limit must be an integer between 1 and {MAX_SDSS_ROWS}.")
+    return int(value)
+
+
+def _projection_fields(fields: object) -> list[str]:
+    if not isinstance(fields, (list, tuple)) or not 1 <= len(fields) <= MAX_SDSS_FIELDS:
+        raise ValueError(f"SDSS photoobj_fields must contain 1 to {MAX_SDSS_FIELDS} field names.")
+    if any(not isinstance(field, str) or len(field) > MAX_SDSS_FIELD_LENGTH
+           or not _SQL_IDENTIFIER.fullmatch(field) for field in fields):
+        raise ValueError("SDSS field names must be bounded literal SQL identifiers, not expressions.")
+    return list(fields)
+
+
+def _positive_angle(value: object, unit: str) -> float:
+    try:
+        number = float(Angle(value).to_value(unit))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("SDSS region dimensions must be scalar angles.") from exc
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError("SDSS region dimensions must be finite and positive.")
+    return number
+
+
+def _finite_region_inputs(ra_hours: float, dec_degs: float, *sizes: float) -> None:
+    try:
+        valid = math.isfinite(ra_hours) and math.isfinite(dec_degs) and -90 <= dec_degs <= 90
+        valid = valid and math.isfinite(ra_hours * 5400)
+        valid = valid and all(math.isfinite(size) and math.isfinite(size * 5) and size > 0 for size in sizes)
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if not valid:
+        raise ValueError("SDSS region inputs must be finite with positive dimensions and valid declination.")
+
+
 class MARSSDSS(SDSSClass):
     """``SDSSClass`` that builds MARS's SkyServer SQL.
 
     EXTRACTED: was ``AfterglowSDSS``. Renamed — MARS is not Afterglow — but
-    the generated SQL is unchanged, because the quality predicates in it are
-    what make SDSS photometry usable for zero-point solves.
+    the quality predicates/region geometry are preserved. CAT-02/27 adds a
+    bounded TOP and literal projection fields; backend regions use query_sql,
+    not the pinned SDK's incompatible cross-ID/region payload protocol.
     """
 
     def _args_to_payload(
@@ -52,6 +100,7 @@ class MARSSDSS(SDSSClass):
         radius=2 * arcsec,
         photoobj_fields=None,
         data_release=17,
+        limit=None,
         **kwargs,
     ):
         """Return the SkyServer request payload.
@@ -66,22 +115,26 @@ class MARSSDSS(SDSSClass):
         pole inside the region or a region straddling RA=0/360 splits into the
         same four cases. Here they become SQL predicates instead of a filter.
 
-        Falls back to astroquery's own payload builder when the caller gave no
-        coordinates, radius or field list.
+        Requires scalar coordinates, a finite positive region and bounded
+        literal fields. Missing inputs fail locally rather than triggering the
+        SDK's metadata requests or an unbounded fallback query.
         """
-        if None in (coordinates, radius, photoobj_fields):
-            return super()._args_to_payload(
-                coordinates=None,
-                photoobj_fields=photoobj_fields,
-                data_release=data_release,
-                **kwargs,
-            )
+        limit = _row_limit(limit)
+        photoobj_fields = _projection_fields(photoobj_fields)
+        if not isinstance(coordinates, SkyCoord) or not coordinates.isscalar:
+            raise ValueError("SDSS SQL regions require scalar SkyCoord coordinates.")
+        if not math.isfinite(coordinates.ra.degree) or not math.isfinite(coordinates.dec.degree):
+            raise ValueError("SDSS SQL coordinates must be finite.")
+        if radius is None:
+            raise ValueError("SDSS SQL regions require a radius or width/height tuple.")
 
         if isinstance(radius, tuple) and len(radius) == 2:
             # Rectangular region
             region = ''
             ra, dec = coordinates.ra.degree, coordinates.dec.degree
-            h = Angle(radius[1]).to('degree').value/2
+            height = _positive_angle(radius[1], 'degree')
+            width = _positive_angle(radius[0], 'degree')
+            h = height/2
             dec_min, dec_max = dec - h, dec + h
             if dec_min < -90:
                 # South Pole in FOV, use the whole RA range
@@ -90,9 +143,10 @@ class MARSSDSS(SDSSClass):
                 # North Pole in FOV, use the whole RA range
                 where = f's.dec >= {dec_min}'
             else:
-                w = np.rad2deg(np.arcsin(
-                    np.sin(np.deg2rad(Angle(radius[0]).to('degree').value/2)) /
-                    np.cos(np.deg2rad(dec))))
+                ratio = np.sin(np.deg2rad(width/2)) / np.cos(np.deg2rad(dec))
+                if not math.isfinite(ratio) or abs(ratio) > 1:
+                    raise ValueError("SDSS box has no finite RA span under the preserved geometry.")
+                w = np.rad2deg(np.arcsin(ratio))
                 ra_min, ra_max = ra - w, ra + w
                 if ra_max >= ra_min + 360:
                     # RA spans the whole 360deg range
@@ -115,16 +169,17 @@ class MARSSDSS(SDSSClass):
             # Circular region
             region = 'fGetNearbyObjEq({},{},{}) AS n, '.format(
                 coordinates.ra.degree, coordinates.dec.degree,
-                Angle(radius).to('arcmin').value)
+                _positive_angle(radius, 'arcmin'))
             where = 'n.objID = s.objID'
 
         # Construct SQL query
         # noinspection SqlResolve
-        q = 'SELECT DISTINCT {} ' \
+        q = 'SELECT DISTINCT TOP {} {} ' \
             'FROM {}Star AS s ' \
             'JOIN Field f ON s.fieldID = f.fieldID ' \
             'WHERE {} AND f.quality = 3 AND s.clean = 1' \
             .format(
+                limit,
                 ', '.join(['s.{0}'.format(sql_field)
                            for sql_field in photoobj_fields]),
                 region, where,
@@ -162,6 +217,11 @@ class SDSSQueryBackend(VizierCatalog):
     ``data_release`` comes from the plugin declaration in
     ``catalogs/sdss_catalog.py``, which also builds ``display_name`` from it —
     the two must move together, so the release is not configurable separately.
+
+    Region requests use MARS's bounded quality-filtered SQL via the installed
+    SDK's query_sql transport. Limits default to the declaration's row_limit,
+    never exceed 5,000, and are applied before mapping even if a provider ignores
+    TOP. This does not provide an HTTP-byte or whole-call deadline budget.
     """
 
     def query_objects(self, names: TList[str]) -> TList[CatalogSource]:
@@ -192,20 +252,17 @@ class SDSSQueryBackend(VizierCatalog):
         if height_arcmins is None:
             height_arcmins = width_arcmins
 
+        _row_limit(limit, self.row_limit)
+        _finite_region_inputs(ra_hours, dec_degs, width_arcmins, height_arcmins)
+
         if self.cache:
             ra_hours, dec_degs, (width_arcmins, height_arcmins) = _round_for_cache(
                 ra_hours, dec_degs, width_arcmins, height_arcmins
             )
 
-        sdss = SDSS()
-        return self.table_to_sources(
-            sdss.query_region(
-                SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame="icrs"),
-                radius=(width_arcmins * arcmin, height_arcmins * arcmin),
-                photoobj_fields=self._columns,
-                data_release=self.data_release,
-                cache=self.cache,
-            )
+        return self._query_sql_region(
+            ra_hours, dec_degs,
+            (width_arcmins * arcmin, height_arcmins * arcmin), limit,
         )
 
     def query_circ(
@@ -217,18 +274,28 @@ class SDSSQueryBackend(VizierCatalog):
         limit: Optional[int] = None,
     ) -> TList[CatalogSource]:
         """Return SDSS objects within a circular region."""
+        _row_limit(limit, self.row_limit)
+        _finite_region_inputs(ra_hours, dec_degs, radius_arcmins)
         if self.cache:
             ra_hours, dec_degs, (radius_arcmins,) = _round_for_cache(
                 ra_hours, dec_degs, radius_arcmins
             )
 
-        sdss = SDSS()
-        return self.table_to_sources(
-            sdss.query_region(
-                SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame="icrs"),
-                radius=radius_arcmins * arcmin,
-                photoobj_fields=self._columns,
-                data_release=self.data_release,
-                cache=self.cache,
-            )
+        return self._query_sql_region(
+            ra_hours, dec_degs, radius_arcmins * arcmin, limit,
         )
+
+    def _query_sql_region(self, ra_hours, dec_degs, radius, limit):
+        limit = _row_limit(limit, self.row_limit)
+        # Build before client construction: no validation path reaches metadata
+        # lookups or the SDK's incompatible region/cross-ID payload builder.
+        payload = MARSSDSS()._args_to_payload(
+            coordinates=SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame="icrs"),
+            radius=radius, photoobj_fields=self._columns,
+            data_release=self.data_release, limit=limit,
+        )
+        client = SDSS()
+        rows = client.query_sql(payload["cmd"], data_release=self.data_release, cache=self.cache)
+        if rows is None:
+            return []
+        return self.table_to_sources(rows[:limit])

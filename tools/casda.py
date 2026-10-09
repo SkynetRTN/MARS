@@ -32,6 +32,7 @@ from tools import config
 from tools.config import CASDA_OPAL_USERNAME, PREVIEW_ROWS
 from tools.models import ToolResult, ToolWarning
 from tools.resolve import resolve_target_coords
+from tools.downloads import DownloadLimit, bounded_transfer, check_products, MAX_PRODUCTS
 
 __all__ = ["search_casda"]
 
@@ -125,6 +126,11 @@ def search_casda(
     warnings: list[ToolWarning] = []
 
     if download:
+        try:
+            check_products(table)
+        except DownloadLimit as exc:
+            return ToolResult(status="partial", count=len(table), artifact=artifact,
+                              errors=[{"code": "resource_limit", "message": str(exc)}])
         if not CASDA_OPAL_USERNAME:
             return ToolResult(
                 status="partial",
@@ -161,8 +167,6 @@ def search_casda(
                     }
                 ],
             )
-        casda.login(username=CASDA_OPAL_USERNAME)
-        url_list = casda.stage_data(table)
         # The literal "fits_downloads" this used to pass ignored
         # MARS_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
         # one directory and a frame registry searching another. Same directory
@@ -170,7 +174,16 @@ def search_casda(
         # Read through the module for the same reason tools.mast does.
         download_dir = config.FITS_DOWNLOAD_DIR
         download_dir.mkdir(parents=True, exist_ok=True)
-        casda.download_files(url_list, savedir=str(download_dir))
+        try:
+            casda.login(username=CASDA_OPAL_USERNAME)
+            url_list = casda.stage_data(table)
+            if len(url_list) > 2 * MAX_PRODUCTS:
+                raise DownloadLimit("CASDA staged URL count exceeds 64 (products plus checksums); nothing downloaded.")
+            with bounded_transfer(casda, download_dir, max_files=2 * MAX_PRODUCTS):
+                casda.download_files(url_list, savedir=str(download_dir))
+        except (DownloadLimit, OSError, ValueError) as exc:
+            return ToolResult(status="partial", count=len(table), artifact=artifact,
+                              errors=[{"code": "resource_limit", "message": str(exc)}])
         warnings.append(
             ToolWarning(
                 code="products_downloaded",

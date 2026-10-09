@@ -8,6 +8,8 @@ from typing import List, Tuple
 
 import numpy as np
 
+from .limits import MAX_ZONE_RECORDS, QUERY_CHUNK_ROWS, check_query_budget, validate_query_box
+
 _UCAC5_ZONE_RECORD_SIZE = 52  # u5z zone files (z001..z900)
 _MAS_TO_DEG = 1.0 / (1000.0 * 3600.0)
 
@@ -77,6 +79,8 @@ class Ucac5Index:
             )
 
         self.index_asc = self.u5z_dir / "u5index.asc"
+        if self.index_asc.stat().st_size > 128 * 1024 * 1024:
+            raise ValueError("UCAC5 ASCII index exceeds the byte budget.")
 
         # Allocate [zone, bin, (start,count)]
         self._idx = np.zeros((_UCAC5_ZONES, _UCAC5_BINS_PER_ZONE, 2), dtype=np.int32)
@@ -86,7 +90,12 @@ class Ucac5Index:
         # "     0   21 406    1  -8.8"
         # "   135141   18 406 1440"
         with self.index_asc.open("rt", encoding="ascii", errors="strict") as f:
-            for line in f:
+            for line_number in range(1_500_001):
+                line = f.readline(257)
+                if not line:
+                    break
+                if len(line) > 256 or line_number == 1_500_000:
+                    raise ValueError("UCAC5 ASCII index exceeds its line/work budget.")
                 line = line.strip()
                 if not line:
                     continue
@@ -96,6 +105,8 @@ class Ucac5Index:
                     continue
                 start = int(parts[0])
                 count = int(parts[1])
+                if start < 0 or count < 0 or start + count > MAX_ZONE_RECORDS:
+                    raise ValueError("UCAC5 index span exceeds the zone-record budget.")
                 zone = int(parts[2])
                 bin_ = int(parts[3])
                 if 1 <= zone <= _UCAC5_ZONES and 1 <= bin_ <= _UCAC5_BINS_PER_ZONE:
@@ -128,6 +139,8 @@ class Ucac5Index:
             )
 
         nrec = file_size // _UCAC5_ZONE_RECORD_SIZE
+        if nrec > MAX_ZONE_RECORDS:
+            raise ValueError("UCAC5 zone exceeds the record budget.")
         if nrec <= 0:
             return None
 
@@ -253,6 +266,8 @@ class Ucac5Index:
     ) -> Ucac5QueryResult:
         """Query catalog stars inside a RA/Dec rectangle in degrees."""
 
+        validate_query_box(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
+
         thin = max(1, int(thin))
         dec_min_deg = max(-90.0, min(dec_min_deg, dec_max_deg))
         dec_max_deg = min(90.0, max(dec_min_deg, dec_max_deg))
@@ -270,6 +285,7 @@ class Ucac5Index:
 
         ra_out: list[np.ndarray] = []
         dec_out: list[np.ndarray] = []
+        candidates = rows = 0
 
         for span in spans:
             mm = self._load_zone(span.zone)
@@ -282,18 +298,22 @@ class Ucac5Index:
             records = mm[start:stop:thin]
             if records.size == 0:
                 continue
-            ra_deg = (records["ra_mas"].astype(np.float64) * _MAS_TO_DEG) % 360.0
-            dec_deg = (records["dec_mas"].astype(np.float64) * _MAS_TO_DEG)
-            mask = (dec_deg >= dec_min_deg) & (dec_deg <= dec_max_deg)
-            if ra_intervals:
+            candidates += records.size
+            check_query_budget(candidates, rows)
+            for offset in range(0, records.size, QUERY_CHUNK_ROWS):
+                chunk = records[offset:offset + QUERY_CHUNK_ROWS]
+                ra_deg = (chunk["ra_mas"].astype(np.float64) * _MAS_TO_DEG) % 360.0
+                dec_deg = (chunk["dec_mas"].astype(np.float64) * _MAS_TO_DEG)
+                mask = (dec_deg >= dec_min_deg) & (dec_deg <= dec_max_deg)
                 ra_mask = np.zeros_like(mask, dtype=bool)
                 for ra_start, ra_end in ra_intervals:
                     ra_mask |= (ra_deg >= ra_start) & (ra_deg <= ra_end)
                 mask &= ra_mask
-            if not np.any(mask):
-                continue
-            ra_out.append(ra_deg[mask])
-            dec_out.append(dec_deg[mask])
+                rows += int(np.count_nonzero(mask))
+                check_query_budget(candidates, rows)
+                if np.any(mask):
+                    ra_out.append(ra_deg[mask])
+                    dec_out.append(dec_deg[mask])
 
         if not ra_out:
             return Ucac5QueryResult(np.empty(0), np.empty(0))
