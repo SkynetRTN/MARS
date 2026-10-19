@@ -7,16 +7,18 @@ import math
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 from astropy.table import Table
 
-from algorithms.variable_star.folding import fold_with_error
+from algorithms.variable_star.folding import fold_with_error, validate_fold_work
 from algorithms.variable_star.lightcurve import VariableDataRow, merge_sources_by_mjd, with_error_mse
-from algorithms.variable_star.periodogram import variable_periodogram
+from algorithms.variable_star.periodogram import validate_periodogram_grid, variable_periodogram
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
 from tools.models import (
     FileMetadata,
     ToolError,
+    ToolWarning,
     VariableStarFixture,
     VariableStarFixtureList,
     VariableStarFoldedLightCurve,
@@ -37,7 +39,6 @@ _MAX_INPUT_BYTES = 5 * 1024 * 1024
 _MAX_ROWS = 2_000
 _MAX_FIXTURES = 100
 _MAX_SOURCE_ID_LENGTH = 128
-_MAX_FOLD_OPERATIONS = 10_000_000
 
 
 def _fixture_dir() -> Path:
@@ -61,7 +62,7 @@ def _checked_file_size(path: Path) -> None:
 def _finite(value: object, name: str, *, positive: bool = False) -> float:
     try:
         number = float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{name} must be numeric.") from exc
     if not math.isfinite(number) or (positive and number <= 0):
         qualifier = "a finite positive" if positive else "finite"
@@ -107,37 +108,13 @@ def _validated_subdir(subdir: str) -> str:
 def _validate_periodogram_range(start: float, stop: float) -> tuple[float, float]:
     start_value = _finite(start, "start_period", positive=True)
     stop_value = _finite(stop, "end_period", positive=True)
-    if stop_value <= start_value:
-        raise ValueError("end_period must exceed start_period.")
-    step = (stop_value - start_value) / 2000
-    if step <= 0:
-        raise ValueError("period range must have a representable positive step.")
-    if start_value + step <= start_value:
-        raise ValueError("period range step must advance start_period.")
-    value = start_value
-    for _ in range(2001):
-        next_value = value + step
-        if next_value <= value:
-            raise ValueError("period range step must advance every grid point.")
-        value = next_value
-        if value >= stop_value:
-            break
-    else:
-        raise ValueError("period range exceeds the bounded grid iteration count.")
+    validate_periodogram_grid(start_value, stop_value)
     return start_value, stop_value
 
 
 def _validate_fold_period(period: float, times: Sequence[float]) -> float:
     period_value = _finite(period, "period", positive=True)
-    if not times:
-        raise ValueError("light-curve artifact contains no rows.")
-    baseline = max(times) - min(times)
-    if baseline:
-        cycles = baseline / period_value
-        if not math.isfinite(cycles):
-            raise ValueError("period is too small to fold representably over this observation.")
-        if cycles * len(times) > _MAX_FOLD_OPERATIONS:
-            raise ValueError("period exceeds the fold work limit for this observation.")
+    validate_fold_work(period_value, times)
     return period_value
 
 
@@ -210,8 +187,15 @@ def _rows_from_artifact(file: FileMetadata) -> list[VariableDataRow]:
         raise ValueError("Artifact is not a variable-star light-curve artifact.")
     if len(table) > _MAX_ROWS:
         raise ValueError(f"Artifact exceeds the {_MAX_ROWS}-row limit.")
+    def optional_number(value: object) -> float | None:
+        if np.ndim(value) != 0:
+            raise ValueError("Artifact cells must be scalar numeric values or missing.")
+        if value is None or np.ma.is_masked(value):
+            return None
+        return _finite(value, "artifact cell")
+
     rows = [
-        VariableDataRow(*(None if value is None else float(value) for value in row))
+        VariableDataRow(*(optional_number(value) for value in row))
         for row in table[["mjd", "source1", "source2", "error1", "error2", "error_mse"]]
     ]
     for row in rows:
@@ -279,15 +263,23 @@ def compute_variable_star_periodogram(
     try:
         rows = _rows_from_artifact(file)
         samples = variable_periodogram(rows, variable_star, reference_star_magnitude, start_period, end_period)
+        if not samples or any(not math.isfinite(period) or not math.isfinite(power) for period, power in samples):
+            raise ValueError("Periodogram must contain finite periods and powers; degenerate series are not detections.")
     except FileNotFoundError as exc:
         return _error(file, "file_not_found", str(exc), VariableStarPeriodogram)
     except (OSError, ValueError, ZeroDivisionError) as exc:
         return _error(file, "invalid_input", str(exc), VariableStarPeriodogram)
     table = Table({"period": [row[0] for row in samples], "power": [row[1] for row in samples]})
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_periodogram", subdir=subdir)
+    skipped = sum(row.jd is None or row.source1 is None or row.source2 is None for row in rows)
+    warnings = [ToolWarning(
+        code="unpaired_rows_skipped",
+        message=f"Excluded {skipped} observations without a time and both sources from the weighted periodogram.",
+    )] if skipped else []
     return VariableStarPeriodogram(
         file=file, artifact=artifact, samples=len(samples), start_period=start_period, end_period=end_period,
         variable_star=variable_star, preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+        warnings=warnings,
     )
 
 

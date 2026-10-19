@@ -25,10 +25,11 @@ _Former source: `algorithms/wcs/EXTRACTION.md`._
 ### WCS extraction from Skynet
 
 Astrometric (WCS) calibration, lifted out of the Skynet monorepo into
-`algorithms/wcs/`. This is an **extraction, not a rewrite**: every algorithm,
-numeric expression and comment is byte-identical to the source. The only edits
-are import rewiring and severed infrastructure dependencies, each marked inline
-with an `# EXTRACTED:` comment.
+`algorithms/wcs/`. At extraction, every algorithm,
+numeric expression and comment was byte-identical to the source. The only edits
+were import rewiring and severed infrastructure dependencies, each marked inline
+with an `# EXTRACTED:` comment. Later first-party attempt-budget/process-cleanup
+changes are explicitly recorded in §5.7; numerical/search formulas stay preserved.
 
 Source tree: `/home/claude/skynet` (read-only; nothing in it was modified).
 
@@ -123,7 +124,7 @@ Models taken from `runners/common/schemas.py` into `schemas.py`:
 
 ##### 3.2 Solver stack (from `skylib`, source root `skylib/skylib/`)
 
-Every file below is **byte-identical** to its source except where the "Change"
+In this extraction-time inventory, every file was **byte-identical** to its source except where the "Change"
 column says otherwise. `__init__.py` files with 0 lines are empty in both.
 
 | Destination (`algorithms/skylib_lite/`) | Source (`skylib/skylib/`) | Lines | Change |
@@ -224,13 +225,14 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
   object to `solve_wcs`; a direct algorithm call with no settings has no
   configured backend. Optional caller-owned attempt/failure lists expose
   backend diagnostics alongside the explicit `WcsSolveResult` output.
-- **Behaviour:** the extracted solver logic is unchanged. `build_anet_config` /
+- **Behaviour at extraction:** the solver logic was unchanged. `build_anet_config` /
   `build_atlas_config` read configuration only through
   `getattr(cfg, NAME, None)`, and both already handle `None` (anet
   logs a warning and disables itself; atlas returns `None`). `ANET_TIMEOUT_S`
   is new caller-facing plumbing to the vendored backend's existing
   `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
   object to the builders or pass it to `solve_wcs`.
+  The first-party finite timeout policy introduced later is recorded in §5.7.
 - **Search bounds (P6, 2026-09-12):** `wcs/config.py` also carries
   `WcsSearchBounds(radius_deg, min_scale_arcsec, max_scale_arcsec)`, passed as
   `solve_wcs(..., search_bounds=)`. Upstream exposed none of these — its
@@ -289,6 +291,81 @@ time per backend), so they were left exactly as they are, including
 `solver.py`'s module-level `logging.basicConfig(...)` call.
 
 ---
+
+##### 5.7 First-party finite attempt budgets and process cleanup (2026-10-06)
+
+WCS-02 deliberately changes the unbounded timeout acceptance contract, not the
+search arithmetic: omitted/`None` attempt limits select **300 seconds**, and
+explicit values must be finite **1–900 seconds** (booleans are invalid).
+The shared `astrometry/limits.py` validator is used by direct backend configs,
+duck-typed WCS builders and the public tool; invalid settings no longer silently
+disable deadlines. Mutable configs are revalidated at backend entry and the
+astrometry.net run boundary. Public/backend environment precedence is retained:
+the explicit tool argument wins, otherwise that backend's environment value
+wins, otherwise the finite default. Bad configured values return `invalid_timeout`
+from the tool; an unconfigured backend still stays disabled.
+
+Astrometry.net receives the integer CPU allowance and an outer wall-clock
+backstop of the attempt allowance plus the existing **30-second grace**. Its
+POSIX child is started in a new session: cleanup signals that owned group with
+SIGTERM, then SIGKILL even if the leader exits or was already reaped. Waiting
+only for the leader was insufficient: bounded offline probes reproduced a
+SIGTERM-resistant child surviving both situations. The leader is reaped and
+pipes are closed; termination/reap waits remain finite (5 + 5 seconds in the
+worst case). Combined stdout/stderr capture is bounded to 8 MiB before buffer
+extension. Cleanup also runs after interruption, capture failure and success.
+The generic first-party process helper writes private fresh-child ownership
+receipts when a containing runtime requests them; it imports no application
+code. This covers the owned process group, not descendants that
+deliberately escape the session. The non-POSIX fallback kills only the direct
+process; no Windows process-tree validation is claimed.
+
+ATLAS's finite allowance still covers only the blind matcher loop, not catalog
+loading, extraction, its oriented path or all retry work. MCP dispatch additionally
+contains the complete call in an owned worker with a 600-second default and
+finite memory/file/work/reply budgets and cancellation cleanup (`tools/runtime`,
+`docs/installing.md`). This includes preprocessing, oriented work and retries;
+arbitrary direct Python calls still require caller-owned whole-call supervision.
+WCS-01/25 pre-load limits are recorded below. Default all-sky/scale search,
+retry policy, quality/parity acceptance and accepted numerical fixtures are
+unchanged; a solve needing more than its allowance now stops. The 300-second
+default is an operational budget, not a guaranteed solution-time envelope.
+`tests/test_wcs_timeout_limits.py` checks direct/builders/public boundaries,
+CPU/outer-backstop propagation and native owned-group termination using short
+Python processes, without live services or operator astronomy indexes/catalogs.
+
+##### 5.8 First-party ATLAS pre-load budgets (2026-10-06)
+
+WCS-01/25 replace the post-load-only cap with a constructible, revalidated
+footprint contract: the padded half-diagonal must fit `catalog_max_radius_deg`
+(default 2 degrees, explicit finite values in (0, 5], `None` restores 2).
+`catalog_pad_frac` is constructible in [0, 2]. Blind and oriented requests and
+the reference-source follow-up reject oversized footprints before catalog
+initialization, rather than clipping the radius and silently omitting stars.
+The follow-up still uses the legacy maximum scale, not the solved scale
+(WCS-14); a broad legacy requery can therefore explicitly fail an otherwise
+viable solve. This is a deliberate operational acceptance restriction, not a
+scientific correction to the follow-up footprint.
+
+UCAC queries retain coordinate conversion, order and thinning, but process
+16,384-record chunks and reject more than 2,000,000 examined candidates or
+200,000 returned rows. Zones above 4,000,000 records and UCAC5 ASCII indexes
+above 128 MiB, 1,500,000 lines or 256 characters per line are rejected before
+unbounded conversion/parsing; indexed spans must be nonnegative and fit the
+zone-record budget. No query is silently truncated to meet these limits.
+`tests/test_atlas_catalog_limits.py` uses synthetic records and sentinel loaders;
+no operator catalog or native catalog-size compatibility validation is claimed.
+MCP whole-call/memory/cancellation and solver-output containment are described in
+§5.7; accepted matcher/coordinate arithmetic is unchanged.
+
+##### 5.9 WCS-04 default search policy (2026-10-07)
+
+The 180-degree default remains deliberately blind/all-sky. Inventing a narrow
+pointing/scale window would turn unknown pointing into a silent scientific miss.
+Known hints can narrow it; `test_wcs_solution.py` and `test_wcs_solve_tool.py`
+preserve both modes. Safety comes from finite attempts, pre-load catalog/work
+guards and MCP whole-call isolation, not a claim that blind searching is cheap.
+A valid explicit blind solve can exhaust its operational budget and fail.
 
 #### 6. External dependencies
 
@@ -428,10 +505,13 @@ Source: `/home/claude/skynet` (read-only). Current destination:
 `/home/claude/mars/algorithms/photometry/`, with shared Skylib code in
 `/home/claude/mars/algorithms/skylib_lite/`.
 
-This is a **verbatim extraction**, not a port. Every algorithm, constant, comment,
-and numeric quirk is preserved exactly as it was in Skynet. The only edits are
-import rewiring and the removal of hard dependencies on Skynet's ORM and
-plate-solving stage, each marked in-place with an `# EXTRACTED:` comment.
+This began as a **verbatim extraction**, not a port. Every algorithm, constant,
+comment, and numeric quirk was preserved exactly as it was in Skynet; the
+original edits were import rewiring and removal of hard dependencies on
+Skynet's ORM and plate-solving stage, each marked in-place with an
+`# EXTRACTED:` comment. The current tree has one later, explicitly documented
+MARS containment divergence: ALG-01 rejects unsafe sub-pixel ellipse geometry
+before the preserved overlap arithmetic runs.
 
 Current package note: the copied Skylib files described below now live under
 `algorithms/skylib_lite/`; historical paths in this record describe the original
@@ -447,7 +527,7 @@ algorithms/photometry/
 ├── photometry.py          edited: 3 seams
 ├── source_extraction.py   edited: 2 seams
 └── schemas.py             subset + base-model shim
-algorithms/skylib_lite/    vendored algorithmic core (all files byte-identical)
+algorithms/skylib_lite/    vendored core (documented MARS safety guards)
 ├── photometry/{__init__,aperture,aperture_numba,exposure}.py
 ├── extraction/{__init__,main,centroiding}.py
 ├── calibration/{__init__,background}.py
@@ -463,10 +543,13 @@ library) without retaining a nested pipeline package.
 
 #### 2. What was copied
 
-##### 2.1 Vendored skylib — byte-identical, zero edits
+##### 2.1 Vendored skylib — source-faithful with ALG-01 containment guards
 
 Verified with `diff -q` against the source after copying. All paths below are
-relative to `/home/claude/skynet/packages/py/skylib/skylib/`.
+relative to `/home/claude/skynet/packages/py/skylib/skylib/`. The table records
+that original extraction; `photometry/aperture.py` and
+`photometry/aperture_numba.py` now implement the single deliberate MARS safety
+divergence described immediately below it.
 
 | Source | Lines | Destination |
 |---|---:|---|
@@ -484,7 +567,20 @@ relative to `/home/claude/skynet/packages/py/skylib/skylib/`.
 | `util/fits.py` | 211 | `algorithms/skylib_lite/util/fits.py` |
 | `util/__init__.py` | 8 | `algorithms/skylib_lite/util/__init__.py` |
 
-**3,311 lines, unmodified.** Their intra-package relative imports
+The original **3,311 source lines were vendored unmodified**. Eleven files
+remain byte-identical. `photometry/aperture.py` validates source ellipses before
+the automatic optimal-radius search and after final fixed/automatic axes are
+derived. `photometry/aperture_numba.py` applies the same validation to every
+effective ellipse and elliptical-annulus axis before parallel dispatch, with a
+second initializer check for direct internal kernel calls. Elliptical semi-axes
+must be finite and at least 0.5 pixels before any exact-overlap kernel runs.
+Fixed circles retain the independent circle-overlap path and are not subject to
+the floor. The upstream arithmetic in `aperture.py`, `aperture_numba.py`, and
+`util/overlap.py` is otherwise unchanged; the fatal low-level recursion remains
+pinned in subprocess tests while maintained fixed, auto, annulus, optimizer,
+HR-FITS, and radio-FITS paths now fail cleanly.
+
+Their intra-package relative imports
 (`from ..calibration.background import ...`, `from ..util.stats import ...`,
 `from .aperture_numba import ...`) resolve unchanged inside the vendored tree —
 that is why the skylib directory layout was preserved rather than flattened.
@@ -785,7 +881,10 @@ not on the photometry call path if that import proves inconvenient.
 
 #### 10. Verification performed
 
-- `diff -q` against source for all 13 vendored skylib files — byte-identical.
+- At extraction time, `diff -q` against source for all 13 vendored skylib files
+  was byte-identical. Eleven remain so; the current `photometry/aperture.py`
+  and `photometry/aperture_numba.py` differences are the documented ALG-01
+  containment guards above.
 - `python3 -m compileall` over the whole tree — clean.
 - Import-graph audit: no `skynet_db`, `skynet_sdk`, or absolute `skylib` imports
   remain outside `# EXTRACTED:` comments.
@@ -794,10 +893,9 @@ not on the photometry call path if that import proves inconvenient.
   `zero_point_mag`, annulus derivation, NaN→None dump, alias generation).
 
 **Not** verified: no end-to-end numeric run was possible in this environment —
-`scipy`, `numba`, `sep`, and `photutils` are not installed here. The vendored
-skylib files are byte-identical to their source, so no numeric drift can have
-been introduced there; the untested surface is limited to the import rewiring in
-the top-level photometry modules.
+`scipy`, `numba`, `sep`, and `photutils` were not installed in the original
+extraction environment. Later repository tests cover the deliberate ALG-01
+guard; this paragraph records only the initial extraction-time limitation.
 ## Field Calibration
 
 _Former source: `algorithms/fieldcal/EXTRACTION.md`._
@@ -853,7 +951,7 @@ unless noted. `OPD/` abbreviates
 |---|---|---|---|---|
 | `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
-| `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
+| `ref_mag.py` | 217 at extraction | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Originally verbatim (one blank line lost trailing whitespace); first-party PHOT-15 bounded arithmetic/literal substitution added 2026-10-05 (§5a). Accepted transforms, resolution precedence and numeric error propagation remain unchanged. |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
 | batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
 | `__init__.py` | 58 | — | — | **New file.** Public API surface. |
@@ -1050,6 +1148,46 @@ directory, persisting run state, or aggregating CSV output.
    unfiltered list — a failed VSX query is indistinguishable from "no variables
    found". Preserved.
 
+#### 5a. PHOT-15 expression acceptance guards (2026-10-05)
+
+The custom-filter path in Python `PhotometricCalibrationSettings` reaches
+`resolve_ref_mag_for_filter` through `_collect_calibration_sources`. The
+registered `calibrate_zeropoint`/photometry tool schemas do **not** expose custom
+expression settings; this is a direct Python API boundary, not a newly proven
+MCP code-execution exploit. The character allowlist was insufficient to bound
+integer powers, tree work or regex substitutions. Test-first sentinels proved
+unsafe expressions reached `eval` without actually executing large powers;
+`r.r` used as a regex changed unrelated `r+r` arithmetic, and a `(` band name
+raised a regex exception outside the unresolved-value contract.
+
+First-party `_safe_eval_expr` now parses/evaluates only a bounded numeric AST,
+without `eval` or compilation. Accepted operators are `+`, `-`, `*`, `/`, `//`,
+`**`, unary signs and single-argument `sqrt`/`log10`. Powers require a numeric
+literal exponent (optionally signed) of absolute value **≤16**; exponent
+expressions/towers, control flow, booleans, attributes and other calls are
+rejected. Constants/intermediates must be real, finite and at most **1,024
+integer bits**. With bounded operands and exponent, even a rejected integer
+power cannot allocate an unbounded result.
+
+The limits are **2,048 expression characters**, **256 AST nodes**, **32 levels**
+(including parentheses before parsing), **64 bands**, **128 characters per
+band name**, and **32 alias hops**. Band count is checked before flattening or
+propagating errors; finite namespace values and unambiguous sanitized names
+are required. Regex substitutions escape band names literally. Invalid or
+over-budget transforms retain the existing unresolved `None`/`(None, None)`
+result; explicit failed mappings do not fall back to an unrelated preferred
+band, and calibration collection skips the unusable source.
+
+These are intentional custom-input acceptance divergences, not new transform
+coefficients or a catalog-registry merge. Existing registry polynomials retain
+exact Python operation order/results, and the 1e-7 finite-difference uncertainty
+propagation is unchanged. Direct-band precedence, strict parity, explicit/wildcard
+ordering and preferred-band gates remain. The guards do not establish a global
+source-count, calibration-call deadline or MCP resource budget (MCP-01 remains).
+Tests: `tests/test_fieldcal_expression_limits.py`, existing
+`tests/test_fieldcal_ref_mag.py` and recorded calibration/query parity checks.
+Delivery scope and validation counts live in the master continuation plan.
+
 ---
 
 #### 6. Catalog-backend code — now extracted
@@ -1115,8 +1253,10 @@ Removed: `sqlalchemy`, `skynet_db`, `skynet_sdk`, `boto3`/S3, `astroquery`
 - NaN-cleaning serializer confirmed active on `model_dump()`.
 - `apcorr_tol` override confirmed: `1e-4` default → `0.0` after the
   `model_copy`.
-- Byte-level diffs against every Skynet original confirm no algorithmic drift;
-  `solution.py`'s body is byte-identical to `utils.py:468-603`.
+- At extraction time, byte-level diffs against every Skynet original confirmed
+  no algorithmic drift; `solution.py`'s body is byte-identical to
+  `utils.py:468-603`. Later first-party reference-expression bounds are recorded
+  explicitly in §5a rather than claimed as a verbatim body.
 
 **Caveat:** `scipy` and `numba` are not installed in this environment. The
 runtime checks above ran against minimal stand-ins for
@@ -1264,6 +1404,19 @@ rather than normalized, and the classes are private to that module.
 no transforms (USNO-B1, Stetson) has no such attribute at all — not an empty
 dict. Every reader uses `getattr(..., {})`. Upstream had the same shape.
 
+##### 5.6 CAT-01 deliberate passband safeguard (2026-10-06)
+
+The shared first-party `catalogs/filters.py` candidate builder no longer
+case-folds Johnson `V` into SkyMapper violet `v`, or vice versa. Both catalog
+selection and reference-magnitude resolution use it, including padded inputs.
+Without an explicit resolving transform, a SkyMapper/Johnson V request stays
+unresolved even in preferred-band fallback mode. Native `v`, explicit custom
+transforms, other legacy token variants and the two distinct registries remain
+supported. No colour-transform coefficients were changed. The advisory
+no-compatible-catalog selection fallback is retained; reference resolution
+still rejects the unsafe pairing. This deliberately supersedes V/v token
+preservation assertions, tested in `test_m1_science_safeguards.py`.
+
 #### 6. Dependencies
 
 `pydantic` v2 only. Deliberately no `astroquery`, no `astropy` except
@@ -1316,7 +1469,7 @@ nothing network-related. `query/` imports `catalogs/`; never the reverse.
 | MARS file | Upstream source | Lines | Fidelity |
 |---|---|---|---|
 | `vizier.py` | `afterglow_core/resources/catalog_plugins/vizier_catalogs.py` | 373 | Engine verbatim; Flask config → `config.py`; cache patch → `cache.py`; custom-catalog loop → a function |
-| `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 | SQL generation byte-identical |
+| `sdss.py` | `afterglow_core/.../sdss_catalog.py` lines 19–100 + 3 overrides, and the Skynet copy | ~110 at extraction | SQL originally byte-identical; first-party row/identifier/input bounds and pinned-SDK SQL transport in §5.11 |
 | `skymapper.py` | `afterglow_core/.../skymapper_catalog.py` lines 39–58 | 20 | `query_region` override verbatim |
 | `cache.py` | `vizier_catalogs.py` lines 27–72 + `skynet_db/runners/utils.py::prune_vizier_cache` lines 132–158 | ~60 | Two copies of the same idea, merged |
 | `selection.py` | `skynet/.../optical_data_processing/catalog_query.py` lines 20–191 | 172 | Verbatim apart from the registry import |
@@ -1414,7 +1567,8 @@ service infrastructure and was left behind.
 
 ##### 4.8 Class renames
 
-`AfterglowSDSS` → `MARSSDSS`. Generated SQL unchanged. See
+`AfterglowSDSS` → `MARSSDSS`. Generated SQL was unchanged at extraction;
+the first-party acceptance/transport changes are recorded in §5.11. See
 the Catalogs section of this document, §3 for the rest.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
@@ -1486,6 +1640,43 @@ handles rotation and the cos(dec) narrowing. `image_boxes_from_wcs` multiplies
 pixel scale by axis length, which is blind to both but works without
 `array_shape`. Upstream had both; they return different widths for the same WCS
 (verified: 1.02297° vs 1.02400° on a 1024² TAN field). Prefer the former.
+
+##### 5.11 First-party SDSS acceptance/transport contract (2026-10-06)
+
+CAT-02 deliberately diverges from the unbounded upstream SQL: region queries
+emit `SELECT DISTINCT TOP N`, default to the declaration's 5,000-row limit,
+accept only integer limits in 1–5,000 and slice returned tables before source
+mapping even if a provider ignores `TOP`. This bounds mapped rows, not HTTP
+response bytes, SDK parsing memory or the whole-call deadline (MCP-01). Without
+an ordering/completeness contract, the subset is not a full or unbiased catalog
+sample; CAT-19 remains separate.
+
+CAT-27 bounds projections to 1–64 literal ASCII SQL identifiers, each at most
+64 characters. Expressions, comments, qualified names and missing projections
+fail locally; missing coordinates/regions cannot invoke an SDK metadata lookup
+or unbounded fallback. Shipped SDSS fields were already trusted. The custom
+metadata/native Python payload boundary is now guarded; no registered tool
+exposes arbitrary projection fields, and this is not evidence of an MCP SQL
+injection exploit. Non-finite/non-positive dimensions and cache-rounding
+overflow are rejected before work; an unrepresentable polar RA span raises
+rather than sending `NaN` SQL. That guard does not correct CAT-11's preserved
+box geometry.
+
+The pinned `astroquery==0.4.11` cone path passes a coordinate list into the old
+scalar `_args_to_payload` seam and expects a cross-ID rather than SQL payload;
+its rectangular interface also differs. This newly reproduced compatibility
+finding (ALG-03) is repaired for MARS's `query_box`/`query_circ` backend by
+building the quality-filtered SQL explicitly and using the SDK's supported
+`query_sql` endpoint/parser. Offline tests exercise native request construction
+and CSV/error parsing with stub responses, not a live SkyServer. The inherited
+native `MARSSDSS.query_region` interface remains unsupported; backend code must
+not return to it. Named-object queries (CAT-18) remain a separate broken path
+and must reuse the bounded contract when repaired.
+
+Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
+mapping remain preserved; ignored constraints (§5.8) and public schemas are
+unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
+regressions.
 
 #### 6. External dependencies
 
@@ -2077,6 +2268,19 @@ The `query_object`-based assumption that matches are ordered by increasing
 separation held for the clusters tested so far but is still not exhaustively
 verified -- see `tools/hr_diagram.py`'s docstrings.
 
+### TS-01 deliberate legacy longitude correction (2026-10-06)
+
+`legacy.equatorial_to_galactic` now uses `atan2(numerator, denominator)` and
+wraps longitude into [0, 360), rather than discarding the quotient's quadrant.
+This intentionally changes legacy cluster-summary longitude and any downstream
+galaxy projections by 180 degrees in affected quadrants (including M67).
+Finite RA and finite Dec in [-90, 90] are required. The legacy pole/node
+constants and latitude arithmetic remain unchanged; they differ from Astropy's
+ICRS transform by about 0.0013 degrees. Independent Astropy checks allow 0.002
+degrees, cover all quadrants and both poles, and retain unaffected summary/mass
+fixtures. The new `hrfit.py` fitter does not call this helper and is unchanged.
+TS-20's dispersion statistic and TS-21's protected unit factors were not edited.
+
 ## Radio Sources (Python)
 
 ### New first-party capability, replacing two non-functional scratch scripts
@@ -2630,6 +2834,33 @@ class extracted here.
 - No test files were extracted; the 16 Astromancer spec files are TestBed stubs
   that assert only `expect(component).toBeTruthy()`.
 
+#### 12b. Python M1 acceptance bounds (2026-10-05, TS-02)
+
+The live `algorithms/variable_star/folding.py` now guards direct calls as well
+as the public tool. At most 2,000 input rows, 100,000 subtraction iterations
+per sample and 10,000,000 conservative sample-iterations are accepted. The
+sample count is checked before differential arrays/sorts; finite positive
+chosen periods, finite times/baselines, finite phase shifts and derived display
+coordinates, and the aggregate work estimate are checked before/around the
+preserved subtraction loop. A runtime counter also bounds that loop. The tool
+and algorithm share `validate_fold_work`; invalid requests raise `ValueError`
+directly or return `invalid_input` with no artifact from the public tool.
+
+This is an explicit first-party acceptance divergence, not a modulo or
+photometric rewrite. Accepted inputs keep repeated subtraction (exact multiples
+still map to the period, not zero), the negative-period default-baseline
+sentinel, the zero-period empty result, phase wrapping, two-period duplication
+and descending sorting. The distinct empty-data and missing-error alignment
+failures in §9 remain pinned; TS-04 and weighted-spectrum TS-03/09/17 are not
+closed by this guard. `tests/test_variable_star_fold_limits.py` reproduces six
+stalled direct calls with 5 s kill/reap-bounded subprocesses and checks aggregate
+pre-loop/pre-allocation limits, finite/overflowed settings, public structured
+errors and the preserved sentinel/exact-multiple behavior. Ordinary algorithm
+and bundled-pipeline parity tests remain unchanged; the older work-budget test
+now uses 2,000 rather than 2,001 rows to exercise work rather than the row cap.
+These limits do not establish a general server deadline or bound the separately
+ported direct weighted-spectrum loop.
+
 ## Pulsar Sonification
 
 _New section, 2026-08-11. Supersedes the "left behind as out of scope" entry in
@@ -2760,6 +2991,40 @@ The four tools that sit on these are documented in
    parsed by the upstream regexes, not from that dict.
 4. **`sample_cadence_s`** (median sample spacing) is new. Nothing upstream
    needs it; it exists so `tools/pulsar.py` can quantify §7.2 below.
+5. **M1 acceptance guards (2026-10-05, PUL-02/03).** First-party
+   `algorithms/pulsar/limits.py` bounds inputs and work before the preserved
+   subtraction, spectrum, interpolation and audio allocation paths run.
+   Tool input files are capped at 16 MiB and vectors at 100,000 samples.
+   Folding accepts at most 10,000 bins, 100,000 subtraction iterations and
+   100,000,000 sample-iterations; background subtraction accepts at most
+   20,000,000 window samples and requires ordered times. The fold budget was
+   calibrated against all five bundled scans, including their short-period
+   mains peaks; a lower 20,000,000 budget rejected ordinary diagnostic folds.
+   Spectra accept at most 200,000 steps and 200,000,000 sample-grid units,
+   with finite progressing increments, at least three distinct times and
+   finite positive flux variance. Non-finite products, singular trials and
+   a quantized-zero/overflowed default Nyquist interval are validation errors,
+   not NaN successes or escaping arithmetic exceptions. Audio accepts integer
+   rates up to 192,000 Hz, at most 600 seconds **and** 4,000,000 frames, and
+   at most 4,000,000 interpolated points per channel. Inputs/derived settings
+   must be finite (the existing window's NaN-drop rule remains).
+
+   This deliberately narrows acceptance of unsafe/degenerate inputs; accepted
+   inputs retain the original subtraction sequence, exact-multiple phases,
+   bin endpoints, spectral formula/grid, confidence statistics, interpolation
+   weights and PCM floor. It does **not** replace subtraction with modulo,
+   change the variable-star weighted spectrum or correct the science quirks
+   below. Direct algorithm rejection is `ValueError`; the stage-1–4 tool
+   wrappers return `invalid_input` without advertising an artifact. Tests in
+   `test_pulsar_limits.py` use kill/reap-bounded subprocesses for stalled work
+   and pre-allocation sentinels for oversized requests. These are work limits,
+   not server deadlines, sandboxing or general archive/plot resource limits.
+
+   PUL-06 additionally bounds discovery header reads to 256 comment lines and
+   65,536 decoded characters (including the first non-comment line). Per-file
+   read/stat failures yield `scan_unreadable` warnings while retaining readable
+   scans; explicit-path failures return `read_failed` or `parse_error`.
+   `test_pulsar_registry_failures.py` pins this first-party recovery contract.
 
 ### 7. Preserved upstream behaviours (do not "fix")
 
@@ -3197,3 +3462,43 @@ Target language level: the code uses `**`, optional chaining, and
   operating instructions was **not accessible** from this environment, so no
   vault notes were consulted or updated. The repo was treated as the source
   of truth.
+
+#### Python M1 weighted-periodogram acceptance contract (2026-10-05)
+
+The retired TypeScript record above is historical. The current Python port in
+`algorithms/variable_star/periodogram.py` adds first-party ALG-02/TS-03 guards,
+not a replacement for its weighted Lomb--Scargle formula:
+
+- Direct arrays must have the same nonzero length, at most **2,000 samples**,
+  finite times/values and finite positive uncertainties whose inverse-square
+  weights and sum are representable. Invalid weights/derived normalization
+  fail with `ValueError` rather than accidental division/overflow exceptions.
+- Steps must be an integer in **1–200,000**. The conservative work budget is
+  **20,000,000 sample-grid units**, calculated as samples × (steps + 1).
+  Validate before weighted allocation. The accumulating range must be finite,
+  positive, ordered, and progress at every point; shared direct/tool preflight
+  and independent runtime guards bound it to steps + 1 iterations. Frequency,
+  time-product and shifted-coordinate overflow are rejected explicitly.
+- The variable driver uses one paired-row selection for both differential
+  values and uncertainties. Unpaired rows (missing time or either source)
+  remain excluded as upstream; a paired row missing `error_mse` now raises an
+  explicit **combined uncertainty** error, never silently shifting weights.
+  The shared artifact adapter accepts object/null and numeric masked ECSV
+  missing cells as `None` rather than casting numeric masks to NaN. Nonscalar
+  cells are invalid. Successful public spectra report omitted rows using
+  `unpaired_rows_skipped`.
+- The public periodogram requires nonempty finite output; constant/degenerate
+  spectra return `invalid_input` and no artifact. This is a deliberate
+  **public-result acceptance divergence** (TS-17 containment), not a direct
+  formula correction. The direct constant-series NaN parity remains pinned.
+
+Accepted finite fixtures keep the logarithmic-period/linear-counter grid,
+normal 2,001-row floating-drift output at 2,000 steps, weighted numerator,
+unweighted denominator/variance and upstream differential-error MSE. TS-09
+(weighted normalization), TS-14 (uncertainty convention), TS-04 (fold alignment)
+and the remaining direct-helper TS-16/17 contracts require separate review.
+Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
+`tests/test_variable_star_weighted_contract.py`, existing
+`tests/test_variable_star_algorithms.py` and `tests/test_variable_star_tool.py`.
+Delivery scope and check counts are maintained in
+`docs/working/master-continuation-plan.md`, not inferred from this local change.

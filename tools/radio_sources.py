@@ -98,6 +98,8 @@ def _safe_stem(label: str) -> str:
 
 
 def _output_path(stem: str, suffix: str, output_dir: str | Path | None = None) -> Path:
+    if output_dir is None:
+        return artifacts.reserve_artifact_path(stem, subdir=_SUBDIR, ext=suffix)
     directory = Path(output_dir).expanduser().resolve() if output_dir else (ARTIFACT_DIR / _SUBDIR)
     # Reserved, not fixed: two spectra with the same stem otherwise shared one
     # file, and the first result's plot was replaced by the second's.

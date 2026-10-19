@@ -24,10 +24,12 @@ Behaviour differences vs the SWIG engine:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import signal
 import subprocess
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -39,8 +41,10 @@ from astropy.wcs import WCS
 # EXTRACTED: was `from skylib.util.angle import angdist` — shared under
 # algorithms.skylib_lite.util.angle.
 from algorithms.skylib_lite.util.angle import angdist
+from algorithms.skylib_lite.util.processes import bounded_communicate, record_owned_group
 
 from ..types import SolveRequest, SolveSolution
+from ..limits import DEFAULT_SOLVER_TIMEOUT_S, MAX_SOLVER_TIMEOUT_S, normalize_solver_timeout
 from .config import AstrometryNetConfig
 from .errors import (
     AstrometryNetError,
@@ -207,6 +211,7 @@ class AstrometryNetBackend:
     def solve(self, request: SolveRequest, config: AstrometryNetConfig) -> SolveSolution:
         if not isinstance(config, AstrometryNetConfig):
             raise ValueError("Astrometry.net config is required")
+        config = replace(config, timeout_s=normalize_solver_timeout(config.timeout_s))
 
         solve_field = find_solve_field(config.solve_field_path)
         if solve_field is None:
@@ -269,28 +274,36 @@ class AstrometryNetBackend:
         immediate process would orphan the engine — the 12–16 min runaways the
         timeout exists to prevent. The process is started with
         ``start_new_session=True``, so its PID is its process-group leader and we
-        can signal the entire tree. Best-effort: never raises.
+        can signal the entire group. A leader exiting after SIGTERM does not
+        prove its children exited; always follow with SIGKILL on the original
+        group ID, even when the leader was already reaped. Best-effort.
         """
-        try:
-            pgid = os.getpgid(proc.pid)
-        except (OSError, ProcessLookupError):
-            pgid = None
-
-        for sig in (signal.SIGTERM, signal.SIGKILL):
+        # _invoke_solve_field owns a new session whose group ID is proc.pid.
+        # getpgid(proc.pid) fails once the leader exits, even with live children.
+        if os.name == "posix":
             try:
-                if pgid is not None:
-                    os.killpg(pgid, sig)
-                else:
-                    proc.send_signal(sig)
-            except (OSError, ProcessLookupError):
-                return  # already gone
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                pass
             try:
                 proc.wait(timeout=5)
-                return
-            except subprocess.TimeoutExpired:
-                continue
+            except (subprocess.TimeoutExpired, OSError, ValueError):
+                pass
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                pass
+        else:
+            # Native solve-field is unavailable on normal Windows installs;
+            # this fallback only terminates the directly owned process.
+            try:
+                proc.kill()
             except (OSError, ValueError):
-                return
+                pass
+        try:
+            proc.wait(timeout=5)
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            pass
 
     @staticmethod
     def _invoke_solve_field(
@@ -305,6 +318,10 @@ class AstrometryNetBackend:
         timeout (after killing the group and reaping), and
         :class:`SolveFieldFailed` on a nonzero exit (carrying stdout/stderr).
         """
+        if timeout is None:
+            timeout = DEFAULT_SOLVER_TIMEOUT_S + _SUBPROCESS_TIMEOUT_GRACE_SEC
+        if not math.isfinite(timeout) or not 0 < timeout <= MAX_SOLVER_TIMEOUT_S + _SUBPROCESS_TIMEOUT_GRACE_SEC:
+            raise ValueError("Invalid solve-field subprocess timeout.")
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -317,23 +334,33 @@ class AstrometryNetBackend:
         except FileNotFoundError as exc:
             raise SolveFieldNotFoundError([cmd[0]]) from exc
 
+        receipt = None
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            receipt = record_owned_group(proc)
+            stdout, stderr = bounded_communicate(proc, timeout)
         except subprocess.TimeoutExpired as exc:
             # Kill the entire process group, then drain pipes / reap so no
             # solve-field or astrometry-engine child is left running and no
             # zombie or open pipe leaks.
             AstrometryNetBackend._kill_process_group(proc)
-            try:
-                stdout, stderr = proc.communicate(timeout=10)
-            except (subprocess.TimeoutExpired, ValueError):
-                stdout, stderr = None, None
             raise SolveFieldTimeout(
                 cmd,
                 timeout if timeout is not None else 0.0,
-                stdout=_as_text(getattr(exc, "stdout", None)) or stdout,
-                stderr=_as_text(getattr(exc, "stderr", None)) or stderr,
+                stdout=_as_text(getattr(exc, "stdout", None)),
+                stderr=_as_text(getattr(exc, "stderr", None)),
             ) from exc
+        except ValueError as exc:
+            raise SolveFieldFailed(cmd, -1, stderr=str(exc)) from exc
+        finally:
+            # Also clean up on cancellation/KeyboardInterrupt and successful
+            # leaders that left helpers behind. Only this owned group is sent
+            # signals; capture never falls back to unbounded communicate().
+            AstrometryNetBackend._kill_process_group(proc)
+            for stream in (getattr(proc, "stdout", None), getattr(proc, "stderr", None)):
+                if stream is not None:
+                    stream.close()
+            if receipt is not None:
+                receipt.unlink(missing_ok=True)
 
         if proc.returncode != 0:
             raise SolveFieldFailed(
@@ -357,7 +384,8 @@ class AstrometryNetBackend:
         config: AstrometryNetConfig,
     ) -> Optional[WCS]:
         out_base = "solve"
-        cpulimit = int(config.timeout_s) if config.timeout_s else None
+        timeout_s = normalize_solver_timeout(config.timeout_s)
+        cpulimit = int(timeout_s)
         cmd = self._build_cmd(
             solve_field, source, out_base, work, cfg, request,
             use_hint=use_hint, cpulimit=cpulimit,
@@ -373,9 +401,7 @@ class AstrometryNetBackend:
         # solve-field's own --cpulimit bounds the engine; the subprocess timeout
         # is a hard outer backstop (terminating the process group) so a hung
         # process can't run forever.
-        subprocess_timeout = None
-        if config.timeout_s:
-            subprocess_timeout = float(config.timeout_s) + _SUBPROCESS_TIMEOUT_GRACE_SEC
+        subprocess_timeout = timeout_s + _SUBPROCESS_TIMEOUT_GRACE_SEC
 
         self._invoke_solve_field(cmd, work, subprocess_timeout)
 

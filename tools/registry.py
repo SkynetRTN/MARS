@@ -1258,8 +1258,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "timeout_s": {
                     "type": "number",
                     "minimum": 1,
+                    "maximum": 900,
                     "description": "Time limit forwarded to each low-level solve attempt "
-                    "(minimum 1); this does not cap total call runtime across retries.",
+                    "(1–900 seconds; default 300, or backend environment setting); "
+                    "this does not cap total call runtime across retries.",
                 },
                 "force": {
                     "type": "boolean",

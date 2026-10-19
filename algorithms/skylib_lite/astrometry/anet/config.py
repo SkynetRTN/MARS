@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence, Union
 
+from ..limits import DEFAULT_SOLVER_TIMEOUT_S, normalize_solver_timeout
 
 @dataclass
 class AstrometryNetConfig:
@@ -26,10 +27,14 @@ class AstrometryNetConfig:
     #: If None, it is resolved from SKYLIB_ASTROMETRYNET_SOLVE_FIELD /
     #: SKYLIB_ANET_SOLVE_FIELD and then ``shutil.which("solve-field")``.
     solve_field_path: Optional[str] = None
-    #: Wall-clock + CPU limit handed to solve-field (seconds). None = no limit.
-    timeout_s: Optional[float] = None
+    #: CPU limit plus a finite outer wall-clock backstop. None selects 300 s;
+    #: explicit limits must be 1–900 s. Not a whole-call deadline (WCS-21).
+    timeout_s: Optional[float] = DEFAULT_SOLVER_TIMEOUT_S
     #: Extra raw arguments appended to the solve-field command line.
     extra_args: Sequence[str] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        self.timeout_s = normalize_solver_timeout(self.timeout_s)
 
 
 __all__ = ["AstrometryNetConfig"]

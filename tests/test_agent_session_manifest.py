@@ -78,6 +78,11 @@ def test_a_session_persists_its_manifest_and_reuses_a_cached_tool_call(
     monkeypatch, tmp_path
 ):
     artifact_root = tmp_path / "artifacts"
+    from tools import effects
+    # This synthetic writer has the same reviewed private-artifact/cache
+    # disposition as ordinary search tools. Production unknowns stay closed.
+    monkeypatch.setattr(effects, "PRIVATE_ARTIFACT_EXEMPTIONS",
+                        effects.PRIVATE_ARTIFACT_EXEMPTIONS | {"fake_lookup"})
     monkeypatch.setattr(config, "ARTIFACT_DIR", artifact_root)
     monkeypatch.setattr(artifacts, "ARTIFACT_DIR", artifact_root)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")

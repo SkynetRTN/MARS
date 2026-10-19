@@ -51,6 +51,115 @@ def test_a_repeated_name_skips_past_the_highest_suffix_in_one_step(tmp_path):
     assert artifacts.reserve_path_in(tmp_path, "plot", "png") == tmp_path / "plot_8.png"
 
 
+@pytest.mark.parametrize("subdir_kind", ["parent", "windows_parent", "absolute"])
+def test_an_artifact_subdir_cannot_leave_the_artifact_root(tmp_path, monkeypatch, subdir_kind):
+    """Missing subdir validation must not create a file outside the root."""
+    root = tmp_path / "artifacts"
+    outside = tmp_path / "outside"
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+    subdir = {
+        "parent": "../outside",
+        "windows_parent": r"..\outside",
+        "absolute": str(outside),
+    }[subdir_kind]
+
+    with pytest.raises(ValueError, match="artifact subdirectory"):
+        artifacts.write_text("private", "note", subdir=subdir)
+
+    assert not outside.exists()
+
+
+def test_an_artifact_subdir_symlink_cannot_leave_the_artifact_root(tmp_path, monkeypatch):
+    """Resolving only lexical '..' would still permit a symlink escape."""
+    root = tmp_path / "artifacts"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    try:
+        (root / "escape").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:  # pragma: no cover - platform permission
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+
+    with pytest.raises(ValueError, match="artifact subdirectory"):
+        artifacts.write_text("private", "note", subdir="escape")
+
+    assert list(outside.iterdir()) == []
+
+
+def test_a_contained_artifact_subdir_symlink_remains_usable(tmp_path, monkeypatch):
+    """Containment checks reject escapes, not every operator-created symlink."""
+    root = tmp_path / "artifacts"
+    target = root / "target"
+    root.mkdir()
+    target.mkdir()
+    try:
+        (root / "alias").symlink_to(target, target_is_directory=True)
+    except OSError as exc:  # pragma: no cover - platform permission
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+
+    ref = artifacts.write_text("ok", "note", subdir="alias")
+
+    assert Path(ref.path).resolve() == target / "note.md"
+    assert (target / "note.md").read_text() == "ok"
+
+
+def test_an_artifact_scope_is_revalidated_when_a_symlink_appears(tmp_path, monkeypatch):
+    """A scope that was safe on entry can change before its first write."""
+    root = tmp_path / "artifacts"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+
+    with artifacts.scoped_artifacts("sessions/run"):
+        (root / "sessions").mkdir()
+        try:
+            (root / "sessions" / "run").symlink_to(outside, target_is_directory=True)
+        except OSError as exc:  # pragma: no cover - platform permission
+            pytest.skip(f"directory symlinks unavailable: {exc}")
+        with pytest.raises(ValueError, match="artifact scope"):
+            artifacts.write_text("private", "note")
+
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("ext", ["", ".", "..", "../escape", "/escape", "a/b", r"a\b"])
+def test_an_artifact_extension_cannot_carry_a_path(tmp_path, ext):
+    """The extension contributes one suffix, never another path component."""
+    with pytest.raises(ValueError, match="artifact extension"):
+        artifacts.reserve_path_in(tmp_path, "result", ext)
+
+    assert _files(tmp_path) == []
+
+
+def test_a_reserved_artifact_extension_cannot_carry_a_path(artifact_dir):
+    """Binary writers use the same extension boundary as explicit roots."""
+    with pytest.raises(ValueError, match="artifact extension"):
+        artifacts.reserve_artifact_path("result", ext="../escape")
+
+    assert _files(artifact_dir) == []
+
+
+def test_a_text_artifact_extension_cannot_carry_a_path(artifact_dir):
+    """Text writers cannot turn a Windows separator into part of a name."""
+    with pytest.raises(ValueError, match="artifact extension"):
+        artifacts.write_text("private", "result", ext=r"a\b")
+
+    assert _files(artifact_dir) == []
+
+
+def test_an_explicit_absolute_output_root_remains_supported(tmp_path):
+    """A Python caller may deliberately select a root of its own."""
+    chosen = (tmp_path / "chosen").resolve()
+
+    path = artifacts.reserve_path_in(chosen, "result", ".png")
+
+    assert path == chosen / "result.png"
+    assert path.is_file()
+
+
 def test_a_table_is_written_beside_its_claimed_name_never_onto_it(artifact_dir, monkeypatch):
     """astropy's FITS writer, pointed at the reserved path with overwrite=True,
     deleted the placeholder before writing -- releasing the claimed name to

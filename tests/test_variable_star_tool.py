@@ -128,7 +128,8 @@ def test_public_validation_rejects_a_step_that_stalls_at_a_binade_boundary() -> 
 def test_fold_validation_bounds_total_repeated_subtraction_work() -> None:
     """Catches allowing the per-row cycle allowance to multiply into a DoS."""
     with pytest.raises(ValueError, match="work limit"):
-        _validate_fold_period(1e-7, [0.0] * 2_000 + [0.1])
+        # Stay within the 2,000-row input limit to exercise the work limit.
+        _validate_fold_period(1e-7, [0.0] * 1_999 + [0.1])
 
 
 def test_public_validation_rejects_artifact_directory_escape() -> None:

@@ -28,11 +28,13 @@ class SolverSettings:
     * ``ANET_INDEX_PATH`` — directory (or ``os.pathsep``-separated list, or a
       sequence) holding astrometry.net index files. Falsy ⇒ the astrometry.net
       backend is disabled.
-    * ``ANET_TIMEOUT_S`` — astrometry.net low-level attempt limit, in seconds.
+    * ``ANET_TIMEOUT_S`` — astrometry.net low-level attempt limit, in seconds;
+      None selects 300, explicit values must be 1–900 (WCS-02).
     * ``ATLAS_CATALOG_ROOT`` — root of the local star catalog used by the ATLAS
       triangle solver. Falsy ⇒ the ATLAS backend is disabled.
     * ``ATLAS_CATALOG`` — catalog name; ``ucac5`` when unset.
-    * ``ATLAS_TIMEOUT_S`` — deadline for the ATLAS matcher loop, in seconds.
+    * ``ATLAS_TIMEOUT_S`` — deadline for the ATLAS matcher loop, in seconds;
+      the same finite default/range, not a bound on catalog loading/extraction.
     """
 
     def __init__(

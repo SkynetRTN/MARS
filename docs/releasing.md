@@ -65,10 +65,36 @@ with the build artifact, installed and self-tested.
 
 The build job and CI's `package` job, which runs on every pull request, both
 run `twine check --strict` and `.github/scripts/check_dist.py`: the core data,
-the package data the server reads, and nothing that must not ship.
+the package data the server reads, exact Python-source parity with the checkout,
+and nothing that must not ship. The distribution checker rejects missing,
+obsolete and byte-different Python modules, including retired files left in
+setuptools' incremental `build/lib` cache. Build with a fresh build directory
+when that happens; do not bypass the check or assume a successful wheel build
+proved source parity. Release CI uses a fresh checkout.
 
 `secret-scan.yml` and `workflow-safety.yml` (actionlint, zizmor) run on the
 pull request that changes any workflow, this one included.
+
+### Supply pins and updates (AUD-02)
+
+Actions use reviewed commit SHAs; both secret scans use the immutable
+multiarchitecture manifest digest for gitleaks **v8.30.1**. Its Docker registry
+manifest bytes and advertised digest were compared on 2026-10-07; the manifest
+includes Linux amd64/arm64. CI and release metadata checks both use exact
+**Twine 6.2.0**, verified against its PyPI metadata (Python >=3.9). Regression
+tests prevent either pin drifting to a tag or a major-only version.
+The workflow-safety job also pins actionlint **1.7.12** to its byte-verified
+registry manifest digest, checked on the same date.
+
+Keep pins stable between reviewed updates. Security updates may be expedited,
+but still verify the upstream digest/version and run package, workflow-safety
+and secret-scan checks in a narrow PR; ordinary updates follow the same gates.
+Pins do not prove that a dependency is vulnerability-free. Desktop launchers
+still deliberately select the newest released MARS (`@latest`): they are not
+lock-reproducible installs. Use an exact verified release for reproducibility
+or rollback, including its matching skill/data manifest. Actual-host launcher
+freshness and rollback remain INS-04/M4; this change does not revert that
+upstream policy or claim a validated desktop-host update.
 
 ## Publishing to PyPI
 

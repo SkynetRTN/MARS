@@ -28,6 +28,8 @@ from typing import Optional
 
 import numpy as np
 
+from . import limits
+
 __all__ = [
     "FoldedProfile",
     "DEFAULT_BINS",
@@ -119,13 +121,25 @@ def float_mod(a: np.ndarray, b: float) -> np.ndarray:
     A value already ``<= b`` (including a negative one) is returned untouched,
     exactly as upstream leaves it.
     """
-    result = np.array(a, dtype=np.float64, copy=True)
+    values = limits.vector(a, "fold time")
+    limits.finite(b, "period_s")
+    result = values.copy()
     if b <= 0:
         return result
+    # M1 guard, not fmod: retain the exact subtraction sequence for accepted
+    # data, but reject work that would stall or exhaust a serving process.
+    cycles = float(np.max(result, initial=0.0)) / b
+    if (not math.isfinite(cycles) or cycles > limits.MAX_FOLD_ITERATIONS
+            or (math.ceil(cycles) + 1) * result.size > limits.MAX_FOLD_WORK):
+        raise ValueError("folding exceeds the repeated-subtraction work budget")
+    iterations = 0
     while True:
         mask = result > b
         if not mask.any():
             return result
+        iterations += 1
+        if iterations > limits.MAX_FOLD_ITERATIONS or iterations * result.size > limits.MAX_FOLD_WORK:
+            raise ValueError("folding exceeds the repeated-subtraction work budget")
         result[mask] -= b
 
 
@@ -145,8 +159,14 @@ def fold_to_phase(
     two-period display — the pulsar tool does both after binning, unlike its
     variable-star sibling.
     """
-    time_s = np.asarray(time_s, dtype=np.float64)
-    source1 = np.asarray(source1, dtype=np.float64)
+    time_s = limits.vector(time_s, "time_s")
+    source1 = limits.vector(source1, "source1")
+    if time_s.size != source1.size:
+        raise ValueError("time_s and source1 must have the same length")
+    if source2 is not None:
+        source2 = limits.vector(source2, "source2")
+        if source2.size != time_s.size:
+            raise ValueError("time_s and source2 must have the same length")
 
     if time_s.size == 0:
         empty = np.empty(0, dtype=np.float64)
@@ -186,8 +206,11 @@ def bin_data(x: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.nd
     of exactly ``bins`` and is **discarded**. Upstream does the same; the lost
     point is one sample out of thousands.
     """
-    x = np.asarray(x, dtype=np.float64)
-    y = np.asarray(y, dtype=np.float64)
+    limits.integer(bins, "bins", limits.MAX_BINS)
+    x = limits.vector(x, "phase_s")
+    y = limits.vector(y, "flux")
+    if x.size != y.size:
+        raise ValueError("phase and flux must have the same length")
     if x.size == 0:
         return np.empty(0), np.empty(0)
     if bins <= 0:
@@ -196,6 +219,7 @@ def bin_data(x: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.nd
     x_min = float(np.min(x))
     x_max = float(np.max(x))
     bin_size = (x_max - x_min) / bins
+    limits.finite(bin_size, "bin size")
 
     centres = x_min + np.arange(bins, dtype=np.float64) * bin_size + bin_size / 2
 
@@ -294,6 +318,9 @@ def fold_lightcurve(
         raise ValueError(f"period_s must be positive, got {period_s!r}")
     if not math.isfinite(period_s):
         raise ValueError(f"period_s must be finite, got {period_s!r}")
+    limits.fold_settings(bins, phase, cal, display_period)
+    limits.finite(phase * period_s, "phase shift")
+    limits.finite(display_period * period_s, "display duration")
 
     phase_x, folded1, folded2 = fold_to_phase(time_s, source1, source2, period_s)
     samples_folded = int(phase_x.size)

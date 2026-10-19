@@ -39,6 +39,15 @@ def _artifact_root(monkeypatch, tmp_path):
     return root
 
 
+@pytest.fixture(autouse=True)
+def _reviewed_read_only_test_tools(monkeypatch):
+    """These synthetic handlers are explicitly harmless, not registry exemptions."""
+    from tools import effects
+    monkeypatch.setattr(effects, "NO_LOCAL_WRITE", effects.NO_LOCAL_WRITE | {
+        "lookup", "capped_search", "first", "explode", "boom", "list_catalogs", "bad_tool",
+    })
+
+
 def _session() -> AgentSession:
     return AgentSession(
         user_message="hi", model="test-model", max_turns=5, system=SYSTEM_PROMPT

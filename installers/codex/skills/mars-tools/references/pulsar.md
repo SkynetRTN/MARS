@@ -65,6 +65,21 @@ dedispersion. Expect the fallback there.
 
 ## Pulsar: reporting the period
 
+Check `errors` before following an artifact path. The pulsar stages reject
+unsafe/degenerate input with `invalid_input` and no artifact: input files are
+limited to 16 MiB/100,000 samples; folds to 10,000 bins and bounded subtraction
+work; spectra to 200,000 steps **and** 200,000,000 sample-grid units. A constant,
+non-finite or fewer-than-three-distinct-time spectrum is not a measurement.
+Narrow the grid/window rather than blindly retrying a rejected request.
+
+Audio has both a 600-second cap and a 4,000,000-frame cap, with integer sample
+rates up to 192,000 Hz and bounded interpolation work. At 44,100 Hz the frame
+cap allows about 90.7 seconds; the 60-second default fits. Reduce duration/rate
+on a size rejection. Listings retain readable scans and warn `scan_unreadable`
+for failed neighbors; explicit scan read failures carry `read_failed` or
+`parse_error`. Inspect those warnings rather than treating a partial listing
+as a complete archive. Full limits: `docs/pulsar-tool-pipeline.md` §6a.
+
 The answer must let a reader tell a detection from a fit. State, for every
 scan:
 
@@ -93,6 +108,17 @@ compact paired-source CSV fixtures rather than radio scans:
 2. `compute_variable_star_periodogram` — the error-weighted periodogram; this
    is where the period comes from.
 3. `fold_variable_star_lightcurve` — folds at an explicit `period`.
+
+Check `errors` before using the next artifact. The weighted stage accepts
+paired observations with finite positive combined uncertainties; it excludes
+unpaired observations and reports their count as `unpaired_rows_skipped`.
+Missing/zero/non-finite combined uncertainties on a **paired** observation, or
+empty/constant/non-finite spectra, return `invalid_input` without an artifact.
+Do not interpret those failures as a period measurement or retry unchanged.
+The public grid remains fixed at 2,000 steps (normally 2,001 output rows due
+to float accumulation); it shares finite/progress/work guards with the direct
+algorithm. Input artifacts remain limited to 5 MiB/2,000 rows. These guards
+do not correct the preserved weighted-normalization or uncertainty formula.
 
 A period you fold at came from step 2 or from somewhere else, and the answer
 says which.

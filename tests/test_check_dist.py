@@ -66,3 +66,11 @@ def test_the_licence_gate_is_opt_in_and_accepts_any_declared_form(tmp_path):
 
 def test_another_distribution_name_fails(tmp_path):
     assert check_dist.check_wheel(_wheel(tmp_path, metadata="Name: some-other-project\n"))
+
+
+def test_release_source_parity_rejects_stale_incremental_build_modules(tmp_path):
+    wheel = _wheel(tmp_path, extra=["tools/retired.py"])
+    problems = check_dist.check_wheel(wheel, verify_source=True)
+    assert "stale/unknown module tools/retired.py" in problems
+    assert "source differs for tools/__init__.py" in problems
+    assert "missing source module tools/mcp/server.py" in problems

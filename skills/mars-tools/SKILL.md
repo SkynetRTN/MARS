@@ -31,10 +31,11 @@ carry the workflow for one area and are worth reading before working in it.
 | [`references/radio.md`](references/radio.md) | a radio FITS map or a source's radio spectrum |
 | [`references/checkout.md`](references/checkout.md) | calling the tools from a MARS checkout rather than through a tool server |
 
-Every rule below restates guidance whose authority is the system prompt of
+Scientific rules below restate guidance whose authority is the system prompt of
 MARS's own agent loop, `tools/agent/prompt.py`, and names the section it
 comes from. Where the two ever disagree, the prompt is right and this file is
-stale.
+stale. MCP operational limits are enforced by `tools.runtime` and
+`tools.downloads`, independently of the optional agent loop.
 
 ## 1. There is no archive behind the local tools
 
@@ -151,6 +152,9 @@ to ask for no cap.
 The caps exist to keep an exploratory result out of your context, not to limit
 a request for everything. Having uncapped, say that the complete data was saved
 and give the artifact path; do not present the preview as the whole answer.
+Uncapping a query does not remove runtime or download limits: archive transfers
+allow at most 32 products and 512 MiB per call. If limits prevent completion,
+report the returned errors/partial status; do not claim a complete download.
 
 > Authority: `tools/agent/prompt.py`, "When the user's request implies
 > exhaustive data".
@@ -182,6 +186,11 @@ and give the artifact path; do not present the preview as the whole answer.
   for coordinates, or to disambiguate an unclear name.
 - If a call errors or times out, do not repeat the identical call. Read the
   error, then change the approach.
+- MCP calls have a 600-second whole-call default, including capacity waiting.
+  `tool_timeout` or `resource_limit` means the work stopped: use only returned
+  valid artifacts, never leftover partial files. Host timeouts alone do not
+  cancel work; an MCP cancellation does. Operators may set
+  `MARS_MCP_CALL_TIMEOUT_S` to a finite value up to 1800 seconds.
 - `search_vizier(category="radio")` (or `"optical"`, `"infrared"`, ...) covers
   a whole band in one call; do not walk catalogs one ID at a time.
 - Report plot and audio paths; do not describe an image you have not looked at
@@ -203,7 +212,9 @@ about the whole set, read the file.
   description names it. From a checkout it is `MARS_ARTIFACT_DIR`, or
   `artifacts/` in the directory Python started in. Either way the paths are
   local files you can read directly.
-- **How they are laid out.** Each tool writes into its own subdirectory
+- **How they are laid out.** MCP calls use
+  `.mars-runtime/<call-id>/artifacts/<tool>/`; direct Python/console tools
+  write into their own subdirectory
   (`pulsar/`, `vizier/`, `simbad/`, ...). `list_artifacts` lists one
   directory's files, not subdirectories: pass the subdirectory as `directory`.
   Nothing is overwritten — a repeated call writes a new file with a numeric

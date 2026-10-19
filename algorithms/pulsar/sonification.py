@@ -22,9 +22,8 @@ caller passes is what decides the rendering, and upstream has two modes:
   -- ``pass_seconds`` is the windowed observation *duration* and the input is
   the raw background-subtracted scan, so one pass plays the scan through once.
 
-**Only the light-curve mode is wired up today.** ``tools.pulsar`` has no way to
-obtain a period yet; folded rendering lands with the periodogram tool. The
-caveat below applies to the light-curve mode specifically -- a binned phase
+Both modes are wired through ``tools.pulsar``. The caveat below applies to
+the light-curve mode specifically -- a binned phase
 profile is uniform in phase by construction, so it does not suffer from it.
 
 **The synthesis never sees the time axis.** Upstream's first parameter is
@@ -59,6 +58,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+from . import limits
 
 __all__ = [
     "SonificationResult",
@@ -156,7 +157,7 @@ def interpolate_linear(data: np.ndarray, factor: int) -> np.ndarray:
     ``1..factor``, computed in float64 exactly as upstream does, so the values
     match bit for bit.
     """
-    data = np.asarray(data, dtype=np.float64)
+    data = limits.vector(data, "interpolation input")
     n = data.size
     if n == 0:
         return np.empty(0, dtype=np.float64)
@@ -168,6 +169,9 @@ def interpolate_linear(data: np.ndarray, factor: int) -> np.ndarray:
     if factor <= 0:
         # ceil() upstream cannot produce this, but a direct caller can.
         return data.copy()
+
+    if (n - 1) * (factor + 1) + 1 > limits.MAX_INTERPOLATED_POINTS:
+        raise ValueError("interpolation exceeds the point budget")
 
     t = np.arange(1, factor + 1, dtype=np.float64) / (factor + 1)
     start = data[:-1]
@@ -195,12 +199,17 @@ def window_sonification_input(
     of what survived the window and is what upstream passes as the synthesis
     ``period``.
     """
-    time_s = np.asarray(time_s, dtype=np.float64)
-    source1 = np.asarray(source1, dtype=np.float64)
+    limits.finite(max_seconds, "max_input_seconds", positive=True)
+    time_s = limits.vector(time_s, "time_s", allow_nan=True)
+    source1 = limits.vector(source1, "source1", allow_nan=True)
+    if time_s.size != source1.size:
+        raise ValueError("time_s and source1 must have the same length")
 
     good = ~(np.isnan(time_s) | np.isnan(source1))
     if source2 is not None:
-        source2 = np.asarray(source2, dtype=np.float64)
+        source2 = limits.vector(source2, "source2", allow_nan=True)
+        if source2.size != time_s.size:
+            raise ValueError("time_s and source2 must have the same length")
         good &= ~np.isnan(source2)
 
     time_s = time_s[good]
@@ -278,7 +287,9 @@ def sonify(
     ``seed`` seeds the noise carrier. ``None`` draws from fresh entropy, which
     is what upstream does -- pass it only when reproducibility does not matter.
     """
-    source1 = np.asarray(source1, dtype=np.float64)
+    limits.audio_settings(speed, cal, sample_rate, output_seconds)
+    limits.finite(pass_seconds, "pass_seconds", positive=True)
+    source1 = limits.vector(source1, "source1")
     if source1.size == 0:
         raise ValueError("no data to sonify")
     if pass_seconds <= 0:
@@ -294,16 +305,22 @@ def sonify(
 
     # period *= 1 / speed
     period = pass_seconds * (1.0 / speed)
+    limits.finite(period, "playback period", positive=True)
+    limits.finite(1.0 / period, "playback frequency", positive=True)
+    cycle_samples = sample_rate / (1.0 / period)
+    if not math.isfinite(cycle_samples) or cycle_samples > limits.MAX_INTERPOLATED_POINTS:
+        raise ValueError("playback period exceeds the interpolation point budget")
 
     # Calibration on a copy, so a repeated render cannot compound it.
     source2_cal = None
     if source2 is not None:
-        source2_cal = np.asarray(source2, dtype=np.float64) * cal
+        source2_cal = limits.vector(source2, "source2") * cal
         if source2_cal.size != source1.size:
             raise ValueError(
                 "source1 and source2 must be the same length, got "
                 f"{source1.size} and {source2_cal.size}"
             )
+        limits.vector(source2_cal, "calibrated source2")
 
     # Global min/max across both channels, then normalize to [0, 1].
     all_values = (
@@ -313,6 +330,7 @@ def sonify(
     global_max = float(np.max(all_values))
     # `(globalMax - globalMin || 1)`: a flat light curve divides by 1, not 0.
     spread = (global_max - global_min) or 1.0
+    limits.finite(spread, "normalization range", positive=True)
 
     norm1 = (source1 - global_min) / spread
     norm2 = (source2_cal - global_min) / spread if source2_cal is not None else None

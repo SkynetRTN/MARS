@@ -20,6 +20,9 @@ The ``decompose_linear`` tests are adapted from
 from __future__ import annotations
 
 import math
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -154,22 +157,44 @@ CRASHING_CALLS = [
     "ellipoverlap(-2.0, -2.0, 2.0, 2.0, 1.0, 1.0, 0.0)",
 ]
 
+#: Conservative boundary accepted by the MARS photometry containment guard.
+SAFE_FLOOR_CALLS = [
+    "ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.50, 0.50, 0.0)",
+    "ellipoverlap(-0.5, -0.5, 0.5, 0.5, 1.00, 0.50, 0.0)",
+    "ellipoverlap(-0.5, -0.5, 0.5, 0.5, 1.00, 0.50, 0.7853981633974483)",
+    "ellipoverlap(-0.5, -0.5, 0.5, 0.5, 5.00, 0.50, 0.7853981633974483)",
+]
+
+
+def _run_python(source: str) -> subprocess.CompletedProcess[str]:
+    """Run a potentially fatal geometry path outside the pytest process."""
+    return subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(Path(__file__).resolve().parent.parent),
+    )
+
 
 def _crashes(expression: str) -> bool:
     """Run one overlap call in a subprocess; report whether it survived."""
-    import subprocess
-    import sys
-    from pathlib import Path
-
-    result = subprocess.run(
-        [sys.executable, "-c",
-         "from algorithms.skylib_lite.util.overlap import "
-         "ellipoverlap, triangle_unitcircle_overlap\n"
-         f"print({expression})"],
-        capture_output=True, text=True, timeout=300,
-        cwd=str(Path(__file__).resolve().parent.parent),
+    result = _run_python(
+        "from algorithms.skylib_lite.util.overlap import "
+        "ellipoverlap, triangle_unitcircle_overlap\n"
+        f"print({expression})"
     )
     return result.returncode != 0
+
+
+def _assert_blocked_after_setup(source: str) -> None:
+    """Require a dangerous public path to fail cleanly after setup."""
+    result = _run_python(source)
+    assert result.returncode == 0, result
+    assert result.stdout.startswith("READY\nBLOCKED:"), result
+    assert "at least 0.5 pixels" in result.stdout, result
+    assert "SURVIVED" not in result.stdout, result
+    assert "Traceback (most recent call last)" not in result.stderr, result
 
 
 @pytest.mark.slow
@@ -194,8 +219,9 @@ def test_ellipoverlap_segfaults_on_a_centred_oversized_rectangle(expression):
     — a 1x1 pixel against the aperture, with ``dx``/``dy`` the offset from the
     source centre. So a source sitting on a pixel centre with an effective
     semi-axis below about 0.36 pixels crashes the process. Measured on this
-    build: 0.40 is fine, 0.35 is fatal. ``run_photometry`` validates only
-    ``a > 0``, so nothing stops a caller reaching it.
+    build: 0.40 is fine, 0.35 is fatal. The maintained photometry boundary
+    rejects unsafe ellipses before this helper, while the vendored low-level
+    defect remains pinned here.
 
     Run in a subprocess because an in-process call would take pytest down with
     it. Asserted as a non-zero exit rather than a specific signal, since the
@@ -215,6 +241,31 @@ def test_the_crash_boundary_sits_between_0_4_and_0_35_pixels():
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("expression", SAFE_FLOOR_CALLS)
+def test_the_containment_floor_is_safe_for_rotated_and_elongated_ellipses(expression):
+    """The 0.5 px guard boundary survives representative ellipse shapes."""
+    assert not _crashes(expression)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("axis", ["np.nan", "np.inf", "-np.inf"])
+def test_sum_ellipse_blocks_nonfinite_axes_before_the_parallel_kernel(axis):
+    """Non-finite geometry is rejected on the calling thread, not in prange."""
+    _assert_blocked_after_setup(
+        "import numpy as np\n"
+        "from algorithms.skylib_lite.photometry.aperture_numba import sum_ellipse\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        f"    sum_ellipse(data, 2.0, 2.0, {axis}, 0.5, 0.0)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
 def test_an_off_centre_pixel_is_safe_at_the_same_scale():
     """Only the centred case is fatal, which is why it survived in production.
 
@@ -223,6 +274,170 @@ def test_an_off_centre_pixel_is_safe_at_the_same_scale():
     enough to have gone unnoticed.
     """
     assert not _crashes("ellipoverlap(-0.3, -0.7, 0.7, 0.3, 0.2, 0.2, 0.0)")
+
+
+@pytest.mark.slow
+def test_run_photometry_blocks_a_fixed_ellipse_before_the_fatal_overlap_path():
+    """The maintained fixed-ellipse boundary contains the vendored defect."""
+    _assert_blocked_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "background = np.zeros_like(data)\n"
+        "background_rms = np.ones_like(data)\n"
+        "source = SourceExtractionData(x=3.0, y=3.0)\n"
+        "settings = PhotometrySettings(mode='aperture', a=0.35, b=0.34, apcorr_tol=0)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        "    run_photometry(data, Header({'EXPTIME': 1}), [source], settings, "
+        "background=background, background_rms=background_rms)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_run_photometry_blocks_default_auto_before_the_fatal_overlap_path():
+    """Default auto settings reject a derived unsafe ellipse cleanly."""
+    _assert_blocked_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "background = np.zeros_like(data)\n"
+        "background_rms = np.ones_like(data)\n"
+        "source = SourceExtractionData(x=3.0, y=3.0, fwhm_x=0.3297, "
+        "fwhm_y=0.3200, theta=0.0, flux=1.0)\n"
+        "settings = PhotometrySettings(mode='auto', apcorr_tol=0)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        "    run_photometry(data, Header({'EXPTIME': 1}), [source], settings, "
+        "background=background, background_rms=background_rms)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_aperture_photometry_blocks_an_unsafe_ellipse_before_snr_search():
+    """The direct k=0 path validates before its early optimal-radius overlap."""
+    _assert_blocked_after_setup(
+        "import numpy as np\n"
+        "from algorithms.skylib_lite.photometry import aperture_photometry\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "sources = np.zeros(1, dtype=[('x', float), ('y', float), "
+        "('a', float), ('b', float), ('theta', float), ('flux', float)])\n"
+        "sources[0] = (3.0, 3.0, 0.35, 0.34, 0.0, 1.0)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        "    aperture_photometry(data, sources, background=np.zeros_like(data), "
+        "background_rms=np.ones_like(data), k=0, apcorr_tol=0)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("circular", [False, True])
+def test_run_photometry_blocks_unsafe_elliptical_annuli(circular):
+    """Main-aperture safety does not make a smaller ellipse annulus safe."""
+    b_value = "0.6" if circular else "0.5"
+    _assert_blocked_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "source = SourceExtractionData(x=3.0, y=3.0)\n"
+        f"settings = PhotometrySettings(mode='aperture', a=0.6, b={b_value}, "
+        "a_in_px=0.1, a_out_px=0.2, b_out_px=0.1, apcorr_tol=0)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        "    run_photometry(data, Header({'EXPTIME': 1}), [source], settings)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_optimal_radius_objective_blocks_an_unsafe_derived_minor_axis():
+    """A safe source ellipse can become unsafe at the optimizer lower bound."""
+    _assert_blocked_after_setup(
+        "import numpy as np\n"
+        "from algorithms.skylib_lite.photometry.aperture import calc_flux_err\n"
+        "data = np.ones((5, 5), dtype=float)\n"
+        "print('READY', flush=True)\n"
+        "try:\n"
+        "    calc_flux_err(np.array([1.0]), data, 2.0, 2.0, 4.0, 0.0, "
+        "np.ones_like(data), None, 1.0)\n"
+        "except ValueError as exc:\n"
+        "    print(f'BLOCKED:{exc}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_hr_fits_tool_returns_a_structured_error_for_an_unsafe_auto_ellipse():
+    """The registered HR wrapper must survive a fatal auto-mode input."""
+    _assert_blocked_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "import tools.hr_diagram as hr\n"
+        "def dangerous(*args, **kwargs):\n"
+        "    data = np.ones((5, 5), dtype=float)\n"
+        "    source = SourceExtractionData(x=3.0, y=3.0, fwhm_x=0.3297, "
+        "fwhm_y=0.3200, theta=0.0, flux=1.0)\n"
+        "    return run_photometry(data, Header({'EXPTIME': 1}), [source], "
+        "PhotometrySettings(mode='auto', apcorr_tol=0), "
+        "background=np.zeros_like(data), background_rms=np.ones_like(data))\n"
+        "hr.observations.extract_photometry_from_fits = dangerous\n"
+        "print('READY', flush=True)\n"
+        "result = hr.extract_photometry_from_fits('unused.fits')\n"
+        "if result.status == 'error' and result.errors[0].code == 'invalid_input':\n"
+        "    print(f'BLOCKED:{result.errors[0].message}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
+
+
+@pytest.mark.slow
+def test_radio_fits_tool_returns_a_structured_error_for_an_unsafe_auto_ellipse():
+    """The registered radio wrapper must survive a fatal auto-mode input."""
+    _assert_blocked_after_setup(
+        "from astropy.io.fits import Header\n"
+        "import numpy as np\n"
+        "from algorithms.photometry.photometry import run_photometry\n"
+        "from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData\n"
+        "import tools.radio_sources as radio\n"
+        "def dangerous(*args, **kwargs):\n"
+        "    data = np.ones((5, 5), dtype=float)\n"
+        "    source = SourceExtractionData(x=3.0, y=3.0, fwhm_x=0.3297, "
+        "fwhm_y=0.3200, theta=0.0, flux=1.0)\n"
+        "    return run_photometry(data, Header({'EXPTIME': 1}), [source], "
+        "PhotometrySettings(mode='auto', apcorr_tol=0), "
+        "background=np.zeros_like(data), background_rms=np.ones_like(data))\n"
+        "radio._extract_radio_sources = dangerous\n"
+        "print('READY', flush=True)\n"
+        "result = radio.identify_radio_sources('unused.fits')\n"
+        "if result.status == 'error' and result.errors[0].code == 'invalid_input':\n"
+        "    print(f'BLOCKED:{result.errors[0].message}', flush=True)\n"
+        "else:\n"
+        "    print('SURVIVED', flush=True)\n"
+    )
 
 
 # ---------------------------------------------------------------------------

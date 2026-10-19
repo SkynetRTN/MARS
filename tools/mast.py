@@ -31,6 +31,7 @@ from tools import artifacts
 from tools import config
 from tools.config import DEFAULT_MAX_OBSERVATIONS, PREVIEW_ROWS
 from tools.models import ToolResult, ToolWarning, coerce_optional_int
+from tools.downloads import DownloadLimit, bounded_transfer, check_products, check_mast_paths
 
 __all__ = ["search_mast"]
 
@@ -165,11 +166,20 @@ def search_mast(
             # while the download lands in another -- which is BL-11 again.
             download_dir = config.FITS_DOWNLOAD_DIR
             download_dir.mkdir(parents=True, exist_ok=True)
-            manifest = Observations.download_products(
-                products, download_dir=str(download_dir)
-            )
+            try:
+                check_products(products, size_column="size")
+                check_mast_paths(products)
+                with bounded_transfer(Observations, download_dir):
+                    manifest = Observations.download_products(products, download_dir=str(download_dir))
+            except (DownloadLimit, OSError, ValueError) as exc:
+                return ToolResult(status="partial", count=len(obs_table),
+                                  preview=artifacts.preview_rows(obs_table, PREVIEW_ROWS),
+                                  columns=[str(c) for c in obs_table.colnames],
+                                  artifacts=[obs_artifact, products_artifact], warnings=warnings,
+                                  errors=[{"code": "resource_limit", "message": str(exc)}])
             local_paths = (
-                list(manifest["Local Path"]) if "Local Path" in manifest.colnames else []
+                [str(row["Local Path"]) for row in manifest if row["Status"] == "COMPLETE"]
+                if "Local Path" in manifest.colnames and "Status" in manifest.colnames else []
             )
             # Name the directories the files actually landed in. astroquery
             # nests them under mastDownload/<mission>/<obs_id>/, and once a
@@ -192,6 +202,10 @@ def search_mast(
                     "naming one of the directories above",
                 )
             )
+            if len(local_paths) != len(products):
+                return ToolResult(status="partial", count=len(obs_table),
+                                  artifacts=[obs_artifact, products_artifact], warnings=warnings,
+                                  errors=[{"code": "provider_unavailable", "message": "Some archive downloads did not complete; the manifest is not a complete transfer."}])
 
     return ToolResult(
         status="ok" if len(obs_for_products) == len(obs_table) else "partial",

@@ -200,10 +200,75 @@ Windows. Set `MARS_HOME` to move it.
 
 | Directory | What |
 | --- | --- |
-| `artifacts/` | tool output files. Never overwritten, so clear it yourself. |
+| `artifacts/` | tool outputs; MCP uses private `.mars-runtime/<call-id>/artifacts/` trees. |
 | `fits_downloads/` | MAST and CASDA downloads |
 | `bundles/` | the optional data |
 | `numba-cache/` | compiled-function cache |
 
 On Linux and macOS the default artifact directory and its files are private to
 you (`0700` and `0600`).
+
+Artifact subdirectories and session scopes must remain beneath the artifact
+root: absolute paths, parent traversal, escaping symlinks and path-like filename
+extensions are rejected before a file is created. Python APIs that explicitly
+accept an `output_dir` may instead use that caller-selected directory as their
+write root; generated names are still confined to it. These checks assume a
+trusted local user; they are not a sandbox against concurrent filesystem changes.
+
+## MCP runtime limits and cleanup
+
+MCP is a trusted local, single-user stdio interface, not an authenticated shared
+service. Caller-selected absolute input paths and configured external data roots
+are intentional. Do not expose this server to untrusted remote users. These
+guards apply to MCP dispatch, not arbitrary direct Python calls or the console's
+in-process agent loop.
+
+Each call runs in an owned process. Its default whole-call deadline is **600
+seconds**, including waiting for sequential capacity, preprocessing, queries,
+solver retries and rendering. Operators may set `MARS_MCP_CALL_TIMEOUT_S` to a
+finite positive value up to **1800 seconds**; tool arguments cannot remove it.
+MCP cancellation terminates/reaps owned work before releasing capacity. A host
+merely ceasing to wait is not cancellation. Stopped work never advertises
+partial files as completed artifacts; query metadata can remain a valid partial
+result. Check `tool_timeout`, `resource_limit` and partial-result errors.
+
+| Per-call budget | Default / enforcement |
+| --- | --- |
+| Memory | Linux: absolute 4 GiB address space per process via `RLIMIT_AS`. macOS: finite `RLIMIT_AS` ceiling equal to the worker's measured pre-tool bootstrap mappings plus a 4 GiB additional address-space allowance; large OS/loader mappings are not a tool allocation. POSIX children inherit the ceiling; stricter inherited limits are preserved. Windows: 4 GiB job-wide committed memory, owned by the server with kill-on-close and verified empty-job cleanup. Setup failure refuses the call. Native behavior is gated in CI, not inferred from Linux. |
+| Managed work/artifacts/caches | 256 MiB, 10,000 entries; supervised every 50 ms |
+| Downloads | 32 products, 512 MiB actual decoded streamed bytes; CASDA permits 64 URLs including checksums, counted in the same byte budget |
+| Logs / reply / input | 1 MiB combined stdout/stderr; 4 MiB JSON reply; 1 MiB serialized call input |
+| Solver pipes | 8 MiB combined, checked before buffer extension |
+| Inline media | 32 references, 20,000,000 encoded bytes total, plus 5 MB PNG / 16 MB WAV per-file limits |
+
+POSIX has an additional hard per-file 512-MiB backstop. Aggregate directory/log
+checks are sampled and can briefly overshoot; they are not filesystem quotas.
+Retained managed trees at each root have a **5-GiB admission ceiling**, not a
+globally atomic multi-server/user quota. Inputs, indexes and bundles are not
+adopted as runtime outputs. Downloads are not silently sliced: narrow filters
+after a refusal. Existing download files are never overwritten; SDK cloud,
+resume and unbounded-content shortcuts are disabled. Atomic publication needs
+filesystem hard-link support.
+
+Windows launches the actual interpreter while preserving its virtual environment,
+so launcher exit cannot stand in for worker exit. Cleanup requires the native
+process handle to signal, not merely a cached Python exit code, and waits for job-wide
+active-process accounting to reach zero. Worker failures forward at most 64 KiB
+from each stdout/stderr log to **operator stderr**, never into client results;
+the private managed logs retain diagnostic context for troubleshooting.
+
+Finished owned trees are kept until explicitly cleaned; **30 days** is the
+default retention selection. Inspect first:
+
+```bash
+mars-mcp cleanup
+mars-mcp cleanup --days 30 --apply
+```
+
+Dry-run creates no output namespace. `--apply` permanently removes only listed
+expired, finished, marked call trees under the artifact/download roots. It
+leaves running calls, links, unmarked legacy outputs, console sessions, bundles
+and operator datasets alone. Selected arguments, logs and research outputs are
+not recoverable through MARS; retain anything needed before applying cleanup.
+Abrupt server death may leave a `running` marker: inspect/recover it manually
+after verifying no owned work remains; cleanup never guesses that it is safe.

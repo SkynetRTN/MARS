@@ -260,10 +260,9 @@ def test_error_propagation_can_be_disabled():
 def test_expression_evaluator_rejects_anything_outside_the_token_allowlist():
     """``_ALLOWED_TOKENS`` is a security boundary, not a formatting rule.
 
-    ``_safe_eval_expr`` ends in ``eval``. Its guard is a regex fullmatch over
-    ``[A-Za-z0-9_+\\-*/().\\s]``, which is what keeps subscripts, attribute
-    access, quotes and comparisons out. Everything rejected here would otherwise
-    reach the interpreter.
+    ``_safe_eval_expr`` retains the lexical allowlist and now uses a bounded
+    numeric AST rather than Python ``eval``. The AST also rejects attribute
+    access and control flow, which the character allowlist alone cannot exclude.
     """
     bands = {"r": 14.4, "i": 14.25}
     assert _safe_eval_expr("r - 0.5*(r - i)", bands) == pytest.approx(14.325)

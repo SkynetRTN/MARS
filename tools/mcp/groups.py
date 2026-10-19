@@ -34,6 +34,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from tools.bench.plane import TOOL_CLASSES
+from tools.effects import NO_LOCAL_WRITE as _NO_LOCAL_WRITE
+from tools.effects import WRITES_OUTSIDE_ARTIFACTS as _WRITES_OUTSIDE_ARTIFACTS
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 
 __all__ = [
@@ -115,28 +117,6 @@ GROUPS: tuple[Group, ...] = (
 )
 
 _BY_NAME = {group.name: group for group in GROUPS}
-
-#: Schema arguments that make a call write outside the artifact directory,
-#: and whether that write modifies an existing file.
-_WRITES_OUTSIDE_ARTIFACTS = {"download": False, "write_header": True}
-
-# These tools only inspect local data or return remote results in the response.
-# All other registered tools create artifacts, download files, or can update a
-# FITS header. The closed allow-list avoids accidentally promising read-only
-# behavior for a newly registered writer.
-_NO_LOCAL_WRITE = frozenset({
-    "resolve_target", "get_paper_abstract", "list_vizier_catalogs",
-    "list_optical_frames", "resolve_optical_frame", "describe_image_wcs",
-    "list_photometry_targets", "list_photometric_catalogs",
-    "resolve_reference_band", "list_artifacts", "describe_artifact",
-    "list_zeropoint_references", "load_zeropoint_reference",
-    "compare_zeropoint_to_reference", "replay_field_calibration",
-    "solve_zeropoint_from_measurements", "list_pulsar_scans",
-    "resolve_pulsar_scan", "list_variable_star_fixtures",
-    "resolve_variable_star_fixture", "get_literature_cluster_params",
-    "calibrate_zeropoint",
-})
-
 
 def group_of(
     name: str, functions: Mapping[str, Callable[..., Any]] = TOOL_FUNCTIONS

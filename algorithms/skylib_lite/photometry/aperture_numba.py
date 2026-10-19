@@ -16,6 +16,8 @@ from algorithms.skylib_lite.util.stats import chauvenet1
 
 __all__ = ['sum_circle', 'sum_circann', 'sum_ellipse', 'sum_ellipann']
 
+_MIN_SAFE_ELLIPSE_SEMI_AXIS_PX = 0.5
+
 
 # Aperture flags
 SEP_APER_TRUNC = 0x0010
@@ -427,6 +429,16 @@ _sum_circle, _sum_circle_reject = sum_aper_factory(
 
 
 @njitc(inline='always')
+def _validate_safe_ellipse_axes(a: float, b: float) -> None:
+    """Contain fatal exact-overlap recursion before a Numba pixel loop."""
+    if not np.isfinite(a) or not np.isfinite(b) or \
+            a < _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX or b < _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX:
+        raise ValueError(
+            'Elliptical aperture semi-axes must be finite and at least 0.5 pixels; '
+            'smaller ellipses can trigger fatal overlap recursion')
+
+
+@njitc(inline='always')
 def _aper_init_ellipse(aper: np.ndarray) -> np.ndarray:
     if aper[0] < 0:
         raise ValueError('Negative aperture semi-major axis')
@@ -434,6 +446,8 @@ def _aper_init_ellipse(aper: np.ndarray) -> np.ndarray:
         raise ValueError('Negative aperture semi-minor axis')
     if aper[0] < aper[1]:
         raise ValueError('Aperture semi-major axis smaller than semi-minor axis')
+
+    _validate_safe_ellipse_axes(aper[0]*aper[3], aper[1]*aper[3])
 
     aper_params = np.empty(9, np.float64)
     aper_params[:4] = a, b, theta, r = aper
@@ -536,6 +550,10 @@ def _aper_init_ellipann(aper: np.ndarray) -> np.ndarray:
         raise ValueError('Negative inner annulus radius')
     if aper[3] > aper[3]:
         raise ValueError('Inner annulus radius must be smaller than outer annulus radius')
+
+    _validate_safe_ellipse_axes(aper[0]*aper[4], aper[1]*aper[4])
+    if aper[3] > 0:
+        _validate_safe_ellipse_axes(aper[0]*aper[3], aper[1]*aper[3])
 
     aper_params = np.empty(12, np.float64)
     aper_params[:5] = a, b, theta, rin, rout = aper
@@ -794,6 +812,12 @@ def sum_ellipse(
     aper[:, 2] = theta
     aper[:, 3] = r
 
+    # Validate before entering a parallel region. Exceptions raised by an
+    # initializer inside a prange worker are not reliably propagated by
+    # Numba, so unsafe geometry must be rejected on the calling thread too.
+    for i in range(n):
+        _validate_safe_ellipse_axes(aper[i, 0]*aper[i, 3], aper[i, 1]*aper[i, 3])
+
     if bkgann is None:
         if reject_outliers:
             for i in prange(n):
@@ -810,6 +834,11 @@ def sum_ellipse(
         aper_ann[:, 2] = theta
         aper_ann[:, 3] = bkgann[0]
         aper_ann[:, 4] = bkgann[1]
+
+        for i in range(n):
+            _validate_safe_ellipse_axes(aper_ann[i, 0]*aper_ann[i, 4], aper_ann[i, 1]*aper_ann[i, 4])
+            if aper_ann[i, 3] > 0:
+                _validate_safe_ellipse_axes(aper_ann[i, 0]*aper_ann[i, 3], aper_ann[i, 1]*aper_ann[i, 3])
 
         for i in prange(n):
             flux, fluxerr, area[i], flag[i] = _sum_ellipse(
@@ -860,6 +889,13 @@ def sum_ellipann(
     aper[:, 2] = theta
     aper[:, 3] = rin
     aper[:, 4] = rout
+
+    # Keep validation outside prange so ValueError reaches Python rather than
+    # being swallowed by a parallel worker while leaving invalid output.
+    for i in range(n):
+        _validate_safe_ellipse_axes(aper[i, 0]*aper[i, 4], aper[i, 1]*aper[i, 4])
+        if aper[i, 3] > 0:
+            _validate_safe_ellipse_axes(aper[i, 0]*aper[i, 3], aper[i, 1]*aper[i, 3])
 
     if reject_outliers:
         for i in prange(x.size):

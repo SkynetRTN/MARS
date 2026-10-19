@@ -118,6 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     from tools.dotenv import DOTENV_PATH, load_dotenv
 
     loaded = load_dotenv()
+    if argv[:1] == ["cleanup"]:
+        from tools.runtime.storage import cleanup_main
+
+        return cleanup_main(argv[1:])
     pin_numba_cache()
 
     if argv[:1] == ["fetch-data"]:
@@ -170,10 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr, level=logging.INFO, format="mars-mcp: %(message)s"
     )
 
-    # Every tool call runs on a worker thread, and on macOS matplotlib's
-    # automatic backend refuses to create a figure off the main thread. The
-    # server draws only to files, so it never needs a GUI backend. A user's own
-    # MPLBACKEND still wins.
+    # Workers draw only to files; the server never needs a GUI backend.
     os.environ.setdefault("MPLBACKEND", "Agg")
 
     if "tools.config" in sys.modules:
@@ -219,7 +220,10 @@ def main(argv: list[str] | None = None) -> int:
     for group in groups.GROUPS:
         if selected is None or group.name in selected:
             log.info("group %s: %s", group.name, group.description)
-    server = build_server(schemas)
+    try:
+        server = build_server(schemas)
+    except ValueError as exc:
+        parser.error(str(exc))
     log.info(
         "serving %d tools and %d skill resources over stdio; instructions %d characters",
         len(schemas),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from algorithms.catalogs import CATALOG_OPTIONS, CATALOGS
+from algorithms.catalogs.filters import filter_token_candidates
 from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 from tools.models import CatalogSummary, ReferenceBandResolution, ToolError, ToolWarning
 
@@ -10,17 +11,7 @@ _MATH_NAMES = frozenset(("abs", "exp", "log", "log10", "sqrt"))
 
 
 def _filter_token_candidates(image_filter: str) -> list[str]:
-    seen: list[str] = []
-    for token in (
-        image_filter,
-        image_filter.strip(),
-        image_filter.lower(),
-        image_filter.upper(),
-        image_filter.replace("′", "'").replace("’", "'"),
-    ):
-        if token and token not in seen:
-            seen.append(token)
-    return seen
+    return [token for token in filter_token_candidates(image_filter) if token]
 
 
 def _expression_deps(expr: str) -> set[str]:

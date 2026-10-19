@@ -74,22 +74,15 @@ def test_original_casing_is_tried_first():
     assert _filter_token_candidates("Halpha")[0] == "Halpha"
 
 
-def test_whitespace_and_case_variants_are_all_offered():
+def test_violet_and_johnson_tokens_do_not_offer_case_variants():
     candidates = _filter_token_candidates("v")
     assert candidates[0] == "v"
-    assert "V" in candidates
+    assert "V" not in candidates
 
 
 def test_padded_input_never_yields_the_bare_upper_case_token():
-    """QUIRK: ``.upper()`` runs on the *unstripped* string.
-
-    ``" v "`` produces ``[" v ", "v", " V "]`` — never a bare ``"V"``, because
-    the upper-case variant is built from the original, spaces and all. Callers
-    are protected only because ``select_catalogs_for_filter`` runs
-    ``normalize_filter_token`` first; calling ``catalog_supports_filter``
-    directly with a padded name skips that and can miss.
-    """
-    assert _filter_token_candidates(" v ") == [" v ", "v", " V "]
+    """CAT-01: whitespace must not bypass the V/v passband distinction."""
+    assert _filter_token_candidates(" v ") == [" v ", "v"]
     assert "V" not in _filter_token_candidates(" v ")
 
 

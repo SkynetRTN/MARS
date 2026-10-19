@@ -70,6 +70,11 @@ how many observations have products fetched; `null` uncaps, and takes a while
 on a heavily observed object. `download=true` fetches products into the local
 download root, where `list_optical_frames` / `resolve_optical_frame` find them
 (`references/optical.md`).
+Downloads are separate from query completeness: at most 32 filtered products
+and 512 MiB of actual streamed bytes per call. Missing/incorrect size headers
+do not lift that bound. Narrow `extension`/`product_type`/`mrp_only` when a
+download is refused; preserve the metadata artifact as a query result, not a
+claim that the files transferred. Existing download files are not overwritten.
 
 ## MPC
 
@@ -82,6 +87,9 @@ resolution, and it errors rather than returning nothing: "1" (Ceres), "433"
 `search_casda` searches the ASKAP radio archive. `target=` resolves through
 SIMBAD. ASKAP is a southern instrument: a northern target usually returns
 nothing, and that is an answer, not an error.
+Downloads require configured OPAL credentials with a stored keyring password,
+never an interactive prompt. The same 32-product/512-MiB budget applies, with
+at most 64 staged URLs including checksums; those bytes count too.
 
 ## ADS
 

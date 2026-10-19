@@ -20,6 +20,7 @@ from algorithms.skylib_lite.astrometry.anet.engine import (
     validate_index_dirs,
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+from algorithms.skylib_lite.astrometry.limits import DEFAULT_SOLVER_TIMEOUT_S, normalize_solver_timeout
 from algorithms.wcs.results import WcsSolveMetadata
 from algorithms.wcs.schemas import WcsCalibrationSettings
 from algorithms.wcs.source_extraction import build_wcs_from_header
@@ -75,13 +76,11 @@ def _timeout_error(name: str, value: object) -> ToolError | None:
     if value is None:
         return None
     try:
-        timeout = float(value)
-    except (TypeError, ValueError, OverflowError):
-        timeout = math.nan
-    if not math.isfinite(timeout) or timeout < 1:
+        normalize_solver_timeout(value)
+    except ValueError:
         return ToolError(
             code="invalid_timeout",
-            message=f"{name} must be at least one finite second.",
+            message=f"{name} must be 1–900 finite seconds (omitted: 300 seconds).",
         )
     return None
 
@@ -383,7 +382,8 @@ def solve_astrometry(
 ) -> WcsSummary:
     """Solve a local FITS image and optionally persist the resulting WCS.
 
-    ``timeout_s`` is forwarded to each low-level solve attempt; extraction and
+    ``timeout_s`` is 1–900 seconds, defaulting to 300 unless a backend environment
+    setting overrides it. It is forwarded to each low-level attempt; extraction and
     retries mean it does not cap total call runtime. The astrometry.net
     subprocess also adds a short termination grace period to reap children.
 
@@ -504,10 +504,12 @@ def solve_astrometry(
             if index_path is not None
             else os.getenv("ANET_INDEX_PATH")
         ),
-        anet_timeout_s=timeout_s if timeout_s is not None else os.getenv("ANET_TIMEOUT_S"),
+        anet_timeout_s=(timeout_s if timeout_s is not None
+                        else os.getenv("ANET_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
         atlas_catalog_root=os.getenv("ATLAS_CATALOG_ROOT"),
         atlas_catalog=os.getenv("ATLAS_CATALOG"),
-        atlas_timeout_s=timeout_s if timeout_s is not None else os.getenv("ATLAS_TIMEOUT_S"),
+        atlas_timeout_s=(timeout_s if timeout_s is not None
+                         else os.getenv("ATLAS_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
     )
     timeout_settings = (
         ("ANET_TIMEOUT_S", solver_settings.ANET_TIMEOUT_S, solver_settings.ANET_INDEX_PATH),
