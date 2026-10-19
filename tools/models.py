@@ -629,12 +629,15 @@ class PulsarPeriodogram(PulsarObservationInfo):
     artifact: Optional[ArtifactRef] = None
 
     mode: Literal["period", "frequency"] = "period"
+    search_unit: Literal["s", "Hz"] | None = None
+    """Units of search_start/search_stop: seconds for period, Hz for frequency."""
     search_start: float | None = None
     search_stop: float | None = None
     steps: int | None = None
     channel: str | None = None
 
     peak_period_s: float | None = None
+    peak_frequency_hz: float | None = None
     peak_power: float | None = None
     peak_confidence: str | None = None
     """Highest false-alarm level the peak clears, or null if it clears none.
@@ -653,9 +656,11 @@ class PulsarPeriodogram(PulsarObservationInfo):
     is worth trusting, near 1 it is not, whatever ``peak_power`` says."""
 
     confidence_thresholds: dict[str, float] = Field(default_factory=dict)
-    top_peaks: list[dict[str, Any]] = Field(default_factory=list)
+    top_peaks: list[dict[str, float]] = Field(default_factory=list)
     """A few best-separated candidates, strongest first, for when the global
-    peak is a harmonic rather than the fundamental."""
+    peak is a harmonic rather than the fundamental. Each carries period_s,
+    frequency_hz and power in both modes; use period_s for folding. The former
+    mode-dependent x key is retired."""
 
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)

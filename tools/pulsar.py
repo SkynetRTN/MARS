@@ -28,6 +28,7 @@ import fnmatch
 import json
 import re
 import stat
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -361,23 +362,30 @@ def load_pulsar_lightcurve(
 # ---------------------------------------------------------------------------
 
 def _top_peaks(
-    x: np.ndarray, power: np.ndarray, count: int, min_separation: float
-) -> list[dict[str, Any]]:
+    x: np.ndarray, power: np.ndarray, count: int, min_separation: float,
+    *, freq_mode: bool,
+) -> list[dict[str, float]]:
     """Best-separated candidates, strongest first.
 
     Not upstream — astromancer marks only the global maximum. A tool needs
     more, because the global peak is often a harmonic of the true period, and
     a caller that only ever sees one number has no way to notice.
     """
-    peaks: list[dict[str, Any]] = []
+    peaks: list[dict[str, float]] = []
+    selected: list[float] = []
     for index in np.argsort(power)[::-1]:
         value = float(x[index])
         if any(
-            abs(value - peak["x"]) < min_separation * max(value, peak["x"])
-            for peak in peaks
+            abs(value - previous) < min_separation * max(value, previous)
+            for previous in selected
         ):
             continue
-        peaks.append({"x": value, "power": float(power[index])})
+        selected.append(value)
+        peaks.append({
+            "period_s": 1.0 / value if freq_mode else value,
+            "frequency_hz": value if freq_mode else 1.0 / value,
+            "power": float(power[index]),
+        })
         if len(peaks) >= count:
             break
     return peaks
@@ -400,8 +408,10 @@ def compute_pulsar_periodogram(
 
     This is the stage that produces the period the fold and the folded
     sonification need. ``start``/``stop`` default to the observation's own
-    Nyquist bounds — twice the mean sample interval, up to 3 s — which is what
-    astromancer seeds its form with.
+    Nyquist bounds — twice the mean sample interval up to 3 s in period mode,
+    or 0.1 Hz up to the reciprocal Nyquist period in frequency mode. Explicit
+    bounds use seconds in period mode and Hz in frequency mode; ``search_unit``
+    identifies the returned ``search_start``/``search_stop`` units.
 
     ``channel`` selects what to search: ``"sum"`` (both polarizations added,
     the default and usually the most sensitive), ``"source1"`` or
@@ -414,8 +424,10 @@ def compute_pulsar_periodogram(
     noise both clear 3 sigma while folding to nothing. On four of the five
     bundled scans the strongest peak is exactly that: a confident artifact.
 
-    Check ``top_peaks`` too — a strong peak at twice or half the listed period
-    means the fundamental may be the other one.
+    Check ``top_peaks`` too — each candidate carries ``period_s``,
+    ``frequency_hz`` and ``power`` in both modes. A strong peak at twice or half
+    the listed period means the fundamental may be the other one. Pass the
+    candidate's ``period_s`` to folding, whichever search mode produced it.
 
     Run this before consulting any reference period. A fold at a measured
     period is a detection; a fold at a literature period is a fit to a known
@@ -527,6 +539,9 @@ def compute_pulsar_periodogram(
     # confidence lines without recomputing the spectrum.
     table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
     table.meta["freq_mode"] = bool(freq_mode)
+    table.meta["channel"] = channel
+    table.meta["search_unit"] = "Hz" if freq_mode else "s"
+    table["frequency_hz" if freq_mode else "period_s"].unit = table.meta["search_unit"]
     table.meta["steps"] = int(result.steps)
     if result.peak_x is not None:
         table.meta["peak_x"] = float(result.peak_x)
@@ -540,16 +555,20 @@ def compute_pulsar_periodogram(
         file=file,
         artifact=artifact,
         mode="frequency" if freq_mode else "period",
+        search_unit="Hz" if freq_mode else "s",
         search_start=result.start,
         search_stop=result.stop,
         steps=result.steps,
         channel=channel,
         peak_period_s=result.peak_period_s,
+        peak_frequency_hz=(
+            float(result.peak_x) if freq_mode else 1.0 / result.peak_x
+        ) if result.peak_x is not None else None,
         peak_power=result.peak_power,
         peak_confidence=result.peak_confidence_level,
         peak_fold_snr=peak_fold_snr,
         confidence_thresholds=result.confidence,
-        top_peaks=_top_peaks(result.x, result.power, 5, 0.02),
+        top_peaks=_top_peaks(result.x, result.power, 5, 0.02, freq_mode=freq_mode),
         warnings=warnings,
         **info,
     )
@@ -1342,14 +1361,15 @@ def plot_pulsar(
     """Plot a pulsar artifact as a PNG, the way Astromancer draws it.
 
     ``kind`` defaults to ``"auto"``, which reads the columns and picks the
-    chart: a light curve (``time_s``), a periodogram (``period_s``/``power``)
+    chart: a light curve (``time_s``), a periodogram
+    (``period_s``/``power`` or ``frequency_hz``/``power``)
     or a folded profile (``phase_s``). So any stage's artifact can be passed
     straight in, and a raw scan is ingested first and drawn as a light curve.
 
-    Axis labels, series names, the logarithmic periodogram x axis, the
-    "Global Maxima" peak marker, the dashed false-alarm lines and the folded
-    plot's x extent are all carried from upstream rather than chosen here --
-    see ``algorithms/pulsar/charts.py``.
+    The upstream chart specifications in ``algorithms/pulsar/charts.py`` supply
+    the peak marker, confidence lines and folded extent. Periodogram labels
+    follow the artifact's channel metadata (unknown for legacy artifacts), and
+    its x column selects a logarithmic Period (s) or linear Frequency (Hz) axis.
 
     ``show_hidden_series`` draws the folded plot's Difference and Sum series,
     which upstream adds with ``visible: false`` -- present in the legend but
@@ -1402,6 +1422,24 @@ def plot_pulsar(
         )
 
     spec = _CHART_FOR_KIND[resolved_kind]
+    if resolved_kind == "periodogram":
+        # M2 PUL-01/04: adapt the upstream period/XX template to the spectrum
+        # actually stored. Old artifacts cannot establish a channel identity.
+        channel = table.meta.get("channel")
+        names = {
+            "sum": "Sum", "source1": "Polarization XX", "source2": "Polarization YY",
+        }
+        series_name = (
+            names.get(channel, "Unknown channel")
+            if isinstance(channel, str) else "Unknown channel"
+        )
+        frequency = "frequency_hz" in table.colnames
+        spec = replace(
+            spec,
+            x_axis_label="Frequency (Hz)" if frequency else "Period (s)",
+            x_axis_type="linear" if frequency else "logarithmic",
+            series=(replace(spec.series[0], name=series_name),),
+        )
     label = output_name or (
         f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
     )

@@ -801,9 +801,9 @@ def test_periodogram_top_peaks_expose_harmonics(pulsar_path, artifact_dir) -> No
     assert len(result.top_peaks) > 1
     harmonics = [
         peak for peak in result.top_peaks[1:]
-        if any(abs(peak["x"] - period / n) < 0.01 * period for n in range(2, 9))
+        if any(abs(peak["period_s"] - period / n) < 0.01 * period for n in range(2, 9))
     ]
-    assert harmonics, f"expected harmonics among {[p['x'] for p in result.top_peaks]}"
+    assert harmonics, f"expected harmonics among {[p['period_s'] for p in result.top_peaks]}"
 
 
 def test_periodogram_tool_rejects_an_absurd_grid(pulsar_path) -> None:

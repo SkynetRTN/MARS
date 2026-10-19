@@ -39,7 +39,10 @@ dedispersion. Expect the fallback there.
 3. `compute_pulsar_periodogram(path=<artifact>)` — read `peak_period_s`,
    `peak_fold_snr`, `top_peaks`, and the warnings.
    - `peak_fold_snr` above ~8 and no `peak_does_not_fold` warning: a candidate.
-     Check `top_peaks` for harmonics — pulsars put power at P/2, P/3, ..., so
+     Each `top_peaks` entry has `period_s`, `frequency_hz` and `power` in both
+     search modes; the former mode-dependent `x` key is retired. Use
+     `period_s` for folding and `frequency_hz` only when reporting frequencies.
+     Check the candidate periods for harmonics — pulsars put power at P/2, P/3, ..., so
      an entry at an integer fraction of another may share one fundamental.
    - Otherwise: the peak is an artifact. Recognise which one (0.016665 s is
      mains; 2.1-2.2 s is red noise) and retune.
@@ -51,6 +54,13 @@ dedispersion. Expect the fallback there.
      mains), and raise `steps` once you know roughly where the period is.
    `plot_pulsar(path=<periodogram artifact>)` shows at a glance whether the
    spectrum is a harmonic comb or a forest of interference spikes.
+   With `freq_mode=true`, `start`/`stop` are Hz on a linear grid; the defaults
+   are 0.1 Hz and the reciprocal Nyquist period. Otherwise they are seconds on
+   a logarithmic grid, defaulting to twice the mean sample interval and 3 s.
+   Read `search_unit` alongside `search_start`/`search_stop`. Periodogram plots
+   recover Sum/XX/YY from the artifact's channel metadata; older artifacts
+   without that metadata say `Unknown channel`. Frequency plots use a linear
+   `Frequency (Hz)` axis, and period plots use logarithmic `Period (s)`.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.
 6. `fold_pulsar_lightcurve(path=<artifact>, period_s=<measured>)` — read

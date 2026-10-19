@@ -3119,6 +3119,33 @@ Still left behind, deliberately: `Highcharts.Chart` handles, `addSeries` /
 tooltip `pointFormat` strings, and the RxJS form subscriptions. A renderer
 needs the specification, not the widget.
 
+### 8c. M2 periodogram meaning (2026-10-19; PUL-01/04/08)
+
+The first-party tool layer now persists the searched `channel` in periodogram
+ECSV metadata and adapts the upstream chart template when plotting it.
+`sum`/`source1`/`source2` render Sum/Polarization XX/Polarization YY; legacy or
+unrecognised channel metadata renders `Unknown channel`, without guessing XX.
+The x column chooses logarithmic Period (s) or linear Frequency (Hz), including
+legacy artifacts with inconsistent `freq_mode` metadata. The upstream chart
+constants remain preservation fixtures; this adapter is an intentional
+presentation correction to MARS's former hard-coded period/XX output.
+
+The public `top_peaks` dictionaries replace mode-dependent `x` with explicit
+`period_s`, `frequency_hz` and `power`. This is an intentional output-contract
+change: consumers must use `period_s` for folding. Peak ranking, 2% separation
+in native grid coordinates, trial grids, powers, folding and confidence math
+are unchanged. Results also expose `peak_frequency_hz` and `search_unit`
+(`s`/`Hz` for `search_start`/`search_stop`); artifacts persist `search_unit`
+and physical x-column units. Schema descriptions and rendered skill guidance
+now describe both search modes' existing bounds.
+
+`tests/test_pulsar_periodogram_semantics.py` uses an independent synthetic
+2-Hz signal to test all three channels in both modes, ECSV and JSON handoffs,
+explicit candidate periods passed to folding, legacy channel handling and
+actual matplotlib trace/peak/axis state. Existing real-scan parity assertions
+continue to apply. This does not change the scientific confidence statistic
+or irregular-sampling Nyquist policy (TS-11/13 remain scheduled in M2).
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in

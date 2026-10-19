@@ -149,9 +149,17 @@ On the B0329+54 fixture that yields a peak at **0.714790 s** against ATNF's
 0.714519699725801 s (0.04%), at power 399 versus a 12.8 three-sigma threshold,
 folding to a **204 sigma** profile.
 
-Note `pg.top_peaks` on that run: `0.7148, 0.1429, 0.1785, 0.2378, 0.1192` —
+Note `pg.top_peaks[*].period_s` on that run: `0.7148, 0.1429, 0.1785, 0.2378, 0.1192` —
 after the fundamental, every entry is a harmonic (P/5, P/4, P/3, P/6). That is
 normal for a pulsar and is why the field exists.
+
+Each candidate now carries `period_s`, `frequency_hz` and `power` in both
+search modes; the ambiguous `x` key is retired (M2 PUL-08). Pass `period_s`
+to folding. `peak_period_s` and `peak_frequency_hz` identify the global peak.
+The `search_start`/`search_stop` bounds use `search_unit`: `s` in period mode
+and `Hz` with `freq_mode=True`. Period mode retains its logarithmic grid and
+defaults from twice the mean sample interval to 3 s. Frequency mode retains
+its linear grid and defaults from 0.1 Hz to the reciprocal Nyquist period.
 
 ### What a blind search actually achieves
 
@@ -232,19 +240,25 @@ Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
 ## 4b. Plotting
 
 `plot_pulsar` renders any stage's artifact as a PNG, choosing the chart from
-the columns it finds (`time_s` → light curve, `period_s`/`power` → periodogram,
+the columns it finds (`time_s` → light curve, `period_s`/`power` or
+`frequency_hz`/`power` → periodogram,
 `phase_s` → folded). It sits beside the pipeline rather than in it: nothing
 downstream consumes a plot.
 
 | Chart | Axes | Series |
 | --- | --- | --- |
 | Light curve | Time (s) / Intensity, linear | Polarization XX, Polarization YY |
-| Periodogram | Period (s) / Intensity, **logarithmic** | the spectrum, "Global Maxima" peak marker, three dashed false-alarm lines |
+| Periodogram, period mode | Period (s) / Intensity, **logarithmic** | selected channel, "Global Maxima" peak marker, three dashed false-alarm lines |
+| Periodogram, frequency mode | Frequency (Hz) / Intensity, **linear** | selected channel, "Global Maxima" peak marker, three dashed false-alarm lines |
 | Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
 
-All of that — labels, series names, the log axis, the hidden series, the
-folded x extent — is Astromancer's own chart configuration, ported to
-`algorithms/pulsar/charts.py`. It is not styling chosen here. The
+The templates, hidden series and folded extent are Astromancer's chart
+configuration, ported to `algorithms/pulsar/charts.py`. M2 PUL-01/04 adapts
+the periodogram template to the artifact: persisted `channel` metadata maps
+`sum`/`source1`/`source2` to Sum/Polarization XX/Polarization YY; absent or
+unrecognised channel metadata renders `Unknown channel`. The x column selects
+the period or frequency axis even for legacy artifacts with missing or stale
+`freq_mode` metadata. The ECSV x column also carries its physical unit. The
 `docs/extraction.md` entry that listed the Highcharts components as "left
 behind as UI" is superseded for the parts that decide *what* is drawn; the
 widget plumbing (boost thresholds, tooltips, export buttons) was not ported.

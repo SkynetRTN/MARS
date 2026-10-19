@@ -740,14 +740,18 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light "
         "curve to FIND ITS PERIOD. This is the only tool that produces a period "
         "from data, so it comes before folding and before folded sonification. "
-        "Defaults search the observation's own Nyquist bounds (twice the mean "
-        "sample interval, up to 3 s). Local only -- no network. "
+        "Defaults search twice the mean sample interval up to 3 s in period "
+        "mode, or 0.1 Hz up to the reciprocal Nyquist period in frequency mode. "
+        "search_unit identifies the search_start/search_stop units. "
+        "Local only -- no network. "
         "IMPORTANT: check 'peak_fold_snr' before using 'peak_period_s'. It folds "
         "the data at the peak and measures the resulting pulse -- above ~8 the "
         "peak is real, near 1 it is not. Do NOT rely on 'peak_confidence' for "
         "this: its false-alarm threshold assumes white noise, so mains "
         "interference and baseline red noise routinely read '99.73% Confidence' "
-        "while folding to nothing. Also check 'top_peaks': pulsars produce "
+        "while folding to nothing. Each 'top_peaks' entry carries period_s, "
+        "frequency_hz and power in both modes; use period_s for folding. "
+        "Also check 'top_peaks': pulsars produce "
         "strong harmonics, so a peak at an integer multiple or fraction of the "
         "reported period may be the real fundamental. Run this BEFORE consulting "
         "any reference period: a fold at a measured period is a detection, a "
@@ -771,11 +775,14 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "start": {
                     "type": "number",
                     "description": "Shortest trial period in seconds (or lowest "
-                    "frequency in Hz when freq_mode). Defaults to the Nyquist limit.",
+                    "frequency in Hz when freq_mode). Defaults to twice the mean "
+                    "sample interval in period mode, or 0.1 Hz in frequency mode.",
                 },
                 "stop": {
                     "type": "number",
-                    "description": "Longest trial period in seconds. Defaults to 3.0.",
+                    "description": "Longest trial period in seconds (or highest "
+                    "frequency in Hz when freq_mode). Defaults to 3 s in period "
+                    "mode, or the reciprocal Nyquist period in frequency mode.",
                 },
                 "steps": {
                     "type": "integer",
