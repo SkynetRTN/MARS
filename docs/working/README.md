@@ -11,7 +11,7 @@ active plans.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed/re-fetched 2026-10-09; unchanged `origin/main` `6d966de` (released rc6), `origin/dev` `38bf06a`. M0 closed; M1 branch implementation includes catalog/science/effects/pins, owned MCP workers, streamed download limits, safe retention and mandatory wheel/source parity (INS-05). Final Python 3.13 regression (3,367 passed), no-MCP and installed-wheel gates pass; required native runtime/security CI and delivery remain explicitly queued. M1 is not complete. Reconciles all 110 historical IDs, ALG-01–03 and the partially validated desktop rollout (§9). Browser support remains parked. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed/re-fetched 2026-10-19: `origin/main` `e85a790` (PR #118), `origin/dev` `38bf06a`. M0 and M1 closed; M1 is merged and unreleased. Final local Python 3.13 regression (3,385 passed), installed-wheel, final PR-head and post-merge Python 3.12/3.13/package/native Windows/macOS/security/workflow gates pass. No formal review is required; publication is deferred until the master plan is completed and worked through. M2 is next. Reconciles all 110 historical IDs, ALG-01–03 and the partially validated desktop rollout (§9). Browser support remains parked. |
 
 ## Landed
 
