@@ -67,7 +67,7 @@ works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
 (in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
 [dated host proposal](analysis/mcp-desktop-hosts.md) §6. Real desktop-host
 validation is still an open gate in the
-[master plan](working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
+[release checklist](working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
 
 In the examples below, replace `/path/to/mars-mcp` with the full path from
 [Install](#install).

@@ -1,17 +1,15 @@
 # Working Documents
 
-The [master continuation plan](master-continuation-plan.md) is the single index
-and execution sequence for known continuing work. It states **Status**,
-**Prerequisites**, **Unblocks**, priorities, evidence, dependencies and
-acceptance checks. Its work streams remain sections of that plan; dated
-reviews and completed implementation records are evidence, not competing
-active plans.
+The [master continuation plan](master-continuation-plan.md) is the closure
+checklist for the next release. It describes concrete failures, required
+outcomes and questions that still need evidence. Dated reviews retain the
+original findings; implementation choices belong in subsequent work.
 
 ## Index
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed/re-fetched 2026-10-19: `origin/main` `e85a790` (PR #118), `origin/dev` `38bf06a`. M0 and M1 closed; M1 is merged and unreleased. Final local Python 3.13 regression (3,385 passed), installed-wheel, final PR-head and post-merge Python 3.12/3.13/package/native Windows/macOS/security/workflow gates pass. No formal review is required; publication is deferred until the master plan is completed and worked through. M2 is next. Reconciles all 110 historical IDs, ALG-01–03 and the partially validated desktop rollout (§9). Browser support remains parked. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-20 against `main` at `a6785aa`. M0/M1 closed; M1 merged and unreleased. M2 must be reassessed without PR #120. Remaining gates describe failures, missing evidence and final release checks. Browser hosting remains deferred. |
 
 ## Landed
 
@@ -38,8 +36,8 @@ When a work stream lands:
 
 1. Fold the durable outcome into a reference document at the top level of
    `docs/` — that is the document that stays current against the code.
-2. Update its master-plan rows with closure commit/PR, test evidence and any
-   deliberate limitations. Keep the original finding IDs.
+2. Update the relevant release checklist item with its outcome and evidence.
+   Keep original finding IDs in the linked review records.
 3. Archive the master only after every accepted item is closed and the others
    have explicit deferral/revisit decisions. Add an `Archived` block recording
    what was verified, move it to [`../archive/`](../archive/README.md), and add

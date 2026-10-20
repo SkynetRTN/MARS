@@ -1,11 +1,11 @@
 # MARS Algorithm Remediation Plan
 
-> **Planning cross-reference, 2026-10-01:** All 110 finding IDs now have current
-> dispositions and execution streams in the
-> [master continuation plan §5](../working/master-continuation-plan.md#5-complete-historical-algorithm-disposition-register).
-> The original rollout, duplicate counts and TypeScript targets below are
-> historical; several failures changed or disappeared in later Python/stateless
-> work. Use the master for scheduling and this record for original evidence.
+> **Release cross-reference, 2026-10-20:** The
+> [release closure checklist](../working/master-continuation-plan.md) describes
+> remaining failures and unanswered questions in plain language. This record
+> retains the original finding IDs and evidence. Its rollout, duplicate counts
+> and TypeScript targets are historical; several failures changed or disappeared
+> in later Python/stateless work.
 
 Date: 2026-08-10
 Status: proposed
