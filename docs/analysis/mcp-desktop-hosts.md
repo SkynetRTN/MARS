@@ -3,7 +3,7 @@
 **Status:** dated proposal from PR #97, 2026-10-01. D2 was built ahead of
 order, at the maintainer's direction; no other phase has started.
 Scheduling and acceptance now live in the single
-[master continuation plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4).
+[release checklist](../working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
 This snapshot preserves the rationale, host claims and vendor sources for
 rechecking, not a competing execution plan. D2 has since been built, in
 `installers/claude-desktop/`; its results are below. Its gate, a real
@@ -287,7 +287,7 @@ is the only part not yet exercised.
 
 - Fold the outcome into `../installing.md`, `../tool-architecture.md` §10.3
   and `CLAUDE.md`'s `tools/mcp/` rules.
-- Close D0–D4 in the [master plan](../working/master-continuation-plan.md#9-desktop-host-rollout-d0d4)
+- Record desktop outcomes in the [release checklist](../working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work)
   with evidence and fold durable outcomes into reference docs. This proposal
   remains dated evidence, not an active track to archive separately.
 
