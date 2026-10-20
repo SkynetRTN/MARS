@@ -1,13 +1,15 @@
 # MARS release closure gate
 
-Updated 2026-10-20 against `main` at `a6785aa`, after pulling the latest changes.
+Updated 2026-10-20 against `main` at `15f5497`, with the first M2 checkpoint
+implemented on `feature/m2-pulsar-channels-axes`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 is open in full. PR #120 is abandoned as an implementation path and supplies
-no closure evidence. Reassess its subjects against main along with the rest of
-M2; do not continue from that branch or count its tests as acceptance.
+M2 remains open after the channels-and-axes checkpoint below. PR #120 is
+abandoned as an implementation path and supplies no closure evidence. Reassess
+its subjects against main along with the rest of M2; do not continue from that
+branch or count its tests as acceptance.
 
 Each unchecked item describes a failure or a specific unanswered question.
 Close it with evidence of the required behavior, or an explicit maintainer
@@ -19,11 +21,21 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-- [ ] **Pulsar channels and axes.** Sum and YY spectra are plotted as
-  "Polarization XX" because saved spectra omit the selected channel. Frequency
-  spectra use the period chart's label and logarithmic axis. Artifacts, plots
-  and metadata must identify the actual channel and distinguish seconds from
-  hertz, including older artifacts whose channel is unknown.
+- [x] **Pulsar channels and axes.** New spectrum artifacts retain the selected
+  channel and attach seconds or hertz to their coordinate column. Plots and
+  their metadata identify Sum, XX or YY; period spectra use logarithmic seconds
+  and frequency spectra use linear hertz. Both label spectral power and include
+  units on peak coordinates. Older artifacts with missing or unrecognized
+  channel metadata show "Unknown channel" and warn, while their saved coordinate
+  column determines the axis even without a reliable mode flag. Evidence:
+  [spectrum acceptance tests](../../tests/test_pulsar_spectrum_semantics.py)
+  inspect actual matplotlib traces, axes, peak markers and confidence lines
+  across all three channels and both modes, plus legacy artifacts.
+  Validation: Python 3.13.15 with locked dependencies and `[mcp]`, full offline
+  suite **3,403 passed, 49 skipped**; compileall, generated-skill consistency
+  and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
+  native Windows and external solver-data gates. Changes are local to this
+  feature branch and are not in published `0.1.0rc6`.
 - [ ] **Pulsar candidates and confidence.** `top_peaks.x` changes units by
   mode, so callers can fold at the wrong period. Candidate and search-bound
   units must be unambiguous. Confidence counts grid points as independent

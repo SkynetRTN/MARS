@@ -53,6 +53,10 @@ dedispersion. Expect the fallback there.
      mains), and raise `steps` once you know roughly where the period is.
    `plot_pulsar(path=<periodogram artifact>)` shows at a glance whether the
    spectrum is a harmonic comb or a forest of interference spikes.
+   Its legend identifies the saved channel: Sum, Polarization XX or
+   Polarization YY. Period spectra use logarithmic seconds; frequency spectra
+   use linear hertz. Older artifacts without channel metadata show Unknown
+   channel and warn `unknown_spectrum_channel`; recompute to record the channel.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.
 6. `fold_pulsar_lightcurve(path=<artifact>, period_s=<measured>)` — read

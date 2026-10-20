@@ -741,15 +741,18 @@ class PulsarSonification(MARSToolModel):
 class PulsarPlot(MARSToolModel):
     """A rendered pulsar chart.
 
-    The chart's identity -- axis labels, series names, whether the x axis is
-    logarithmic -- comes from ``algorithms.pulsar.charts``, which carries
-    Astromancer's own configuration rather than choices made here.
+    Chart defaults come from ``algorithms.pulsar.charts``. Spectrum channel
+    identity and period/frequency axis semantics describe the saved artifact.
     """
 
     file: FileMetadata
     artifact: Optional[ArtifactRef] = None
 
     kind: Literal["lightcurve", "periodogram", "folded"] | None = None
+    mode: Literal["period", "frequency"] | None = None
+    """Spectrum coordinate: seconds for period, hertz for frequency; otherwise null."""
+    channel: Literal["sum", "source1", "source2"] | None = None
+    """Searched spectrum channel; null when unknown or for other plot kinds."""
     title: str | None = None
     x_axis_label: str | None = None
     y_axis_label: str | None = None

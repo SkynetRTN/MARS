@@ -3119,6 +3119,20 @@ Still left behind, deliberately: `Highcharts.Chart` handles, `addSeries` /
 tooltip `pointFormat` strings, and the RxJS form subscriptions. A renderer
 needs the specification, not the widget.
 
+#### M2 spectrum presentation correction (2026-10-20)
+
+The historical `PERIODOGRAM_CHART` constant remains the upstream default.
+MARS's renderer now uses `periodogram_chart` to describe the artifact's
+selected channel (Sum, XX or YY) and coordinate: logarithmic seconds for
+`period_s`, linear hertz for `frequency_hz`. The y-axis is labelled Power,
+and peak-marker coordinates include their unit. Spectrum artifacts persist
+the selected `channel` and attach the coordinate's Astropy unit; older
+artifacts without recognized channel metadata are explicitly unknown and
+warn rather than defaulting to XX. This is a deliberate presentation and
+metadata correction; periodogram powers and confidence arithmetic are unchanged.
+`tests/test_pulsar_spectrum_semantics.py` checks saved artifacts and the real
+rendered traces, axes, peaks and confidence lines in both modes.
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in

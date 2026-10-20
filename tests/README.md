@@ -64,6 +64,7 @@ Three consequences shape everything here:
 | `test_skylib_exposure.py` | Exposure-time calculators |
 | `test_pulsar_limits.py` | M1 PUL-02/03: kill/reap-bounded direct/public stall probes; pre-allocation work/input/audio rejection; degenerate-spectrum structured failures; accepted audio control. Preservation arithmetic stays covered by `test_pulsar_sonification.py`. |
 | `test_pulsar_registry_failures.py` | M1 PUL-06: readable-neighbor recovery, explicit-path/root/read/stat failures, disappearing files and bounded header reads. |
+| `test_pulsar_spectrum_semantics.py` | M2 channels and axes: all three spectrum channels in both modes; ECSV channel and coordinate units; actual matplotlib traces, scales, peak markers and confidence lines; older artifacts with unknown channels and missing/stale mode metadata. |
 | `test_variable_star_fold_limits.py` | M1 TS-02: kill/reap-bounded direct fold/modulo probes, shared tool/algorithm work validation, pre-allocation row limit and finite derived coordinates; preserves strict subtraction, default/zero-period semantics and existing TS-04 parity assertions. |
 | `test_variable_star_periodogram_limits.py` | M1 ALG-02: kill/reap-bounded weighted-grid stalls; finite/range/integer-step, sample/aggregate-work and representable-weight validation; pre-allocation sentinels and runtime guards after bypassing preflight. Existing weighted arithmetic and direct constant-series NaN remain pinned separately. |
 | `test_variable_star_weighted_contract.py` | M1 TS-03 / TS-17 public containment: aligned paired-row uncertainties; object/null and numeric masked ECSV handoffs; raw partial-source ingest; skipped-row warnings; missing/invalid weights, nonscalar cells, empty/constant spectra and work-limit failures produce no success artifact. |
@@ -139,8 +140,8 @@ changed — which may be the intent, but is never an accident.
 
 ## Not covered
 
-Gaps are listed so they are visible rather than assumed. Their execution order
-and acceptance checks are tracked as VAL-01–05 and PUL-09 in the
+Gaps are listed so they are visible rather than assumed. Their release
+acceptance checks are tracked in the
 [master continuation plan](../docs/working/master-continuation-plan.md).
 
 | Area | Why not, and what it would take |
@@ -150,7 +151,7 @@ and acceptance checks are tracked as VAL-01–05 and PUL-09 in the
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
 | **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The APASS and VSX row mappers *are* executed against real provider rows — the recorded responses under `data/fieldcal/zp_solutions/ngc5128_b_002/` (`test_fieldcal_reference.py`) — but Landolt and USNO's `table_to_sources` overrides are still covered only structurally via the MRO contract; they would need recorded responses of their own. |
 | **`tools/radio_sources.py`'s VizieR/NED-backed steps** | `identify_radio_sources`'s catalog cross-match and `analyze_source_spectrum`/`plot_field_sed`'s name-based NED lookup. Confirmed working manually end to end against a synthetic FITS frame pointed at 3C 48 (real detection, real VizieR radio-catalog match, real 85-point NED spectrum, plausible spectral index -- see `docs/extraction.md`, "Radio Sources (Python)") — but there is no `network`-marked automated test for either step, so a future regression would not be caught by CI. |
-| **Scientific plots and host/platform behavior** | Public registry/schema, agent/LLM and MCP paths have focused coverage. Remaining named gaps include visible pulsar chart semantics (PUL-09), actual host and macOS/Windows installed behavior (INS-01), and the provider/solver paths above. Passing preservation tests does not establish scientific correctness; all historical finding IDs are mapped in master-plan §5. |
+| **Scientific plots and host/platform behavior** | Public registry/schema, agent/LLM and MCP paths have focused coverage. Pulsar spectrum channel/axis semantics and actual trace, marker and confidence-line content are covered by `test_pulsar_spectrum_semantics.py`; this does not establish plot content across all supported tools. Actual host and macOS/Windows installed behavior and the provider/solver paths above remain gaps. Passing preservation tests does not establish scientific correctness; the master plan tracks the remaining release gates. |
 
 ## Adding tests
 

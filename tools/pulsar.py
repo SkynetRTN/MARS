@@ -523,10 +523,12 @@ def compute_pulsar_periodogram(
             "power": result.power,
         }
     )
+    table["frequency_hz" if freq_mode else "period_s"].unit = "Hz" if freq_mode else "s"
     # Carried in the artifact so plot_pulsar can draw the peak marker and the
     # confidence lines without recomputing the spectrum.
     table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
     table.meta["freq_mode"] = bool(freq_mode)
+    table.meta["channel"] = channel
     table.meta["steps"] = int(result.steps)
     if result.peak_x is not None:
         table.meta["peak_x"] = float(result.peak_x)
@@ -1342,13 +1344,15 @@ def plot_pulsar(
     """Plot a pulsar artifact as a PNG, the way Astromancer draws it.
 
     ``kind`` defaults to ``"auto"``, which reads the columns and picks the
-    chart: a light curve (``time_s``), a periodogram (``period_s``/``power``)
-    or a folded profile (``phase_s``). So any stage's artifact can be passed
+    chart: a light curve (``time_s``), a periodogram (``period_s`` or
+    ``frequency_hz``, plus ``power``), or a folded profile (``phase_s``).
+    So any stage's artifact can be passed
     straight in, and a raw scan is ingested first and drawn as a light curve.
 
-    Axis labels, series names, the logarithmic periodogram x axis, the
-    "Global Maxima" peak marker, the dashed false-alarm lines and the folded
-    plot's x extent are all carried from upstream rather than chosen here --
+    Period spectra use a logarithmic seconds axis; frequency spectra use a
+    linear hertz axis. The saved channel labels the spectrum; older artifacts
+    without it are labelled "Unknown channel" with a warning. The peak marker,
+    false-alarm lines and folded extent follow the upstream chart defaults --
     see ``algorithms/pulsar/charts.py``.
 
     ``show_hidden_series`` draws the folded plot's Difference and Sum series,
@@ -1402,6 +1406,23 @@ def plot_pulsar(
         )
 
     spec = _CHART_FOR_KIND[resolved_kind]
+    spectrum_channel = None
+    spectrum_mode = None
+    if resolved_kind == "periodogram":
+        saved_channel = table.meta.get("channel")
+        if saved_channel in ("sum", "source1", "source2"):
+            spectrum_channel = saved_channel
+        else:
+            warnings.append(ToolWarning(
+                code="unknown_spectrum_channel",
+                message="Spectrum artifact has no recognized channel metadata; "
+                "the searched channel is unknown. Recompute the spectrum to record it.",
+            ))
+        # Column names describe the saved coordinates, including old artifacts
+        # without freq_mode or with a stale flag. Never reinterpret the values.
+        freq_mode = "frequency_hz" in table.colnames
+        spectrum_mode = "frequency" if freq_mode else "period"
+        spec = charts.periodogram_chart(freq_mode=freq_mode, channel=spectrum_channel)
     label = output_name or (
         f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
     )
@@ -1438,6 +1459,8 @@ def plot_pulsar(
         file=file,
         artifact=ArtifactRef(path=str(output_path), format="png", row_count=len(table)),
         kind=resolved_kind,
+        mode=spectrum_mode,
+        channel=spectrum_channel,
         title=drawn["title"],
         x_axis_label=drawn["x_label"],
         y_axis_label=drawn["y_label"],
@@ -1488,9 +1511,10 @@ def _render_plot(
         peak_power = table.meta.get("peak_power")
         if peak_x is not None and peak_power is not None:
             marker = charts.PERIODOGRAM_PEAK_SERIES
+            unit = "Hz" if x_column == "frequency_hz" else "s"
             axes.scatter(
                 [peak_x], [peak_power], color=marker.color, zorder=marker.z_index or 10,
-                s=40, label=f"{marker.name} ({peak_x:.6g})",
+                s=40, label=f"{marker.name} ({peak_x:.6g} {unit})",
             )
             plotted.append(marker.name)
 

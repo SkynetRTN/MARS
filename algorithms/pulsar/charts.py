@@ -18,7 +18,7 @@ RxJS form subscriptions. A plot needs the spec, not the chart object.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "ChartSpec",
     "LIGHT_CURVE_CHART",
     "PERIODOGRAM_CHART",
+    "periodogram_chart",
     "PERIODOGRAM_PEAK_SERIES",
     "CONFIDENCE_LINES",
     "FOLDED_CHART",
@@ -83,10 +84,9 @@ LIGHT_CURVE_CHART = ChartSpec(
     ),
 )
 
-#: ``PulsarPeriodogram.getDefaultPeriodogram()``. The **logarithmic** x axis is
-#: load-bearing, not cosmetic: ``lomb_scargle`` evaluates a logarithmic period
-#: grid in period mode, so a linear axis misrepresents where it actually
-#: sampled.
+#: ``PulsarPeriodogram.getDefaultPeriodogram()``. The logarithmic x axis
+#: matches the grid in period mode. This is the historical default;
+#: MARS resolves the saved channel and coordinate with ``periodogram_chart``.
 PERIODOGRAM_CHART = ChartSpec(
     title="Title",
     x_axis_label="Period (s)",
@@ -97,6 +97,28 @@ PERIODOGRAM_CHART = ChartSpec(
         SeriesSpec("Polarization XX", "power", marker="circle", marker_radius=3),
     ),
 )
+
+
+def periodogram_chart(*, freq_mode: bool, channel: Optional[str]) -> ChartSpec:
+    """Describe MARS's saved spectrum rather than upstream's fixed XX series.
+
+    Frequency mode samples a linear grid in Hz; period mode samples a
+    logarithmic grid in seconds. A legacy artifact without a known channel
+    must not acquire an XX identity just by being plotted.
+    """
+    name = {
+        "sum": "Sum",
+        "source1": "Polarization XX",
+        "source2": "Polarization YY",
+    }.get(channel, "Unknown channel")
+    return replace(
+        PERIODOGRAM_CHART,
+        x_axis_label="Frequency (Hz)" if freq_mode else "Period (s)",
+        x_axis_type="linear" if freq_mode else "logarithmic",
+        y_axis_label="Power",
+        series=(replace(PERIODOGRAM_CHART.series[0], name=name),),
+    )
+
 
 #: Upstream names the peak marker "Global Maxima" although ``find_global_max``
 #: returns one point.

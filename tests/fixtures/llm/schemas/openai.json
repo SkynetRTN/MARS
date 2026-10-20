@@ -888,7 +888,7 @@
     "type": "function",
     "function": {
       "name": "plot_pulsar",
-      "description": "Plot a pulsar artifact as a PNG image: the light curve, the periodogram, or the folded pulse profile. Pass any artifact from the pulsar pipeline (or a raw scan) and the chart is chosen from its columns. Local only -- no network. The periodogram plot is the most informative of the three when a period looks wrong: it shows the whole spectrum on a log axis with the peak marked and the false-alarm lines drawn, so interference and harmonic combs are visible immediately in a way the numbers alone do not convey. Axis labels, series names and styling come from Astromancer's own chart configuration, not from this tool.",
+      "description": "Plot a pulsar artifact as a PNG image: the light curve, the periodogram, or the folded pulse profile. Pass any artifact from the pulsar pipeline (or a raw scan) and the chart is chosen from its columns. Local only -- no network. The periodogram plot is the most informative of the three when a period looks wrong: it shows the saved channel's spectrum with the peak marked and the false-alarm lines drawn. Period spectra use a logarithmic seconds axis; frequency spectra use a linear hertz axis. Older spectra without channel metadata are labelled unknown with a warning. Interference and harmonic combs are visible immediately in a way the numbers alone do not convey. Chart defaults come from Astromancer, adapted to the saved spectrum's channel and coordinate.",
       "parameters": {
         "type": "object",
         "properties": {

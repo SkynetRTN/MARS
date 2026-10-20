@@ -232,19 +232,33 @@ Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
 ## 4b. Plotting
 
 `plot_pulsar` renders any stage's artifact as a PNG, choosing the chart from
-the columns it finds (`time_s` → light curve, `period_s`/`power` → periodogram,
+the columns it finds (`time_s` → light curve, `period_s` or `frequency_hz` plus
+`power` → periodogram,
 `phase_s` → folded). It sits beside the pipeline rather than in it: nothing
 downstream consumes a plot.
 
 | Chart | Axes | Series |
 | --- | --- | --- |
 | Light curve | Time (s) / Intensity, linear | Polarization XX, Polarization YY |
-| Periodogram | Period (s) / Intensity, **logarithmic** | the spectrum, "Global Maxima" peak marker, three dashed false-alarm lines |
+| Period spectrum | Period (s) / Power, **logarithmic** | selected channel, "Global Maxima" marker in seconds, three dashed false-alarm lines |
+| Frequency spectrum | Frequency (Hz) / Power, **linear** | selected channel, "Global Maxima" marker in hertz, three dashed false-alarm lines |
 | Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
 
-All of that — labels, series names, the log axis, the hidden series, the
-folded x extent — is Astromancer's own chart configuration, ported to
-`algorithms/pulsar/charts.py`. It is not styling chosen here. The
+The base chart configuration is ported from Astromancer to
+`algorithms/pulsar/charts.py`. MARS adapts the spectrum labels and axis to the
+saved data: `channel=sum` is **Sum**, `source1` is **Polarization XX**, and
+`source2` is **Polarization YY**. New spectrum ECSV artifacts record `channel`
+alongside `freq_mode`, and their coordinate column carries an Astropy unit
+(`s` or `Hz`). Plot results report `channel` and `mode`; the saved column name
+determines the coordinate even when an older artifact lacks `freq_mode` or
+contains a stale flag. Missing or unrecognized channel metadata produces an
+**Unknown channel** legend and `unknown_spectrum_channel` warning. Recompute
+an older spectrum to recover its channel identity; it cannot be inferred
+from the saved powers.
+
+The hidden folded series, folded x extent, peak styling and false-alarm lines
+retain the ported defaults. These presentation changes leave spectrum powers,
+candidate values and confidence calculations unchanged. The
 `docs/extraction.md` entry that listed the Highcharts components as "left
 behind as UI" is superseded for the parts that decide *what* is drawn; the
 widget plumbing (boost thresholds, tooltips, export buttons) was not ported.
