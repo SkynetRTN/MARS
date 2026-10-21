@@ -150,3 +150,53 @@ def test_legacy_spectrum_uses_column_units_and_discloses_unknown_channel(
     assert f"Global Maxima ({xs[1]:.6g} {unit})" in [
         text.get_text() for text in axes.get_legend().get_texts()
     ]
+
+
+@pytest.mark.parametrize("channel", [np.array(["sum"]), np.array(["sum", "source1"])])
+def test_array_channel_metadata_is_unknown_instead_of_raising(
+    tmp_path, artifact_dir, saved_axes, channel,
+):
+    # Astropy serializes ndarray metadata into valid ECSV. It is not a scalar
+    # channel identity, even when its sole element happens to be "sum".
+    table = Table({"period_s": [0.5, 1.0, 2.0], "power": [1.0, 4.0, 2.0]})
+    table.meta["channel"] = channel
+    path = tmp_path / "array_channel.ecsv"
+    table.write(path, format="ascii.ecsv")
+
+    result = plot_pulsar(path)
+
+    assert result.errors == []
+    assert result.channel is None
+    assert [w.code for w in result.warnings] == ["unknown_spectrum_channel"]
+    assert result.series == ["Unknown channel"]
+    assert saved_axes[-1].lines[0].get_label() == "Unknown channel"
+
+
+@pytest.mark.parametrize("channel", ["sum", "source1"])
+@pytest.mark.parametrize("freq_mode", [False, True])
+def test_standard_spectrum_does_not_claim_a_polarization(
+    two_channel_curve, tmp_path, artifact_dir, saved_axes, channel, freq_mode,
+):
+    # Standard files contain one generic flux column, with no XX/YY identity.
+    data = Table.read(two_channel_curve, format="ascii.ecsv")
+    raw = tmp_path / "standard.txt"
+    raw.write_text(
+        "# Input file\n# Candidate = single-flux\n"
+        + "".join(f"{time} {value}\n" for time, value in zip(data["time_s"], data["source1"])),
+        encoding="utf-8",
+    )
+    spectrum = compute_pulsar_periodogram(
+        raw, channel=channel, freq_mode=freq_mode, subtract_background=False,
+        start=0.4, stop=3.0, steps=80,
+    )
+    assert spectrum.errors == []
+    table = Table.read(spectrum.artifact.path, format="ascii.ecsv")
+    assert table.meta["flavour"] == "standard"
+    assert table.meta["channel"] == channel
+
+    result = plot_pulsar(spectrum.artifact.path)
+
+    assert result.errors == []
+    assert result.channel == channel
+    assert result.series[0] == "Data"
+    assert saved_axes[-1].lines[0].get_label() == "Data"

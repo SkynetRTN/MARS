@@ -1,6 +1,6 @@
 # MARS release closure gate
 
-Updated 2026-10-20 against `main` at `15f5497`, with the first M2 checkpoint
+Updated 2026-10-21 against `main` at `15f5497`, with the first M2 checkpoint
 implemented on `feature/m2-pulsar-channels-axes`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
@@ -27,12 +27,15 @@ the subsequent work.
   and frequency spectra use linear hertz. Both label spectral power and include
   units on peak coordinates. Older artifacts with missing or unrecognized
   channel metadata show "Unknown channel" and warn, while their saved coordinate
-  column determines the axis even without a reliable mode flag. Evidence:
+  column determines the axis even without a reliable mode flag. Non-string
+  channel metadata also takes that fallback. Standard-format single-flux
+  spectra use "Data" without claiming a polarization, preserving the selected
+  `sum` or `source1` channel. Evidence:
   [spectrum acceptance tests](../../tests/test_pulsar_spectrum_semantics.py)
   inspect actual matplotlib traces, axes, peak markers and confidence lines
   across all three channels and both modes, plus legacy artifacts.
   Validation: Python 3.13.15 with locked dependencies and `[mcp]`, full offline
-  suite **3,403 passed, 49 skipped**; compileall, generated-skill consistency
+  suite **3,409 passed, 49 skipped**; compileall, generated-skill consistency
   and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
   native Windows and external solver-data gates. Changes are local to this
   feature branch and are not in published `0.1.0rc6`.

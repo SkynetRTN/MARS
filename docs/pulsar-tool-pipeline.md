@@ -249,12 +249,14 @@ The base chart configuration is ported from Astromancer to
 saved data: `channel=sum` is **Sum**, `source1` is **Polarization XX**, and
 `source2` is **Polarization YY**. New spectrum ECSV artifacts record `channel`
 alongside `freq_mode`, and their coordinate column carries an Astropy unit
-(`s` or `Hz`). Plot results report `channel` and `mode`; the saved column name
-determines the coordinate even when an older artifact lacks `freq_mode` or
-contains a stale flag. Missing or unrecognized channel metadata produces an
-**Unknown channel** legend and `unknown_spectrum_channel` warning. Recompute
-an older spectrum to recover its channel identity; it cannot be inferred
-from the saved powers.
+(`s` or `Hz`). Standard-format single-flux spectra use **Data** for either
+permitted selection (`sum` or `source1`), preserving that selection in metadata
+without claiming an XX/YY polarization. Plot results report `channel` and `mode`;
+the saved column name determines the coordinate even when an older artifact
+lacks `freq_mode` or contains a stale flag. Missing, non-string or unrecognized
+channel metadata produces an **Unknown channel** legend and
+`unknown_spectrum_channel` warning. Recompute an older spectrum to recover its
+channel identity; it cannot be inferred from the saved powers.
 
 The hidden folded series, folded x extent, peak styling and false-alarm lines
 retain the ported defaults. These presentation changes leave spectrum powers,

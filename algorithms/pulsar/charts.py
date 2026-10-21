@@ -99,18 +99,23 @@ PERIODOGRAM_CHART = ChartSpec(
 )
 
 
-def periodogram_chart(*, freq_mode: bool, channel: Optional[str]) -> ChartSpec:
+def periodogram_chart(
+    *, freq_mode: bool, channel: Optional[str], single_source: bool = False,
+) -> ChartSpec:
     """Describe MARS's saved spectrum rather than upstream's fixed XX series.
 
     Frequency mode samples a linear grid in Hz; period mode samples a
     logarithmic grid in seconds. A legacy artifact without a known channel
-    must not acquire an XX identity just by being plotted.
+    must not acquire an XX identity just by being plotted. Standard files
+    carry one generic flux column, labelled Data rather than a polarization.
     """
     name = {
         "sum": "Sum",
         "source1": "Polarization XX",
         "source2": "Polarization YY",
     }.get(channel, "Unknown channel")
+    if single_source and channel in ("sum", "source1"):
+        name = "Data"
     return replace(
         PERIODOGRAM_CHART,
         x_axis_label="Frequency (Hz)" if freq_mode else "Period (s)",

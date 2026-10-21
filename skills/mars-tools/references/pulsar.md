@@ -57,6 +57,8 @@ dedispersion. Expect the fallback there.
    Polarization YY. Period spectra use logarithmic seconds; frequency spectra
    use linear hertz. Older artifacts without channel metadata show Unknown
    channel and warn `unknown_spectrum_channel`; recompute to record the channel.
+   Standard-format single-flux spectra use Data; `sum` and `source1` both
+   search that one column and do not establish an XX/YY polarization.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.
 6. `fold_pulsar_lightcurve(path=<artifact>, period_s=<measured>)` — read

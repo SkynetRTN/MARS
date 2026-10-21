@@ -1410,7 +1410,7 @@ def plot_pulsar(
     spectrum_mode = None
     if resolved_kind == "periodogram":
         saved_channel = table.meta.get("channel")
-        if saved_channel in ("sum", "source1", "source2"):
+        if isinstance(saved_channel, str) and saved_channel in ("sum", "source1", "source2"):
             spectrum_channel = saved_channel
         else:
             warnings.append(ToolWarning(
@@ -1422,7 +1422,11 @@ def plot_pulsar(
         # without freq_mode or with a stale flag. Never reinterpret the values.
         freq_mode = "frequency_hz" in table.colnames
         spectrum_mode = "frequency" if freq_mode else "period"
-        spec = charts.periodogram_chart(freq_mode=freq_mode, channel=spectrum_channel)
+        flavour = table.meta.get("flavour")
+        spec = charts.periodogram_chart(
+            freq_mode=freq_mode, channel=spectrum_channel,
+            single_source=isinstance(flavour, str) and flavour == "standard",
+        )
     label = output_name or (
         f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
     )
