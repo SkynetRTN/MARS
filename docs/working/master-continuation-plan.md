@@ -1,8 +1,8 @@
 # MARS release closure gate
 
 Updated 2026-10-21 against `main` at `15f5497`, with the first two M2 checkpoints
-implemented on `feature/m2-pulsar-candidates-confidence`, stacked on the
-channels-and-axes checkpoint at `27bdceb`.
+implemented on the single working branch `feature/m2`. Keep the remaining M2
+work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
