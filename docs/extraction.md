@@ -3135,6 +3135,42 @@ metadata correction; periodogram powers and confidence arithmetic are unchanged.
 `tests/test_pulsar_spectrum_semantics.py` checks saved artifacts and the real
 rendered traces, axes, peaks and confidence lines in both modes.
 
+#### M2 candidates and significance correction (2026-10-21)
+
+First-party `sampling.py` derives the default minimum period from twice median
+positive spacing without rounding. Only uniform epochs receive a Nyquist
+period; gaps/jitter/duplicates expose a labelled search heuristic and warning.
+The frequency default is the reciprocal of the same period band. All stages
+rederive sampling metadata when loading an artifact. The historical
+`nyquist_periodogram_range` helper remains for provenance, but no longer seeds
+the public driver.
+
+`significance.py` replaces the driver's independent-trial confidence levels
+with a conservative finite-grid Gaussian-noise bound: a finite-sample Beta
+tail, multiplied by the actual evaluated grid count through the union
+inequality. Frequency independence is not assumed. Results/plots disclose
+the conditional model, exclude correlated/filtered noise, RFI and retuning,
+and do not call the result a pulsar or correct-period probability. The legacy
+`confidence_threshold` helper/constants remain historical; new driver
+confidence fields are empty/null. Old artifact levels are uncalibrated.
+
+Ordinary spectral powers retain their ported arithmetic. Numerically
+degenerate/nonorthogonal sine/cosine trials, notably exact uniform Nyquist,
+now use a thin SVD projection of the raw columns with a numerical rank test;
+the old sum of quotients was not a valid projection there and could exceed
+the sample-variance normalization. Candidate periods/frequencies must both
+be finite. Candidate rows always have `period_s`, `frequency_hz`, `power`;
+search bounds have an explicit `search_unit`. This deliberately supersedes
+the M1 preservation of default bounds and confidence statistics recorded above.
+The fold-SNR arithmetic and its empirical cutoff remain unchanged, with
+guidance corrected to avoid treating them as calibrated detection probabilities.
+
+The [acceptance record](analysis/pulsar-candidates-confidence.md) contains the
+mathematical argument, primary references, Astropy/SciPy comparisons, Gaussian
+null checks and remeasured scan outcomes. Focused tests are in
+`test_pulsar_candidates_confidence.py`; the existing rendered-content tests
+now inspect conditional false-alarm lines.
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in

@@ -12,20 +12,21 @@ are not repeated here. This file is how to carry them out.
 `list_pulsar_scans` returns five Green Bank 20 m scans, about a minute each.
 Each carries `curated_period_s`, `curated_difficulty` and `period_source`, which
 names the curation the period came from. The scans themselves carry **no
-period**; that is exactly why a fold at a measured period is an independent
-detection. Recorded outcomes of a blind search at default settings:
+period**. Keep data-derived candidates separate from reference-seeded folds.
+Recorded outcomes at the M2 median-spacing defaults (2026-10-21):
 
 | Scan | Curated difficulty | Blind search at defaults |
 | --- | --- | --- |
-| B0329+54 | Easy | the pulsar, 0.7148 s, within 0.04% of the reference |
-| B1133+16 | Lightly Challenging | 0.016665 s — 60 Hz mains |
+| B0329+54 | Easy | 0.714622 s, within 0.015% of the reference |
+| B1133+16 | Lightly Challenging | ~2.18 s — baseline residual candidate |
 | B1933+16 | More Challenging | ~2.18 s — baseline red noise |
-| B2021+51 | Lightly Challenging | ~2.14 s — baseline red noise |
-| B2045-16 | Most Challenging | 0.016665 s — 60 Hz mains |
+| B2021+51 | Lightly Challenging | ~2.13 s — baseline residual candidate |
+| B2045-16 | Most Challenging | ~1.98 s — unsupported candidate |
 
-That is what a minute on a 20 m dish supports, not a defect. Four of the five
-peaks above clear the "99.73% Confidence" line anyway, which is why
-`peak_confidence` is not the check. B1933+16 resists even a tuned search: its
+Only B0329 matches its reference period at these defaults; this does not
+establish a general sensitivity limit. All five peaks have small conditional
+Gaussian-noise bounds, including the unsupported ones. `peak_confidence` is
+retired; it returns null. B1933+16 resists the recorded tuned searches: its
 dispersion smears the pulse across ~11% of the period, and this pipeline has no
 dedispersion. Expect the fallback there.
 
@@ -39,12 +40,22 @@ dedispersion. Expect the fallback there.
 2. `load_pulsar_lightcurve(path=...)` — keep the `.ecsv` artifact path; every
    later stage takes it.
 3. `compute_pulsar_periodogram(path=<artifact>)` — read `peak_period_s`,
-   `peak_fold_snr`, `top_peaks`, and the warnings.
+   `peak_fold_snr`, `top_peaks`, `false_alarm_assumptions`, and the warnings.
+   Every candidate has `period_s`, `frequency_hz` and `power`, in either mode.
+   Fold with its `period_s`; `search_unit` describes `search_start`/`search_stop`.
+   Period bounds default to twice median positive spacing through 3 s;
+   frequency bounds default to the reciprocal band. `sampling_limit_heuristic`
+   means irregular data has no asserted hard Nyquist cutoff. Instrument
+   cadence/integration information may justify different explicit bounds.
+   `false_alarm_probability_upper_bound` is conditional on iid Gaussian
+   errors and one fixed finite grid. Filtering, correlated noise, RFI and
+   retuning are not calibrated; it is not the probability of a pulsar or
+   correct period. `peak_fold_snr` is empirical; periodic RFI can fold too.
    - `peak_fold_snr` above ~8 and no `peak_does_not_fold` warning: a candidate.
      Check `top_peaks` for harmonics — pulsars put power at P/2, P/3, ..., so
      an entry at an integer fraction of another may share one fundamental.
-   - Otherwise: the peak is an artifact. Recognise which one (0.016665 s is
-     mains; 2.1-2.2 s is red noise) and retune.
+   - Otherwise: the fold does not strongly support the candidate. Inspect
+     possible interference/baseline residuals and retune.
 4. **Retune** before reaching for the reference:
    - rerun `load_pulsar_lightcurve` with a different `back_scale` (e.g. 1 and 6
      against the default 3) and search again — a red-noise peak moves with it,
@@ -59,6 +70,9 @@ dedispersion. Expect the fallback there.
    channel and warn `unknown_spectrum_channel`; recompute to record the channel.
    Standard-format single-flux spectra use Data; `sum` and `source1` both
    search that one column and do not establish an XX/YY polarization.
+   Current threshold lines say Gaussian noise FAP; historical confidence
+   levels are labelled uncalibrated and warn `legacy_confidence_uncalibrated`.
+   Retuning is outside the single-search false-alarm bound.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.
 6. `fold_pulsar_lightcurve(path=<artifact>, period_s=<measured>)` — read

@@ -722,7 +722,7 @@
   },
   {
     "name": "compute_pulsar_periodogram",
-    "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light curve to FIND ITS PERIOD. This is the only tool that produces a period from data, so it comes before folding and before folded sonification. Defaults search the observation's own Nyquist bounds (twice the mean sample interval, up to 3 s). Local only -- no network. IMPORTANT: check 'peak_fold_snr' before using 'peak_period_s'. It folds the data at the peak and measures the resulting pulse -- above ~8 the peak is real, near 1 it is not. Do NOT rely on 'peak_confidence' for this: its false-alarm threshold assumes white noise, so mains interference and baseline red noise routinely read '99.73% Confidence' while folding to nothing. Also check 'top_peaks': pulsars produce strong harmonics, so a peak at an integer multiple or fraction of the reported period may be the real fundamental. Run this BEFORE consulting any reference period: a fold at a measured period is a detection, a fold at a literature period is a fit to a known answer. Compare the result against a reference afterwards (a bundled scan's 'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind search on a single 60-second scan only succeeds for a bright source; if it fails or disagrees with the reference, retry -- vary back_scale (a red-noise peak moves with it, a real periodicity does not), narrow start/stop away from the artifact, raise steps. Fold at the reference period only after a retuned search has still failed, and say so when you do.",
+    "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light curve to FIND ITS PERIOD. This is the only tool that produces a period from data, so it comes before folding and before folded sonification. Default period bounds are twice median positive spacing through 3 s; frequency mode uses the reciprocal band. Irregular sampling makes this a search heuristic, not a hard Nyquist limit. Local only. Every 'top_peaks' entry has period_s, frequency_hz and power in either mode: fold with period_s. search_unit identifies search_start/stop. false_alarm_probability_upper_bound is a conservative fixed-grid Gaussian-noise bound, not the probability of a pulsar or correct period. Read false_alarm_assumptions and warnings: correlated noise, baseline filtering, RFI and repeated retuning are not calibrated. Legacy peak_confidence is null and confidence_thresholds is empty. Check 'peak_fold_snr' and the profile: the cutoff of 8 is an empirical diagnostic, not a detection probability; periodic RFI can fold too. Also check 'top_peaks': pulsars produce strong harmonics, so a peak at an integer multiple or fraction of the reported period may be the real fundamental. Run this BEFORE consulting any reference period: a reference-seeded fold does not independently measure the period. Compare the result against a reference afterwards (a bundled scan's 'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind search on a single 60-second scan only succeeds for a bright source; if it fails or disagrees with the reference, retry -- vary back_scale (a red-noise peak moves with it, a real periodicity does not), narrow start/stop away from the artifact, raise steps. Fold at the reference period only after a retuned search has still failed, and say so when you do.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -732,11 +732,11 @@
         },
         "start": {
           "type": "number",
-          "description": "Shortest trial period in seconds (or lowest frequency in Hz when freq_mode). Defaults to the Nyquist limit."
+          "description": "Shortest trial period in seconds (or lowest frequency in Hz when freq_mode=true). Default: twice median positive spacing in seconds, or 1/3 Hz in frequency mode."
         },
         "stop": {
           "type": "number",
-          "description": "Longest trial period in seconds. Defaults to 3.0."
+          "description": "Upper search bound: seconds in period mode (default 3.0), Hz when freq_mode=true (default reciprocal of twice median positive spacing). Actual tested coordinates are in the artifact; the preserved grid can omit the endpoint."
         },
         "steps": {
           "type": "integer",
@@ -762,7 +762,7 @@
   },
   {
     "name": "fold_pulsar_lightcurve",
-    "description": "PULSAR PIPELINE STAGE 3 of 4. Fold a pulsar light curve at a period into a pulse profile: every rotation is stacked on the others, so a real pulse adds up while noise averages down. This is what makes a pulsar that is invisible in the raw scan clearly visible. Needs a period -- measure it with compute_pulsar_periodogram first. A literature period (a scan's 'curated_period_s', or search_atnf) is the fallback for when a retuned search has still failed, and a fold at one is not an independent detection: report which kind of period you folded at. Local only -- no network. IMPORTANT: folding at the WRONG period returns a flat profile, not an error. Read 'pulse_snr' to judge: above ~8 is a real detection, near 1 means the period is wrong or the source is too faint in this scan.",
+    "description": "PULSAR PIPELINE STAGE 3 of 4. Fold a pulsar light curve at a period into a pulse profile: every rotation is stacked on the others, so a real pulse adds up while noise averages down. This is what makes a pulsar that is invisible in the raw scan clearly visible. Needs a period -- measure it with compute_pulsar_periodogram first. A literature period (a scan's 'curated_period_s', or search_atnf) is the fallback for when a retuned search has still failed, and a fold at one is not an independent detection: report which kind of period you folded at. Local only -- no network. IMPORTANT: folding at the WRONG period returns a flat profile, not an error. Read 'pulse_snr' as an empirical concentration diagnostic; the cutoff of 8 is not a calibrated detection probability. Periodic RFI can fold coherently too. A weak fold may mean a wrong period or a source too faint in this scan.",
     "input_schema": {
       "type": "object",
       "properties": {

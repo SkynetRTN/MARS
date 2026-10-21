@@ -1,12 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-21 against `main` at `15f5497`, with the first M2 checkpoint
-implemented on `feature/m2-pulsar-channels-axes`.
+Updated 2026-10-21 against `main` at `15f5497`, with the first two M2 checkpoints
+implemented on `feature/m2-pulsar-candidates-confidence`, stacked on the
+channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the channels-and-axes checkpoint below. PR #120 is
+M2 remains open after the two pulsar checkpoints below. PR #120 is
 abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -39,11 +40,27 @@ the subsequent work.
   and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
   native Windows and external solver-data gates. Changes are local to this
   feature branch and are not in published `0.1.0rc6`.
-- [ ] **Pulsar candidates and confidence.** `top_peaks.x` changes units by
-  mode, so callers can fold at the wrong period. Candidate and search-bound
-  units must be unambiguous. Confidence counts grid points as independent
-  trials; the search limit uses mean spacing despite gaps. Their scientific
-  meaning still needs validation.
+- [x] **Pulsar candidates and confidence.** Every candidate exposes `period_s`,
+  `frequency_hz` and `power` in either mode; search bounds have `search_unit`,
+  and `evaluated_trials` counts the actual saved grid. Defaults use twice
+  median positive spacing through 3 s (the reciprocal frequency band).
+  Irregular epochs get an explicit search heuristic and warning, with no
+  claimed hard Nyquist limit; all stages rederive sampling from the data.
+  Legacy confidence fields return null/empty. Their replacement is a
+  finite-sample Gaussian-noise tail with a Bonferroni union bound over actual
+  trials, without assuming independent frequencies. Numerically degenerate
+  Nyquist trials use a stable SVD projection. Results/plots state the noise
+  model; old artifact thresholds are uncalibrated. Neither the bound nor
+  empirical fold SNR is a pulsar/correct-period probability. Correlated or
+  filtered radio noise, RFI and repeated retuning remain outside that model.
+  Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
+  [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
+  and actual rendered threshold checks in both modes. All five scans complete;
+  only B0329 matches its reference at the revised defaults. Frozen historical
+  benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
+  Validation: Python 3.13.15, full offline suite **3,436 passed, 49 skipped**;
+  compileall, schema goldens, generated-skill consistency, repository shape and
+  `git diff --check` pass. The changes remain local, unmerged and unpublished.
 - [ ] **Variable-star powers and errors.** Weighted spectra mix weighted and
   unweighted normalization, changing the reported strength of periodic signals;
   differential errors are divided by two. Powers and uncertainties need

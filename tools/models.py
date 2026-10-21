@@ -33,6 +33,7 @@ __all__ = [
     "OpticalFrame",
     "OpticalFrameList",
     "PulsarLightCurve",
+    "PulsarCandidate",
     "PulsarPeriodogram",
     "PulsarFoldedProfile",
     "PulsarSonification",
@@ -444,6 +445,10 @@ class PulsarObservationInfo(MARSToolModel):
     time_span_s: float | None = None
     mean_sample_interval_s: float | None = None
     sample_cadence_s: float | None = None
+    sampling_policy: Literal["uniform", "median_spacing_heuristic"] | None = None
+    suggested_min_period_s: float | None = None
+    nyquist_period_s: float | None = None
+    """Twice the spacing for uniform data; null for irregular/insufficient epochs."""
     background_subtracted: bool = False
     back_scale_s: float | None = None
 
@@ -614,12 +619,16 @@ class PulsarLightCurve(PulsarObservationInfo):
     obs_freq_mhz: float | None = None
     ra_deg: float | None = None
     dec_deg: float | None = None
-    nyquist_period_s: float | None = None
-    """Twice the mean sample interval -- the shortest period resolvable, and
-    the periodogram's default lower search bound."""
-
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarCandidate(MARSToolModel):
+    """A trial peak with invariant, explicit coordinate units."""
+
+    period_s: float
+    frequency_hz: float
+    power: float
 
 
 class PulsarPeriodogram(PulsarObservationInfo):
@@ -631,29 +640,37 @@ class PulsarPeriodogram(PulsarObservationInfo):
     mode: Literal["period", "frequency"] = "period"
     search_start: float | None = None
     search_stop: float | None = None
+    search_unit: Literal["s", "Hz"] | None = None
+    """Unit of the requested search_start/search_stop; actual trials are in the artifact."""
     steps: int | None = None
+    evaluated_trials: int = 0
     channel: str | None = None
 
     peak_period_s: float | None = None
+    peak_frequency_hz: float | None = None
     peak_power: float | None = None
     peak_confidence: str | None = None
-    """Highest false-alarm level the peak clears, or null if it clears none.
+    """Retired legacy confidence label; new computations return null.
 
-    **Not a validity check.** The threshold assumes white noise, and radio data
-    is not white: mains interference and post-subtraction red noise routinely
-    clear the 3-sigma line. On four of the five bundled scans the strongest
-    peak reads "99.73% Confidence" and is not the pulsar. Use
-    ``peak_fold_snr``, which tests the peak against the data itself."""
+    Use false_alarm_probability_upper_bound with its explicit model assumptions.
+    Neither quantity is a posterior probability of a pulsar or correct period.
+    """
 
     peak_fold_snr: float | None = None
-    """Pulse significance obtained by folding at ``peak_period_s``.
+    """Empirical pulse concentration from folding at ``peak_period_s``.
 
-    The arbiter. A periodogram peak that is a real periodicity concentrates
-    flux when folded; one that is RFI or red noise does not. Above ~8 the peak
-    is worth trusting, near 1 it is not, whatever ``peak_power`` says."""
+    The conventional warning cutoff is 8. This is neither a calibrated
+    detection significance nor a source classifier; periodic RFI can fold too.
+    """
 
     confidence_thresholds: dict[str, float] = Field(default_factory=dict)
-    top_peaks: list[dict[str, Any]] = Field(default_factory=list)
+    """Retired independent-trial thresholds; new computations return an empty map."""
+    false_alarm_method: Literal["gaussian_bonferroni"] | None = None
+    false_alarm_probability_upper_bound: float | None = Field(default=None, ge=0, le=1)
+    false_alarm_thresholds: dict[str, float] = Field(default_factory=dict)
+    """Keys are Gaussian FAP bounds (0.1, 0.01, 0.001); values are spectral powers."""
+    false_alarm_assumptions: list[str] = Field(default_factory=list)
+    top_peaks: list[PulsarCandidate] = Field(default_factory=list)
     """A few best-separated candidates, strongest first, for when the global
     peak is a harmonic rather than the fundamental."""
 
@@ -676,9 +693,12 @@ class PulsarFoldedProfile(PulsarObservationInfo):
     samples_folded: int = 0
 
     pulse_snr: float | None = None
-    """Peak significance against the profile's own off-pulse scatter. Above
-    ~8 the fold is a real detection; near 1 the period is wrong or the source
-    is too faint in this scan."""
+    """Peak concentration against the profile's own off-pulse scatter.
+
+    The warning cutoff of 8 is empirical, not a calibrated detection
+    significance. A weak fold may mean a wrong period or a faint source;
+    coherent interference can also produce a strong fold.
+    """
 
     channels: int = 1
     preview: list[dict[str, Any]] = Field(default_factory=list)

@@ -26,7 +26,7 @@ from typing import Optional
 
 import numpy as np
 
-from . import limits
+from . import limits, sampling, significance
 
 __all__ = [
     "Periodogram",
@@ -69,7 +69,13 @@ class Periodogram:
     peak_power: Optional[float] = None
 
     confidence: dict[str, float] = field(default_factory=dict)
-    """False-alarm thresholds by level id, from :func:`confidence_threshold`."""
+    """Legacy independent-trial thresholds; no longer populated by the driver."""
+
+    false_alarm_method: str | None = None
+    false_alarm_probability_upper_bound: float | None = None
+    false_alarm_thresholds: dict[str, float] = field(default_factory=dict)
+    evaluated_trials: int = 0
+    sampling: sampling.Sampling | None = None
 
     @property
     def peak_period_s(self) -> Optional[float]:
@@ -77,6 +83,12 @@ class Periodogram:
         if self.peak_x is None or self.peak_x == 0:
             return None
         return 1.0 / self.peak_x if self.freq_mode else float(self.peak_x)
+
+    @property
+    def peak_frequency_hz(self) -> Optional[float]:
+        if self.peak_x is None or self.peak_x == 0:
+            return None
+        return float(self.peak_x) if self.freq_mode else 1.0 / self.peak_x
 
     @property
     def peak_confidence_level(self) -> Optional[str]:
@@ -112,12 +124,13 @@ def lomb_scargle(
       ``exp(log(start) + (log(stop) - log(start)) * i / steps)``. So the loop
       only supplies the iteration count. Frequency mode overwrites both with
       the linear loop variable and really is linear.
-    * **The grid never reaches ``stop``.** The exponent is ``i / steps`` with
-      ``i`` ending at ``steps - 1``, so the last evaluated point falls one step
-      short of the upper bound.
+    * **The endpoint is not forced.** Usually the last point is short of
+      ``stop``; accumulated float error can supply an extra iteration with
+      ``i == steps``. Report/count the actual coordinates, not just ``steps``.
 
-    The power is the standard normalized Lomb-Scargle periodogram; upstream
-    reaches it through ``ArrMath.dot(v)``, which is ``dot(v, v)``.
+    Power is N/2 times standard-normalized Lomb-Scargle power; upstream reaches
+    it through ``ArrMath.dot(v)``, which is ``dot(v, v)``. Numerically degenerate
+    trials use a stable projection as documented in the M2 acceptance record.
     """
     ts = limits.vector(ts, "time_s")
     ys = limits.vector(ys, "flux")
@@ -176,6 +189,7 @@ def lomb_scargle(
             frequency = x_val
             log_x_val = x_val
 
+        limits.finite(1 / frequency, "trial period in seconds", positive=True)
         omega = 2.0 * math.pi * frequency
         limits.finite(omega, "angular frequency", positive=True)
         with np.errstate(over="ignore", invalid="ignore"):
@@ -192,11 +206,29 @@ def lomb_scargle(
         sin_term = np.sin(omega_t_minus_tau)
 
         try:
-            power = (
-                float(np.dot(h_residue, cos_term)) ** 2.0 / float(np.dot(cos_term, cos_term))
-                + float(np.dot(h_residue, sin_term)) ** 2.0 / float(np.dot(sin_term, sin_term))
-            ) / two_var_of_y
-        except (ZeroDivisionError, OverflowError) as exc:
+            cos_norm = float(np.dot(cos_term, cos_term))
+            sin_norm = float(np.dot(sin_term, sin_term))
+            cross = float(np.dot(cos_term, sin_term))
+            if (
+                min(cos_norm, sin_norm) <= np.finfo(float).eps * ts.size
+                or abs(cross) > 1e-10 * math.sqrt(cos_norm * sin_norm)
+            ):
+                # At e.g. exact Nyquist, roundoff defeats tau's intended
+                # orthogonality. The port's sum of two quotients then ceases
+                # to be a projection and can exceed N/2. Fit the same raw
+                # columns with an SVD rank test; never scale tiny roundoff
+                # columns into artificial independent regressors.
+                design = np.column_stack((cos_term, sin_term))
+                basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
+                cutoff = np.finfo(float).eps * max(design.shape) * singular_values[0]
+                projection = basis[:, singular_values > cutoff].T @ h_residue
+                power = float(np.dot(projection, projection)) / two_var_of_y
+            else:
+                power = (
+                    float(np.dot(h_residue, cos_term)) ** 2.0 / cos_norm
+                    + float(np.dot(h_residue, sin_term)) ** 2.0 / sin_norm
+                ) / two_var_of_y
+        except (ZeroDivisionError, OverflowError, np.linalg.LinAlgError) as exc:
             raise ValueError("singular periodogram trial") from exc
         limits.finite(power, "spectral power")
 
@@ -226,10 +258,11 @@ def find_global_max(x: np.ndarray, power: np.ndarray) -> tuple[Optional[float], 
 
 
 def confidence_threshold(alpha: float, points: int) -> float:
-    """``-Math.log(1 - (1 - alpha) ** (1 / points))``, verbatim.
+    """Historical ``-Math.log(1 - (1 - alpha) ** (1 / points))``, verbatim.
 
     Spectral-power threshold a peak must clear to beat the false-alarm
-    probability ``alpha`` over ``points`` independent trial frequencies.
+    probability ``alpha`` over ``points`` independent exponential trials.
+    Not used for current sample-variance-normalized public results.
     """
     return -math.log(1 - (1 - alpha) ** (1 / points))
 
@@ -237,15 +270,15 @@ def confidence_threshold(alpha: float, points: int) -> float:
 def nyquist_periodogram_range(
     ts: np.ndarray, freq_mode: bool = False
 ) -> Optional[dict[str, float]]:
-    """``nyquistPeriodogramRange(ts, method)`` — the default search bounds.
+    """Historical ``nyquistPeriodogramRange(ts, method)`` search bounds.
 
     Returns ``None`` for fewer than two samples rather than emitting garbage,
     as upstream does. Keys are upstream's: ``startPeriod``, ``endPeriod``,
     ``periodFoldingPeriodMin``, ``periodFoldingPeriodMax``.
 
-    Note ``avgDiff`` is **twice** the mean sample interval — upstream's
-    Nyquist limit, the shortest period the data can resolve — and is rounded
-    to 5 decimals, which is a real quantization of the lower bound.
+    ``avgDiff`` is twice the mean sample interval, rounded to 5 decimals.
+    Upstream called it a Nyquist limit, which is not justified for irregular
+    data. The public driver now uses ``sampling.summarize`` instead.
     """
     ts = limits.vector(ts, "time_s")
     if ts.size < 2:
@@ -282,23 +315,40 @@ def compute_periodogram(
     steps: int = DEFAULT_STEPS,
     freq_mode: bool = False,
 ) -> Periodogram:
-    """Run the spectrum, locate the peak, and attach confidence thresholds.
+    """Run preserved powers with first-party search and significance semantics.
 
-    ``start``/``stop`` default to :func:`nyquist_periodogram_range` for the
-    given mode — the same defaults the astromancer form seeds from the file.
+    Default period bounds are twice median positive spacing through 3 s;
+    frequency mode uses the reciprocal band. Irregular spacing supplies a
+    search heuristic, not a hard Nyquist limit. Significance is a conservative
+    finite-grid bound under iid Gaussian noise, not a detection probability.
     """
     ts = limits.vector(ts, "time_s")
     if ts.size < 3:
         raise ValueError("need at least three samples to compute a periodogram")
+    observed_sampling = sampling.summarize(ts)
     if start is None or stop is None:
-        bounds = nyquist_periodogram_range(ts, freq_mode)
-        if bounds is None:
+        shortest = observed_sampling.suggested_min_period_s
+        if shortest is None:
             raise ValueError("need at least two samples to choose search bounds")
-        start = bounds["startPeriod"] if start is None else start
-        stop = bounds["endPeriod"] if stop is None else stop
+        default_start = 1 / 3.0 if freq_mode else shortest
+        default_stop = 1 / shortest if freq_mode else 3.0
+        start = default_start if start is None else start
+        stop = default_stop if stop is None else stop
 
     x, power = lomb_scargle(ts, ys, start, stop, steps, freq_mode)
     peak_x, peak_power = find_global_max(x, power)
+
+    trials = len(x)
+    thresholds = {}
+    false_alarm = None
+    method = None
+    if ts.size > 3 and trials and peak_power is not None:
+        false_alarm = significance.upper_bound(peak_power, ts.size, trials)
+        thresholds = {
+            str(alpha): significance.threshold(alpha, ts.size, trials)
+            for alpha in significance.PROBABILITIES
+        }
+        method = significance.METHOD
 
     return Periodogram(
         x=x,
@@ -309,8 +359,9 @@ def compute_periodogram(
         steps=int(steps),
         peak_x=peak_x,
         peak_power=peak_power,
-        confidence={
-            level["id"]: confidence_threshold(level["alpha"], steps)
-            for level in CONFIDENCE_LEVELS
-        },
+        false_alarm_method=method,
+        false_alarm_probability_upper_bound=false_alarm,
+        false_alarm_thresholds=thresholds,
+        evaluated_trials=trials,
+        sampling=observed_sampling,
     )

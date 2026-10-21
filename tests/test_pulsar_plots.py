@@ -237,7 +237,7 @@ def test_periodogram_plot_draws_the_peak_and_confidence_lines(staged) -> None:
     result = plot_pulsar(spectrum.artifact.path)
 
     assert "Global Maxima" in result.series
-    for line in charts.CONFIDENCE_LINES:
+    for line in charts.FALSE_ALARM_LINES:
         assert line.name in result.series
 
 

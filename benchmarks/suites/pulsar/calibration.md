@@ -1,5 +1,16 @@
 # `pulsar` — calibration record
 
+**2026-10-21 scope note.** The calibration below is historical. M2 now returns
+explicit candidate coordinates, median-spacing search defaults and conditional
+Gaussian noise bounds; legacy confidence labels return null, and fold SNR is
+an empirical diagnostic. The current default B1933 peak remains near 2.184 s
+with weak fold concentration; B2045's moves from mains to about 1.976 s.
+The [M2 acceptance record](../../../docs/analysis/pulsar-candidates-confidence.md)
+reports all five scans. This checkpoint does not rerun or regrade the archived
+model sweep; its frozen verdict keys remain unchanged. It supplies no new
+model-ranking evidence. Updating uncertainty verdicts for the new fields and
+regrading archived sessions belongs to the remaining benchmark gate.
+
 **Status: CALIBRATED — every premise held under a model, and the one task no
 other can replace fired.**
 

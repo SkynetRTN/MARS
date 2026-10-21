@@ -29,6 +29,7 @@ __all__ = [
     "periodogram_chart",
     "PERIODOGRAM_PEAK_SERIES",
     "CONFIDENCE_LINES",
+    "FALSE_ALARM_LINES",
     "FOLDED_CHART",
     "FOLDED_SINGLE_SOURCE_NAME",
     "folded_x_axis_maximum",
@@ -141,6 +142,14 @@ CONFIDENCE_LINES = (
     SeriesSpec("67.3% Confidence", "conf-1-sigma", color="red", dash_style="ShortDash"),
     SeriesSpec("95.4% Confidence", "conf-2-sigma", color="orange", dash_style="ShortDash"),
     SeriesSpec("99.73% Confidence", "conf-3-sigma", color="green", dash_style="ShortDash"),
+)
+
+# First-party M2 labels: these bound a Gaussian-noise event on the tested
+# grid; they are not posterior confidence or a calibrated pulsar detection.
+FALSE_ALARM_LINES = (
+    SeriesSpec("Gaussian noise FAP <= 10%", "0.1", color="red", dash_style="ShortDash"),
+    SeriesSpec("Gaussian noise FAP <= 1%", "0.01", color="orange", dash_style="ShortDash"),
+    SeriesSpec("Gaussian noise FAP <= 0.1%", "0.001", color="green", dash_style="ShortDash"),
 )
 
 #: ``PulsarPeriodFolding`` defaults. Note the x axis is "Time (s)", not

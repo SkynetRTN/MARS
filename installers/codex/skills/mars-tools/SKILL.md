@@ -63,13 +63,18 @@ Run the stages in order; each produces what the next needs.
    path to every later stage.
 2. `compute_pulsar_periodogram` — measure the period. It is the only tool that
    produces one from the data, and it runs on every scan, including those that
-   already have a curated period. Check peak_fold_snr, not peak_confidence: the
-   confidence threshold assumes white noise, so mains interference and baseline
-   drift routinely read "99.73% Confidence" while folding to nothing. A
-   `peak_does_not_fold` warning means the period is wrong.
+   already have a curated period. Each `top_peaks` candidate has `period_s`,
+   `frequency_hz` and `power`; fold with `period_s` in either search mode.
+   Read `false_alarm_assumptions`: `false_alarm_probability_upper_bound` is
+   conditional on iid Gaussian noise and one fixed grid. It does not calibrate
+   baseline filtering, correlated noise, RFI or retuning, and is not a pulsar
+   or correct-period probability. `peak_confidence` is retired (null).
+   Check `peak_fold_snr`, aliases, the profile and warnings. `peak_does_not_fold`
+   means the fold does not strongly support this candidate.
 3. `fold_pulsar_lightcurve` — stack rotations into a pulse profile. `pulse_snr`
-   above ~8 is a detection. Folding at a wrong period returns a flat profile,
-   not an error.
+   above ~8 is an empirical concentration diagnostic, not a calibrated
+   detection probability; periodic RFI can fold too. A wrong period may return
+   a flat profile rather than an error.
 4. `sonify_pulsar` — render audio. Always pass `period_s` when you have one.
 
 `plot_pulsar` renders any stage's artifact; the periodogram plot shows
@@ -80,9 +85,9 @@ rendered audio: the synthesis ignores sample timestamps.
 
 ## 3. Period sourcing: measure first, compare second
 
-A fold at a **measured** period is a detection. A fold at a **literature**
-period is a fit to a known answer. They are different claims, and one must
-never be reported as the other.
+A fold at a **literature** period does not independently measure that period.
+A data-derived candidate still needs profile and alias checks. Report where
+the period came from; neither kind of fold alone proves a pulsar detection.
 
 1. **Measure.** Run `compute_pulsar_periodogram`; read `peak_fold_snr` and
    `top_peaks`. That is the only evidence that does not depend on knowing the
@@ -91,11 +96,12 @@ never be reported as the other.
    `search_atnf` for a source the curation does not cover. On agreement, report
    both numbers and say which is which.
 3. **Retune, do not substitute.** On disagreement, a low `peak_fold_snr`, or a
-   `peak_does_not_fold` warning, the measurement is wrong: retry with different
+   `peak_does_not_fold` warning, the candidate is not supported: retry with different
    parameters. Vary `back_scale` (a red-noise peak moves with it, a real
    periodicity does not), narrow `start`/`stop` away from the artifact, raise
    `steps`. Two artifacts recur on this data: 0.016665 s is 60.006 Hz mains
-   interference, and a 2.1-2.2 s peak is leftover baseline red noise.
+   interference, and a 2.1-2.2 s peak is leftover baseline red noise. Retuning
+   is outside the reported single-search Gaussian-noise bound.
 4. **Fall back, and say so.** Only when a retuned search has still failed, fold
    at the reference period — and state plainly that you did. That fold's
    `pulse_snr` is not an independent detection, because the period came from

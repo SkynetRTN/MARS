@@ -105,11 +105,13 @@ def test_computed_spectrum_round_trips_channel_and_axes(
     )
     legend = [text.get_text() for text in axes.get_legend().get_texts()]
     assert f"Global Maxima ({table.meta['peak_x']:.6g} {unit})" in legend
-    assert len(axes.lines) == 4  # spectrum plus three actual confidence lines
-    for line, key in zip(axes.lines[1:], (
-        "conf-1-sigma", "conf-2-sigma", "conf-3-sigma",
-    )):
-        np.testing.assert_array_equal(line.get_ydata(), [table.meta["confidence"][key]] * 2)
+    assert len(axes.lines) == 4  # spectrum plus three conditional noise levels
+    for line, key in zip(axes.lines[1:], ("0.1", "0.01", "0.001")):
+        np.testing.assert_array_equal(
+            line.get_ydata(), [table.meta["false_alarm_thresholds"][key]] * 2,
+        )
+        assert "Gaussian noise FAP <=" in line.get_label()
+    assert "false_alarm_model_assumptions" in [w.code for w in result.warnings]
     assert Path(result.artifact.path).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
