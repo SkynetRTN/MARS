@@ -1,7 +1,8 @@
 # MARS release closure gate
 
-Updated 2026-10-21 against `main` at `15f5497`, with the first two M2 checkpoints
-implemented on the single working branch `feature/m2`. Keep the remaining M2
+Updated 2026-10-21 against `main` at `15f5497`, with the first M2 checkpoint
+closed and the second implemented but reopened by review on the single working
+branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
@@ -40,7 +41,16 @@ the subsequent work.
   and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
   native Windows and external solver-data gates. Changes are local to this
   feature branch and are not in published `0.1.0rc6`.
-- [x] **Pulsar candidates and confidence.** Every candidate exposes `period_s`,
+- [ ] **Pulsar candidates and confidence.** Reopened by independent review
+  (2026-10-21): near-perfect four-sample fits can round to maximum power,
+  causing the reported Gaussian false-alarm bound to collapse to approximately
+  `2.2e-308` despite a resolvable residual tail near `1.05e-8`. Sufficient
+  thresholds can also round onto that unresolved endpoint. Correct the
+  numerical tail/threshold handling or explicitly report unavailable levels
+  before closing this gate; see the
+  [review reproduction](../analysis/pulsar-candidates-confidence.md#review-follow-up-unresolved-endpoint-probabilities).
+  The implemented portions remain:
+  every candidate exposes `period_s`,
   `frequency_hz` and `power` in either mode; search bounds have `search_unit`,
   and `evaluated_trials` counts the actual saved grid. Defaults use twice
   median positive spacing through 3 s (the reciprocal frequency band).

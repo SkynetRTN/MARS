@@ -1,6 +1,8 @@
 # Pulsar candidates, sampling and false-alarm bounds
 
-Validated 2026-10-21 for the second M2 checkpoint. This replaces the public
+Implementation and acceptance checks recorded 2026-10-21 for the second M2
+checkpoint. Independent review subsequently reopened the gate for unresolved
+endpoint probabilities, detailed below. The implementation replaces the public
 driver's independent-grid-point confidence interpretation; it does not
 calibrate pulsar detection on radio data.
 
@@ -126,3 +128,39 @@ diagnostic, with an inherited warning cutoff of 8; coherent interference may
 fold too. No detection-probability, period-uncertainty or general sensitivity
 claim follows from this checkpoint.
 [VanderPlas, §VII](https://arxiv.org/html/1703.09824).
+
+## Review follow-up: unresolved endpoint probabilities
+
+Independent code review on 2026-10-21 found a P2 numerical defect in
+`significance.upper_bound` and threshold generation. The following supported
+four-sample input reproduces it through both the algorithm and the public tool:
+
+```python
+t = np.arange(4) * 0.25
+d = 2.0**-27
+y = np.array([d, 1-d, d, -1-d])
+result = periodogram.compute_periodogram(
+    t, y, start=1.0, stop=1.001, steps=1, freq_mode=True,
+)
+```
+
+`peak_power` rounds to `2.0`, so the normalized power rounds to one and the
+reported bound is `2.2250738585072014e-308`. Independent floating-mean least
+squares gives residual SSE about `2.2204460434e-16` and TSS `2.0`. The
+finite-sample Beta tail is about `1.05367121e-8`, also confirmed by a
+70-digit quadrature calculation. The residual remains resolvable; replacing
+its lost complement by the smallest normal float does not establish a
+conservative bound. The public result and saved ECSV both carry the bad value.
+
+The related `threshold(0.001, 4, 200_002)` rounds to the maximum power `2.0`;
+`threshold(0.01, 4, 200_002)` yields a power whose reported bound is about
+`0.01010656`, above the requested `0.01`. These cannot be presented as resolved
+sufficient thresholds without further numerical handling.
+
+The derivation remains valid away from this numerical boundary. The code needs
+stable residual-based evaluation with controlled error handling, or explicit
+unavailable probabilities/levels when resolution is insufficient. An arbitrary
+epsilon correction alone does not prove conservativeness. The 106 focused
+candidate, limit, spectrum and plot tests pass but do not cover this failing
+endpoint. This finding remains unresolved; the master plan records the gate
+as open.
