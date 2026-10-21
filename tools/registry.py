@@ -818,8 +818,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "retuned search has still failed, and a fold at one is not an independent "
         "detection: report which kind of period you folded at. Local only -- no "
         "network. "
-        "IMPORTANT: folding at the WRONG period returns a flat profile, not an "
-        "error. Read 'pulse_snr' as an empirical concentration diagnostic; "
+        "IMPORTANT: folding at the WRONG period can return a flat profile "
+        "without an error. Read 'pulse_snr' as an empirical concentration diagnostic; "
         "the cutoff of 8 is not a calibrated detection probability. Periodic "
         "RFI can fold coherently too. A weak fold may mean a wrong period or "
         "a source too faint in this scan.",
