@@ -1749,7 +1749,8 @@ the generated name is never parsed. Preserved.
 photometer is not useful, and field calibration depends on the filtering.
 `len(table)` and `len(sources)` differ routinely. *M3:* a response where
 *every* row drops is now an unusable response (§5.12), and a row without a
-finite position is dropped the same way.
+finite position is dropped the same way. Rows that all drop give `[]` with a
+logged warning: a sparse or faint cone, not a broken provider (§5.12).
 
 ##### 5.5 A magnitude of 99 or more means "not measured"
 
@@ -1852,15 +1853,18 @@ is still `[]`.
   names the missing column and what the provider returned. An absent id column
   is tolerated, since live APASS never returns the `recno` it requests, and
   field calibration assigns ids.
-* Plain-column mappings also try `_`-prefixed and unprefixed spellings, as
-  apostrophes already were. **Live finding:** current astroquery returns
+* Plain-column mappings and band columns also try `_`-prefixed and
+  unprefixed spellings, as apostrophes already were (`_row_value` tries the
+  same). A column used inside an expression must match exactly, because the
+  expression is evaluated against the real names. **Live finding:** current astroquery returns
   2MASS's `2MASS` column, not the `_2MASS` the declaration maps, so every 2MASS
   id was lost.
-* Rows that are all masked, non-finite or >= 99 in every band, or have no
-  finite position, are an unusable response. Individual such rows are dropped.
-  **Live:** about 1 in 74 Tycho-2 rows has a masked mean position (no
-  proper-motion solution), and is dropped rather than emitted with a NaN
-  position. Mapping those stars from Tycho-2's observed positions would be a
+* Rows that are masked, non-finite or >= 99 in every band, or have no finite
+  position, are dropped. If every row drops the result is `[]` with a logged
+  warning, since the columns were present: a sparse or faint cone is not a
+  broken provider. **Live:** about 1 in 74 Tycho-2 rows has a masked mean
+  position (no proper-motion solution), and is dropped rather than emitted
+  with a NaN position. Mapping those stars from Tycho-2's observed positions would be a
   scientific change; it is not made here.
 * **Landolt crashed on every live query.** Its transform (Catalogs) read errors
   with `getattr(mag, 'error', 0)`, but MARS's `Mag.error` defaults to `None`.
@@ -1873,12 +1877,21 @@ is still `[]`.
   SkyServer answers, including HTML 404 and "Skyserver Error" pages, so one
   transient error made the same SDSS query fail at parse time until the entry
   expired. This was found live in the development host's own cache.
-  `_query_sql` retries an unparseable or HTML-headed reply once with the cache
-  bypassed. If that also fails it raises `ProviderResponseError`, quoting the
-  reply. A refusal (`RemoteServiceError`) gets the same retry but raises as
-  itself; network errors are not retried.
+  `_query_sql` inspects the raw reply. An HTML page read from the cache is
+  evicted (the exact entry, via astroquery's `_last_query`) and refetched with
+  caching on, so a good reply repairs the cache. A page that persists is a
+  service failure, raised as `RemoteServiceError` (retryable), as is a refusal.
+  Any other reply that will not parse is `ProviderResponseError`, and a failed
+  reply is never left in the cache. Network errors are not retried.
+* The runner's ID, coordinate and `query_catalogs_for_image` loops skip a
+  catalog whose response is unusable and try the next, so one catalog cannot
+  abort a fallback chain. Only when no catalog yields sources is the unusable
+  response raised, naming each catalog.
 * `calibrate_zeropoint` reports `ProviderResponseError` as the new tool code
-  `unusable_response`, which other tools share (below).
+  `unusable_response`, which other tools share (below). `run_photometry_on_target`
+  used to print a failed field calibration to stderr only; it now carries it
+  as an `unusable_response` or `field_calibration_failed` warning beside the
+  instrumental fallback.
 
 Beyond the VizieR mapper, each chain the M3 item names was checked live, and
 fixed where a populated response could look empty or escape as an exception:
@@ -1889,16 +1902,20 @@ fixed where a populated response could look empty or escape as an exception:
   "no match". `search_vizier` now also requests VizieR's computed
   `_RAJ2000`/`_DEJ2000` (all 138 catalogs then carry them), the matcher also
   reads `_RA.icrs`/`_DE.icrs`, and a catalog whose positions still cannot be
-  read is named in a `catalog_positions_unreadable` warning. The name columns
-  gain `2MASS`.
+  read is named in a `catalog_positions_unreadable` warning:
+  `match_sources_to_catalog(..., unreadable_raises=True)` raises
+  `UnreadablePositions` in one pass, rather than returning the `[]` that also
+  means "no match". The name columns gain `2MASS`.
 * **NED photometry:** a renamed `Frequency`/`Flux Density` column used to
   escape `analyze_source_spectrum` as `KeyError`. It is now
   `unusable_response`.
 * **Gaia DR3 and Cantat-Gaudin & Anders 2020** (`tools.hr_diagram`): the columns
   each step reads are checked (`_GAIA_COLUMNS`, `_LITERATURE_COLUMNS`). A
   renamed one escaped `crossmatch_gaia_by_position` as `KeyError`; a masked or
-  NaN literature parameter flowed on as a NaN age or distance. Both are now
-  `unusable_response`.
+  NaN age, extinction, distance modulus or distance flowed on into the fit.
+  Both are now `unusable_response`. A non-finite parallax or proper motion
+  does not refuse the fit. A non-finite cluster position refuses only the
+  Gaia fetch around it. All three tools share `ProviderResponseError`.
 * **SIMBAD** (`algorithms.query.simbad`): columns are read case-insensitively,
   since astroquery before 0.4.8 returned `MAIN_ID`/`RA`/`DEC`/`OTYPE`. A
   response missing one raises `SimbadResponseError` under `strict=True`

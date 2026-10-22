@@ -54,6 +54,7 @@ from .geometry import (
 )
 from .registry import CATALOGS, UnknownCatalogError
 from .selection import select_catalogs_for_filter
+from .vizier import ProviderResponseError
 
 __all__ = ["query_catalogs", "query_catalogs_for_image"]
 
@@ -188,11 +189,16 @@ def query_catalogs(
     )
 
     sources: list[CatalogSource] = []
+    unusable: list[ProviderResponseError] = []
 
     if source_ids_list:
         logger.info("Querying catalogs by source IDs (%d IDs)", len(source_ids_list))
         for catalog in catalog_list:
-            catalog_sources = CATALOGS[catalog].query_objects(source_ids_list)
+            try:
+                catalog_sources = CATALOGS[catalog].query_objects(source_ids_list)
+            except ProviderResponseError as exc:
+                _note_unusable(catalog, exc, unusable)
+                continue
             if catalog_sources:
                 logger.info(
                     "Catalog %s returned %d sources by ID", catalog, len(catalog_sources)
@@ -200,7 +206,7 @@ def query_catalogs(
                 if stop_on_success:
                     return list(catalog_sources)
                 sources += list(catalog_sources)
-        return sources
+        return _sources_or_unusable(sources, unusable)
 
     if ra_hours is not None:
         logger.info(
@@ -209,16 +215,20 @@ def query_catalogs(
             dec_degs,
         )
         for catalog in catalog_list:
-            if radius_arcmins is None:
-                catalog_sources = CATALOGS[catalog].query_box(
-                    ra_hours, dec_degs, width_arcmins, height_arcmins, constraints
-                )
-                shape = "box"
-            else:
-                catalog_sources = CATALOGS[catalog].query_circ(
-                    ra_hours, dec_degs, radius_arcmins, constraints
-                )
-                shape = "circle"
+            try:
+                if radius_arcmins is None:
+                    catalog_sources = CATALOGS[catalog].query_box(
+                        ra_hours, dec_degs, width_arcmins, height_arcmins, constraints
+                    )
+                    shape = "box"
+                else:
+                    catalog_sources = CATALOGS[catalog].query_circ(
+                        ra_hours, dec_degs, radius_arcmins, constraints
+                    )
+                    shape = "circle"
+            except ProviderResponseError as exc:
+                _note_unusable(catalog, exc, unusable)
+                continue
             if catalog_sources:
                 logger.info(
                     "Catalog %s returned %d sources for %s query",
@@ -229,7 +239,7 @@ def query_catalogs(
                 if stop_on_success:
                     return catalog_sources
                 sources += catalog_sources
-        return sources
+        return _sources_or_unusable(sources, unusable)
 
     # WCS footprint mode.
     boxes: list[tuple[float, float, float, float]] = []
@@ -278,6 +288,23 @@ def query_catalogs(
     return sources
 
 
+def _note_unusable(catalog: str, exc: ProviderResponseError, unusable: list) -> None:
+    # M3: one catalog's unusable response no longer aborts the rest of the
+    # list; it is kept so a wholly unusable query still fails by name.
+    logger.warning("Catalog %s returned an unusable response; trying the next: %s", catalog, exc)
+    unusable.append(exc)
+
+
+def _sources_or_unusable(sources: list, unusable: list) -> list:
+    """The sources found, or -- when none were and some catalog was unusable --
+    that failure, so an unusable response never reads as an empty field."""
+    if not sources and unusable:
+        if len(unusable) == 1:
+            raise unusable[0]
+        raise ProviderResponseError("; ".join(str(exc) for exc in unusable))
+    return sources
+
+
 def query_catalogs_for_image(
     catalogs: list[str],
     wcs: WCS,
@@ -312,15 +339,23 @@ def query_catalogs_for_image(
     boxes = image_boxes_from_wcs(wcs, shape=shape, header=header, data=data)
 
     sources: list[CatalogSource] = []
+    unusable: list[ProviderResponseError] = []
     for catalog in catalogs:
-        for ra_deg, dec_deg, width_deg, height_deg in boxes:
-            sources += CATALOGS[catalog].query_box(
-                ra_deg / 15.0,
-                dec_deg,
-                width_deg * 60.0,
-                height_deg * 60.0,
-                constraints or {},
-            )
+        try:
+            catalog_sources: list[CatalogSource] = []
+            for ra_deg, dec_deg, width_deg, height_deg in boxes:
+                catalog_sources += CATALOGS[catalog].query_box(
+                    ra_deg / 15.0,
+                    dec_deg,
+                    width_deg * 60.0,
+                    height_deg * 60.0,
+                    constraints or {},
+                )
+        except ProviderResponseError as exc:
+            _note_unusable(catalog, exc, unusable)
+            continue
+        sources += catalog_sources
+    sources = _sources_or_unusable(sources, unusable)
 
     # Keep only sources landing on the detector, stamping pixel coordinates.
     height, width = infer_image_shape(wcs, shape=shape, header=header, data=data)

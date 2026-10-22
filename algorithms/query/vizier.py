@@ -53,9 +53,9 @@ logger = logging.getLogger(__name__)
 class ProviderResponseError(ValueError):
     """A provider returned rows MARS cannot use (M3, CAT-20).
 
-    Raised for renamed or missing coordinate or magnitude columns and for rows
-    with no usable value, so an unusable response is never mistaken for a
-    field with no stars. An empty response is still an empty result.
+    Raised for renamed or missing coordinate or magnitude columns, so an
+    unusable response is never mistaken for a field with no stars. An empty
+    response, or well-formed rows with nothing measurable, is still ``[]``.
     """
 
 # astroquery treats cache failures as query failures; MARS does not. See
@@ -192,10 +192,10 @@ class VizierCatalog(Catalog):
         table and version, and with a leading underscore added or removed
         (``_2MASS``/``2MASS``).
 
-        M3 (CAT-20): an unusable response raises ``ProviderResponseError``
-        instead of mapping to ``[]`` -- missing coordinate columns, no declared
-        band column, or rows of which none has a usable magnitude and a
-        finite position. See ``docs/extraction.md``, Query §5.12.
+        M3 (CAT-20): a response missing its coordinate columns, or every
+        declared band column, raises ``ProviderResponseError`` instead of
+        mapping to ``[]``. Well-formed rows with nothing measurable still map
+        to ``[]`` (logged). See ``docs/extraction.md``, Query §5.12.
         """
         sources: TList[CatalogSource] = []
         if table is None or len(table) == 0:
@@ -251,25 +251,18 @@ class VizierCatalog(Catalog):
             if source.mags:
                 sources.append(source)
 
-        # M3 (CAT-20): rows that all lost their values used to come back as an
-        # empty list, indistinguishable from a field with no stars.
-        if not sources:
-            raise ProviderResponseError(
-                f"{self.name} returned {len(table)} rows, none with a usable magnitude "
-                "(every declared band is absent, masked, non-finite or >= 99)."
-            )
         # A row without a finite position cannot be placed or matched (e.g.
         # Tycho-2 stars with no mean position have masked RAmdeg/DEmdeg); it is
-        # dropped like a row without a magnitude.
+        # dropped like a row without a magnitude. Well-formed rows that all
+        # drop are a field with nothing measurable -- a sparse or faint cone --
+        # not a broken provider, so the result is [] (the columns were
+        # checked above); the count is logged so it is not silent.
         positioned = [source for source in sources if _finite_position(source)]
-        if not positioned:
-            raise ProviderResponseError(
-                f"{self.name} returned {len(sources)} rows with magnitudes but none "
-                "with a finite position."
+        if len(positioned) < len(table):
+            logger.warning(
+                "%s: %d of %d rows had no usable magnitude or finite position and were dropped",
+                self.name, len(table) - len(positioned), len(table),
             )
-        if len(positioned) < len(sources):
-            logger.info("%s: dropped %d of %d rows with no finite position",
-                        self.name, len(sources) - len(positioned), len(sources))
         return positioned
 
     def _check_response_columns(self, colnames: TList[str]) -> TDict[str, str]:
@@ -285,8 +278,12 @@ class VizierCatalog(Catalog):
         aliases: TDict[str, str] = {}
         for attr, expr in (self.col_mapping or {}).items():
             needed = _expression_columns(expr)
-            found = {name: _column_spelling(name, present) for name in needed}
-            if expr in found and found[expr] not in (None, expr):
+            # Only a plain-column mapping can be read under another spelling:
+            # an expression is evaluated against the real column names.
+            plain = needed == [expr]
+            found = {name: _column_spelling(name, present) if plain else (name if name in present else None)
+                     for name in needed}
+            if plain and found[expr] not in (None, expr):
                 aliases[expr] = found[expr]
             missing = [name for name, spelling in found.items() if spelling is None]
             if missing and attr in ("ra_hours", "dec_degs"):
@@ -462,17 +459,21 @@ def _finite_position(source: CatalogSource) -> bool:
 
 
 def _row_value(row, column: Optional[str]):
-    """Read a column, retrying with apostrophes as underscores.
+    """Read a column, retrying with apostrophes as underscores and with a
+    leading underscore added or removed.
 
     astroquery exposes VizieR's ``g'mag`` as either ``g'mag`` or ``g_mag``
     depending on the table and the astroquery version.
     """
     if column is None:
         raise KeyError(column)
-    try:
-        return row[column]
-    except KeyError:
-        return row[column.replace("'", "_")]
+    # The same spellings _check_response_columns accepts (M3).
+    for candidate in (column, column.replace("'", "_"), column.lstrip("_"), "_" + column):
+        try:
+            return row[candidate]
+        except KeyError:
+            continue
+    raise KeyError(column)
 
 
 def _round_for_cache(ra_hours: float, dec_degs: float, *sizes):

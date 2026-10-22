@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-__all__ = ["catalog_positions_readable", "guess_radec_columns", "match_sources_to_catalog"]
+__all__ = ["UnreadablePositions", "guess_radec_columns", "match_sources_to_catalog"]
 
 #: Tried in order; the first pair present (case-insensitively) in the table wins.
 _RADEC_CANDIDATES = [
@@ -66,21 +66,8 @@ def guess_radec_columns(table: pd.DataFrame) -> tuple[str, str] | None:
     return None
 
 
-def catalog_positions_readable(table: pd.DataFrame) -> bool:
-    """Whether ``match_sources_to_catalog`` can read positions from ``table``.
-
-    M3: that function returns ``[]`` both for "no source within the radius"
-    and for "no position columns it understands", so a caller that needs to
-    tell a populated-but-unreadable catalog from a miss asks here first.
-    """
-    guessed = guess_radec_columns(table)
-    if guessed is None:
-        return False
-    rows = table.dropna(subset=list(guessed))
-    if rows.empty:
-        return False
-    return (_coerce_degrees(rows[guessed[0]], is_ra=True) is not None
-            and _coerce_degrees(rows[guessed[1]], is_ra=False) is not None)
+class UnreadablePositions(ValueError):
+    """A populated catalog has no position columns the matcher can read (M3)."""
 
 
 def match_sources_to_catalog(
@@ -89,6 +76,8 @@ def match_sources_to_catalog(
     radius_arcsec: float,
     ra_col: str | None = None,
     dec_col: str | None = None,
+    *,
+    unreadable_raises: bool = False,
 ) -> list[dict]:
     """Nearest-catalog-neighbour within ``radius_arcsec`` for every row in
     ``sources_df`` (expects ``ra_deg``/``dec_deg`` columns).
@@ -101,24 +90,34 @@ def match_sources_to_catalog(
     Returns one entry per matched source (not per candidate), each carrying
     the full matched catalog row so the caller can read whatever
     flux/frequency/name columns that particular catalog happens to have.
+
+    ``[]`` means both "no source within the radius" and "no positions this
+    function can read". With ``unreadable_raises=True`` the second, for a
+    populated catalog, raises :class:`UnreadablePositions` instead (M3), so a
+    caller can report it rather than count it as a miss.
     """
     if sources_df.empty or catalog_df.empty:
+        return []
+
+    def unreadable(reason: str) -> list[dict]:
+        if unreadable_raises:
+            raise UnreadablePositions(reason)
         return []
 
     if ra_col is None or dec_col is None:
         guessed = guess_radec_columns(catalog_df)
         if guessed is None:
-            return []
+            return unreadable("no recognised RA/Dec column pair")
         ra_col, dec_col = guessed
 
     catalog_df = catalog_df.dropna(subset=[ra_col, dec_col]).reset_index(drop=True)
     if catalog_df.empty:
-        return []
+        return unreadable(f"every {ra_col}/{dec_col} value is missing")
 
     catalog_ra = _coerce_degrees(catalog_df[ra_col], is_ra=True)
     catalog_dec = _coerce_degrees(catalog_df[dec_col], is_ra=False)
     if catalog_ra is None or catalog_dec is None:
-        return []
+        return unreadable(f"{ra_col}/{dec_col} values could not be read as coordinates")
 
     ra0 = float(sources_df["ra_deg"].mean())
     dec0 = float(sources_df["dec_deg"].mean())

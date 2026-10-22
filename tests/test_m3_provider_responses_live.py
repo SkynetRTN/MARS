@@ -100,17 +100,22 @@ def test_live_radio_catalogs_are_all_positionable_and_3c_matches():
     import pandas as pd
     from astropy.table import Table
 
-    from algorithms.radio.matching import catalog_positions_readable, match_sources_to_catalog
+    from algorithms.radio.matching import UnreadablePositions, match_sources_to_catalog
     from tools.vizier import search_vizier
 
     result = search_vizier(ra_hours=24.4221 / 15, dec_degs=33.1598, radius_arcmin=1.0,
                            category="radio", max_catalogs=40)
     assert result.artifacts
     tables = {a.path.split("/")[-1]: Table.read(a.path).to_pandas() for a in result.artifacts}
-    unreadable = [name for name, df in tables.items() if not df.empty and not catalog_positions_readable(df)]
+    source = pd.DataFrame({"ra_deg": [24.4221], "dec_deg": [33.1598]})
+    unreadable = []
+    for name, df in tables.items():
+        try:
+            match_sources_to_catalog(source, df, radius_arcsec=90, unreadable_raises=True)
+        except UnreadablePositions:
+            unreadable.append(name)
     assert unreadable == []  # was 17 of 40, B1950-only catalogs among them
     three_c = next(df for name, df in tables.items() if name.startswith("VIII_1A_3c"))
-    source = pd.DataFrame({"ra_deg": [24.4221], "dec_deg": [33.1598]})
     # 3C positions are 1950s-era and coarse: 3C 48 sits ~40" from NED's.
     assert match_sources_to_catalog(source, three_c, radius_arcsec=90)
 

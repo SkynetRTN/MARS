@@ -51,8 +51,9 @@ from algorithms.hrdiagram_py.matching import field_footprint
 from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionSettings
 from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
+from algorithms.query.vizier import ProviderResponseError
 from algorithms.radio import spectral_fitting
-from algorithms.radio.matching import catalog_positions_readable, match_sources_to_catalog
+from algorithms.radio.matching import UnreadablePositions, match_sources_to_catalog
 from tools import artifacts
 from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult, ToolWarning
@@ -89,10 +90,6 @@ _RADIO_MAX_FREQUENCY_HZ = 3e11
 # "2MASS" is how current astroquery spells the column older releases renamed
 # to "_2MASS" (M3).
 _NAME_COLUMNS = ["Name", "MAIN_ID", "ID", "2MASS", "_2MASS", "NVSS", "recno"]
-
-
-class _Unusable(RuntimeError):
-    """A provider answered with rows this tool cannot read (M3)."""
 
 
 class _NotFound(Exception):
@@ -301,11 +298,15 @@ def identify_radio_sources(
         for artifact in catalog_result.artifacts:
             catalog_df = Table.read(artifact.path).to_pandas()
             catalog_label = Path(artifact.path).stem
-            if not catalog_df.empty and not catalog_positions_readable(catalog_df):
+            try:
+                matches = match_sources_to_catalog(
+                    sources, catalog_df, radius_arcsec, unreadable_raises=True
+                )
+            except UnreadablePositions:
                 # M3: this used to read as "no source matched this catalog".
                 unreadable.append(catalog_label)
                 continue
-            for match in match_sources_to_catalog(sources, catalog_df, radius_arcsec):
+            for match in matches:
                 position = sources.index.get_loc(match["source_index"])
                 n_matches[position] += 1
                 separation = match["separation_arcsec"]
@@ -388,7 +389,7 @@ def _load_spectrum_from_ned(name: str, max_frequency_hz: float) -> tuple[np.ndar
     missing = [column for column in ("Frequency", "Flux Density") if column not in table.columns]
     if missing:
         # M3: a renamed NED column used to escape as KeyError.
-        raise _Unusable(
+        raise ProviderResponseError(
             f"NED's photometry for {name!r} has no {', '.join(missing)} column; it "
             f"returned {', '.join(map(str, table.columns))}"
         )
@@ -442,7 +443,7 @@ def analyze_source_spectrum(
             )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
-    except _Unusable as exc:
+    except ProviderResponseError as exc:
         return ToolResult(status="error", errors=[{"code": "unusable_response", "message": str(exc)}])
     except (RuntimeError, ValueError) as exc:
         return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])

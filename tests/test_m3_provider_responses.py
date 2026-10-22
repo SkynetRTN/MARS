@@ -88,24 +88,32 @@ def test_an_apostrophe_spelling_change_still_maps():
 # --- non-finite values ---------------------------------------------------------
 
 
-def test_rows_that_are_all_non_finite_are_an_unusable_response():
-    nan = [math.nan, math.nan]
-    table = _apass(Bmag=nan, Vmag=nan, **{"g'mag": nan, "r'mag": nan, "i'mag": nan})
-    with pytest.raises(ProviderResponseError, match=r"APASS returned 2 rows, none with a usable magnitude"):
+@pytest.mark.parametrize("value", [math.nan, 99.0, MaskedColumn([14.1, 15.2], mask=[True, True])])
+def test_well_formed_rows_with_nothing_measurable_are_no_matches(value, caplog):
+    # A sparse or faint cone, not a broken provider: the columns are all there.
+    column = value if isinstance(value, MaskedColumn) else [value, value]
+    table = _apass(Bmag=column, Vmag=column, **{"g'mag": column, "r'mag": column, "i'mag": column})
+    with caplog.at_level("WARNING", logger="algorithms.query.vizier"):
+        assert CATALOGS["APASS"].table_to_sources(table) == []
+    assert "2 of 2 rows had no usable magnitude or finite position" in caplog.text
+
+
+def test_rows_with_no_finite_position_are_dropped_not_an_error():
+    assert CATALOGS["APASS"].table_to_sources(_apass(RAJ2000=[math.nan, math.nan])) == []
+
+
+def test_a_coordinate_column_inside_an_expression_is_not_aliased():
+    # 'RAJ2000/15' is evaluated against real names: a response with only the
+    # VizieR-computed _RAJ2000 must be named as missing RAJ2000.
+    table = _apass(RAJ2000=None, _RAJ2000=[201.36, 201.37])
+    with pytest.raises(ProviderResponseError, match="no RAJ2000 column for ra_hours"):
         CATALOGS["APASS"].table_to_sources(table)
 
 
-def test_masked_magnitudes_on_every_row_are_an_unusable_response():
-    masked = MaskedColumn([14.1, 15.2], mask=[True, True])
-    table = _apass(Bmag=masked, Vmag=masked, **{"g'mag": masked, "r'mag": masked, "i'mag": masked})
-    with pytest.raises(ProviderResponseError, match="none with a usable magnitude"):
-        CATALOGS["APASS"].table_to_sources(table)
-
-
-def test_non_finite_positions_on_every_row_are_an_unusable_response():
-    table = _apass(RAJ2000=[math.nan, math.nan])
-    with pytest.raises(ProviderResponseError, match="none with a finite position"):
-        CATALOGS["APASS"].table_to_sources(table)
+def test_a_band_column_found_under_an_underscore_spelling_is_read():
+    table = _apass(Vmag=None, _Vmag=[13.5, 14.6])
+    sources = CATALOGS["APASS"].table_to_sources(table)
+    assert [s.mags["V"].value for s in sources] == [pytest.approx(13.5), pytest.approx(14.6)]
 
 
 def test_a_row_without_a_finite_position_is_dropped_like_one_without_magnitudes():
@@ -174,6 +182,28 @@ def test_the_runner_raises_an_unusable_response_instead_of_returning_nothing(mon
     monkeypatch.setattr(apass, "query_circ", lambda *a, **k: apass.table_to_sources(_apass(RAJ2000=None)))
     with pytest.raises(ProviderResponseError):
         query_catalogs(["APASS"], ra_hours=13.42, dec_degs=-43.0, radius_arcmins=3.0)
+
+
+def test_an_unusable_catalog_does_not_abort_the_fallback_chain(monkeypatch):
+    from algorithms.query.runner import query_catalogs
+
+    apass, ucac = CATALOGS["APASS"], CATALOGS["UCAC"]
+    monkeypatch.setattr(apass, "query_circ", lambda *a, **k: apass.table_to_sources(_apass(RAJ2000=None)))
+    monkeypatch.setattr(ucac, "query_circ", lambda *a, **k: apass.table_to_sources(_apass()))
+    found = query_catalogs(["APASS", "UCAC"], ra_hours=13.42, dec_degs=-43.0, radius_arcmins=3.0,
+                           stop_on_success=True)
+    assert len(found) == 2
+
+
+def test_every_catalog_unusable_names_each_one(monkeypatch):
+    from algorithms.query.runner import query_catalogs
+
+    for name in ("APASS", "UCAC"):
+        catalog = CATALOGS[name]
+        monkeypatch.setattr(catalog, "query_circ",
+                            lambda *a, _c=catalog, **k: _c.table_to_sources(Table({"x": [1.0]})))
+    with pytest.raises(ProviderResponseError, match=r"APASS.*; UCAC"):
+        query_catalogs(["APASS", "UCAC"], ra_hours=13.42, dec_degs=-43.0, radius_arcmins=3.0)
 
 
 # --- search_vizier asks VizieR for computed J2000 positions -------------------
@@ -407,7 +437,8 @@ def test_ads_fielded_clauses_are_each_grouped():
     b"<html><head> <title>Skyserver Error</title> </head><body>Invalid column</body></html>",
     b"<!DOCTYPE html>\n<html>\n<head><title>404</title></head>\n<body>\n<p>Not Found</p>\n</body>\n</html>\n",
 ])
-def test_an_sdss_error_page_is_retried_uncached_then_named(monkeypatch, page):
+def test_a_persistent_sdss_error_page_is_a_retryable_service_failure(monkeypatch, page):
+    from astroquery.exceptions import RemoteServiceError
     from astroquery.sdss import SDSSClass
     from requests import Response
 
@@ -420,9 +451,40 @@ def test_an_sdss_error_page_is_retried_uncached_then_named(monkeypatch, page):
         return response
 
     monkeypatch.setattr(SDSSClass, "_request", request)
-    with pytest.raises(ProviderResponseError, match="SkyServer did not return a table"):
+    # An outage page is the service failing -- try again later -- not a
+    # response MARS can never read.
+    with pytest.raises(RemoteServiceError, match="HTML page"):
         CATALOGS["SDSS"].query_circ(12.0, 0.5, 1.0)
-    assert len(calls) == 2  # the cached attempt, then one uncached retry
+    assert len(calls) == 2  # the first attempt, then one refetch
+
+
+def test_a_cached_sdss_error_page_is_evicted_and_replaced(monkeypatch, tmp_path):
+    from astroquery.sdss import SDSSClass
+
+    import algorithms.query.sdss as sdss_module
+
+    good = (b"objID,ra,dec,u,err_u,g,err_g,r,err_r,i,err_i,z,err_z\n"
+            b"1,180,0.5,15,0.01,14,0.01,13.5,0.01,13.3,0.01,13.2,0.01\n")
+    answers = iter([b"<html><title>Skyserver Error</title></html>", good])
+    import requests
+
+    def request(self, method, url, **kwargs):  # the session astroquery's cache fronts
+        response = requests.Response()
+        response.status_code, response.encoding, response._content = 200, "utf-8", next(answers)
+        response.url = url
+        response.request = requests.Request(method, url).prepare()  # astroquery's to_cache needs it
+        return response
+
+    monkeypatch.setattr(requests.Session, "request", request)
+    client = sdss_module.SDSS()
+    client.cache_location = tmp_path
+    monkeypatch.setattr(sdss_module, "SDSS", lambda: client)
+    (source,) = CATALOGS["SDSS"].query_circ(12.0, 0.5, 1.0)
+    assert int(source.id) == 1
+    # The good reply replaced the poisoned page: a third call needs no network.
+    (cached,) = CATALOGS["SDSS"].query_circ(12.0, 0.5, 1.0)
+    assert int(cached.id) == 1
+    assert len(list(tmp_path.glob("*.pickle"))) == 1
 
 
 def test_an_sdss_cached_error_page_recovers_when_the_service_answers(monkeypatch):
@@ -453,3 +515,63 @@ def test_an_sdss_network_failure_is_not_relabelled(monkeypatch):
     monkeypatch.setattr(SDSSClass, "_request", down)
     with pytest.raises(RequestsConnectionError):
         CATALOGS["SDSS"].query_circ(12.0, 0.5, 1.0)
+
+
+# --- review follow-ups on ca3c4b9 ------------------------------------------------
+
+
+def test_a_non_finite_parallax_or_motion_does_not_refuse_the_literature_fit(monkeypatch, tmp_path):
+    import tools.hr_diagram as hr
+
+    row = dict(LITERATURE_ROW, **{"pmRA*": [math.nan], "plx": [math.nan]})
+    monkeypatch.setattr(hr, "search_vizier", lambda **k: _vizier_result(tmp_path, row))
+    result = hr.get_literature_cluster_params("M67")
+    assert result.status == "ok", result.errors
+    assert result.preview[0]["log_age"] == pytest.approx(9.63)
+
+
+def test_a_non_finite_cluster_position_cannot_centre_a_gaia_fetch(monkeypatch, tmp_path):
+    import tools.hr_diagram as hr
+
+    row = dict(LITERATURE_ROW, RA_ICRS=[math.nan])
+    monkeypatch.setattr(hr, "search_vizier", lambda **k: _vizier_result(tmp_path, row))
+    result = hr.crossmatch_gaia_by_position("M67")
+    assert [e.code for e in result.errors] == ["unusable_response"]
+    assert "not finite" in result.errors[0].message
+
+
+@pytest.mark.parametrize("raised, code", [
+    (ProviderResponseError("APASS: the response has no RAJ2000 column for ra_hours"), "unusable_response"),
+    (RuntimeError("Could not match any detected sources to catalog sources"), "field_calibration_failed"),
+])
+def test_the_photometry_pipeline_reports_why_field_calibration_failed(monkeypatch, raised, code):
+    import algorithms.query.runner as runner
+    from tools.photometry_pipeline import load_fits_image, select_zero_point_mag
+    from tools.optical import resolve_optical_frame
+    from pathlib import Path
+
+    def fail(*args, **kwargs):
+        raise raised
+
+    monkeypatch.setattr(runner, "query_catalogs", fail)
+    data, header = load_fits_image(Path(resolve_optical_frame("ngc5128_galaxy_b_001").path))
+    header.remove("PHOT_M0", ignore_missing=True)
+    resolution = select_zero_point_mag(None, header, data, use_field_cal=True, catalogs=["APASS"])
+    assert resolution.value is None
+    assert resolution.failure_code == code
+    assert str(raised) in resolution.failure
+
+
+def test_run_photometry_on_target_carries_the_failure_as_a_warning(monkeypatch):
+    import tools.photometry as photometry
+    from tools.photometry_pipeline import ZeroPointResolution
+
+    failed = ZeroPointResolution(None, "none", verified=False,
+                                 failure="unusable catalog response: APASS: no RAJ2000",
+                                 failure_code="unusable_response")
+    monkeypatch.setattr(photometry, "compute_photometry",
+                        lambda *a, **k: (np.zeros((4, 4)), [], failed))
+    monkeypatch.setattr(photometry, "plot_photometry", lambda *a, **k: None)
+    result = photometry.run_photometry_on_target("ngc5128_galaxy_b_001")
+    assert [(w.code, w.message) for w in result.warnings] == [
+        ("unusable_response", "unusable catalog response: APASS: no RAJ2000")]

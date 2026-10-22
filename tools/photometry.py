@@ -345,6 +345,13 @@ def run_photometry_on_target(
     # mutually inconsistent by several magnitudes to anyone checking the math.
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
 
+    warnings = []
+    failure = getattr(zero_point, "failure", None)  # resolutions may be duck-typed
+    if getattr(zero_point, "failure_code", None) == "unusable_response":
+        warnings.append(ToolWarning(code="unusable_response", message=failure))
+    elif failure:
+        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
+
     return PhotometryRunResult(
         file=describe_file(fits_path),
         source_count=len(results),
@@ -355,6 +362,7 @@ def run_photometry_on_target(
         brightest=_source_summary(brightest),
         faintest=_source_summary(faintest),
         artifacts=artifacts,
+        warnings=warnings,
     )
 
 

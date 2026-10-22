@@ -142,44 +142,68 @@ def _objid_queries(fields: list[str], object_ids: list[int]):
 
 
 def _query_sql(client, sql: str, data_release: int, cache: bool):
-    """Run ``query_sql``, recovering from a cached SkyServer error page.
+    """Run a SkyServer SQL query, recovering from a cached error page.
 
-    M3: astroquery caches whatever SkyServer answered, including its HTML error
-    pages, and parsing one fails (``InconsistentTableError``, or
-    ``FileNotFoundError`` when astropy takes a short page for a path). Once
-    cached, the same query failed until the entry expired. A reply that is not
-    a table is retried once with the cache bypassed, then reported as an
-    unusable response quoting SkyServer. A refusal (``RemoteServiceError``) is
-    retried the same way but raises as itself; network and HTTP failures are
-    not retried here.
+    M3: astroquery caches whatever SkyServer answers, including its HTML error
+    and maintenance pages, so one transient error made the same query fail
+    until the cache entry expired. The raw reply is inspected before parsing:
+
+    * an HTML page from the cache is evicted and refetched with caching on, so
+      a good reply repairs the cache;
+    * an HTML page that persists is a service failure, raised as astroquery's
+      ``RemoteServiceError`` -- retryable later, like a refusal;
+    * a refusal (``error_message``) raises as itself;
+    * any other reply that will not parse is ``ProviderResponseError``.
+
+    A failed reply is evicted from the cache either way, so the next call asks
+    SkyServer again. Network and HTTP failures raise as themselves.
     """
     from astroquery.exceptions import RemoteServiceError
-    from requests import RequestException
 
-    def attempt(use_cache: bool):
-        rows = client.query_sql(sql, data_release=data_release, cache=use_cache)
-        # A longer HTML page parses as a one-column "table" headed by its doctype.
-        names = getattr(rows, "colnames", None) or []
-        if len(names) == 1 and str(names[0]).lstrip().startswith("<"):
-            raise ValueError(f"SkyServer returned an HTML page ({names[0][:60]!r})")
-        return rows
-
+    if not hasattr(client, "query_sql_async"):  # a duck-typed client
+        return client.query_sql(sql, data_release=data_release, cache=cache)
+    response = client.query_sql_async(sql, data_release=data_release, cache=cache)
+    if cache and _is_html(response.text):
+        logger.warning("SkyServer reply was an HTML page; evicting it and asking again")
+        _evict_last_query(client)
+        response = client.query_sql_async(sql, data_release=data_release, cache=True)
+    if _is_html(response.text):
+        if cache:
+            _evict_last_query(client)
+        raise RemoteServiceError(
+            f"SkyServer returned an HTML page instead of a table: {_html_title(response.text)}"
+        )
     try:
-        return attempt(cache)
-    except RequestException:
+        return client._parse_result(response)
+    except RemoteServiceError:
+        if cache:
+            _evict_last_query(client)
         raise
     except Exception as exc:
         if cache:
-            logger.warning("SkyServer reply was not a table (%s); retrying uncached", exc)
-            try:
-                return attempt(False)
-            except RequestException:
-                raise
-            except Exception as retry_exc:
-                exc = retry_exc
-        if isinstance(exc, RemoteServiceError):
-            raise exc  # SkyServer refused the query: a service error, not a bad table
-        raise ProviderResponseError(f"SkyServer did not return a table: {str(exc)[:300]}") from exc
+            _evict_last_query(client)
+        raise ProviderResponseError(f"SkyServer's reply is not a readable table: {str(exc)[:300]}") from exc
+
+
+def _is_html(text: str) -> bool:
+    head = text.lstrip()[:200].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html")
+
+
+def _html_title(text: str) -> str:
+    match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip()[:120] if match else text.strip()[:120]
+
+
+def _evict_last_query(client) -> None:
+    """Delete the cache entry astroquery just read or wrote for ``client``.
+
+    Not ``AstroQuery.remove_cache_file``: it tests ``Path.exists`` without
+    calling it and so raises when the entry is already gone.
+    """
+    query = getattr(client, "_last_query", None)
+    if query is not None:
+        query.request_file(client.cache_location).unlink(missing_ok=True)
 
 
 def _positive_angle(value: object, unit: str) -> float:
