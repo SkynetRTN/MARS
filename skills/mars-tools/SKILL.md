@@ -92,8 +92,9 @@ never be reported as the other.
    both numbers and say which is which.
 3. **Retune, do not substitute.** On disagreement, a low `peak_fold_snr`, or a
    `peak_does_not_fold` warning, the measurement is wrong: retry with different
-   parameters. Vary `back_scale` (a red-noise peak moves with it, a real
-   periodicity does not), narrow `start`/`stop` away from the artifact, raise
+   parameters. Vary `back_scale` by rerunning `load_pulsar_lightcurve` with it
+   (a red-noise peak moves with it, a real periodicity does not; later stages
+   cannot change the baseline), narrow `start`/`stop` away from the artifact, raise
    `steps`. Two artifacts recur on this data: 0.016665 s is 60.006 Hz mains
    interference, and a 2.1-2.2 s peak is leftover baseline red noise.
 4. **Fall back, and say so.** Only when a retuned search has still failed, fold

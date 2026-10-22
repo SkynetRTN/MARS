@@ -51,8 +51,9 @@ from algorithms.hrdiagram_py.matching import field_footprint
 from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionSettings
 from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
+from algorithms.query.vizier import ProviderResponseError
 from algorithms.radio import spectral_fitting
-from algorithms.radio.matching import match_sources_to_catalog
+from algorithms.radio.matching import UnreadablePositions, match_sources_to_catalog
 from tools import artifacts
 from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult, ToolWarning
@@ -86,7 +87,9 @@ _RADIO_MAX_FREQUENCY_HZ = 3e11
 #: Common per-catalog "what is this" columns, tried in order. Not
 #: standardized across VizieR tables the way RA/Dec conventions roughly are
 #: (see algorithms.radio.matching) -- this is a best-effort label only.
-_NAME_COLUMNS = ["Name", "MAIN_ID", "ID", "_2MASS", "NVSS", "recno"]
+# "2MASS" is how current astroquery spells the column older releases renamed
+# to "_2MASS" (M3).
+_NAME_COLUMNS = ["Name", "MAIN_ID", "ID", "2MASS", "_2MASS", "NVSS", "recno"]
 
 
 class _NotFound(Exception):
@@ -290,11 +293,20 @@ def identify_radio_sources(
     # order rather than committing to whichever matched closest.
     all_names: list[list[str]] = [[] for _ in range(len(sources))]
 
+    unreadable: list[str] = []
     if catalog_result.status in ("ok", "partial"):
         for artifact in catalog_result.artifacts:
             catalog_df = Table.read(artifact.path).to_pandas()
             catalog_label = Path(artifact.path).stem
-            for match in match_sources_to_catalog(sources, catalog_df, radius_arcsec):
+            try:
+                matches = match_sources_to_catalog(
+                    sources, catalog_df, radius_arcsec, unreadable_raises=True
+                )
+            except UnreadablePositions:
+                # M3: this used to read as "no source matched this catalog".
+                unreadable.append(catalog_label)
+                continue
+            for match in matches:
                 position = sources.index.get_loc(match["source_index"])
                 n_matches[position] += 1
                 separation = match["separation_arcsec"]
@@ -315,6 +327,14 @@ def identify_radio_sources(
     artifact = _write_df_artifact(sources, f"{Path(fits_path).stem}_radio_sources")
 
     warnings = list(catalog_result.warnings)
+    if unreadable:
+        warnings.append(
+            ToolWarning(
+                code="catalog_positions_unreadable",
+                message=f"{len(unreadable)} returned catalog(s) had rows but no position "
+                f"columns this tool can read, so they were not cross-matched: {', '.join(unreadable)}.",
+            )
+        )
     if field_capped:
         warnings.append(
             ToolWarning(
@@ -366,6 +386,13 @@ def _load_spectrum_from_ned(name: str, max_frequency_hz: float) -> tuple[np.ndar
         raise RuntimeError("; ".join(e.message for e in result.errors) or "search_ned failed")
 
     table = Table.read(result.artifact.path).to_pandas()
+    missing = [column for column in ("Frequency", "Flux Density") if column not in table.columns]
+    if missing:
+        # M3: a renamed NED column used to escape as KeyError.
+        raise ProviderResponseError(
+            f"NED's photometry for {name!r} has no {', '.join(missing)} column; it "
+            f"returned {', '.join(map(str, table.columns))}"
+        )
     table = table.dropna(subset=["Frequency", "Flux Density"])
     freq = table["Frequency"].to_numpy(dtype=float)
     flux = table["Flux Density"].to_numpy(dtype=float)
@@ -416,6 +443,8 @@ def analyze_source_spectrum(
             )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
+    except ProviderResponseError as exc:
+        return ToolResult(status="error", errors=[{"code": "unusable_response", "message": str(exc)}])
     except (RuntimeError, ValueError) as exc:
         return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
 

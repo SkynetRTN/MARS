@@ -154,8 +154,9 @@ see below. Ownership is strict:
   `compute_pulsar_periodogram` (read `peak_fold_snr`, not `peak_confidence` —
   the confidence threshold assumes white noise and mains interference reads
   "99.73%" while folding to nothing) → **compare** against the curated or
-  ATNF value → on disagreement **retune** (`back_scale`, `start`/`stop`,
-  `steps`; 0.016665 s is 60 Hz mains, a 2.1–2.2 s peak is baseline red noise)
+  ATNF value → on disagreement **retune** (`back_scale` by rerunning
+  `load_pulsar_lightcurve`, then `start`/`stop`, `steps`; 0.016665 s is 60 Hz
+  mains, a 2.1–2.2 s peak is baseline red noise)
   → only then **fall back** to folding at the reference, and say so — that
   fold's `pulse_snr` is not an independent detection. A blind search succeeds
   on one of the five bundled scans, so reaching the fallback on the faint ones

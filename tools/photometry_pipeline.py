@@ -53,6 +53,15 @@ class ZeroPointResolution:
     # what `plot_zero_point_solution` needs to draw the fit and mark outliers;
     # nothing else in this tool reads it.
     calibration_sources: list[object] | None = None
+    # Why a requested field-calibration solve produced no zero point, with
+    # the warning code the tool reports it under (M3); None otherwise.
+    failure: str | None = None
+    failure_code: str | None = None
+
+
+#: compute_field_cal_zero_point's message prefix for an unusable catalog
+#: response, so select_zero_point_mag can report it under its own code.
+UNUSABLE_RESPONSE_PREFIX = "unusable catalog response: "
 
 
 def resolve_zero_point_mag(fits_path: Path, header: object) -> float | None:
@@ -94,6 +103,7 @@ def compute_field_cal_zero_point(
     from algorithms.fieldcal.field_cal import perform_field_calibration
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
     from algorithms.query.selection import select_catalogs_for_filter
+    from algorithms.query.vizier import ProviderResponseError
 
     from tools.photometry import _resolve_calibration_inputs
 
@@ -130,6 +140,8 @@ def compute_field_cal_zero_point(
             catalog_sources=catalog_sources,
             variable_sources=variable_sources,
         )
+    except ProviderResponseError as exc:
+        return None, None, f"{UNUSABLE_RESPONSE_PREFIX}{exc}", None
     except Exception as exc:  # network failures, no catalog matches, etc.
         return None, None, f"field calibration failed: {exc}", None
 
@@ -322,6 +334,9 @@ def select_zero_point_mag(
                 calibration_sources=field_cal_result.phot_results if field_cal_result else None,
             )
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
+        # M3: the reason used to reach only stderr; the tool now reports it.
+        code = "unusable_response" if str(error).startswith(UNUSABLE_RESPONSE_PREFIX) else "field_calibration_failed"
+        return ZeroPointResolution(None, "none", verified=False, failure=error, failure_code=code)
 
     return ZeroPointResolution(None, "none", verified=False)
 

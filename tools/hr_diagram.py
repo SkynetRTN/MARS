@@ -56,12 +56,14 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+import math
 from typing import Any
 
 import pandas as pd
 from astropy.table import Table
 
 from algorithms.hrdiagram_py import isochrones, literature, matching, membership, observations
+from algorithms.query.vizier import ProviderResponseError
 from tools import artifacts, config
 from tools.config import PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
@@ -124,6 +126,36 @@ def _fit_and_compare(members, params, cluster_name: str, stem: str, **kwargs) ->
         artifacts.discard_placeholder(out_png)
 
 
+def _provider_error(exc: Exception) -> dict:
+    """``unusable_response`` for rows that could not be read, else the service failed."""
+    code = "unusable_response" if isinstance(exc, ProviderResponseError) else "provider_unavailable"
+    return {"code": code, "message": str(exc)}
+
+
+#: VizieR's own column names each step reads (M3 contract; checked live).
+_GAIA_COLUMNS = ("RA_ICRS", "DE_ICRS", "Source", "Gmag", "BPmag", "RPmag")
+_LITERATURE_COLUMNS = ("RA_ICRS", "DE_ICRS", "plx", "pmRA*", "pmDE", "AgeNN", "AVNN", "DMNN", "DistPc")
+#: The literature values the isochrone fit itself consumes, which must be finite.
+#: Position matters only when Gaia is fetched around it (checked there).
+_LITERATURE_FIT_COLUMNS = ("AgeNN", "AVNN", "DMNN", "DistPc")
+
+
+def _require_columns(table: pd.DataFrame, columns: tuple[str, ...], catalog: str) -> None:
+    missing = [column for column in columns if column not in table.columns]
+    if missing:
+        raise ProviderResponseError(
+            f"VizieR's {catalog} response has no {', '.join(missing)} column; it returned "
+            f"{', '.join(map(str, table.columns[:40]))}"
+        )
+
+
+def _as_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _read_table_artifact(path: str) -> pd.DataFrame:
     return Table.read(path).to_pandas()
 
@@ -162,6 +194,7 @@ def _fetch_gaia_and_match(sources: pd.DataFrame, radius_arcsec: float, mag_limit
         raise _NotFound(f"VizieR returned no {GAIA_DR3_CATALOG} rows for this field")
 
     gaia = _read_table_artifact(result.artifacts[0].path)
+    _require_columns(gaia, _GAIA_COLUMNS, GAIA_DR3_CATALOG)
     return matching.match_sources_to_gaia(sources, gaia, radius_arcsec=radius_arcsec)
 
 
@@ -170,6 +203,9 @@ def _fetch_gaia_for_position(ra_deg: float, dec_deg: float, radius_arcmin: float
     # star, so this renames straight to the schema membership.py and
     # isochrones.py expect (matching.match_sources_to_gaia's column names)
     # instead of going through a KD-tree nearest-neighbour match.
+    if not (math.isfinite(_as_float(ra_deg)) and math.isfinite(_as_float(dec_deg))):
+        # M3: a masked catalog position cannot centre a Gaia cone.
+        raise ProviderResponseError(f"The position to fetch Gaia around is not finite ({ra_deg}, {dec_deg})")
     result = search_vizier(
         ra_hours=ra_deg / 15.0,
         dec_degs=dec_deg,
@@ -188,7 +224,9 @@ def _fetch_gaia_for_position(ra_deg: float, dec_deg: float, radius_arcmin: float
     if not result.artifacts:
         raise _NotFound(f"VizieR returned no {GAIA_DR3_CATALOG} rows for this field")
 
-    gaia = _read_table_artifact(result.artifacts[0].path).rename(columns={
+    gaia = _read_table_artifact(result.artifacts[0].path)
+    _require_columns(gaia, _GAIA_COLUMNS, GAIA_DR3_CATALOG)
+    gaia = gaia.rename(columns={
         "Gmag": "G", "e_Gmag": "G_err", "BPmag": "BP", "e_BPmag": "BP_err",
         "RPmag": "RP", "e_RPmag": "RP_err", "Plx": "parallax", "e_Plx": "parallax_error",
         "pmRA": "pmra", "pmDE": "pmdec", "e_pmRA": "pmra_error", "e_pmDE": "pmdec_error",
@@ -224,6 +262,15 @@ def _fetch_literature_params(cluster_name: str) -> dict[str, Any]:
         raise _NotFound(f"VizieR returned no {literature.CLUSTER_CATALOG} rows near {cluster_name!r}")
 
     rows = _read_table_artifact(result.artifacts[0].path)
+    _require_columns(rows, _LITERATURE_COLUMNS, literature.CLUSTER_CATALOG)
+    nearest = rows.iloc[0]
+    unusable = [column for column in _LITERATURE_FIT_COLUMNS if not math.isfinite(_as_float(nearest[column]))]
+    if unusable:
+        # M3: a masked or NaN parameter used to flow on as a NaN age/distance.
+        raise ProviderResponseError(
+            f"{literature.CLUSTER_CATALOG}'s row for {cluster_name!r} has no finite "
+            f"{', '.join(unusable)}"
+        )
     # Confirmed live (``tools/agent/prompt.py``): target= resolution orders
     # matches by increasing separation from the resolved position, so the first
     # row is the nearest catalog entry -- for a cluster-parameter catalog, that
@@ -277,8 +324,8 @@ def crossmatch_gaia(csv_path: str, radius_arcsec: float = 2.0, mag_limit: float 
         matched = _fetch_gaia_and_match(sources, radius_arcsec, mag_limit)
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
-    except RuntimeError as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+    except (RuntimeError, ProviderResponseError) as exc:
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     artifact = _write_df_artifact(matched, f"{Path(csv_path).stem}_gaia")
     return ToolResult(
@@ -312,8 +359,8 @@ def crossmatch_gaia_by_position(
         gaia = _fetch_gaia_for_position(params["ra_deg"], params["dec_deg"], radius_arcmin, mag_limit)
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
-    except RuntimeError as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+    except (RuntimeError, ProviderResponseError) as exc:
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     artifact = _write_df_artifact(gaia, f"{_safe_stem(cluster_name)}_gaia")
     return ToolResult(
@@ -342,7 +389,7 @@ def get_literature_cluster_params(cluster_name: str) -> ToolResult:
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
     except (RuntimeError, KeyError, ValueError) as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     return ToolResult(status="ok", count=1, preview=[params], columns=list(params.keys()))
 
@@ -379,8 +426,8 @@ def select_cluster_members(
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
-    except RuntimeError as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+    except (RuntimeError, ProviderResponseError) as exc:
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     artifact = _write_df_artifact(members, f"{Path(csv_path).stem}_members")
     return ToolResult(
@@ -418,8 +465,8 @@ def fit_and_compare_hr_diagram(
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
-    except RuntimeError as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+    except (RuntimeError, ProviderResponseError) as exc:
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     png_path = Path(report.pop("png_path"))
     csv_path = Path(report.pop("members_csv_path"))
@@ -468,7 +515,7 @@ def run_full_hr_pipeline(
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
     except (ValueError, RuntimeError) as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     png_path = Path(report.pop("png_path"))
     csv_path = Path(report.pop("members_csv_path"))
@@ -529,7 +576,7 @@ def run_full_hr_pipeline_from_catalog(
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
     except (ValueError, RuntimeError) as exc:
-        return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
+        return ToolResult(status="error", errors=[_provider_error(exc)])
 
     png_path = Path(report.pop("png_path"))
     csv_path = Path(report.pop("members_csv_path"))

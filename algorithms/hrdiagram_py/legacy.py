@@ -30,7 +30,7 @@ def get_cmd_data(sources: Sequence[Mapping[str, Any]], filters: Sequence[str]) -
 
 
 # PORTED: git-history:algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getDefaultBin
-def get_default_bin(plot_data: Sequence[float]) -> int | float:
+def get_default_bin(plot_data: Sequence[float]) -> int:
     if not plot_data:
         return 10
     n = len(plot_data)
@@ -38,20 +38,26 @@ def get_default_bin(plot_data: Sequence[float]) -> int | float:
     numerator = plot_data[-1] - plot_data[0]
     denominator = 2 * iqr * n ** (-1 / 3)
     if denominator == 0:
+        # M3 (TS-18): upstream divided anyway -- NaN for one value or no
+        # spread, Infinity for tied quartiles. One value needs one bin; with
+        # tied quartiles Freedman-Diaconis is undefined, so use Sturges.
         if numerator == 0:
-            return math.nan
-        return math.copysign(math.inf, numerator)
+            return 1
+        return math.ceil(math.log2(n)) + 1
     return math.ceil(numerator / denominator)
 
 
 # PORTED: git-history:algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getHistogramExtremes
 def get_histogram_extremes(data: Sequence[float], selected_data: Sequence[float]) -> dict[str, float]:
-    if not selected_data:
+    if not selected_data or not data:
         return {"min": -999, "max": 999}
     sigma = 0.9876
+    # M3 (TS-28): for one value the lower index is 1, past the end (upstream
+    # read undefined). Clamping changes nothing from two values up.
+    last = len(data) - 1
     return {
-        "min": data[math.ceil(len(data) * (0.5 - sigma / 2))],
-        "max": data[math.floor(len(data) * (0.5 + sigma / 2))],
+        "min": data[min(math.ceil(len(data) * (0.5 - sigma / 2)), last)],
+        "max": data[min(math.floor(len(data) * (0.5 + sigma / 2)), last)],
     }
 
 

@@ -25,6 +25,12 @@ class WcsSolveMetadata:
     given, set only when that backend was attempted. ``atlas_*`` diagnostics
     record that backend's observed source/catalog counts, normalized miss
     reason, and whether its candidate was accepted by the WCS acceptance gate.
+
+    ``solver_failures`` (M3, WCS-23) lists, as ``"backend: reason"``, every
+    backend that was configured but could not run or raised: a missing
+    ``solve-field``, a bad catalog root, a full disk, ATLAS without a pointing
+    hint. Empty with ``wcs`` set to ``None`` means a genuine miss; a solution
+    can still carry entries for a backend it did without.
     """
 
     science_hdu_index: int | None = None
@@ -62,6 +68,7 @@ class WcsSolveMetadata:
     atlas_catalog_count: int | None = None
     atlas_failure_reason: str | None = None
     atlas_accepted: bool | None = None
+    solver_failures: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

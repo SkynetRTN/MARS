@@ -217,11 +217,17 @@ def find_global_max(x: np.ndarray, power: np.ndarray) -> tuple[Optional[float], 
     peak period that the period-folding tab consumes, which makes this the
     handoff between stage 2 and stage 3.
     """
-    if x.size == 0:
+    if x.shape != power.shape:
+        raise ValueError("x and power must be the same length.")
+    # M3 (TS-16): upstream's comparison loop started from points[0], so a NaN
+    # there (or argmax's NaN-first rule here) made NaN the peak. Non-finite
+    # powers are not candidates; with none finite there is no peak.
+    finite = np.isfinite(power)
+    if not finite.any():
         return None, None
     # `points[i][1] > globalMax[1]` — strictly greater, so ties keep the
     # earliest, which in period mode is the shortest period.
-    index = int(np.argmax(power))
+    index = int(np.argmax(np.where(finite, power, -np.inf)))
     return float(x[index]), float(power[index])
 
 

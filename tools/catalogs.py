@@ -68,6 +68,7 @@ def _reference_resolves(
     image_filter: str,
     catalog_mags: set[str],
     lookup: dict[str, str],
+    allow_preferred_band_fallback: bool = False,
 ) -> bool:
     dummy_mags = {
         band: {"value": 1.0, "error": 0.1}
@@ -78,9 +79,75 @@ def _reference_resolves(
         catalog_name=catalog_name,
         cs_mags=dummy_mags,
         custom_filter_lookup={catalog_name: lookup},
-        allow_preferred_band_fallback=False,
+        allow_preferred_band_fallback=allow_preferred_band_fallback,
     )
     return ref_mag is not None
+
+
+def _missing_bands(target: str, catalog_mags: set[str], lookup: dict[str, str]) -> list[str]:
+    """Return the bands a lookup target needs that the catalog does not carry."""
+    missing: set[str] = set()
+    pending, seen = [target], set()
+    while pending:
+        current = pending.pop()
+        if current in seen or current in catalog_mags:
+            continue
+        seen.add(current)
+        if current in lookup:
+            pending.append(lookup[current])
+            continue
+        deps = _expression_deps(current)
+        if deps == {current}:
+            missing.add(current)
+        else:
+            pending.extend(deps)
+    return sorted(missing)
+
+
+def reference_band_unavailable(catalog: str, image_filter: str | None) -> str | None:
+    """Explain why a field calibration against ``catalog`` cannot produce any
+    reference magnitude for ``image_filter``, or return ``None`` if it can.
+
+    Unlike ``resolve_reference_band``'s ``supported``, this allows the
+    preferred-band fallback that a default field calibration also allows, so
+    it reports only failures that are certain: a filter whose explicit
+    transform needs bands the catalog does not carry (CAT-06, APASS ``U``),
+    or a pairing resolution refuses. A catalog MARS does not declare is not
+    certain to fail -- its rows may match a band directly -- so it returns
+    ``None``. Rows missing some magnitudes are a separate matter.
+    """
+    catalog_name = str(catalog).strip()
+    normalized_filter = (image_filter or "").strip()
+    if not normalized_filter:
+        return None
+    declaration = _effective_catalog(catalog_name)
+    if declaration is None:
+        return None
+    catalog_mags = set((getattr(declaration, "mags", {}) or {}).keys())
+    lookup = _effective_lookup(catalog_name)
+    if _reference_resolves(
+        catalog_name=catalog_name,
+        image_filter=normalized_filter,
+        catalog_mags=catalog_mags,
+        lookup=lookup,
+        allow_preferred_band_fallback=True,
+    ):
+        return None
+    for token in _filter_token_candidates(normalized_filter):
+        target = lookup.get(token)
+        if target:
+            missing = _missing_bands(target, catalog_mags, lookup)
+            if missing:
+                return (
+                    f"{catalog_name} cannot supply a reference magnitude for filter "
+                    f"{normalized_filter!r}: its transform {target!r} needs "
+                    f"{', '.join(missing)}, which {catalog_name} does not carry."
+                )
+            break
+    return (
+        f"{catalog_name} has no usable reference-band mapping for filter "
+        f"{normalized_filter!r}."
+    )
 
 
 def list_photometric_catalogs() -> list[CatalogSummary]:
@@ -150,12 +217,22 @@ def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceB
         target = lookup.get(token)
         if target:
             supported, reference, kind = _resolve_target(target, catalog_mags, lookup)
+            missing = _missing_bands(target, catalog_mags, lookup)
+            if missing:
+                warnings.append(
+                    ToolWarning(
+                        code="unsupported_filter",
+                        message=f"{catalog_name}'s transform for filter {normalized_filter!r} "
+                        f"needs {', '.join(missing)}, which {catalog_name} does not carry.",
+                    )
+                )
             return ReferenceBandResolution(
                 catalog=catalog_name,
                 image_filter=normalized_filter,
                 supported=supported and reference_resolves,
                 reference=reference,
                 kind=kind if reference_resolves else "unresolved",
+                warnings=warnings,
             )
 
     if wildcard_target:

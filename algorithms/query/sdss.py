@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+from urllib.parse import urlencode
 from numbers import Integral
 from typing import Dict as TDict, List as TList, Optional
 
@@ -34,7 +35,7 @@ from astroquery.sdss import SDSSClass
 
 from algorithms.catalogs.schemas import CatalogSource
 
-from .vizier import VizierCatalog, _round_for_cache
+from .vizier import ProviderResponseError, VizierCatalog, _round_for_cache
 
 __all__ = ["MARSSDSS", "SDSSQueryBackend"]
 
@@ -62,6 +63,147 @@ def _projection_fields(fields: object) -> list[str]:
            or not _SQL_IDENTIFIER.fullmatch(field) for field in fields):
         raise ValueError("SDSS field names must be bounded literal SQL identifiers, not expressions.")
     return list(fields)
+
+
+#: SkyServer ``objID`` is a signed 64-bit ``bigint``; real IDs are positive.
+_MAX_OBJID = 2**63 - 1
+#: Encoded query-string budget for one objID request. ``query_sql`` sends the
+#: SQL as a GET query string, and SkyServer answers 404 once that passes 2,048
+#: bytes (measured live 2026-10-21: 75 objIDs at 2,005 bytes succeed, 80 at
+#: 2,120 fail), so IDs are batched to stay under this with some margin.
+MAX_SDSS_QUERY_STRING = 1_900
+
+
+def _as_object_id(name: object) -> int | None:
+    """Return ``name`` as an objID, or ``None`` if it cannot be one."""
+    if isinstance(name, Integral) and not isinstance(name, bool):
+        value = int(name)
+    elif isinstance(name, str) and name.strip().isascii() and name.strip().isdigit():
+        value = int(name.strip())
+    else:
+        return None
+    return value if 0 < value <= _MAX_OBJID else None
+
+
+def _object_ids(names: object) -> list[int]:
+    """Return the distinct objIDs among ``names``, in request order.
+
+    Accepts integers and decimal digit strings, so a name is never
+    interpolated into the SQL -- only the integer it parses to is. Any other
+    name cannot identify an SDSS row and is left out, as an unresolved name
+    is by ``VizierCatalog.query_objects``: the runner hands the same IDs to
+    every selected catalog, so another catalog's ID must not abort the lookup.
+    """
+    if not isinstance(names, (list, tuple)):
+        raise ValueError("SDSS objID lookup requires a list of objIDs.")
+    if len(names) > MAX_SDSS_ROWS:
+        raise ValueError(f"SDSS objID lookup accepts at most {MAX_SDSS_ROWS} objIDs per call.")
+    object_ids = []
+    for name in names:
+        object_id = _as_object_id(name)
+        if object_id is None:
+            logger.info("SDSS objID lookup skipped %r: not an SDSS objID", name)
+        else:
+            object_ids.append(object_id)
+    return list(dict.fromkeys(object_ids))
+
+
+def _objid_sql(fields: list[str], object_ids: list[int]) -> str:
+    # noinspection SqlResolve
+    return 'SELECT DISTINCT TOP {} {} ' \
+        'FROM Star AS s ' \
+        'JOIN Field f ON s.fieldID = f.fieldID ' \
+        'WHERE s.objID IN ({}) AND f.quality = 3 AND s.clean = 1' \
+        .format(
+            len(object_ids),
+            ', '.join('s.{0}'.format(field) for field in fields),
+            ', '.join(str(object_id) for object_id in object_ids),
+        )
+
+
+def _query_string_length(sql: str) -> int:
+    # What query_sql puts on the URL for DR > 11 (searchtool) with CSV output.
+    return len(urlencode({"cmd": sql, "format": "csv", "searchtool": "SQL"}))
+
+
+def _objid_queries(fields: list[str], object_ids: list[int]):
+    """Yield ``(sql, id_count)`` batches whose GET URLs fit SkyServer's limit."""
+    batch: list[int] = []
+    for object_id in object_ids:
+        if batch and _query_string_length(_objid_sql(fields, batch + [object_id])) > MAX_SDSS_QUERY_STRING:
+            yield _objid_sql(fields, batch), len(batch)
+            batch = []
+        batch.append(object_id)
+    if batch:
+        sql = _objid_sql(fields, batch)
+        if _query_string_length(sql) > MAX_SDSS_QUERY_STRING:
+            raise ValueError("SDSS objID lookup fields are too long for one request URL.")
+        yield sql, len(batch)
+
+
+def _query_sql(client, sql: str, data_release: int, cache: bool):
+    """Run a SkyServer SQL query, recovering from a cached error page.
+
+    M3: astroquery caches whatever SkyServer answers, including its HTML error
+    and maintenance pages, so one transient error made the same query fail
+    until the cache entry expired. The raw reply is inspected before parsing:
+
+    * an HTML page from the cache is evicted and refetched with caching on, so
+      a good reply repairs the cache;
+    * an HTML page that persists is a service failure, raised as astroquery's
+      ``RemoteServiceError`` -- retryable later, like a refusal;
+    * a refusal (``error_message``) raises as itself;
+    * any other reply that will not parse is ``ProviderResponseError``.
+
+    A failed reply is evicted from the cache either way, so the next call asks
+    SkyServer again. Network and HTTP failures raise as themselves.
+    """
+    from astroquery.exceptions import RemoteServiceError
+
+    if not hasattr(client, "query_sql_async"):  # a duck-typed client
+        return client.query_sql(sql, data_release=data_release, cache=cache)
+    response = client.query_sql_async(sql, data_release=data_release, cache=cache)
+    if cache and _is_html(response.text):
+        logger.warning("SkyServer reply was an HTML page; evicting it and asking again")
+        _evict_last_query(client)
+        response = client.query_sql_async(sql, data_release=data_release, cache=True)
+    if _is_html(response.text):
+        if cache:
+            _evict_last_query(client)
+        raise RemoteServiceError(
+            f"SkyServer returned an HTML page instead of a table: {_html_title(response.text)}"
+        )
+    try:
+        return client._parse_result(response)
+    except RemoteServiceError:
+        if cache:
+            _evict_last_query(client)
+        raise
+    except Exception as exc:
+        if cache:
+            _evict_last_query(client)
+        raise ProviderResponseError(f"SkyServer's reply is not a readable table: {str(exc)[:300]}") from exc
+
+
+def _is_html(text: str) -> bool:
+    head = text.lstrip()[:200].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html")
+
+
+def _html_title(text: str) -> str:
+    match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip()[:120] if match else text.strip()[:120]
+
+
+def _evict_last_query(client) -> None:
+    """Delete the cache entry astroquery just read or wrote for ``client``.
+
+    Not ``AstroQuery.remove_cache_file``: it tests ``Path.exists`` without
+    calling it and so raises when the entry is already gone.
+    """
+    query = getattr(client, "_last_query", None)
+    if query is not None:
+        query.request_file(client.cache_location).unlink(missing_ok=True)
 
 
 def _positive_angle(value: object, unit: str) -> float:
@@ -225,19 +367,28 @@ class SDSSQueryBackend(VizierCatalog):
     """
 
     def query_objects(self, names: TList[str]) -> TList[CatalogSource]:
-        """Return SDSS objects with the given names, one request each."""
-        sdss = SDSS()
-        rows = []
-        for name in names:
-            rows.append(
-                sdss.query_object(
-                    name,
-                    data_release=self.data_release,
-                    photoobj_fields=self._columns,
-                    cache=self.cache,
-                )[0]
-            )
-        return self.table_to_sources(rows)
+        """Return SDSS objects with the given objIDs, in one SQL request.
+
+        EXTRACTED: was one ``sdss.query_object(name, ...)[0]`` call per name.
+        ``SDSSClass`` has no ``query_object`` (CAT-18), so every named lookup
+        raised ``AttributeError``. The names here are what ``col_mapping``
+        reports as a source's ``id`` -- SkyServer ``objID`` integers -- and
+        they are matched with the same ``Star``/quality/clean predicates as a
+        region, so a named row is as trustworthy as a region row. As with
+        ``VizierCatalog.query_objects``, a name with no qualifying row -- or
+        that is not an objID at all -- is absent from the result rather than
+        an error. IDs are batched so each request's URL stays under
+        ``MAX_SDSS_QUERY_STRING``.
+        """
+        object_ids = _object_ids(names)
+        photoobj_fields = _projection_fields(self._columns)
+        client = SDSS() if object_ids else None
+        sources: TList[CatalogSource] = []
+        for q, count in _objid_queries(photoobj_fields, object_ids):
+            rows = _query_sql(client, q, self.data_release, self.cache)
+            if rows is not None:
+                sources += self.table_to_sources(rows[:count])
+        return sources
 
     def query_box(
         self,
@@ -295,7 +446,7 @@ class SDSSQueryBackend(VizierCatalog):
             data_release=self.data_release, limit=limit,
         )
         client = SDSS()
-        rows = client.query_sql(payload["cmd"], data_release=self.data_release, cache=self.cache)
+        rows = _query_sql(client, payload["cmd"], self.data_release, self.cache)
         if rows is None:
             return []
         return self.table_to_sources(rows[:limit])

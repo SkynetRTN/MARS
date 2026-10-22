@@ -723,7 +723,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "type": "number",
                     "description": "Running-median baseline window in seconds, "
                     "default 3.0. Values under ~2.2x the sample spacing subtract "
-                    "the signal along with the baseline.",
+                    "the signal along with the baseline. Set here only: later "
+                    "stages read this artifact's baseline as it was subtracted.",
                 },
                 "subtract_background": {
                     "type": "boolean",
@@ -755,7 +756,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "result against a reference afterwards (a bundled scan's "
         "'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind "
         "search on a single 60-second scan only succeeds for a bright source; if "
-        "it fails or disagrees with the reference, retry -- vary back_scale (a "
+        "it fails or disagrees with the reference, retry -- rerun "
+        "load_pulsar_lightcurve with a different back_scale and search the new "
+        "light curve (a "
         "red-noise peak moves with it, a real periodicity does not), narrow "
         "start/stop away from the artifact, raise steps. Fold at the reference "
         "period only after a retuned search has still failed, and say so when "
@@ -895,7 +898,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "buried in noise and drifts a few percent from sky time (reported as "
         "'playback_stretch'). Never read a period off the audio; the synthesis "
         "ignores sample timestamps. Returns the WAV path plus observation "
-        "metadata; the audio is never inlined.",
+        "metadata; the audio is never inlined. The background baseline is set "
+        "once, by load_pulsar_lightcurve's back_scale/subtract_background; a raw "
+        "file passed here is ingested with the defaults.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -919,19 +924,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": "Playback rate. 1.0 (default) is real time; 2.0 "
                     "plays the observation twice as fast, so it passes twice within "
                     "the same output length.",
-                },
-                "subtract_background": {
-                    "type": "boolean",
-                    "description": "Remove the running-median baseline before "
-                    "rendering. Defaults to true, and should stay on -- it is what "
-                    "makes the pulses stand out against the receiver's drifting "
-                    "continuum level.",
-                },
-                "back_scale": {
-                    "type": "number",
-                    "description": "Background window width in seconds. Defaults to "
-                    "3.0. Values below ~2.2x the sample spacing degenerate and "
-                    "subtract the signal along with the baseline.",
                 },
                 "stereo": {
                     "type": "boolean",

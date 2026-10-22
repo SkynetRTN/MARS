@@ -26,10 +26,11 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import math
 import re
 import stat
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import numpy as np
 from astropy.table import Table
@@ -140,14 +141,68 @@ def _check_file_budget(file: FileMetadata) -> None:
         raise _LoadError("invalid_input", "pulsar input exceeds the 16 MiB file budget")
 
 
+def _background_not_applied(
+    meta: Mapping[str, Any],
+    back_scale: Optional[float],
+    subtract_background: Optional[bool],
+    *,
+    light_curve: bool = True,
+) -> ToolWarning | None:
+    """Warn when background settings were passed with an artifact that ignores them.
+
+    M3: background is subtracted once, when load_pulsar_lightcurve ingests a
+    raw scan, and an artifact records what was done (``background_subtracted``,
+    ``back_scale_s``). ``None`` means "not given": only a request that differs
+    from what the artifact records is reported, in the artifact's own terms.
+    """
+    if back_scale is None and subtract_background is None:
+        return None
+    if not light_curve:
+        return ToolWarning(
+            code="background_settings_ignored",
+            message="back_scale and subtract_background have no effect on a periodogram "
+            "or folded artifact: it was computed from a light curve whose background "
+            "was set when the raw scan was loaded.",
+        )
+    recorded_subtracted = bool(meta.get("background_subtracted", False))
+    recorded_scale = meta.get("back_scale_s")
+    # A back_scale on its own asks for subtraction at that window.
+    if subtract_background is not None:
+        wanted_subtracted = bool(subtract_background)
+    else:
+        wanted_subtracted = True if back_scale is not None else recorded_subtracted
+    differs = wanted_subtracted != recorded_subtracted or (
+        wanted_subtracted and back_scale is not None
+        and (recorded_scale is None or not math.isclose(float(back_scale), float(recorded_scale)))
+    )
+    if not differs:
+        return None
+    recorded = (
+        f"with background subtracted at back_scale={float(recorded_scale):g} s"
+        if recorded_subtracted and recorded_scale is not None
+        else "without background subtraction"
+    )
+    return ToolWarning(
+        code="background_settings_ignored",
+        message=f"This light-curve artifact was written {recorded}; back_scale and "
+        "subtract_background apply only when a raw scan is ingested, so the requested "
+        "setting was not applied. Pass the raw scan to load_pulsar_lightcurve with the "
+        "setting you want.",
+    )
+
+
 def _load(
     file: FileMetadata,
     *,
-    back_scale: float,
-    subtract_background: bool,
+    back_scale: Optional[float],
+    subtract_background: Optional[bool],
     warnings: list[ToolWarning],
 ) -> _LightCurve:
-    """Load a raw scan or a stage-1 artifact into a common shape."""
+    """Load a raw scan or a stage-1 artifact into a common shape.
+
+    ``None`` background settings mean the defaults for a raw scan, and "as
+    recorded" for an artifact.
+    """
 
     if not file.exists:
         raise _LoadError("file_not_found", "Pulsar file does not exist.")
@@ -156,7 +211,14 @@ def _load(
     _check_file_budget(file)
 
     if (file.suffix or "").lower() == ".ecsv":
-        return _load_artifact(file)
+        lc = _load_artifact(file)
+        ignored = _background_not_applied(lc.meta, back_scale, subtract_background)
+        if ignored is not None:
+            warnings.append(ignored)
+        return lc
+
+    back_scale = ingest.DEFAULT_BACK_SCALE if back_scale is None else back_scale
+    subtract_background = True if subtract_background is None else subtract_background
 
     try:
         observation = ingest.read_pulsar_file(file.path)
@@ -294,8 +356,8 @@ def _label(lc: _LightCurve, file: FileMetadata, override: Optional[str]) -> str:
 def load_pulsar_lightcurve(
     path: str | Path,
     *,
-    back_scale: float = ingest.DEFAULT_BACK_SCALE,
-    subtract_background: bool = True,
+    back_scale: Optional[float] = None,
+    subtract_background: Optional[bool] = None,
     output_name: Optional[str] = None,
     subdir: Optional[str] = "pulsar",
 ) -> PulsarLightCurve:
@@ -306,7 +368,8 @@ def load_pulsar_lightcurve(
     leading noise-diode calibration block, rebases the time axis onto seconds
     since the UTC header, and subtracts a running-median baseline.
 
-    ``back_scale`` is the baseline window in seconds. Leaving the subtraction
+    ``back_scale`` is the baseline window in seconds, 3.0 when not given;
+    this is the one stage that sets it. Leaving the subtraction
     on is what makes the pulses stand out from the receiver's drifting
     continuum level; every later stage is far less sensitive without it.
 
@@ -371,6 +434,9 @@ def _top_peaks(
     """
     peaks: list[dict[str, Any]] = []
     for index in np.argsort(power)[::-1]:
+        # argsort places NaN last, so reversed it would rank NaN first.
+        if not np.isfinite(power[index]):
+            continue
         value = float(x[index])
         if any(
             abs(value - peak["x"]) < min_separation * max(value, peak["x"])
@@ -391,8 +457,8 @@ def compute_pulsar_periodogram(
     steps: int = periodogram.DEFAULT_STEPS,
     freq_mode: bool = False,
     channel: str = "sum",
-    back_scale: float = ingest.DEFAULT_BACK_SCALE,
-    subtract_background: bool = True,
+    back_scale: Optional[float] = None,
+    subtract_background: Optional[bool] = None,
     output_name: Optional[str] = None,
     subdir: Optional[str] = "pulsar",
 ) -> PulsarPeriodogram:
@@ -424,7 +490,8 @@ def compute_pulsar_periodogram(
     ``search_atnf`` — as a check on the measurement.
 
     A blind search on one 60-second scan only works for a bright source. If it
-    fails, or disagrees with the reference, retry: vary ``back_scale`` (the
+    fails, or disagrees with the reference, retry: rerun
+    ``load_pulsar_lightcurve`` with a different ``back_scale`` (the
     spurious peak often moves with it while a real pulsar does not), narrow
     ``start``/``stop`` away from the artifact, raise ``steps``. Folding at the
     reference period is the fallback for when that has still failed.
@@ -510,8 +577,9 @@ def compute_pulsar_periodogram(
                 message=(
                     f"The strongest peak folds to only {peak_fold_snr:.1f} sigma, so it "
                     f"is probably interference or baseline residual rather than a "
-                    f"pulsar -- regardless of its false-alarm confidence. Try a "
-                    f"different back_scale, narrow the search away from the "
+                    f"pulsar -- regardless of its false-alarm confidence. Rerun "
+                    f"load_pulsar_lightcurve with a different back_scale, narrow "
+                    f"the search away from the "
                     f"suspect period, or get the period from search_atnf."
                 ),
             )
@@ -567,8 +635,8 @@ def fold_pulsar_lightcurve(
     phase: float = folding.DEFAULT_PHASE,
     display_period: int = folding.DEFAULT_DISPLAY_PERIOD,
     cal: float = 1.0,
-    back_scale: float = ingest.DEFAULT_BACK_SCALE,
-    subtract_background: bool = True,
+    back_scale: Optional[float] = None,
+    subtract_background: Optional[bool] = None,
     output_name: Optional[str] = None,
     subdir: Optional[str] = "pulsar",
 ) -> PulsarFoldedProfile:
@@ -708,8 +776,8 @@ def sonify_pulsar(
     phase: float = folding.DEFAULT_PHASE,
     speed: float = sonification.DEFAULT_SPEED,
     cal: float = sonification.DEFAULT_CAL,
-    back_scale: float = ingest.DEFAULT_BACK_SCALE,
-    subtract_background: bool = True,
+    back_scale: Optional[float] = None,
+    subtract_background: Optional[bool] = None,
     stereo: bool = True,
     audio_seconds: float = sonification.DURATION_SECONDS,
     max_input_seconds: float = sonification.MAX_INPUT_SECONDS,
@@ -1332,8 +1400,8 @@ def plot_pulsar(
     x_label: Optional[str] = None,
     y_label: Optional[str] = None,
     show_hidden_series: bool = False,
-    back_scale: float = ingest.DEFAULT_BACK_SCALE,
-    subtract_background: bool = True,
+    back_scale: Optional[float] = None,
+    subtract_background: Optional[bool] = None,
     dpi: int = 150,
     figsize: tuple[float, float] = (10.0, 5.0),
     output_name: Optional[str] = None,
@@ -1381,6 +1449,12 @@ def plot_pulsar(
                 raise _LoadError(
                     "parse_error", f"Not a readable pulsar artifact: {exc}"
                 ) from exc
+            ignored = _background_not_applied(
+                table.meta, back_scale, subtract_background,
+                light_curve="time_s" in table.colnames,
+            )
+            if ignored is not None:
+                warnings.append(ignored)
         else:
             # A raw scan: ingest it so there is something to draw.
             lc = _load(
