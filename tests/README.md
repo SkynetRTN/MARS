@@ -11,8 +11,8 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 Most extracted algorithms have preservation tests against recorded upstream
 output, including known bugs. Passing those tests establishes parity, not
 scientific correctness. Intentional M2 corrections have separate acceptance
-tests against independent scientific references; the pulsar and variable-star
-records under `docs/analysis/` describe their derivations and limits.
+tests against independent scientific references; the pulsar, variable-star
+and cluster records under `docs/analysis/` describe their derivations and limits.
 
 Most files are algorithm-preservation tests. Tool smoke tests live here too
 when they cover the public `tools/` surface without network calls or generated
@@ -71,6 +71,7 @@ For the preservation tests, three conventions apply:
 | `test_variable_star_fold_limits.py` | M1 TS-02: kill/reap-bounded direct fold/modulo probes, shared tool/algorithm work validation, pre-allocation row limit and finite derived coordinates; preserves strict subtraction, default/zero-period semantics and existing TS-04 parity assertions. |
 | `test_variable_star_periodogram_limits.py` | M1 ALG-02: kill/reap-bounded weighted-grid stalls; finite/range/integer-step, sample/aggregate-work and representable-weight validation; pre-allocation sentinels and runtime guards after bypassing preflight. M2 powers have independent scientific checks; direct constant-series NaN remains pinned separately. |
 | `test_variable_star_weighted_contract.py` | M1 TS-03 / TS-17 public containment: aligned paired-row uncertainties; object/null and numeric masked ECSV handoffs; raw partial-source ingest; skipped-row warnings; missing/invalid weights, nonscalar cells, empty/constant spectra and work-limit failures produce no success artifact. |
+| `test_cluster_ages_membership.py` | M2 legacy HR corrections: log-year ages retained in Myr through the 13.8 Gyr display window; opaque ID joins independent of order; finite zero proper motion, ellipse boundaries and zero-width axes; actual registered membership ECSV output. |
 | `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
 | `test_photometry_registry_smoke.py` | `tools/photometry.py`'s `list_photometry_targets`/`run_photometry_on_target` -- bundled-target resolution, fast offline runs, exposure-time consistency, and the sky-position/source-table fields that bridge into `tools.hr_diagram`. |
 | `test_radio_sources.py` | `algorithms/radio/`'s spectral-index/log-parabola fitting (injected-value recovery) and RA/Dec-column-guessing catalog matching, plus `tools/radio_sources.py`'s offline/error paths. New capability, no upstream to match -- see `docs/extraction.md`, "Radio Sources (Python)". |

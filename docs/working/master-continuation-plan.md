@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-21 against `main` at `15f5497`, with the first three M2 checkpoints
+Updated 2026-10-22 against `main` at `15f5497`, with the first four M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the two pulsar checkpoints and the variable-star checkpoint
+M2 remains open after the two pulsar, variable-star and cluster checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -74,8 +74,9 @@ the subsequent work.
 - [x] **Variable-star powers and errors.** Weighted floating-mean least squares
   uses the same inverse-variance weights for the response, fitted columns and
   reference variance. Standard power in [0, 1] is fractional weighted chi-square
-  improvement, not a detection probability. SVD uses an estimated solver/phase
-  resolution policy for collapsed aliases; exact constants remain rejected
+  improvement, not a detection probability. Response offsets are scaled before
+  squared energies to preserve powers at tiny and large amplitudes. SVD uses
+  an estimated solver/phase resolution policy for collapsed aliases; exact constants remain rejected
   publicly. Differential standard errors use independent quadrature without
   halving; covariance, shared systematics and uncertainty in the fixed reference
   magnitude are excluded. Public stages rederive old cached errors from source
@@ -83,17 +84,29 @@ the subsequent work.
   magnitudes, normalization and uncertainty convention in results/artifacts.
   The period grid, work bounds and fold ordering remain. Evidence:
   [derivation and acceptance record](../analysis/variable-star-powers-errors.md),
-  [21 scientific regressions](../../tests/test_variable_star_science.py),
+  [25 scientific regressions](../../tests/test_variable_star_science.py),
   independent Astropy/full-model QR comparisons and public ECSV handoffs.
-  Review found and verified the constant-series correction; final review has
-  no outstanding findings. Validation: Python 3.13.15, full offline suite
-  **3,476 passed, 49 skipped**; compileall, schema goldens, generated-skill
+  Review found and verified constant-series and response-amplitude corrections;
+  final review has no outstanding findings. Validation: Python 3.13.15,
+  full offline suite **3,503 passed, 49 skipped**; compileall, schema goldens, generated-skill
   consistency, repository shape and `git diff --check` pass. Broader direct
   helper failures remain M3 work. Changes remain local, unmerged and unpublished.
-- [ ] **Cluster ages and membership.** Legacy HR helpers discard ages above
-  13.8 million years, can miss ID `10` when joining IDs in numerical versus
-  alphabetical order, and exclude exactly zero proper motion. Supported
-  results must retain valid old clusters, matching sources and zero motions.
+- [x] **Cluster ages and membership.** Legacy HR helpers convert MWSC log-year
+  ages to Myr within the retained 13.8 Gyr display window, keeping valid old
+  clusters. FSR joins use exact IDs independent of source/result order and
+  numeric conversion; source order, in-place updates and first duplicate
+  results are retained. Membership accepts finite zero proper motion and
+  rejects missing/nonfinite components, including with unbounded selection.
+  Zero-width ellipse axes define closed lines or points. These exported legacy
+  helpers have no registered-tool callers; the separate registered membership
+  implementation already accepts zero motion, verified through its written
+  ECSV output. No membership probabilities are claimed. Evidence:
+  [scope and acceptance record](../analysis/cluster-ages-membership.md),
+  [23 regressions](../../tests/test_cluster_ages_membership.py), and independent
+  review with **62 passing cluster/HR tests** and no outstanding findings.
+  Validation: Python 3.13.15, full offline suite **3,503 passed, 49 skipped**;
+  compileall, schema goldens, generated-skill consistency, repository shape and
+  `git diff --check` pass. Changes remain local, unmerged and unpublished.
 - [ ] **Legacy coordinates, extinction and mass.** Negative sexagesimal
   coordinates lose their sign; W1 extinction returns zero outside the
   implemented law; the extinction multiplier ignores a non-default `rv`.

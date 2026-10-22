@@ -102,7 +102,17 @@ def apply_isochrone_transform(response: Mapping[str, Any], plot_type: str, filte
 
 # PORTED: git-history:algorithms/hrdiagram/result/mwsc-distributions.ts::*Distribution
 def get_mwsc_age_distribution(clusters: Sequence[Mapping[str, Any]]) -> list[float]:
-    return sorted(10 ** cluster["age"] / 1_000_000 for cluster in clusters if cluster.get("age") is not None and 0 < 10 ** cluster["age"] / 1_000_000 < 13.8)
+    """Convert MWSC log10(years) to Myr within the legacy 13.8 Gyr window."""
+    ages: list[float] = []
+    max_log_age = math.log10(13.8e9)
+    for cluster in clusters:
+        log_age = cluster.get("age")
+        if log_age is None or not math.isfinite(log_age) or log_age >= max_log_age:
+            continue
+        age_myr = 10 ** (log_age - 6)
+        if age_myr > 0:
+            ages.append(age_myr)
+    return sorted(ages)
 
 
 def get_mwsc_distance_distribution(clusters: Sequence[Mapping[str, Any]]) -> list[float]:
@@ -138,6 +148,10 @@ def source_serialization(sources: Sequence[Mapping[str, Any]]) -> dict[str, Any]
 
 # PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources
 def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fsr: Mapping[str, Any]) -> dict[str, list[Mapping[str, Any]]]:
+    """Partition by distance and an inclusive ellipse of finite measured motion.
+
+    Zero-width axes select a closed line or point rather than dividing by zero.
+    """
     if sources is None:
         return {"fsr": [], "not_fsr": []}
     pm_global = fsr.get("pm_ra") is None or fsr.get("pm_dec") is None
@@ -151,13 +165,22 @@ def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fs
     for source in sources:
         values = source.get("fsr")
         distance_ok = fsr.get("distance") is None or (values and values.get("distance") and fsr["distance"]["min"] <= values["distance"] <= fsr["distance"]["max"])
-        pm_ok = pm_global
-        if not pm_ok and values and values.get("pm_ra") and values.get("pm_dec"):
-            inner = 1 - ((values["pm_ra"] - center_ra) / a) ** 2
-            dec_diff = b * math.sqrt(inner) if inner >= 0 else math.nan
-            pm_ok = center_dec - dec_diff <= values["pm_dec"] <= center_dec + dec_diff
-        elif pm_global and (not values or values.get("pm_ra") is None or values.get("pm_dec") is None):
-            pm_ok = False
+        pm_ra = values.get("pm_ra") if values else None
+        pm_dec = values.get("pm_dec") if values else None
+        pm_ok = (
+            pm_ra is not None and pm_dec is not None
+            and math.isfinite(pm_ra) and math.isfinite(pm_dec)
+        )
+        if pm_ok and not pm_global:
+            dx, dy = pm_ra - center_ra, pm_dec - center_dec
+            if a < 0 or b < 0:
+                pm_ok = False
+            elif a == 0:
+                pm_ok = dx == 0 and abs(dy) <= b
+            elif b == 0:
+                pm_ok = dy == 0 and abs(dx) <= a
+            else:
+                pm_ok = math.hypot(dx / a, dy / b) <= 1
         (selected if distance_ok and pm_ok else rejected).append(source)
     return {"fsr": selected, "not_fsr": rejected}
 
@@ -215,23 +238,18 @@ def get_data_range(data: Sequence[Sequence[float]]) -> dict[str, dict[str, float
 
 # PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::appendFSRResults
 def append_fsr_results(sources: list[dict[str, Any]], fsr: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    ordered_fsr = sorted(fsr, key=lambda entry: float(entry["id"]))
-    i = j = 0
-    while i < len(sources) and j < len(ordered_fsr):
-        source_id = sources[i]["id"]
-        result_id = ordered_fsr[j]["id"]
-        if source_id == result_id:
-            sources[i]["fsr"] = {
-                "pm_ra": ordered_fsr[j]["pm_ra"],
-                "pm_dec": ordered_fsr[j]["pm_dec"],
-                "distance": ordered_fsr[j]["distance"],
+    """Attach the first result for each exact source ID, preserving source order."""
+    results_by_id: dict[Any, Mapping[str, Any]] = {}
+    for result in fsr:
+        results_by_id.setdefault(result["id"], result)
+    for source in sources:
+        result = results_by_id.get(source["id"])
+        if result is not None:
+            source["fsr"] = {
+                "pm_ra": result["pm_ra"],
+                "pm_dec": result["pm_dec"],
+                "distance": result["distance"],
             }
-            i += 1
-            j += 1
-        elif source_id < result_id:
-            i += 1
-        else:
-            j += 1
     return sources
 
 

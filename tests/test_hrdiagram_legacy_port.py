@@ -40,13 +40,13 @@ def test_plot_transform_preserves_off_by_one_break_and_strict_error_cut():
     ) == pytest.approx({"x": -0.3396268972771528, "y": -10.54009866066234})
 
 
-def test_mwsc_distributions_keep_original_clip_and_unit_rules():
+def test_mwsc_distributions_use_myr_ages_and_retain_other_clip_rules():
     clusters = [
         {"age": 9.0, "distance": 1000, "metallicity": 0.0, "e_bv": 0.2, "num_cluster_stars": 10},
         {"age": None, "distance": -1, "metallicity": 0.8, "e_bv": 1.1, "num_cluster_stars": 0},
     ]
 
-    assert legacy.get_mwsc_age_distribution(clusters) == []
+    assert legacy.get_mwsc_age_distribution(clusters) == [1000.0]
     assert legacy.get_mwsc_distance_distribution(clusters) == [1.0]
     assert legacy.get_mwsc_metallicity_distribution(clusters) == [0.0]
     assert legacy.get_mwsc_reddening_distribution(clusters) == [0.2]

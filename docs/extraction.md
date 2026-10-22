@@ -3586,3 +3586,25 @@ components. Days/magnitudes and normalization/uncertainty-method metadata now
 accompany new artifacts/results. Existing missing-error failures and direct
 constant-series nonfinite behavior remain M3 work; public constants are
 rejected. No covariance model or detection-probability claim is added.
+
+The 2026-10-22 review follow-up additionally scales response offsets before
+forming squared energies. Standard powers then remain invariant for tiny and
+large finite amplitudes instead of underflowing to zero or overflowing. Four
+direct/public regressions and an independent 1,500-case amplitude comparison
+cover the correction; see the acceptance record above.
+
+#### Python M2 cluster ages and membership (2026-10-22)
+
+Three exported helpers in `algorithms/hrdiagram_py/legacy.py` intentionally
+diverge from their historical TypeScript behavior. MWSC logarithmic ages in
+years become Myr within the retained 13.8 Gyr display window, rather than
+discarding every cluster older than 13.8 Myr. FSR results join by exact source
+ID, independent of ordering or numeric conversion. Membership cuts accept
+finite zero proper motion, reject missing/nonfinite components, and handle
+zero-width ellipse axes as closed lines or points.
+
+The registered HR membership tool uses the separate `membership.py`, which
+already accepts zero motion; an actual ECSV regression verifies that boundary.
+No membership probability or new HR fit is introduced. The subsequent legacy
+coordinates, extinction and mass checkpoint remains open. See the
+[scope and acceptance record](analysis/cluster-ages-membership.md).
