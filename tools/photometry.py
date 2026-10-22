@@ -31,6 +31,7 @@ cluster worth an HR diagram.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -499,7 +500,7 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
 
-    from algorithms.fieldcal.field_cal import perform_field_calibration
+    from algorithms.fieldcal.field_cal import DegenerateCalibrationError, perform_field_calibration
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
 
     # The same settings classes the CLI field-cal path constructs -- the ones
@@ -569,6 +570,11 @@ def calibrate_zeropoint(
             errors=[ToolError(code="unsupported_filter", message=str(exc))],
             warnings=warnings,
         )
+    except DegenerateCalibrationError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="no_solution", message=str(exc))],
+            warnings=warnings,
+        )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
         return ZeropointComparison(
             errors=[ToolError(code="field_calibration_failed", message=str(exc))],
@@ -581,7 +587,7 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
     zero_point, _result = outcome
-    if zero_point is None:
+    if zero_point is None or not math.isfinite(zero_point):
         return ZeropointComparison(
             errors=[ToolError(code="no_solution", message="field calibration did not converge")],
             warnings=warnings,

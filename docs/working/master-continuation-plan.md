@@ -94,13 +94,26 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   (offline) and `tests/test_m3_catalog_lookup_live.py` (`network`; passed
   2026-10-21 against live SkyServer, SIMBAD, VizieR APASS and CASDA with an
   empty astroquery cache), `docs/extraction.md` Catalogs §5.7 and Query updates.
-- [ ] **Malformed calibration inputs.** Confirm reported failures with mixed
+- [x] **Malformed calibration inputs.** Confirm reported failures with mixed
   catalog row shapes/epochs, absent coordinates, missing FWHM in adaptive
   apertures and degenerate zero-point header writes. These cases must not
   escape as exceptions or advertise a usable calibration. Reproduced live
   2026-10-21: a U-band NGC 5128 calibration with default catalogs selects
   SkyMapper, whose rows carry `numpy.int32` ids, and field calibration's
   `CatalogSource` revalidation rejects them as `field_calibration_failed`.
+  *Closed:* all four reports and the live integer-id failure reproduced, then
+  fixed in field calibration: integer ids are coerced, epochs no longer abort
+  matching, positionless rows and non-finite magnitudes are left out (with
+  specific errors when nothing usable remains), solves without a finite zero
+  point and positive uncertainty raise `DegenerateCalibrationError` before any
+  header write (`no_solution` from the tool), and `mode="auto"` receives the
+  detected FWHM. Evidence: `tests/test_m3_calibration_inputs.py`,
+  `tests/test_m3_calibration_inputs_live.py` (`network`, live SkyMapper and
+  UCAC), `docs/extraction.md` Field Calibration §5b. The live runs show
+  SkyMapper and UCAC B zero points 1.27 and 0.72 mag from APASS through the
+  preferred-band fallback and the UCAC wildcard; that is M2's catalog
+  magnitudes and filters item, not validated here.
+
 - [ ] **Direct light-curve helpers.** Missing errors can misalign variable
   folds; all-null dates raise; constant weighted spectra retain NaNs; empty peak
   selection has an unfinished helper contract. Legacy histograms fail on
