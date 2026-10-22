@@ -9,12 +9,7 @@ from __future__ import annotations
 import math
 from typing import Sequence
 
-from algorithms.variable_star.lightcurve import (
-    VariableDataRow,
-    differential_data,
-    differential_errors,
-    jd_range,
-)
+from algorithms.variable_star.lightcurve import VariableDataRow, jd_range
 
 
 # First-party TS-02 acceptance bounds, not changes to the folding formula.
@@ -77,10 +72,14 @@ def fold_with_error(
     phase: float = 0.0,
     display_periods: int = 2,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float, float]]]:
-    """Fold differential data and error bars exactly as the variable service.
+    """Fold differential data and error bars as the variable service did.
 
-    The intentionally separate filters retain the original index-alignment
-    fragility when a paired row has no combined error.
+    M3 (TS-04): upstream filtered values and error bars separately and paired
+    them by index, so one paired row without a combined error shifted every
+    later bound onto the wrong point and the fold raised ``IndexError``; equal
+    JDs could also swap bounds between rows. Each point now carries its own
+    row's bounds, ``(x, None, None)`` when that row has no combined error.
+    Nothing to fold returns ``([], [])``. Values, phases and order are as before.
     """
     if variable_star == "none":
         return [], []
@@ -88,12 +87,20 @@ def fold_with_error(
         raise ValueError(f"fold exceeds the {MAX_FOLD_SAMPLES}-sample limit.")
     _finite(period, "period")  # negative means use the upstream JD baseline
     _finite(phase, "phase")
-    data = sorted(differential_data(rows, variable_star, reference_star_magnitude))
-    errors = sorted(differential_errors(rows, variable_star, reference_star_magnitude))
+    points = sorted((
+        (row.jd, _differential(row, variable_star, reference_star_magnitude), row.error_mse)
+        for row in rows
+        if row.jd is not None and row.source1 is not None and row.source2 is not None
+    ), key=lambda point: point[:2])  # upstream's (jd, magnitude) order; never compare None
+    data = [(jd, magnitude) for jd, magnitude, _ in points]
+    errors = [
+        (jd, None, None) if error is None else (jd, magnitude - error, magnitude + error)
+        for jd, magnitude, error in points
+    ]
     chosen_period = jd_range(rows) if period < 0 else period
     folded_data: list[tuple[float, float]] = []
-    folded_errors: list[tuple[float, float, float]] = []
-    if chosen_period != 0:
+    folded_errors: list[tuple[float, float | None, float | None]] = []
+    if chosen_period != 0 and data:
         min_jd = data[0][0]
         validate_fold_work(chosen_period, [row[0] for row in data])
         _finite(phase * chosen_period, "phase shift")
@@ -109,10 +116,16 @@ def fold_with_error(
                 _finite(x + chosen_period, "duplicated fold phase")
                 folded_data.append((x + chosen_period, magnitude))
                 folded_errors.append((x + chosen_period, error[1], error[2]))
-    return (
-        sorted(folded_data, key=lambda row: row[0], reverse=True),
-        sorted(folded_errors, key=lambda row: row[0], reverse=True),
-    )
+    # One sort keeps each bound beside its point (Python's sort is stable).
+    order = sorted(range(len(folded_data)), key=lambda index: folded_data[index][0], reverse=True)
+    return [folded_data[index] for index in order], [folded_errors[index] for index in order]
+
+
+def _differential(row: VariableDataRow, variable_star: str, reference_star_magnitude: float) -> float:
+    # Same expression as lightcurve.differential_data.
+    if variable_star == "source1":
+        return row.source1 - row.source2 + reference_star_magnitude
+    return row.source2 - row.source1 + reference_star_magnitude
 
 
 def get_period_step(period_folding_period: float, observation_range: float) -> float:

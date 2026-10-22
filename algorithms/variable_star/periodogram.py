@@ -115,7 +115,13 @@ def lomb_scargle_with_error(
     """Return the exact error-weighted, logarithmic-period spectrum.
 
     Finite, aligned inputs must fit the bounded sample/grid work budget.
-    Accepted inputs retain TypeScript arithmetic, including constant-series NaN.
+    Accepted inputs retain TypeScript arithmetic.
+
+    M3 (TS-17): a constant series has zero variance, so every trial power is
+    0/0 and upstream returned a spectrum of NaN (or inf, when the weighted
+    mean's rounding leaves tiny residues). It now raises ``ValueError``, as
+    the pulsar periodogram does for the same input, and so does any trial
+    whose power is not finite.
     """
     if len(times) != len(values) or len(times) != len(errors):
         raise ValueError("Dimension mismatch between time, value and uncertainty arrays.")
@@ -135,6 +141,8 @@ def lomb_scargle_with_error(
         _finite(two_variance, "twice the variance")
     except (OverflowError, ZeroDivisionError) as exc:
         raise ValueError("weighted normalization is not representable.") from exc
+    if two_variance == 0:
+        raise ValueError("A constant series has no variance; its periodogram is undefined.")
     result: list[tuple[float, float]] = []
     x_value = start
     index = 0
@@ -168,6 +176,8 @@ def lomb_scargle_with_error(
             )
         except OverflowError as exc:
             raise ValueError("weighted trial power is not representable.") from exc
+        if not isfinite(power):
+            raise ValueError(f"weighted trial power at period {period!r} is not finite.")
         result.append((period, power))
         next_value = x_value + step
         if not isfinite(next_value) or next_value <= x_value:

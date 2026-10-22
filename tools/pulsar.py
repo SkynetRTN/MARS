@@ -371,6 +371,9 @@ def _top_peaks(
     """
     peaks: list[dict[str, Any]] = []
     for index in np.argsort(power)[::-1]:
+        # argsort places NaN last, so reversed it would rank NaN first.
+        if not np.isfinite(power[index]):
+            continue
         value = float(x[index])
         if any(
             abs(value - peak["x"]) < min_separation * max(value, peak["x"])

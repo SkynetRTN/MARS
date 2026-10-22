@@ -1,7 +1,5 @@
 """Parity tests for the extracted variable-star computations."""
 
-import math
-
 import pytest
 
 from algorithms.variable_star.folding import fold_with_error, get_period_step
@@ -96,29 +94,33 @@ def test_weighted_lomb_scargle_matches_the_extracted_typescript_grid() -> None:
         assert actual == pytest.approx(expected_row)
 
 
-def test_weighted_lomb_scargle_keeps_typescript_nan_for_a_constant_series() -> None:
-    """Catches Python division errors replacing TypeScript's IEEE NaN output."""
-    samples = lomb_scargle_with_error([0.0, 1.0], [3.0, 3.0], [0.1, 0.1], 0.1, 0.2, 1)
-
-    assert len(samples) == 1
-    assert math.isnan(samples[0][1])
+def test_weighted_lomb_scargle_rejects_a_constant_series() -> None:
+    """M3 (TS-17) replaced TypeScript's all-NaN spectrum with a ValueError."""
+    with pytest.raises(ValueError, match="constant"):
+        lomb_scargle_with_error([0.0, 1.0], [3.0, 3.0], [0.1, 0.1], 0.1, 0.2, 1)
 
 
-def test_fold_with_error_keeps_the_upstream_missing_error_alignment_failure() -> None:
-    """Catches silently repairing the documented separate-filter misalignment."""
+def test_fold_with_error_pairs_each_bound_with_its_own_row() -> None:
+    """M3 (TS-04) replaced upstream's index misalignment and IndexError.
+
+    A row without a combined error folds with ``None`` bounds; the full
+    contract is in ``test_m3_lightcurve_helpers.py``.
+    """
     rows = [
         VariableDataRow(1.0, 14.0, 12.0, 0.1, 0.1, None),
         VariableDataRow(2.0, 14.1, 12.0, 0.1, 0.1, 0.070710678),
     ]
 
-    with pytest.raises(IndexError):
-        fold_with_error(rows, "source1", 12.0, period=0.5)
+    data, errors = fold_with_error(rows, "source1", 12.0, period=0.5, display_periods=1)
+    assert [x for x, _ in data] == [x for x, _, _ in errors]
+    bounds = {round(magnitude, 9): (low, high) for (_, magnitude), (_, low, high) in zip(data, errors)}
+    assert bounds[14.0] == (None, None)
+    assert bounds[14.1] == pytest.approx((14.1 - 0.070710678, 14.1 + 0.070710678))
 
 
-def test_fold_with_error_keeps_the_upstream_empty_data_failure() -> None:
-    """Pins the extracted service's unguarded first-row access on empty input."""
-    with pytest.raises(IndexError):
-        fold_with_error([], "source1", 12.0, period=0.5)
+def test_fold_with_error_of_nothing_is_empty() -> None:
+    """M3 replaced the unguarded first-row access on empty input."""
+    assert fold_with_error([], "source1", 12.0, period=0.5) == ([], [])
 
 
 def test_differential_errors_returns_no_rows_when_no_variable_star_is_selected() -> None:

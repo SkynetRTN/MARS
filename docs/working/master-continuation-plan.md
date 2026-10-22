@@ -115,11 +115,20 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   preferred-band fallback and the UCAC wildcard; that is M2's catalog
   magnitudes and filters item, not validated here.
 
-- [ ] **Direct light-curve helpers.** Missing errors can misalign variable
+- [x] **Direct light-curve helpers.** Missing errors can misalign variable
   folds; all-null dates raise; constant weighted spectra retain NaNs; empty peak
   selection has an unfinished helper contract. Legacy histograms fail on
   singleton or tied data. Public spectrum guards already exist; remaining
   supported helper calls need defined results for these inputs.
+  *Closed:* each input reproduced, then given a defined result. Folds pair
+  every point with its own bounds (`None`, masked by the tool with an
+  `unbounded_points_folded` warning, when a row lacks a combined error) and
+  return `([], [])` when nothing folds. An undated baseline is `0.0`; constant
+  or non-finite weighted spectra raise `ValueError`, matching the pulsar
+  helpers. Peak selection ignores non-finite power. Singleton/tied histograms
+  return one bin, Sturges' rule or the value itself. Ordinary results are
+  unchanged. Evidence: `tests/test_m3_lightcurve_helpers.py`, the updated
+  pinned tests, and `docs/extraction.md` (Python M3 direct-helper contracts).
 - [ ] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
   equinoxes such as `J2000`. Missing binaries, bad catalog roots and a full
   output disk must be distinguishable from a genuine no-solution result.

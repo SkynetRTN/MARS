@@ -97,8 +97,14 @@ def differential_errors(
 
 
 def jd_range(rows: Sequence[VariableDataRow]) -> float:
-    """Return the upstream four-decimal observation baseline."""
+    """Return the upstream four-decimal observation baseline.
+
+    M3 (TS-31): with no dated row upstream returned ``-Infinity`` and the port
+    raised ``ValueError`` from ``max()``; no dates is now no baseline, ``0.0``.
+    """
     values = [row.jd for row in rows if row.jd is not None]
+    if not values:
+        return 0.0
     return float(f"{max(values) - min(values):.4f}")
 
 

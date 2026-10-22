@@ -2957,8 +2957,9 @@ photometric rewrite. Accepted inputs keep repeated subtraction (exact multiples
 still map to the period, not zero), the negative-period default-baseline
 sentinel, the zero-period empty result, phase wrapping, two-period duplication
 and descending sorting. The distinct empty-data and missing-error alignment
-failures in §9 remain pinned; TS-04 and weighted-spectrum TS-03/09/17 are not
-closed by this guard. `tests/test_variable_star_fold_limits.py` reproduces six
+failures in §9 were pinned by this guard and are replaced by the M3 helper
+contracts (Python M3 direct-helper contracts, below); weighted-spectrum
+TS-03/09 are not closed by it. `tests/test_variable_star_fold_limits.py` reproduces six
 stalled direct calls with 5 s kill/reap-bounded subprocesses and checks aggregate
 pre-loop/pre-allocation limits, finite/overflowed settings, public structured
 errors and the preserved sentinel/exact-multiple behavior. Ordinary algorithm
@@ -3596,15 +3597,39 @@ not a replacement for its weighted Lomb--Scargle formula:
 - The public periodogram requires nonempty finite output; constant/degenerate
   spectra return `invalid_input` and no artifact. This is a deliberate
   **public-result acceptance divergence** (TS-17 containment), not a direct
-  formula correction. The direct constant-series NaN parity remains pinned.
+  formula correction. The direct constant-series NaN parity was pinned here;
+  M3 replaced it with a `ValueError` (next subsection).
 
 Accepted finite fixtures keep the logarithmic-period/linear-counter grid,
 normal 2,001-row floating-drift output at 2,000 steps, weighted numerator,
 unweighted denominator/variance and upstream differential-error MSE. TS-09
-(weighted normalization), TS-14 (uncertainty convention), TS-04 (fold alignment)
-and the remaining direct-helper TS-16/17 contracts require separate review.
+(weighted normalization) and TS-14 (uncertainty convention) require separate
+review; TS-04 and the direct-helper TS-16/17 contracts are settled by M3.
 Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
 `tests/test_variable_star_weighted_contract.py`, existing
 `tests/test_variable_star_algorithms.py` and `tests/test_variable_star_tool.py`.
 Delivery scope and check counts are maintained in
 `docs/working/master-continuation-plan.md`, not inferred from this local change.
+
+#### Python M3 direct-helper contracts (2026-10-21)
+
+The registered tools already contained most of these inputs; the helpers
+themselves raised, returned NaN or misaligned. Each now has a defined result,
+marked `M3` at its site. Ordinary inputs are unchanged.
+
+| Helper | Input | Upstream / previous port | Now |
+|---|---|---|---|
+| `variable_star.folding.fold_with_error` (TS-04) | a paired row without `error_mse` | values and bounds filtered and sorted separately, paired by index: later bounds shifted, then `IndexError`; equal JDs could swap bounds | each point keeps its own row's bounds, `(x, None, None)` without one; the tool masks them and warns `unbounded_points_folded` |
+| `fold_with_error` | nothing foldable | `IndexError` on `data[0]` | `([], [])` |
+| `variable_star.lightcurve.jd_range` (TS-31) | no dated row | `-Infinity`; port `ValueError` from `max()` | `0.0`, so a default-period fold is empty |
+| `variable_star.periodogram.lomb_scargle_with_error` (TS-17) | constant series; any non-finite trial power | all-NaN spectrum (`inf` through `variable_periodogram`) | `ValueError`, as the pulsar periodogram already did (PUL-03) |
+| `pulsar.periodogram.find_global_max` (TS-16) | NaN or infinite powers; mismatched arrays | a NaN first poisons the result | non-finite powers are not candidates; none finite is `(None, None)`; mismatched lengths `ValueError`; ties still keep the earliest |
+| `tools.pulsar._top_peaks` (TS-16) | NaN powers | NaN ranked first | skipped |
+| `hrdiagram_py.legacy.get_default_bin` (TS-18) | one value or no spread; tied quartiles | NaN; Infinity | 1; Sturges' `ceil(log2 n) + 1` where Freedman-Diaconis is undefined |
+| `hrdiagram_py.legacy.get_histogram_extremes` (TS-28) | one value; no data | `undefined` minimum; port `IndexError` | that value for both; the empty-selection sentinel |
+
+The histogram index clamp only changes the one-value case. From two values up
+the original indices are already in range, and a test checks that.
+Tests: `tests/test_m3_lightcurve_helpers.py`; the pinned upstream failures in
+`test_variable_star_algorithms.py` and `test_hrdiagram_legacy_port.py` now
+state these contracts.

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-from astropy.table import Table
+from astropy.table import MaskedColumn, Table
 
 from algorithms.variable_star.folding import fold_with_error, validate_fold_work
 from algorithms.variable_star.lightcurve import VariableDataRow, merge_sources_by_mjd, with_error_mse
@@ -306,12 +306,21 @@ def fold_variable_star_lightcurve(
         return _error(file, "file_not_found", str(exc), VariableStarFoldedLightCurve)
     except (OSError, ValueError, IndexError) as exc:
         return _error(file, "invalid_input", str(exc), VariableStarFoldedLightCurve)
+    # A point whose row has no combined uncertainty folds with masked bounds.
+    unbounded = [row[1] is None for row in errors]
     table = Table({
         "phase": [row[0] for row in data], "magnitude": [row[1] for row in data],
-        "error_low": [row[1] for row in errors], "error_high": [row[2] for row in errors],
+        "error_low": MaskedColumn([row[1] or 0.0 for row in errors], mask=unbounded),
+        "error_high": MaskedColumn([row[2] or 0.0 for row in errors], mask=unbounded),
     })
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_folded", subdir=subdir)
+    warnings = [ToolWarning(
+        code="unbounded_points_folded",
+        message=f"{sum(unbounded)} folded points come from observations without a combined "
+        "uncertainty; their error bounds are masked.",
+    )] if any(unbounded) else []
     return VariableStarFoldedLightCurve(
         file=file, artifact=artifact, period=period, phase=phase, display_periods=display_periods,
         rows_folded=len(data), preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+        warnings=warnings,
     )
