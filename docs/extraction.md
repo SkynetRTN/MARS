@@ -495,6 +495,42 @@ data installed.
   dependency loading and search configuration without claiming blind-triangle
   convergence; the tool retains astrometry.net as the blind solving route.
 
+#### 9. M3 setup and I/O failures (2026-10-21)
+
+Rechecked against current code first: the tool layer already reported a
+misconfigured backend as `solver_unavailable` and a backend that raised as
+`solver_failed` (M1), but each of these still reproduced:
+
+* **ATLAS without a pointing hint (WCS-05).** The backend's `float(None)` raised
+  `TypeError`, surfacing as `solver_failed: atlas: float() argument must be ...`.
+  ATLAS searches locally around the hint, so without one it is now skipped,
+  and the reason is recorded: "atlas: needs a pointing hint, and the FITS
+  header records none ...".
+* **Textual equinoxes (WCS-22).** `_frame_from_header` called
+  `float('J2000')`, and `solve_wcs` swallowed the error with a bare `pass`, so
+  an `OBJCTRA`/`OBJCTDEC` hint was lost and a bounded search was refused for
+  "no pointing hint". `_equinox_year` now reads numbers, numeric strings and
+  `J`/`B`-prefixed years. A prefix decides FK5/FK4; a bare year keeps
+  upstream's 1980 cut, and an unreadable value falls back to ICRS. The swallow
+  now logs a warning. Live: with the 4200-series indexes, the M15 frame whose
+  only pointing is `OBJCTRA`/`OBJCTDEC` with `EQUINOX='J2000'` solves in ~3 s
+  under the P6 bounds.
+* **Missing binaries, bad catalog roots, full disks (WCS-23).** On a direct
+  `solve_wcs` call these were visible only through the optional
+  `solver_failures` list, and a configured astrometry.net whose `solve-field`
+  had gone was a silent miss. `WcsSolveMetadata.solver_failures` now carries
+  every `"backend: reason"` on every return path. A missing `solve-field` is
+  recorded. ATLAS's attempt is recorded before it writes its input image, so
+  a full disk there reads "atlas: could not write its input image to ...:
+  [Errno 28] No space left on device" instead of "solver: ...". A solve that
+  succeeded without a failed backend now carries a `solver_backend_unavailable`
+  warning from the tool.
+
+An empty `solver_failures` with no WCS is therefore a genuine miss, and the tool
+keeps `no_solution` for exactly that case. Tests:
+`tests/test_m3_wcs_failures.py` (stubbed backends); the real-solver runs above
+and the `solver_data` tests were also run with the operator data configured.
+
 ## Photometry
 
 _Former source: `algorithms/photometry/EXTRACTION.md`._

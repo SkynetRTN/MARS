@@ -478,6 +478,10 @@ def solve_wcs(
 ) -> WcsSolveResult:
 
     wcs_settings = WcsCalibrationSettings()
+    # M3 (WCS-23): every setup or backend failure is kept in the result, so a
+    # direct caller can tell it from a genuine miss without passing a list.
+    failures = solver_failures if solver_failures is not None else []
+    attempts = solver_attempts if solver_attempts is not None else []
 
     # The observer's plate-solve preferences (ASSET_PIPELINE_RUN_REVIEW.md §3.3).
     # Only the two knobs that shape the *written* WCS are exposed — SIP order and
@@ -572,7 +576,9 @@ def solve_wcs(
             if dec_deg_g is not None:
                 dec_hint_deg = float(dec_deg_g)
         except Exception:
-            pass
+            # Was a silent pass: WCS-22's J2000 equinox lost the hint here.
+            logger.warning("solve_wcs: could not read a pointing hint from the header",
+                           exc_info=True)
 
     if ra_hint_hours is not None:
         ra_hint_hours = ra_hint_hours % 24.0
@@ -705,8 +711,7 @@ def solve_wcs(
 
                     t0 = time.time()
                     try:
-                        if solver_attempts is not None:
-                            solver_attempts.append("astrometry.net")
+                        attempts.append("astrometry.net")
                         solution = anet_solve_field_glob(request, anet_config)
                     except SolveFieldTimeout as exc:
                         logger.warning(
@@ -716,8 +721,7 @@ def solve_wcs(
                         )
                         solution = None
                     except AstrometryNetError as exc:
-                        if solver_failures is not None:
-                            solver_failures.append(f"astrometry.net: {exc}")
+                        failures.append(f"astrometry.net: {exc}")
                         logger.warning(
                             "solve_wcs: anet backend error — %s (file_id=%s)", exc, file_id
                         )
@@ -751,14 +755,33 @@ def solve_wcs(
                 else:
                     logger.info("solve_wcs: anet skipped — no valid source positions (file_id=%s)", file_id)
             else:
-                logger.info("solve_wcs: anet backend not available (file_id=%s)", file_id)
+                # M3 (WCS-23): configured but no binary used to be a silent miss.
+                failures.append("astrometry.net: solve-field is not available")
+                logger.warning("solve_wcs: anet configured but solve-field is not available (file_id=%s)", file_id)
 
         # --- Atlas fallback ---
-        if (solution is None or solution.wcs is None) and atlas_config is not None:
+        # M3 (WCS-05): the ATLAS search is local around the hint, and without
+        # one its float(None) raised TypeError. It is skipped, and recorded.
+        atlas_skipped = None
+        if atlas_config is not None and (ra_hint_deg is None or dec_hint_deg is None):
+            atlas_skipped = (
+                "atlas: needs a pointing hint, and the FITS header records none (no "
+                "celestial WCS and no pointing keyword pair such as OBJRA/OBJDEC, "
+                "TELRA/TELDEC, RA/DEC or OBJCTRA/OBJCTDEC)"
+            )
+        if (solution is None or solution.wcs is None) and atlas_skipped:
+            failures.append(atlas_skipped)
+            logger.warning("solve_wcs: %s (file_id=%s)", atlas_skipped, file_id)
+        if (solution is None or solution.wcs is None) and atlas_config is not None and not atlas_skipped:
             logger.info("solve_wcs: trying Atlas backend (file_id=%s)", file_id)
             atlas_backend = AtlasBackend()
             image_path = tmpdir / "skylib_atlas_input.fits"
-            fits.writeto(image_path, image, header=clean_header, overwrite=True)
+            # Recorded before the write so a failure there is labelled ATLAS's.
+            attempts.append("atlas")
+            try:
+                fits.writeto(image_path, image, header=clean_header, overwrite=True)
+            except OSError as exc:
+                raise OSError(f"could not write its input image to {tmpdir}: {exc}") from exc
 
             # Narrow the scale window around the best available pixel-scale prior.
             # The full WcsCalibrationSettings range (default 0.1–60 arcsec/px) forces
@@ -812,8 +835,6 @@ def solve_wcs(
             )
 
             t0 = time.time()
-            if solver_attempts is not None:
-                solver_attempts.append("atlas")
             solution = atlas_backend.solve(request, atlas_config)
             elapsed = time.time() - t0
             atlas_metadata = solution.metadata or {}
@@ -857,9 +878,8 @@ def solve_wcs(
                 )
 
     except Exception as exc:
-        if solver_failures is not None:
-            backend = solver_attempts[-1] if solver_attempts else "solver"
-            solver_failures.append(f"{backend}: {exc}")
+        backend = attempts[-1] if attempts else "solver"
+        failures.append(f"{backend}: {exc}")
         logger.exception("Astrometric solution failed for file_id=%s", file_id)
         return WcsSolveResult(
             wcs=None,
@@ -869,6 +889,7 @@ def solve_wcs(
                 height_px=height,
                 n_field=int(len(sources)),
                 **search_metadata,
+                solver_failures=tuple(failures),
             ),
         )
 
@@ -882,6 +903,7 @@ def solve_wcs(
                 height_px=height,
                 n_field=int(len(sources)),
                 **search_metadata,
+                solver_failures=tuple(failures),
             ),
         )
 
@@ -988,5 +1010,6 @@ def solve_wcs(
             delta_dec_arcsec=delta_dec_arcsec,
             n_field=int(len(sources)),
             **search_metadata,
+            solver_failures=tuple(failures),
         ),
     )

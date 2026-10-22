@@ -129,9 +129,18 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   return one bin, Sturges' rule or the value itself. Ordinary results are
   unchanged. Evidence: `tests/test_m3_lightcurve_helpers.py`, the updated
   pinned tests, and `docs/extraction.md` (Python M3 direct-helper contracts).
-- [ ] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
+- [x] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
   equinoxes such as `J2000`. Missing binaries, bad catalog roots and a full
   output disk must be distinguishable from a genuine no-solution result.
+  *Closed:* rechecked, and all three still reproduced. ATLAS without a hint
+  is skipped with a named reason instead of `TypeError`. `J2000`/`B1950`
+  equinoxes keep the hint (a J2000-only M15 frame now solves live).
+  `WcsSolveMetadata.solver_failures` records a missing `solve-field`, a bad
+  catalog root and a full disk on every path, labelled by backend, so only an
+  empty list without a WCS is `no_solution`. Evidence:
+  `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
+  `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
+  because it omits configured settings, which is M4's.
 - [ ] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains

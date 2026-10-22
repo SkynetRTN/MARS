@@ -605,6 +605,16 @@ def solve_astrometry(
             ],
         )
 
+    if solver_failures:
+        # Solved, but a configured backend could not run or raised on the way.
+        configuration_warnings = [
+            *configuration_warnings,
+            ToolWarning(
+                code="solver_backend_unavailable",
+                message="Solved without a configured backend: " + "; ".join(solver_failures),
+            ),
+        ]
+
     if write_header:
         try:
             _write_wcs_header(

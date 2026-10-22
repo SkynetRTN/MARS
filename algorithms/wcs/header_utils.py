@@ -234,6 +234,26 @@ def _parse_ra_dec_values(ra_val, dec_val):
         ra_deg = ra_f
     return ra_deg, dec_f
 
+def _equinox_year(value) -> tuple[str | None, float] | None:
+    """Return ``(prefix, year)`` for an EQUINOX value, or ``None`` if unreadable.
+
+    M3 (WCS-22): ``float('J2000')`` raised, and the caller three layers up
+    discarded the whole pointing hint. Numbers and numeric strings keep the
+    upstream reading; a ``J``/``B`` prefix names the system explicitly.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return None, float(value)
+    text = str(value).strip().upper()
+    prefix = text[0] if text[:1] in ("J", "B") else None
+    try:
+        year = float(text[1:] if prefix else text)
+    except ValueError:
+        return None
+    return (prefix, year) if year == year and abs(year) != float("inf") else None
+
+
 def _frame_from_header(header):
     """
     Return an astropy coordinates frame callable for the given header,
@@ -241,24 +261,23 @@ def _frame_from_header(header):
     """
     # Common aliases
     radesys = (header.get("RADESYS") or header.get("RADECSYS") or "").strip().upper()
-    equinox = header.get("EQUINOX", None)
+    parsed = _equinox_year(header.get("EQUINOX", None))
+    prefix, eq = parsed if parsed is not None else (None, None)
+    # An explicit J/B prefix decides the system; a bare year keeps upstream's
+    # 1980 cut. ``eq`` truthiness is kept for the bare-year tests below.
+    is_julian = prefix == "J" or (prefix is None and eq is not None and eq >= 1980.0)
 
     # If explicitly ICRS, we're done
     if radesys == "ICRS":
         return ICRS()
 
     # FK5 / J2000 (typical)
-    if radesys == "FK5" or (equinox and float(equinox) >= 1980.0):
-        return FK5(equinox=f"J{float(equinox) if equinox else 2000.0}")
+    if radesys == "FK5" or (eq and is_julian):
+        return FK5(equinox=f"J{eq if eq else 2000.0}")
 
     # FK4 / B1950
-    if radesys == "FK4" or (equinox and float(equinox) < 1980.0):
-        return FK4(equinox=f"B{float(equinox) if equinox else 1950.0}")
-
-    # If RADESYS missing but EQUINOX present, assume FK5 for J*, FK4 for B*
-    if equinox is not None:
-        eq = float(equinox)
-        return FK5(equinox=f"J{eq}") if eq >= 1980.0 else FK4(equinox=f"B{eq}")
+    if radesys == "FK4" or (eq and not is_julian):
+        return FK4(equinox=f"B{eq if eq else 1950.0}")
 
     # Fallback
     return ICRS()
