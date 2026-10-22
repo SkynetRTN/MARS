@@ -27,6 +27,8 @@ combined behaviour without this module knowing about it.
 from __future__ import annotations
 
 import logging
+import math
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, Optional, Sequence
@@ -49,17 +51,28 @@ logger = logging.getLogger(__name__)
 #: J2000.0 as upstream wrote it — noon TT on 2000-01-01.
 J2000 = datetime(2000, 1, 1, 12, 0, 0)
 
+#: Seconds a failed probe is remembered before the next lookup retries it.
+RETRY_AFTER_S = 30.0
+
+#: The probed client; ``None`` until a probe succeeds.
 _simbad = None
-_simbad_enabled: Optional[bool] = None
+#: The last probe failure, and the ``time.monotonic()`` before which it stands.
 _simbad_init_error: Optional[BaseException] = None
+_simbad_retry_at = 0.0
 
 
 class SimbadUnavailableError(RuntimeError):
     """SIMBAD could not be asked: it failed to initialize or the query failed.
 
     Raised only by ``resolve_simbad(..., strict=True)``, so a caller can tell
-    an unreachable service from a name SIMBAD does not know.
+    an unreachable service from a name SIMBAD does not know. ``retryable`` is
+    ``False`` only when astroquery itself cannot be imported -- a local
+    installation problem that waiting will not fix.
     """
+
+    def __init__(self, message: str, *, retryable: bool = True):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass
@@ -88,30 +101,37 @@ def simbad_available() -> bool:
     import time, which made importing the module do network-adjacent work, so
     it runs on first use instead.
 
-    Only success is cached. A failed probe is retried on the next call, so a
-    transient failure costs that one lookup rather than disabling resolution
-    for the rest of the process (CAT-22). The failure is kept for
-    ``resolve_simbad(..., strict=True)`` to report.
+    Success is cached for the process. A failure is remembered for only
+    ``RETRY_AFTER_S`` seconds, after which the next lookup probes again, so a
+    transient failure no longer disables resolution for the rest of the
+    process (CAT-22), and a lasting one is not re-probed and re-logged on
+    every call. An astroquery that cannot be imported is remembered for good.
+    The failure is kept for ``resolve_simbad(..., strict=True)`` to report.
     """
-    global _simbad, _simbad_enabled, _simbad_init_error
-    if _simbad_enabled:
+    global _simbad, _simbad_init_error, _simbad_retry_at
+    if _simbad is not None:
         return True
+    if _simbad_init_error is not None and time.monotonic() < _simbad_retry_at:
+        return False
 
     try:
         from astroquery.simbad import Simbad
 
         simbad = Simbad()
         simbad.add_votable_fields("otype")
-    except Exception as exc:
-        logger.warning("SIMBAD object-type field unavailable; will retry on next lookup",
+    except ImportError as exc:
+        logger.warning("astroquery.simbad cannot be imported; SIMBAD resolution disabled",
                        exc_info=True)
-        _simbad_init_error = exc
-        _simbad_enabled = False
+        _simbad_init_error, _simbad_retry_at = exc, math.inf
+        return False
+    except Exception as exc:
+        logger.warning("SIMBAD object-type field unavailable; retrying in %.0f s",
+                       RETRY_AFTER_S, exc_info=True)
+        _simbad_init_error, _simbad_retry_at = exc, time.monotonic() + RETRY_AFTER_S
         return False
 
     _simbad = simbad
     _simbad_init_error = None
-    _simbad_enabled = True
     return True
 
 
@@ -141,7 +161,8 @@ def resolve_simbad(name: str, *, strict: bool = False) -> list[ResolvedTarget]:
     if not simbad_available():
         if strict:
             raise SimbadUnavailableError(
-                f"SIMBAD could not be initialized: {_simbad_init_error}"
+                f"SIMBAD could not be initialized: {_simbad_init_error}",
+                retryable=not isinstance(_simbad_init_error, ImportError),
             ) from _simbad_init_error
         return results
 

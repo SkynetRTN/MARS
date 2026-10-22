@@ -1427,12 +1427,16 @@ registries. Instead `tools.catalogs.reference_band_unavailable` reports the
 failures that are certain under a default solve -- an explicit transform
 needing a band the catalog lacks, or a pairing resolution refuses (SkyMapper
 `V`, §5.6) -- and the calibration tools check it before querying (or, for
-supplied rows, before solving). `calibrate_zeropoint` returns
+supplied rows that still need a band resolved, before solving; rows
+carrying `ref_mag` are used as given, and an undeclared catalog or VSX is never
+grounds to refuse). `calibrate_zeropoint` returns
 `unsupported_filter`, naming the filter, the catalog, the missing band and the
-catalogs that can calibrate the filter; `resolve_reference_band` warns with the
+catalogs with a real band or transform for the filter (not the fallback or a
+`*` wildcard); `resolve_reference_band` warns with the
 missing band. Filters with no transform at all are not rejected: the solve's
 preferred-band fallback still applies to them. Tested in
-`test_m3_catalog_lookup_failures.py`.
+`test_m3_catalog_lookup_failures.py`; the live APASS band set is checked in
+`test_m3_catalog_lookup_live.py`.
 
 #### 6. Dependencies
 
@@ -1566,15 +1570,19 @@ The availability probe also moved: upstream ran `add_votable_fields("otype")` at
 import time, so importing the module did network-adjacent work. It is now lazy
 and cached on first use.
 
-*Update 2026-10-21 (M3, CAT-22):* only a successful probe is cached. Caching
-the failure too latched resolution off for the rest of the process after one
-transient error; a failed probe is now retried by the next lookup.
+*Update 2026-10-21 (M3, CAT-22):* caching a failed probe for the process
+latched resolution off after one transient error. Success is still cached; a
+failure is remembered for `RETRY_AFTER_S` (30 s), so a lasting outage is not
+re-probed and re-logged on every call, and the first lookup after that window
+probes again. An astroquery that cannot be imported is remembered for good,
+and its `SimbadUnavailableError` has `retryable=False`.
 `resolve_simbad` keeps the extracted never-raise default, but
 `resolve_simbad(name, strict=True)` raises `SimbadUnavailableError` for an
 initialization or query failure, so an empty list means only that SIMBAD
 answered without a usable match. `tools.resolve` (and so `resolve_target` and
 `search_casda`'s name path) is strict: an outage is `provider_unavailable`,
-never `not_found`. Tested in `test_m3_catalog_lookup_failures.py`.
+never `not_found`, and a missing astroquery is `dependency_missing`. Tested in `test_m3_catalog_lookup_failures.py`, and live in
+`test_m3_catalog_lookup_live.py`.
 
 ##### 4.6 `AfterglowError` → `UnknownCatalogError(ValueError)`
 
@@ -1703,10 +1711,15 @@ not return to it.
 `query_objects` called `sdss.query_object`, which `SDSSClass` does not have, so
 every call raised `AttributeError`. It now sends one bounded SQL request through
 `query_sql` with `s.objID IN (...)` and the same `Star`/quality/clean
-predicates as a region. Names must be positive integer objIDs (the `id` the
-declaration reports), at most 5,000 per call; anything else is rejected
-locally, naming the value, and only parsed integers reach the SQL. Like
-VizieR's, an objID with no qualifying row is absent from the result.
+predicates as a region. Names are positive integer objIDs (the `id` the
+declaration reports), at most 5,000 per call, and only parsed integers reach
+the SQL. Like VizieR's, a name with no qualifying row -- or that is not an
+objID, such as another catalog's ID in a multi-catalog `source_ids` lookup --
+is absent from the result rather than aborting it. `query_sql` sends a GET
+request and SkyServer answers 404 past 2,048 bytes of query string (measured
+live: 75 objIDs pass, 80 fail), so IDs are batched to stay under
+`MAX_SDSS_QUERY_STRING` (1,900). A live
+round trip (region row -> objID lookup) is in `test_m3_catalog_lookup_live.py`.
 
 Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
 mapping remain preserved; ignored constraints (§5.8) and public schemas are

@@ -89,20 +89,26 @@ def _check_filter_supported(image_filter, catalogs: list[str]) -> None:
     """
     from algorithms.catalogs import CATALOGS
 
-    from tools.catalogs import reference_band_unavailable
+    from tools.catalogs import reference_band_unavailable, resolve_reference_band
 
+    # VSX lists variable stars -- the variability cross-check, never a
+    # calibration reference -- so it neither passes nor fails the check.
+    catalogs = [name for name in catalogs if name != "VSX"]
     if not isinstance(image_filter, str) or not image_filter.strip() or not catalogs:
         return
     reasons = [reference_band_unavailable(name, image_filter) for name in catalogs]
     if not all(reasons):
         return
-    # VSX lists variable stars: it is the variability cross-check, never a
-    # calibration reference, so it is not offered as an alternative.
-    alternatives = [
-        name for name in CATALOGS
-        if name != "VSX" and name not in catalogs
-        and reference_band_unavailable(name, image_filter) is None
-    ]
+    # Offer only catalogs with a real band or transform for the filter: not
+    # the preferred-band fallback, which would substitute another band, nor a
+    # '*' wildcard (UCAC's Open bandpass answers every filter), nor VSX.
+    alternatives = []
+    for name in CATALOGS:
+        if name == "VSX" or name in catalogs:
+            continue
+        resolution = resolve_reference_band(name, image_filter)
+        if resolution.supported and resolution.kind != "wildcard":
+            alternatives.append(name)
     message = " ".join(reasons)
     if alternatives:
         message += f" Catalogs that can calibrate {image_filter.strip()!r}: {', '.join(alternatives)}."
@@ -148,7 +154,14 @@ def _resolve_calibration_inputs(
         )
         if not selected_catalogs:
             selected_catalogs = row_catalogs
-        _check_filter_supported(image_filter, row_catalogs or selected_catalogs)
+        # A row that already carries ref_mag is used as given; only rows the
+        # solve must resolve a band for can make the filter unusable.
+        unresolved = [source for source in catalog_sources if getattr(source, "ref_mag", None) is None]
+        if unresolved:
+            unresolved_catalogs = sorted(
+                {name for name in (getattr(source, "catalog_name", None) for source in unresolved) if name}
+            )
+            _check_filter_supported(image_filter, unresolved_catalogs or selected_catalogs)
 
     if (
         variable_sources is None

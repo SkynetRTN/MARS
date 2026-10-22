@@ -27,7 +27,20 @@ __all__ = ["SimbadUnavailableError", "provider_error", "resolve_target", "resolv
 
 
 def provider_error(exc: SimbadUnavailableError) -> ToolResult:
-    """The ``provider_unavailable`` result for a SIMBAD lookup that failed."""
+    """The error result for a SIMBAD lookup that could not be made.
+
+    ``provider_unavailable`` when SIMBAD failed and a later call may succeed;
+    ``dependency_missing`` when astroquery itself is not importable.
+    """
+    if not exc.retryable:
+        return ToolResult(
+            status="error",
+            errors=[{
+                "code": "dependency_missing",
+                "message": f"{exc} Name resolution needs astroquery installed; "
+                "retrying will not help.",
+            }],
+        )
     return ToolResult(
         status="error",
         errors=[{

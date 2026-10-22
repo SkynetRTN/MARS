@@ -9,6 +9,7 @@ None of these tests opens a socket.
 from __future__ import annotations
 
 import pytest
+import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from astroquery.sdss import SDSSClass
@@ -68,13 +69,37 @@ def test_sdss_object_lookup_through_the_runner(sql_client):
 
 
 @pytest.mark.parametrize("names", [
-    ["M31"], ["1; DROP TABLE Star"], ["-5"], ["1.5"], [""], [None], [12],
-    ["9" * 25],
+    ["M31"], ["1; DROP TABLE Star"], ["-5"], ["1.5"], [""], [None], [True], [0],
+    ["9" * 25], [2**63],
 ])
-def test_sdss_object_lookup_rejects_non_objid_names_before_any_request(monkeypatch, names):
-    monkeypatch.setattr(sdss, "SDSS", lambda: pytest.fail("invalid name reached the client"))
-    with pytest.raises(ValueError, match="SDSS objID"):
-        CATALOGS["SDSS"].query_objects(names)
+def test_sdss_object_lookup_leaves_out_non_objid_names_without_a_request(monkeypatch, names):
+    monkeypatch.setattr(sdss, "SDSS", lambda: pytest.fail("no objID, yet the client was built"))
+    assert CATALOGS["SDSS"].query_objects(names) == []
+
+
+def test_sdss_object_lookup_accepts_integer_objids_and_skips_foreign_ids(sql_client):
+    CATALOGS["SDSS"].query_objects(["APASS 12345", np.int64(42), 7, "7"])
+    (sql, _kwargs), = sql_client.calls
+    assert "s.objID IN (42, 7)" in sql
+    assert "APASS" not in sql
+
+
+def test_another_catalogs_ids_do_not_abort_a_multi_catalog_lookup(sql_client):
+    result = query_catalogs(["SDSS"], source_ids=["APASS 12345", "42"])
+    assert len(result) == 1
+    assert "s.objID IN (42)" in sql_client.calls[0][0]
+
+
+def test_sdss_object_lookup_is_chunked_to_keep_get_urls_short(sql_client):
+    ids = [str(1237648720693755918 + i) for i in range(250)]
+    CATALOGS["SDSS"].query_objects(ids)
+    assert len(sql_client.calls) > 1
+    sent = []
+    for sql, _kwargs in sql_client.calls:
+        # SkyServer 404s past 2,048 bytes of query string (measured live).
+        assert sdss._query_string_length(sql) <= sdss.MAX_SDSS_QUERY_STRING < 2_048
+        sent += sql[sql.index("IN (") + 4:sql.index(")", sql.index("IN ("))].split(", ")
+    assert sent == ids  # every ID once, in order
 
 
 def test_sdss_object_lookup_bounds_the_name_count(monkeypatch):
@@ -149,8 +174,10 @@ def fake_simbad(monkeypatch):
 
     monkeypatch.setattr(astroquery.simbad, "Simbad", Fake)
     monkeypatch.setattr(simbad_query, "_simbad", None)
-    monkeypatch.setattr(simbad_query, "_simbad_enabled", None)
     monkeypatch.setattr(simbad_query, "_simbad_init_error", None)
+    monkeypatch.setattr(simbad_query, "_simbad_retry_at", 0.0)
+    # Retry immediately unless a test is about the backoff itself.
+    monkeypatch.setattr(simbad_query, "RETRY_AFTER_S", 0.0)
     return Fake
 
 
@@ -172,6 +199,45 @@ def test_simbad_resolution_recovers_after_a_transient_initialization_failure(fak
 
     assert simbad_query.resolve_simbad("M31") == []
     assert len(simbad_query.resolve_simbad("M31")) == 1
+
+
+def test_a_failed_probe_is_not_repeated_inside_the_retry_window(fake_simbad, monkeypatch):
+    monkeypatch.setattr(simbad_query, "RETRY_AFTER_S", 30.0)
+    constructed = []
+    original_init = fake_simbad.__init__
+
+    def counting_init(self):
+        constructed.append(1)
+        original_init(self)
+
+    monkeypatch.setattr(fake_simbad, "__init__", counting_init)
+    fake_simbad.init_failures = 1
+    fake_simbad.rows = [M31_ROW]
+
+    assert simbad_query.simbad_available() is False
+    with pytest.raises(simbad_query.SimbadUnavailableError, match="field list unreachable") as caught:
+        simbad_query.resolve_simbad("M31", strict=True)
+    assert caught.value.retryable is True
+    assert len(constructed) == 1  # remembered, not re-probed
+
+    monkeypatch.setattr(simbad_query, "_simbad_retry_at", 0.0)  # the window elapses
+    assert len(simbad_query.resolve_simbad("M31", strict=True)) == 1
+    assert len(constructed) == 2
+
+
+def test_a_missing_astroquery_is_a_dependency_problem_not_an_outage(fake_simbad, monkeypatch):
+    from tools.resolve import resolve_target
+
+    def no_astroquery(self):
+        raise ImportError("No module named 'astroquery.simbad'")
+
+    monkeypatch.setattr(fake_simbad, "__init__", no_astroquery)
+    with pytest.raises(simbad_query.SimbadUnavailableError) as caught:
+        simbad_query.resolve_simbad("M31", strict=True)
+    assert caught.value.retryable is False
+    result = resolve_target("M31")
+    assert [e.code for e in result.errors] == ["dependency_missing"]
+    assert "retrying will not help" in result.errors[0].message
 
 
 def test_strict_simbad_resolution_names_an_initialization_failure(fake_simbad):
@@ -276,8 +342,13 @@ def test_calibration_against_a_catalog_that_cannot_supply_the_filter_fails_by_na
     assert error.code == "unsupported_filter"
     assert "'U'" in error.message and "APASS" in error.message
     assert "uprime" in error.message
-    # The caller is told where the filter can be calibrated instead.
-    assert "SDSS" in error.message and "VSX" not in error.message
+    # The caller is told where the filter can be calibrated instead: only
+    # catalogs with a real U band or transform. Not VSX (variables), not
+    # UCAC's '*' wildcard, and not catalogs reached only through the
+    # preferred-band fallback, which substitutes a different band.
+    assert error.message.endswith(
+        "Catalogs that can calibrate 'U': SDSS, SkyMapper, Landolt, Stetson."
+    )
     assert result.zero_point is None
 
 
@@ -285,11 +356,34 @@ def test_offline_rows_from_a_catalog_that_cannot_supply_the_filter_fail_by_name(
     from tools.fieldcal_reference import replay_catalog_sources
     from tools.photometry import calibrate_zeropoint
 
-    result = calibrate_zeropoint(
-        u_band_frame, catalog_sources=replay_catalog_sources("ngc5128_b_002"),
-    )
+    # The full response is raw APASS rows: the solve must resolve U for them.
+    rows = replay_catalog_sources("ngc5128_b_002", fixture="full_response")
+    assert all(row.ref_mag is None for row in rows)
+    result = calibrate_zeropoint(u_band_frame, catalog_sources=rows)
     assert [e.code for e in result.errors] == ["unsupported_filter"]
     assert "APASS" in result.errors[0].message
+
+
+def test_rows_that_already_carry_ref_mag_are_not_refused(u_band_frame):
+    from tools.fieldcal_reference import replay_catalog_sources
+    from tools.photometry import calibrate_zeropoint
+
+    # The selected rows carry recorded ref_mags, which the solve uses as given.
+    rows = replay_catalog_sources("ngc5128_b_002")
+    assert all(row.ref_mag is not None for row in rows)
+    result = calibrate_zeropoint(u_band_frame, catalog_sources=rows)
+    assert result.errors == []
+    assert result.zero_point is not None
+
+
+def test_the_check_ignores_undeclared_catalogs_and_vsx():
+    from tools.photometry import UnsupportedFilterError, _check_filter_supported
+
+    _check_filter_supported("U", ["MyLocalCatalog"])  # not certain to fail
+    _check_filter_supported("U", ["VSX"])  # never a reference: nothing to check
+    with pytest.raises(UnsupportedFilterError) as caught:
+        _check_filter_supported("U", ["APASS", "VSX"])
+    assert "VSX" not in str(caught.value)
 
 
 def test_pipeline_calibration_reports_the_unsupported_filter(u_band_frame, no_catalog_query):

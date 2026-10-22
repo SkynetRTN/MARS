@@ -110,9 +110,11 @@ def reference_band_unavailable(catalog: str, image_filter: str | None) -> str | 
 
     Unlike ``resolve_reference_band``'s ``supported``, this allows the
     preferred-band fallback that a default field calibration also allows, so
-    it reports only failures that are certain: an unknown catalog, or a
-    filter whose explicit transform needs bands the catalog does not carry
-    (CAT-06, APASS ``U``). Rows missing some magnitudes are a separate matter.
+    it reports only failures that are certain: a filter whose explicit
+    transform needs bands the catalog does not carry (CAT-06, APASS ``U``),
+    or a pairing resolution refuses. A catalog MARS does not declare is not
+    certain to fail -- its rows may match a band directly -- so it returns
+    ``None``. Rows missing some magnitudes are a separate matter.
     """
     catalog_name = str(catalog).strip()
     normalized_filter = (image_filter or "").strip()
@@ -120,7 +122,7 @@ def reference_band_unavailable(catalog: str, image_filter: str | None) -> str | 
         return None
     declaration = _effective_catalog(catalog_name)
     if declaration is None:
-        return f"{catalog_name} is not a known photometric catalog."
+        return None
     catalog_mags = set((getattr(declaration, "mags", {}) or {}).keys())
     lookup = _effective_lookup(catalog_name)
     if _reference_resolves(
