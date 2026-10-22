@@ -1,8 +1,8 @@
 # Pulsar candidates, sampling and false-alarm bounds
 
 Implementation and acceptance checks recorded 2026-10-21 for the second M2
-checkpoint. Independent review subsequently reopened the gate for unresolved
-endpoint probabilities, detailed below. The implementation replaces the public
+checkpoint. Independent review reopened the gate for endpoint probabilities;
+the correction and its validation are detailed below. The implementation replaces the public
 driver's independent-grid-point confidence interpretation; it does not
 calibrate pulsar detection on radio data.
 
@@ -58,22 +58,46 @@ FAP <= min(1, K * (1 - 2z/N)^((N-3)/2)).
 
 This step requires no independence between trial frequencies.
 [NIST, Bonferroni inequality](https://www.itl.nist.gov/div898/handbook/prc/section4/prc473.htm).
-The implementation evaluates the expression in log space, with a positive
-floating-point floor for otherwise underflowing probabilities. For a requested
-bound `alpha`, the sufficient power threshold is
+The driver fits the same tau-shifted sine/cosine columns at the selected peak
+and computes `peak_residual_fraction = RSS/TSS` directly. Its centered response
+is scaled before taking norms. The log-space probability is
+
+```text
+min(1, K * (RSS/TSS)^((N-3)/2)).
+```
+
+This avoids subtracting a rounded maximum power from one. A positive
+floating-point floor is used only when a resolved residual's probability
+underflows, never to replace an unresolved residual. A relative residual norm
+at or below `eps * max(design.shape)` returns null, disclosed by
+`false_alarm_resolution_limited`. This is a standard solver-resolution estimate,
+not a certified forward-error enclosure; residual-relative accuracy can
+deteriorate near that limit. The mathematical null-model bound does not imply
+certified interval arithmetic for every floating-point calculation.
+
+For a requested bound `alpha`, the ideal sufficient power threshold is
 
 ```text
 z_alpha = -N/2 * expm1(2 * (log(alpha) - log(K)) / (N-3)).
 ```
 
+The implementation evaluates the equivalent inverse with 80-digit Decimal
+arithmetic and rounds toward larger binary64 powers. A cutoff that rounds to
+`N/2` has no representable sufficient level below the normalization endpoint;
+it is omitted rather than labelled calibrated. The resolution flag/warning
+covers omitted levels independently of whether the peak's bound is available.
+
 Results identify `false_alarm_method="gaussian_bonferroni"`, report the bound
-and thresholds keyed by `0.1`, `0.01`, `0.001`, and include explicit assumptions
+and representable thresholds keyed by `0.1`, `0.01`, `0.001`, and include explicit assumptions
 and a warning. With only three samples there is no nontrivial bound of this
 form: probability/method are null, thresholds empty, and
 `false_alarm_unavailable` explains why. Legacy `peak_confidence` is null and
 `confidence_thresholds` is empty. Old artifacts' thresholds remain drawable
-as **Legacy threshold N (uncalibrated)** with a warning. New plots say
-**Gaussian noise FAP <= …**.
+as **Legacy threshold N (uncalibrated)** with a warning. New artifacts identify
+`false_alarm_statistic=residual_fraction`; pre-fix Gaussian-bound artifacts
+without this metadata also take the uncalibrated fallback. Recompute their
+spectra from the light curve to replace potentially erroneous endpoint values.
+New plots say **Gaussian noise FAP <= …** for the available levels.
 
 The proof requires an actual least-squares projection. At exact or nearly
 uniform Nyquist frequencies, roundoff can make the port's nominally orthogonal
@@ -129,7 +153,7 @@ fold too. No detection-probability, period-uncertainty or general sensitivity
 claim follows from this checkpoint.
 [VanderPlas, §VII](https://arxiv.org/html/1703.09824).
 
-## Review follow-up: unresolved endpoint probabilities
+## Review follow-up: endpoint probability correction
 
 Independent code review on 2026-10-21 found a P2 numerical defect in
 `significance.upper_bound` and threshold generation. The following supported
@@ -144,8 +168,8 @@ result = periodogram.compute_periodogram(
 )
 ```
 
-`peak_power` rounds to `2.0`, so the normalized power rounds to one and the
-reported bound is `2.2250738585072014e-308`. Independent floating-mean least
+Before correction, `peak_power` rounds to `2.0`, so the normalized power rounds
+to one and the reported bound is `2.2250738585072014e-308`. Independent floating-mean least
 squares gives residual SSE about `2.2204460434e-16` and TSS `2.0`. The
 finite-sample Beta tail is about `1.05367121e-8`, also confirmed by a
 70-digit quadrature calculation. The residual remains resolvable; replacing
@@ -157,10 +181,26 @@ The related `threshold(0.001, 4, 200_002)` rounds to the maximum power `2.0`;
 `0.01010656`, above the requested `0.01`. These cannot be presented as resolved
 sufficient thresholds without further numerical handling.
 
-The derivation remains valid away from this numerical boundary. The code needs
-stable residual-based evaluation with controlled error handling, or explicit
-unavailable probabilities/levels when resolution is insufficient. An arbitrary
-epsilon correction alone does not prove conservativeness. The 106 focused
-candidate, limit, spectrum and plot tests pass but do not cover this failing
-endpoint. This finding remains unresolved; the master plan records the gate
-as open.
+The corrected driver instead uses the directly fitted residual. The same input
+returns approximately `1.05367121e-8` in both modes and saves the same value and
+residual fraction in ECSV. Fits below estimated solver resolution return null
+and warn. The `0.01` threshold rounds upward to a sufficient float; the `0.001`
+level is omitted in the example with 200,002 trials. No artificial residual
+epsilon is substituted into a probability.
+
+`tests/test_pulsar_probability_precision.py` includes independent 70-digit
+quadrature references, several noise amplitudes below power-complement
+resolution, public/artifact checks, null/omitted-level warnings, old Gaussian
+artifact plots and NumPy integer counts. The original endpoint tests were
+observed failing before implementation. An independent review checked 3,000
+deterministic threshold cases spanning 4–100,000 samples, up to 200,002 trials
+and probabilities down to `1e-300` against a 150-digit Decimal tail: no returned
+threshold exceeded its requested probability. These checks do not turn the
+solver-resolution estimate into a formal numerical error certificate.
+
+The corrected checkpoint passed independent code review and the full offline
+suite on Python 3.13.15 with locked dependencies and `[mcp]`: **3,453 passed,
+49 skipped**. All 17 new precision regressions pass. Compileall, schema goldens,
+generated-skill consistency, repository shape and `git diff --check` also pass.
+The first two M2 checkpoints are closed locally on `feature/m2`; the remaining
+M2 gates are still open, and these changes are unmerged and unpublished.

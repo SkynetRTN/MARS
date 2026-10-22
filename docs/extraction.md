@@ -3171,6 +3171,16 @@ null checks and remeasured scan outcomes. Focused tests are in
 `test_pulsar_candidates_confidence.py`; the existing rendered-content tests
 now inspect conditional false-alarm lines.
 
+The endpoint review follow-up replaces `1 - 2*peak_power/N` with a direct
+SVD residual fit at the selected peak, using the same tau-shifted columns and
+a scaled centered response. Residuals below estimated solver resolution
+produce null probabilities with a warning. Threshold inverses use 80-digit Decimal arithmetic,
+round upward to binary64 and omit the normalization endpoint. This leaves
+spectrum powers/grid unchanged. New artifacts identify the residual statistic;
+pre-fix Gaussian levels are uncalibrated when plotted. The precision policy
+is numerical error handling, not a certified forward-error enclosure; see
+the acceptance record and `test_pulsar_probability_precision.py`.
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in

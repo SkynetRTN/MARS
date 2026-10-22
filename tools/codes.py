@@ -123,6 +123,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "observations_capped": "More observations matched than products were fetched for; the cap is adjustable.",
     "false_alarm_model_assumptions": "A false-alarm bound assumes iid Gaussian noise and a fixed trial grid; correlated noise, RFI and retuning are not calibrated.",
     "false_alarm_unavailable": "Too few samples for a finite-sample Gaussian false-alarm bound; no level is reported.",
+    "false_alarm_resolution_limited": "The peak residual is below estimated solver resolution or some sufficient power levels are unrepresentable; probabilities may be null and levels omitted.",
     "legacy_confidence_uncalibrated": "A spectrum's saved thresholds lack supported calibration provenance and are shown only as uncalibrated legacy levels.",
     "sampling_limit_heuristic": "Irregular epochs have no asserted Nyquist limit; twice median positive spacing is only a default search suggestion.",
     "search_above_nyquist": "Explicit search bounds exceed the uniform-sampling Nyquist frequency; peaks there may be aliases.",

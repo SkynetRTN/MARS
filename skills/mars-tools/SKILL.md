@@ -69,6 +69,9 @@ Run the stages in order; each produces what the next needs.
    conditional on iid Gaussian noise and one fixed grid. It does not calibrate
    baseline filtering, correlated noise, RFI or retuning, and is not a pulsar
    or correct-period probability. `peak_confidence` is retired (null).
+   `false_alarm_resolution_limited` flags null probabilities or omitted levels
+   at numerical limits. Use the residual-based bound, not rounded power;
+   recompute older spectra for current evaluation.
    Check `peak_fold_snr`, aliases, the profile and warnings. `peak_does_not_fold`
    means the fold does not strongly support this candidate.
 3. `fold_pulsar_lightcurve` — stack rotations into a pulse profile. `pulse_snr`

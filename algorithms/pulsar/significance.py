@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import math
 import sys
+from decimal import Decimal, localcontext
 
 from . import limits
 
 METHOD = "gaussian_bonferroni"
+STATISTIC = "residual_fraction"
 PROBABILITIES = (0.1, 0.01, 0.001)
 ASSUMPTIONS = (
     "Independent Gaussian errors with equal variance around a constant mean.",
@@ -35,27 +37,53 @@ def _counts(samples: int, trials: int) -> None:
         raise ValueError("a false-alarm bound needs at least four samples")
 
 
-def upper_bound(power: float, samples: int, trials: int) -> float:
-    """Upper bound for the largest tested power under the stated Gaussian null.
+def residual_upper_bound(residual_fraction: float, samples: int, trials: int) -> float:
+    """Evaluate the Beta tail from RSS/TSS without subtracting power from one.
 
-    A positive floating-point floor avoids reporting zero for tail probabilities
-    below representable precision; the floor remains conservative.
+    A positive floor is used only when a resolved residual's probability
+    underflows, never as a substitute for an unresolved residual.
+    """
+    _counts(samples, trials)
+    limits.finite(residual_fraction, "residual fraction", positive=True)
+    if residual_fraction > 1:
+        raise ValueError("residual fraction must not exceed one")
+    log_bound = math.log(trials) + (samples - 3) / 2 * math.log(residual_fraction)
+    return math.exp(max(math.log(sys.float_info.min), min(0.0, log_bound)))
+
+
+def upper_bound(power: float, samples: int, trials: int) -> float | None:
+    """Scalar-power reference; the normalization endpoint has no resolved tail.
+
+    The driver uses a directly fitted residual instead. Subtract before
+    dividing to avoid an additional cancellation in ``1 - 2*power/N``.
     """
     _counts(samples, trials)
     limits.finite(power, "power")
     normalized = 2.0 * power / samples
     if normalized < 0 or normalized > 1 + 1e-12:
         raise ValueError("power lies outside the sample-variance normalization")
-    if normalized >= 1:
-        return sys.float_info.min
-    log_bound = math.log(trials) + (samples - 3) / 2 * math.log1p(-normalized)
-    return math.exp(max(math.log(sys.float_info.min), min(0.0, log_bound)))
+    residual_fraction = (samples / 2 - power) / (samples / 2)
+    if residual_fraction <= 0:
+        return None
+    return residual_upper_bound(residual_fraction, samples, trials)
 
 
-def threshold(alpha: float, samples: int, trials: int) -> float:
-    """Power sufficient for a finite-grid Gaussian false-alarm bound <= alpha."""
+def threshold(alpha: float, samples: int, trials: int) -> float | None:
+    """Upward-rounded sufficient power, or null at an unrepresentable endpoint.
+
+    Compute the inverse above binary64 precision before rounding toward larger
+    powers. Rounding to the normalization cap does not yield a drawable level.
+    """
     _counts(samples, trials)
     limits.finite(alpha, "false alarm probability", positive=True)
     if alpha >= 1:
         raise ValueError("false alarm probability must be below one")
-    return -samples / 2 * math.expm1(2 * (math.log(alpha) - math.log(trials)) / (samples - 3))
+    samples, trials = int(samples), int(trials)
+    with localcontext() as context:
+        context.prec = 80
+        residual = (Decimal(float(alpha)) / trials) ** (Decimal(2) / (samples - 3))
+        cutoff = Decimal(samples) / 2 * (1 - residual)
+        value = float(cutoff)
+        if Decimal(value) < cutoff:
+            value = math.nextafter(value, math.inf)
+    return value if value < samples / 2 else None

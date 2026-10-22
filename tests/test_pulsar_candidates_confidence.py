@@ -208,9 +208,8 @@ def test_nearly_perfect_signal_has_finite_nonzero_noise_bound():
     )
     assert np.isfinite(result.false_alarm_probability_upper_bound)
     assert 0 < result.false_alarm_probability_upper_bound < 1e-20
-    # Small N and a large allowed grid can round thresholds to N/2, but must
-    # never yield a negative, infinite or NaN power.
-    assert 0 < significance.threshold(0.001, 4, 200_002) <= 2
+    # A power cutoff that rounds to N/2 is unavailable, not a sufficient level.
+    assert significance.threshold(0.001, 4, 200_002) is None
 
 
 def test_uniform_nyquist_trial_is_a_valid_least_squares_projection():

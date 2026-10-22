@@ -667,8 +667,15 @@ class PulsarPeriodogram(PulsarObservationInfo):
     """Retired independent-trial thresholds; new computations return an empty map."""
     false_alarm_method: Literal["gaussian_bonferroni"] | None = None
     false_alarm_probability_upper_bound: float | None = Field(default=None, ge=0, le=1)
+    peak_residual_fraction: float | None = Field(default=None, ge=0, le=1)
+    """Direct peak-fit RSS/TSS; null when the residual is unresolved."""
+    false_alarm_resolution_limited: bool = False
+    """Peak probability is unresolved or some sufficient levels are unrepresentable."""
     false_alarm_thresholds: dict[str, float] = Field(default_factory=dict)
-    """Keys are Gaussian FAP bounds (0.1, 0.01, 0.001); values are spectral powers."""
+    """Representable Gaussian FAP power levels, keyed by 0.1, 0.01, 0.001.
+
+    Unrepresentable levels are omitted; inspect false_alarm_resolution_limited.
+    """
     false_alarm_assumptions: list[str] = Field(default_factory=list)
     top_peaks: list[PulsarCandidate] = Field(default_factory=list)
     """A few best-separated candidates, strongest first, for when the global

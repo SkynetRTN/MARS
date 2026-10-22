@@ -1,8 +1,7 @@
 # MARS release closure gate
 
-Updated 2026-10-21 against `main` at `15f5497`, with the first M2 checkpoint
-closed and the second implemented but reopened by review on the single working
-branch `feature/m2`. Keep the remaining M2
+Updated 2026-10-21 against `main` at `15f5497`, with the first two M2 checkpoints
+closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
@@ -41,16 +40,7 @@ the subsequent work.
   and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
   native Windows and external solver-data gates. Changes are local to this
   feature branch and are not in published `0.1.0rc6`.
-- [ ] **Pulsar candidates and confidence.** Reopened by independent review
-  (2026-10-21): near-perfect four-sample fits can round to maximum power,
-  causing the reported Gaussian false-alarm bound to collapse to approximately
-  `2.2e-308` despite a resolvable residual tail near `1.05e-8`. Sufficient
-  thresholds can also round onto that unresolved endpoint. Correct the
-  numerical tail/threshold handling or explicitly report unavailable levels
-  before closing this gate; see the
-  [review reproduction](../analysis/pulsar-candidates-confidence.md#review-follow-up-unresolved-endpoint-probabilities).
-  The implemented portions remain:
-  every candidate exposes `period_s`,
+- [x] **Pulsar candidates and confidence.** Every candidate exposes `period_s`,
   `frequency_hz` and `power` in either mode; search bounds have `search_unit`,
   and `evaluated_trials` counts the actual saved grid. Defaults use twice
   median positive spacing through 3 s (the reciprocal frequency band).
@@ -60,15 +50,25 @@ the subsequent work.
   finite-sample Gaussian-noise tail with a Bonferroni union bound over actual
   trials, without assuming independent frequencies. Numerically degenerate
   Nyquist trials use a stable SVD projection. Results/plots state the noise
-  model; old artifact thresholds are uncalibrated. Neither the bound nor
+  model; old artifact thresholds are uncalibrated. Independent review's
+  maximum-power endpoint defect is corrected: directly fitted RSS/TSS retains
+  the resolvable tail near `1.05e-8` in its four-sample reproduction. Fits below
+  estimated solver resolution return null and warn; this estimate is not a
+  certified numerical error enclosure. Threshold inverses use 80-digit Decimal
+  arithmetic, round toward larger powers and omit unrepresentable levels with
+  a warning. Earlier Gaussian artifacts without the residual-statistic marker
+  also plot as uncalibrated; see the
+  [review correction](../analysis/pulsar-candidates-confidence.md#review-follow-up-endpoint-probability-correction).
+  Neither the bound nor
   empirical fold SNR is a pulsar/correct-period probability. Correlated or
   filtered radio noise, RFI and repeated retuning remain outside that model.
   Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
   [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
+  [17 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
   and actual rendered threshold checks in both modes. All five scans complete;
   only B0329 matches its reference at the revised defaults. Frozen historical
   benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
-  Validation: Python 3.13.15, full offline suite **3,436 passed, 49 skipped**;
+  Validation: Python 3.13.15, full offline suite **3,453 passed, 49 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. The changes remain local, unmerged and unpublished.
 - [ ] **Variable-star powers and errors.** Weighted spectra mix weighted and

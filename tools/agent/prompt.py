@@ -63,7 +63,10 @@ the stages in order -- each one produces what the next needs:
      assumes iid Gaussian noise on one fixed grid; read false_alarm_assumptions. \
      It does not calibrate baseline filtering, correlated noise, RFI or retuning, \
      and is not a probability of a pulsar or correct period. peak_confidence is \
-     retired (null). Check peak_fold_snr, the profile, aliases and warnings. \
+     retired (null). false_alarm_resolution_limited flags null probabilities \
+     or omitted levels at numerical limits; do not infer them from rounded \
+     power. Recompute older spectra for current residual-based evaluation. \
+     Check peak_fold_snr, the profile, aliases and warnings. \
      peak_does_not_fold means the fold does not strongly support that candidate.
   3. fold_pulsar_lightcurve -- stack the rotations into a pulse profile. \
      pulse_snr above ~8 is an empirical concentration diagnostic, not a \

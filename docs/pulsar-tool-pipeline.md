@@ -180,6 +180,17 @@ pulsar/correct period. Results state these assumptions. Legacy
 [M2 acceptance record](analysis/pulsar-candidates-confidence.md) gives the
 derivation, independent checks and numerical Nyquist correction.
 
+Peak probabilities use directly fitted `peak_residual_fraction` (RSS/TSS),
+which avoids losing the residual when power rounds to its maximum. If that
+residual falls below estimated solver resolution the probability is null;
+power thresholds that cannot be represented below the maximum are omitted.
+`false_alarm_resolution_limited` and its warning disclose either case. This
+is a numerical resolution policy, not certified floating-point interval
+arithmetic. Read the returned bound rather than deriving one from rounded
+power. New artifacts identify `false_alarm_statistic=residual_fraction`;
+earlier Gaussian-bound artifacts need recomputation, and their saved levels
+are drawn as uncalibrated legacy thresholds.
+
 ### What a blind search actually achieves
 
 B0329+54 is the **only** one of the five bundled scans where this works with

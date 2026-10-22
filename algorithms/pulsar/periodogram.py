@@ -74,6 +74,8 @@ class Periodogram:
     false_alarm_method: str | None = None
     false_alarm_probability_upper_bound: float | None = None
     false_alarm_thresholds: dict[str, float] = field(default_factory=dict)
+    peak_residual_fraction: float | None = None
+    false_alarm_resolution_limited: bool = False
     evaluated_trials: int = 0
     sampling: sampling.Sampling | None = None
 
@@ -100,6 +102,46 @@ class Periodogram:
             if self.peak_power >= self.confidence.get(level["id"], math.inf):
                 best = level["name"]
         return best
+
+
+def _trial_terms(ts: np.ndarray, frequency: float) -> tuple[np.ndarray, np.ndarray]:
+    """The same tau-shifted trigonometric columns for powers and residual fits."""
+    limits.finite(1 / frequency, "trial period in seconds", positive=True)
+    omega = 2.0 * math.pi * frequency
+    limits.finite(omega, "angular frequency", positive=True)
+    with np.errstate(over="ignore", invalid="ignore"):
+        two_omega_t = 2 * omega * ts
+    if not np.isfinite(two_omega_t).all():
+        raise ValueError("time-frequency products must remain finite")
+    tau = math.atan2(
+        float(np.sum(np.sin(two_omega_t))),
+        float(np.sum(np.cos(two_omega_t))),
+    ) / (2.0 * omega)
+    angles = omega * (ts - tau)
+    return np.cos(angles), np.sin(angles)
+
+
+def _peak_residual_fraction(ts: np.ndarray, ys: np.ndarray, frequency: float) -> float | None:
+    """Direct RSS/TSS, or null below an estimate of the solver's resolution.
+
+    Scaling the centered response keeps squared norms finite. The cutoff is
+    a standard backward-error scale, not a certified forward-error enclosure.
+    """
+    response = ys - ys.mean()
+    response = response / np.max(np.abs(response))
+    design = np.column_stack(_trial_terms(ts, frequency))
+    try:
+        basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("singular residual fit") from exc
+    resolution = np.finfo(float).eps * max(design.shape)
+    retained = basis[:, singular_values > resolution * singular_values[0]]
+    residual = response - retained @ (retained.T @ response)
+    relative_norm = float(np.linalg.norm(residual) / np.linalg.norm(response))
+    limits.finite(relative_norm, "relative residual norm")
+    if relative_norm <= resolution:
+        return None
+    return min(1.0, relative_norm * relative_norm)
 
 
 def lomb_scargle(
@@ -189,21 +231,7 @@ def lomb_scargle(
             frequency = x_val
             log_x_val = x_val
 
-        limits.finite(1 / frequency, "trial period in seconds", positive=True)
-        omega = 2.0 * math.pi * frequency
-        limits.finite(omega, "angular frequency", positive=True)
-        with np.errstate(over="ignore", invalid="ignore"):
-            two_omega_t = 2 * omega * ts
-        if not np.isfinite(two_omega_t).all():
-            raise ValueError("time-frequency products must remain finite")
-        tau = math.atan2(
-            float(np.sum(np.sin(two_omega_t))),
-            float(np.sum(np.cos(two_omega_t))),
-        ) / (2.0 * omega)
-        omega_t_minus_tau = omega * (ts - tau)
-
-        cos_term = np.cos(omega_t_minus_tau)
-        sin_term = np.sin(omega_t_minus_tau)
+        cos_term, sin_term = _trial_terms(ts, frequency)
 
         try:
             cos_norm = float(np.dot(cos_term, cos_term))
@@ -323,6 +351,7 @@ def compute_periodogram(
     finite-grid bound under iid Gaussian noise, not a detection probability.
     """
     ts = limits.vector(ts, "time_s")
+    ys = limits.vector(ys, "flux")
     if ts.size < 3:
         raise ValueError("need at least three samples to compute a periodogram")
     observed_sampling = sampling.summarize(ts)
@@ -342,12 +371,18 @@ def compute_periodogram(
     thresholds = {}
     false_alarm = None
     method = None
+    residual_fraction = None
+    resolution_limited = False
     if ts.size > 3 and trials and peak_power is not None:
-        false_alarm = significance.upper_bound(peak_power, ts.size, trials)
-        thresholds = {
-            str(alpha): significance.threshold(alpha, ts.size, trials)
-            for alpha in significance.PROBABILITIES
-        }
+        frequency = peak_x if freq_mode else 1 / peak_x
+        residual_fraction = _peak_residual_fraction(ts, ys, frequency)
+        if residual_fraction is not None:
+            false_alarm = significance.residual_upper_bound(residual_fraction, ts.size, trials)
+        for alpha in significance.PROBABILITIES:
+            level = significance.threshold(alpha, ts.size, trials)
+            if level is not None:
+                thresholds[str(alpha)] = level
+        resolution_limited = residual_fraction is None or len(thresholds) < len(significance.PROBABILITIES)
         method = significance.METHOD
 
     return Periodogram(
@@ -362,6 +397,8 @@ def compute_periodogram(
         false_alarm_method=method,
         false_alarm_probability_upper_bound=false_alarm,
         false_alarm_thresholds=thresholds,
+        peak_residual_fraction=residual_fraction,
+        false_alarm_resolution_limited=resolution_limited,
         evaluated_trials=trials,
         sampling=observed_sampling,
     )

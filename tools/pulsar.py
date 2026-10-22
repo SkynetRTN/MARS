@@ -443,6 +443,11 @@ def compute_pulsar_periodogram(
     a probability of a pulsar or correct period. Legacy ``peak_confidence`` and
     ``confidence_thresholds`` return null and an empty map.
 
+    The peak bound uses directly fitted ``peak_residual_fraction`` (RSS/TSS),
+    since rounded maximum power can lose that residual. Below estimated solver
+    resolution it returns null; unrepresentable threshold levels are omitted.
+    ``false_alarm_resolution_limited`` and its warning disclose either case.
+
     Search before consulting a reference period. Compare afterwards against
     ``curated_period_s`` or ``search_atnf`` and report both provenances. A
     reference-seeded fold does not independently measure the period.
@@ -529,6 +534,14 @@ def compute_pulsar_periodogram(
             "retuning, correlated/filtered noise or RFI, and is not a probability "
             "that the peak is a pulsar or the correct period. Check the fold and aliases.",
         ))
+    if result.false_alarm_resolution_limited:
+        warnings.append(ToolWarning(
+            code="false_alarm_resolution_limited",
+            message="The peak probability is null when its fitted residual is below "
+            "estimated solver resolution; unrepresentable power thresholds are "
+            "omitted. Use the returned residual-based bound when available, rather "
+            "than deriving a probability from rounded spectral power.",
+        ))
 
     # Empirical concentration check, retained from the earlier tool. The cutoff
     # is a diagnostic convention, not a calibrated test or source classifier.
@@ -583,12 +596,15 @@ def compute_pulsar_periodogram(
         "top_peaks": [candidate.model_dump(mode="json") for candidate in candidates],
         "false_alarm_thresholds": result.false_alarm_thresholds,
         "false_alarm_assumptions": list(significance.ASSUMPTIONS),
+        "false_alarm_statistic": significance.STATISTIC,
+        "false_alarm_resolution_limited": result.false_alarm_resolution_limited,
     })
     for key, value in {
         "peak_period_s": result.peak_period_s,
         "peak_frequency_hz": result.peak_frequency_hz,
         "false_alarm_method": result.false_alarm_method,
         "false_alarm_probability_upper_bound": result.false_alarm_probability_upper_bound,
+        "peak_residual_fraction": result.peak_residual_fraction,
     }.items():
         table.meta.pop(key, None)
         if value is not None:
@@ -615,6 +631,8 @@ def compute_pulsar_periodogram(
         confidence_thresholds=result.confidence,
         false_alarm_method=result.false_alarm_method,
         false_alarm_probability_upper_bound=result.false_alarm_probability_upper_bound,
+        peak_residual_fraction=result.peak_residual_fraction,
+        false_alarm_resolution_limited=result.false_alarm_resolution_limited,
         false_alarm_thresholds=result.false_alarm_thresholds,
         false_alarm_assumptions=list(significance.ASSUMPTIONS),
         top_peaks=candidates,
@@ -1590,7 +1608,19 @@ def _render_plot(
             plotted.append(marker.name)
 
         method = table.meta.get("false_alarm_method")
-        calibrated = isinstance(method, str) and method == significance.METHOD
+        statistic = table.meta.get("false_alarm_statistic")
+        calibrated = (
+            isinstance(method, str) and method == significance.METHOD
+            and isinstance(statistic, str) and statistic == significance.STATISTIC
+        )
+        limited = table.meta.get("false_alarm_resolution_limited")
+        if calibrated and isinstance(limited, (bool, np.bool_)) and limited:
+            warnings.append(ToolWarning(
+                code="false_alarm_resolution_limited",
+                message="This spectrum has an unresolved peak probability or omitted "
+                "power levels. Drawn levels are the representable Gaussian-noise "
+                "thresholds only; rounded maximum power does not imply a tiny probability.",
+            ))
         if calibrated:
             thresholds = table.meta.get("false_alarm_thresholds") or {}
             lines = charts.FALSE_ALARM_LINES
@@ -1603,7 +1633,7 @@ def _render_plot(
             if thresholds:
                 warnings.append(ToolWarning(
                     code="legacy_confidence_uncalibrated",
-                    message="Artifact thresholds have no supported false-alarm model. "
+                    message="Artifact thresholds lack current residual-based calibration metadata. "
                     "They are drawn as uncalibrated legacy levels, not confidence. "
                     "Recompute from the light curve for current bounds and assumptions.",
                 ))
