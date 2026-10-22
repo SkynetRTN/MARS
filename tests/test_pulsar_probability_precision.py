@@ -1,6 +1,6 @@
 """Regression checks for variance-normalized powers near their floating limit."""
 
-from decimal import Decimal, localcontext
+from decimal import Decimal, FloatOperation, Inexact, ROUND_FLOOR, localcontext
 
 import numpy as np
 import pytest
@@ -98,6 +98,48 @@ def test_representable_threshold_rounds_toward_sufficient_power(alpha, count_typ
 
 def test_unrepresentable_threshold_is_unavailable():
     assert significance.threshold(0.001, 4, 200_002) is None
+
+
+@pytest.mark.parametrize("host_setting", ["inexact_trap", "float_trap", "exponent_range"])
+def test_public_thresholds_are_independent_of_host_decimal_context(
+    tmp_path, artifact_dir, host_setting,
+):
+    path = tmp_path / "host-context.ecsv"
+    Table({
+        "time_s": np.arange(32) * 0.1,
+        "source1": np.random.default_rng(12).normal(size=32),
+    }).write(path, format="ascii.ecsv")
+
+    with localcontext() as context:
+        context.prec = 3
+        context.rounding = ROUND_FLOOR
+        if host_setting == "inexact_trap":
+            context.traps[Inexact] = True
+        elif host_setting == "float_trap":
+            context.traps[FloatOperation] = True
+        else:
+            context.Emin = -1
+            context.Emax = 0
+            context.clamp = 1
+        context.clear_flags()
+        before = context.copy()
+        result = pulsar.compute_pulsar_periodogram(
+            path, start=1.0, stop=1.001, steps=1,
+        )
+        assert dict(context.flags) == dict(before.flags)
+        assert dict(context.traps) == dict(before.traps)
+        for name in ("prec", "rounding", "Emin", "Emax", "clamp"):
+            assert getattr(context, name) == getattr(before, name)
+
+    assert result.errors == []
+    assert result.artifact is not None
+    assert result.evaluated_trials == 1
+    # Independent SciPy Beta(1, 14.5) inverse, scaled by N/2 = 16.
+    assert result.false_alarm_thresholds == pytest.approx({
+        "0.1": 2.3493143613235064,
+        "0.01": 4.353673849626958,
+        "0.001": 6.0637289297350145,
+    }, rel=1e-13)
 
 
 def test_old_gaussian_artifact_does_not_advertise_pre_fix_thresholds_as_current(

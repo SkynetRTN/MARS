@@ -15,7 +15,15 @@ from __future__ import annotations
 
 import math
 import sys
-from decimal import Decimal, localcontext
+from decimal import (
+    ROUND_HALF_EVEN,
+    Context,
+    Decimal,
+    DivisionByZero,
+    InvalidOperation,
+    Overflow,
+    localcontext,
+)
 
 from . import limits
 
@@ -79,8 +87,13 @@ def threshold(alpha: float, samples: int, trials: int) -> float | None:
     if alpha >= 1:
         raise ValueError("false alarm probability must be below one")
     samples, trials = int(samples), int(trials)
-    with localcontext() as context:
-        context.prec = 80
+    # Own the arithmetic settings instead of inheriting the host's Decimal
+    # traps, rounding or exponent range. localcontext also preserves its flags.
+    context = Context(
+        prec=80, rounding=ROUND_HALF_EVEN, Emin=-999999, Emax=999999,
+        clamp=0, flags=[], traps=[InvalidOperation, DivisionByZero, Overflow],
+    )
+    with localcontext(context):
         residual = (Decimal(float(alpha)) / trials) ** (Decimal(2) / (samples - 3))
         cutoff = Decimal(samples) / 2 * (1 - residual)
         value = float(cutoff)

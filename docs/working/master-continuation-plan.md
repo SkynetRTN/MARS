@@ -55,20 +55,20 @@ the subsequent work.
   the resolvable tail near `1.05e-8` in its four-sample reproduction. Fits below
   estimated solver resolution return null and warn; this estimate is not a
   certified numerical error enclosure. Threshold inverses use 80-digit Decimal
-  arithmetic, round toward larger powers and omit unrepresentable levels with
-  a warning. Earlier Gaussian artifacts without the residual-statistic marker
-  also plot as uncalibrated; see the
+  arithmetic isolated from host Decimal settings, round toward larger powers
+  and omit unrepresentable levels with a warning. Earlier Gaussian artifacts
+  without the residual-statistic marker also plot as uncalibrated; see the
   [review correction](../analysis/pulsar-candidates-confidence.md#review-follow-up-endpoint-probability-correction).
   Neither the bound nor
   empirical fold SNR is a pulsar/correct-period probability. Correlated or
   filtered radio noise, RFI and repeated retuning remain outside that model.
   Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
   [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
-  [17 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
+  [20 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
   and actual rendered threshold checks in both modes. All five scans complete;
   only B0329 matches its reference at the revised defaults. Frozen historical
   benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
-  Validation: Python 3.13.15, full offline suite **3,453 passed, 49 skipped**;
+  Validation: Python 3.13.15, full offline suite **3,456 passed, 49 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. The changes remain local, unmerged and unpublished.
 - [ ] **Variable-star powers and errors.** Weighted spectra mix weighted and

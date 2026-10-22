@@ -198,9 +198,17 @@ and probabilities down to `1e-300` against a 150-digit Decimal tail: no returned
 threshold exceeded its requested probability. These checks do not turn the
 solver-resolution estimate into a formal numerical error certificate.
 
+A further review found that the Decimal inverse inherited host arithmetic
+settings. Enabling `Inexact` or float-operation traps, or narrowing the exponent
+range, made valid public requests raise exceptions. Thresholds now use an
+explicit context with fixed precision, rounding, exponent range and traps,
+leaving the caller's settings and flags unchanged. Three public regressions
+were observed failing before this fix and passing afterwards. Independent
+review also checked 280 thresholds against 150-digit sufficient-tail references.
+
 The corrected checkpoint passed independent code review and the full offline
-suite on Python 3.13.15 with locked dependencies and `[mcp]`: **3,453 passed,
-49 skipped**. All 17 new precision regressions pass. Compileall, schema goldens,
+suite on Python 3.13.15 with locked dependencies and `[mcp]`: **3,456 passed,
+49 skipped**. All 20 precision regressions pass. Compileall, schema goldens,
 generated-skill consistency, repository shape and `git diff --check` also pass.
 The first two M2 checkpoints are closed locally on `feature/m2`; the remaining
 M2 gates are still open, and these changes are unmerged and unpublished.
