@@ -146,6 +146,15 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
   need focused contract evidence. ADS `abs:`/`object:` grouping remains an
   unconfirmed workaround. Distinguish no matches from unusable responses.
+  *Progress 2026-10-21 (not closed):* every listed mapping and chain was
+  checked live and fixed where a populated response looked empty or escaped as
+  an exception. Unusable responses now raise `ProviderResponseError` /
+  `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
+  lost every id to a column rename, B1950-only radio catalogs (3C among them)
+  could never match, and cached SkyServer error pages made SDSS queries fail
+  until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
+  counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
+  grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
 - [ ] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.

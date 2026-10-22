@@ -19,7 +19,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from algorithms.query.simbad import ResolvedTarget, SimbadUnavailableError, resolve_simbad
+from algorithms.query.simbad import (
+    ResolvedTarget,
+    SimbadResponseError,
+    SimbadUnavailableError,
+    resolve_simbad,
+)
 
 from tools.models import ToolResult
 
@@ -32,6 +37,11 @@ def provider_error(exc: SimbadUnavailableError) -> ToolResult:
     ``provider_unavailable`` when SIMBAD failed and a later call may succeed;
     ``dependency_missing`` when astroquery itself is not importable.
     """
+    if isinstance(exc, SimbadResponseError):
+        return ToolResult(
+            status="error",
+            errors=[{"code": "unusable_response", "message": str(exc)}],
+        )
     if not exc.retryable:
         return ToolResult(
             status="error",

@@ -14,13 +14,14 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-__all__ = ["guess_radec_columns", "match_sources_to_catalog"]
+__all__ = ["catalog_positions_readable", "guess_radec_columns", "match_sources_to_catalog"]
 
 #: Tried in order; the first pair present (case-insensitively) in the table wins.
 _RADEC_CANDIDATES = [
     ("RAJ2000", "DEJ2000"),
     ("RA_ICRS", "DE_ICRS"),
     ("_RAJ2000", "_DEJ2000"),
+    ("_RA.icrs", "_DE.icrs"),
     ("RAdeg", "DEdeg"),
     ("RA2000", "DEC2000"),
     ("RA", "DEC"),
@@ -63,6 +64,23 @@ def guess_radec_columns(table: pd.DataFrame) -> tuple[str, str] | None:
         if ra_actual is not None and dec_actual is not None:
             return ra_actual, dec_actual
     return None
+
+
+def catalog_positions_readable(table: pd.DataFrame) -> bool:
+    """Whether ``match_sources_to_catalog`` can read positions from ``table``.
+
+    M3: that function returns ``[]`` both for "no source within the radius"
+    and for "no position columns it understands", so a caller that needs to
+    tell a populated-but-unreadable catalog from a miss asks here first.
+    """
+    guessed = guess_radec_columns(table)
+    if guessed is None:
+        return False
+    rows = table.dropna(subset=list(guessed))
+    if rows.empty:
+        return False
+    return (_coerce_degrees(rows[guessed[0]], is_ra=True) is not None
+            and _coerce_degrees(rows[guessed[1]], is_ra=False) is not None)
 
 
 def match_sources_to_catalog(

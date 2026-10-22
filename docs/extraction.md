@@ -1576,7 +1576,10 @@ default suite, over **real VizieR responses** — recorded once and shipped as
 as astropy tables with the dtypes astroquery 0.4.11 returned. The apostrophe
 columns (`g'mag`, `e_g'mag`, …) arrive spelled with the apostrophe from that
 astroquery version, and the `recno` column the APASS declaration requests is
-not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only.
+not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only. *Update 2026-10-21 (M3):* every catalog
+mapping, Landolt and USNO included, now has a live contract test
+(`tests/test_m3_provider_responses_live.py`); the live Landolt run found the
+crash recorded in Query §5.12.
 
 ## Query
 
@@ -1744,7 +1747,9 @@ the generated name is never parsed. Preserved.
 
 `table_to_sources` appends a source only `if source.mags`. A source MARS cannot
 photometer is not useful, and field calibration depends on the filtering.
-`len(table)` and `len(sources)` differ routinely.
+`len(table)` and `len(sources)` differ routinely. *M3:* a response where
+*every* row drops is now an unusable response (§5.12), and a row without a
+finite position is dropped the same way.
 
 ##### 5.5 A magnitude of 99 or more means "not measured"
 
@@ -1834,6 +1839,79 @@ Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
 mapping remain preserved; ignored constraints (§5.8) and public schemas are
 unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
 regressions.
+
+##### 5.12 M3 provider-response contracts (2026-10-21)
+
+CAT-20: `table_to_sources` swallowed every per-row mapping failure, so a renamed
+or missing column turned a populated response into an empty one -- read as a
+field with no stars. It now checks the response before mapping and raises
+`ProviderResponseError` (a `ValueError`) for an unusable one. An empty response
+is still `[]`.
+
+* Coordinate columns and at least one declared band are required; the error
+  names the missing column and what the provider returned. An absent id column
+  is tolerated, since live APASS never returns the `recno` it requests, and
+  field calibration assigns ids.
+* Plain-column mappings also try `_`-prefixed and unprefixed spellings, as
+  apostrophes already were. **Live finding:** current astroquery returns
+  2MASS's `2MASS` column, not the `_2MASS` the declaration maps, so every 2MASS
+  id was lost.
+* Rows that are all masked, non-finite or >= 99 in every band, or have no
+  finite position, are an unusable response. Individual such rows are dropped.
+  **Live:** about 1 in 74 Tycho-2 rows has a masked mean position (no
+  proper-motion solution), and is dropped rather than emitted with a NaN
+  position. Mapping those stars from Tycho-2's observed positions would be a
+  scientific change; it is not made here.
+* **Landolt crashed on every live query.** Its transform (Catalogs) read errors
+  with `getattr(mag, 'error', 0)`, but MARS's `Mag.error` defaults to `None`.
+  A zero catalog error (`e_R-I = 0.0000` occurs live) therefore raised
+  `None ** 2`. A colour of exactly 0, which the row mapper drops (CAT-23),
+  raised `KeyError`. Unset errors now read as 0, the upstream intent, and only
+  the bands a missing colour feeds are left underived. The preserved
+  U-error-from-V_R bug is kept.
+* **SkyServer error pages were cached as results.** astroquery caches whatever
+  SkyServer answers, including HTML 404 and "Skyserver Error" pages, so one
+  transient error made the same SDSS query fail at parse time until the entry
+  expired. This was found live in the development host's own cache.
+  `_query_sql` retries an unparseable or HTML-headed reply once with the cache
+  bypassed. If that also fails it raises `ProviderResponseError`, quoting the
+  reply. A refusal (`RemoteServiceError`) gets the same retry but raises as
+  itself; network errors are not retried.
+* `calibrate_zeropoint` reports `ProviderResponseError` as the new tool code
+  `unusable_response`, which other tools share (below).
+
+Beyond the VizieR mapper, each chain the M3 item names was checked live, and
+fixed where a populated response could look empty or escape as an exception:
+
+* **Radio VizieR** (`tools.vizier`, `tools.radio_sources`): 17 of 40 radio
+  catalogs around 3C 48 had only B1950 positions (`RA1950`/`DE1950`),
+  including the 3C catalog itself, so they could never cross-match and read as
+  "no match". `search_vizier` now also requests VizieR's computed
+  `_RAJ2000`/`_DEJ2000` (all 138 catalogs then carry them), the matcher also
+  reads `_RA.icrs`/`_DE.icrs`, and a catalog whose positions still cannot be
+  read is named in a `catalog_positions_unreadable` warning. The name columns
+  gain `2MASS`.
+* **NED photometry:** a renamed `Frequency`/`Flux Density` column used to
+  escape `analyze_source_spectrum` as `KeyError`. It is now
+  `unusable_response`.
+* **Gaia DR3 and Cantat-Gaudin & Anders 2020** (`tools.hr_diagram`): the columns
+  each step reads are checked (`_GAIA_COLUMNS`, `_LITERATURE_COLUMNS`). A
+  renamed one escaped `crossmatch_gaia_by_position` as `KeyError`; a masked or
+  NaN literature parameter flowed on as a NaN age or distance. Both are now
+  `unusable_response`.
+* **SIMBAD** (`algorithms.query.simbad`): columns are read case-insensitively,
+  since astroquery before 0.4.8 returned `MAIN_ID`/`RA`/`DEC`/`OTYPE`. A
+  response missing one raises `SimbadResponseError` under `strict=True`
+  (`unusable_response` from `resolve_target`). `if not ra` no longer skips an
+  object at RA 0.
+* **ADS `abs:`/`object:` grouping** remains unconfirmed. No ADS key was
+  available. The grouped query string is pinned offline, and a live test runs
+  when `ADS_DEV_KEY` is set.
+
+Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
+responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
+catalog mapping, Landolt UBVRI, 2MASS ids, SIMBAD, Gaia/literature, radio
+positions with 3C 48 matched in the 3C catalog, NED, and ADS when keyed).
 
 #### 6. External dependencies
 

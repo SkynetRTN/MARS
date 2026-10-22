@@ -27,7 +27,9 @@ which are restored here.
 
 from __future__ import annotations
 
+import builtins
 import logging
+import math
 import re
 from typing import Dict as TDict, List as TList, Optional, Union
 
@@ -43,9 +45,18 @@ from algorithms.catalogs.schemas import CatalogSource, Mag
 from .cache import install_cache_error_suppression
 from .config import settings
 
-__all__ = ["VizierCatalog", "build_custom_vizier_catalog"]
+__all__ = ["ProviderResponseError", "VizierCatalog", "build_custom_vizier_catalog"]
 
 logger = logging.getLogger(__name__)
+
+
+class ProviderResponseError(ValueError):
+    """A provider returned rows MARS cannot use (M3, CAT-20).
+
+    Raised for renamed or missing coordinate or magnitude columns and for rows
+    with no usable value, so an unusable response is never mistaken for a
+    field with no stars. An empty response is still an empty result.
+    """
 
 # astroquery treats cache failures as query failures; MARS does not. See
 # query/cache.py. Installed on import so that merely importing this module gives
@@ -178,14 +189,22 @@ class VizierCatalog(Catalog):
 
         Column lookups retry with apostrophes replaced by underscores, because
         astroquery renames columns like ``g'mag`` to ``g_mag`` depending on the
-        table and version.
+        table and version, and with a leading underscore added or removed
+        (``_2MASS``/``2MASS``).
+
+        M3 (CAT-20): an unusable response raises ``ProviderResponseError``
+        instead of mapping to ``[]`` -- missing coordinate columns, no declared
+        band column, or rows of which none has a usable magnitude and a
+        finite position. See ``docs/extraction.md``, Query §5.12.
         """
         sources: TList[CatalogSource] = []
-        if table is None:
+        if table is None or len(table) == 0:
             # Empty response
             return sources
 
         context = dict(numpy.__dict__)
+        colnames = list(getattr(table, "colnames", None) or table[0].colnames)
+        aliases = self._check_response_columns(colnames)
 
         for row in table:
             source = CatalogSource(catalog_name=self.name, mags={})
@@ -193,8 +212,9 @@ class VizierCatalog(Catalog):
             if self.col_mapping:
                 for attr, expr in self.col_mapping.items():
                     try:
-                        # Fast path: the mapping is a plain column name
-                        val = row[expr]
+                        # Fast path: the mapping is a plain column name, or
+                        # one the provider now spells differently (M3).
+                        val = row[aliases.get(expr, expr)]
                     except KeyError:
                         ctx = dict(context)
                         ctx.update({name: row[name] for name in row.colnames})
@@ -231,7 +251,61 @@ class VizierCatalog(Catalog):
             if source.mags:
                 sources.append(source)
 
-        return sources
+        # M3 (CAT-20): rows that all lost their values used to come back as an
+        # empty list, indistinguishable from a field with no stars.
+        if not sources:
+            raise ProviderResponseError(
+                f"{self.name} returned {len(table)} rows, none with a usable magnitude "
+                "(every declared band is absent, masked, non-finite or >= 99)."
+            )
+        # A row without a finite position cannot be placed or matched (e.g.
+        # Tycho-2 stars with no mean position have masked RAmdeg/DEmdeg); it is
+        # dropped like a row without a magnitude.
+        positioned = [source for source in sources if _finite_position(source)]
+        if not positioned:
+            raise ProviderResponseError(
+                f"{self.name} returned {len(sources)} rows with magnitudes but none "
+                "with a finite position."
+            )
+        if len(positioned) < len(sources):
+            logger.info("%s: dropped %d of %d rows with no finite position",
+                        self.name, len(sources) - len(positioned), len(sources))
+        return positioned
+
+    def _check_response_columns(self, colnames: TList[str]) -> TDict[str, str]:
+        """Fail on a response that lacks columns the mapping cannot do without.
+
+        M3 (CAT-20): a renamed coordinate or magnitude column used to make every
+        row silently unmappable. Coordinates and at least one declared band are
+        required; a missing id column is tolerated (live APASS never returns the
+        ``recno`` it requests). Returns renames for plain-column mappings, e.g.
+        ``_2MASS`` -> ``2MASS``: astroquery once prefixed leading-digit names.
+        """
+        present = set(colnames)
+        aliases: TDict[str, str] = {}
+        for attr, expr in (self.col_mapping or {}).items():
+            needed = _expression_columns(expr)
+            found = {name: _column_spelling(name, present) for name in needed}
+            if expr in found and found[expr] not in (None, expr):
+                aliases[expr] = found[expr]
+            missing = [name for name, spelling in found.items() if spelling is None]
+            if missing and attr in ("ra_hours", "dec_degs"):
+                raise ProviderResponseError(
+                    f"{self.name}: the response has no {', '.join(missing)} column for "
+                    f"{attr}; it returned {', '.join(colnames)}."
+                )
+            if missing:
+                logger.info("%s response has no %s column for %s", self.name, ", ".join(missing), attr)
+        declared = [
+            mag_col for mag_col, _ in (_mag_columns(item) for item in (getattr(self, "mags", None) or {}).values())
+            if mag_col
+        ]
+        if declared and not any(_column_spelling(name, present) for name in declared):
+            raise ProviderResponseError(
+                f"{self.name}: the response has no declared magnitude column "
+                f"({', '.join(declared)}); it returned {', '.join(colnames)}."
+            )
+        return aliases
 
     def _vizier(self, **kwargs) -> Vizier:
         """Construct an astroquery ``Vizier`` bound to this catalog."""
@@ -357,6 +431,34 @@ def _mag_columns(item) -> tuple[Optional[str], Optional[str]]:
         return item[0], None
     except (IndexError, TypeError, ValueError):
         return None, None
+
+
+def _expression_columns(expr: str) -> TList[str]:
+    """The columns a ``col_mapping`` expression reads (as ``_derive_columns``,
+    but also skipping Python builtins such as ``int``/``float``)."""
+    try:
+        names = compile(expr, "<string>", "eval").co_names
+    except SyntaxError:
+        return [expr]  # a literal column name that is not an identifier
+    return [
+        name for name in names
+        if name not in numpy.__dict__ and name not in dir("") and not hasattr(builtins, name)
+    ]
+
+
+def _column_spelling(name: str, present: set) -> Optional[str]:
+    """Return how ``name`` is spelled in a response, or ``None`` if absent."""
+    for candidate in (name, name.replace("'", "_"), name.lstrip("_"), "_" + name):
+        if candidate in present:
+            return candidate
+    return None
+
+
+def _finite_position(source: CatalogSource) -> bool:
+    try:
+        return math.isfinite(float(source.ra_hours)) and math.isfinite(float(source.dec_degs))
+    except (TypeError, ValueError):
+        return False
 
 
 def _row_value(row, column: Optional[str]):

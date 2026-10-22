@@ -19,6 +19,11 @@ from .catalog import Catalog
 __all__ = ['LandoltCatalog']
 
 
+def _err(mag) -> float:
+    """A band's error, 0 when unset or the band is absent."""
+    return (getattr(mag, 'error', None) or 0) if mag is not None else 0
+
+
 class LandoltCatalog(Catalog):
     """
     Landolt/VizieR catalog plugin
@@ -65,31 +70,43 @@ class LandoltCatalog(Catalog):
 
         for source in sources:
             mags = source.mags
-            v, v_err = mags['V'].value, getattr(mags['V'], 'error', 0)
+            # EXTRACTED: upstream read errors with ``getattr(mag, 'error', 0)``,
+            # which assumed an unset error attribute was absent. MARS's ``Mag``
+            # always has ``error``, defaulting to None, so any row with a zero or
+            # unrecorded catalog error raised ``None ** 2`` (M3). ``_err`` reads
+            # an unset error as 0, the upstream intent. A colour the row mapper
+            # dropped (a value of exactly 0, CAT-23) leaves only the bands it
+            # feeds underived, instead of a KeyError for the whole response.
+            if 'V' not in mags:
+                continue
+            v, v_err = mags['V'].value, _err(mags['V'])
 
-            mags['B'] = Mag(value=v + mags['B_V'].value)
-            err = hypot(v_err, getattr(mags['B_V'], 'error', 0))
-            if err:
-                mags['B'].error = err
+            if 'B_V' in mags:
+                mags['B'] = Mag(value=v + mags['B_V'].value)
+                err = hypot(v_err, _err(mags['B_V']))
+                if err:
+                    mags['B'].error = err
 
-            mags['U'] = Mag(value=mags['B'].value + mags['U_B'].value)
-            err = hypot(getattr(mags['B'], 'error', 0),
-                        getattr(mags['V_R'], 'error', 0))
-            if err:
-                mags['U'].error = err
+            if 'B' in mags and 'U_B' in mags:
+                mags['U'] = Mag(value=mags['B'].value + mags['U_B'].value)
+                err = hypot(_err(mags['B']), _err(mags.get('V_R')))
+                if err:
+                    mags['U'].error = err
 
-            mags['R'] = Mag(value=v - mags['V_R'].value)
-            err = hypot(v_err, getattr(mags['V_R'], 'error', 0))
-            if err:
-                mags['R'].error = err
+            if 'V_R' in mags:
+                mags['R'] = Mag(value=v - mags['V_R'].value)
+                err = hypot(v_err, _err(mags['V_R']))
+                if err:
+                    mags['R'].error = err
 
-            mags['I'] = Mag(
-                value=(mags['R'].value - mags['R_I'].value +
-                       v - mags['V_I'].value)/2)
-            err = sqrt((getattr(mags['R'], 'error', 0)**2 +
-                        getattr(mags['R_I'], 'error', 0)**2 +
-                        v_err**2 + getattr(mags['V_I'], 'error', 0)**2)/2)
-            if err:
-                mags['I'].error = err
+            if 'R' in mags and 'R_I' in mags and 'V_I' in mags:
+                mags['I'] = Mag(
+                    value=(mags['R'].value - mags['R_I'].value +
+                           v - mags['V_I'].value)/2)
+                err = sqrt((_err(mags['R'])**2 +
+                            _err(mags['R_I'])**2 +
+                            v_err**2 + _err(mags['V_I'])**2)/2)
+                if err:
+                    mags['I'].error = err
 
         return sources

@@ -40,6 +40,7 @@ from algorithms.catalogs.simbad import SIMBAD_OBJECT_TYPES
 
 __all__ = [
     "ResolvedTarget",
+    "SimbadResponseError",
     "SimbadUnavailableError",
     "resolve_simbad",
     "resolve_targets",
@@ -73,6 +74,21 @@ class SimbadUnavailableError(RuntimeError):
     def __init__(self, message: str, *, retryable: bool = True):
         super().__init__(message)
         self.retryable = retryable
+
+
+class SimbadResponseError(SimbadUnavailableError):
+    """SIMBAD answered, but without the columns resolution reads (M3).
+
+    Not retryable: the same query gets the same response shape.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, retryable=False)
+
+
+#: The columns resolution reads, as astroquery >= 0.4.8 names them; older
+#: releases returned them upper-case (MAIN_ID, RA, DEC, OTYPE).
+_SIMBAD_COLUMNS = ("main_id", "ra", "dec", "otype")
 
 
 @dataclass
@@ -177,10 +193,25 @@ def resolve_simbad(name: str, *, strict: bool = False) -> list[ResolvedTarget]:
     if not rows:
         return results
 
+    # M3: read the columns whichever case this astroquery uses, and fail by
+    # name -- not with a KeyError -- when the response lacks one.
+    colnames = getattr(rows, "colnames", None) or list(getattr(rows[0], "keys", lambda: [])())
+    by_lower = {str(name).lower(): name for name in colnames}
+    missing = [name for name in _SIMBAD_COLUMNS if name not in by_lower]
+    if missing:
+        message = (f"SIMBAD's response has no {', '.join(missing)} column; it returned "
+                   f"{', '.join(map(str, colnames))}")
+        if strict:
+            raise SimbadResponseError(message)
+        logger.warning("%s", message)
+        return results
+    column = {name: by_lower[name] for name in _SIMBAD_COLUMNS}
+
     for row in rows:
-        ra = row["ra"]
-        dec = row["dec"]
-        if not ra or not dec:
+        ra = row[column["ra"]]
+        dec = row[column["dec"]]
+        # Was `if not ra or not dec`, which also skipped a real 0.0.
+        if _missing_value(ra) or _missing_value(dec):
             continue
         try:
             # SIMBAD serves these in degrees already; Angle is used for its
@@ -193,15 +224,27 @@ def resolve_simbad(name: str, *, strict: bool = False) -> list[ResolvedTarget]:
 
         results.append(
             ResolvedTarget(
-                object_name=row["main_id"],
+                object_name=row[column["main_id"]],
                 ra_deg=ra.degree,
                 dec_deg=dec.degree,
-                object_type=SIMBAD_OBJECT_TYPES.get(row["otype"], ""),
+                object_type=SIMBAD_OBJECT_TYPES.get(row[column["otype"]], ""),
                 source="SIMBAD",
             )
         )
 
     return results
+
+
+def _missing_value(value) -> bool:
+    """A cell SIMBAD left empty: None, masked, blank or non-finite."""
+    if value is None or type(value).__name__ == "MaskedConstant":
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    try:
+        return not math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False  # a sexagesimal string; Angle parses it below
 
 
 def resolve_targets(

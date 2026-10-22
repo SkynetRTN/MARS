@@ -35,7 +35,7 @@ from astroquery.sdss import SDSSClass
 
 from algorithms.catalogs.schemas import CatalogSource
 
-from .vizier import VizierCatalog, _round_for_cache
+from .vizier import ProviderResponseError, VizierCatalog, _round_for_cache
 
 __all__ = ["MARSSDSS", "SDSSQueryBackend"]
 
@@ -139,6 +139,47 @@ def _objid_queries(fields: list[str], object_ids: list[int]):
         if _query_string_length(sql) > MAX_SDSS_QUERY_STRING:
             raise ValueError("SDSS objID lookup fields are too long for one request URL.")
         yield sql, len(batch)
+
+
+def _query_sql(client, sql: str, data_release: int, cache: bool):
+    """Run ``query_sql``, recovering from a cached SkyServer error page.
+
+    M3: astroquery caches whatever SkyServer answered, including its HTML error
+    pages, and parsing one fails (``InconsistentTableError``, or
+    ``FileNotFoundError`` when astropy takes a short page for a path). Once
+    cached, the same query failed until the entry expired. A reply that is not
+    a table is retried once with the cache bypassed, then reported as an
+    unusable response quoting SkyServer. A refusal (``RemoteServiceError``) is
+    retried the same way but raises as itself; network and HTTP failures are
+    not retried here.
+    """
+    from astroquery.exceptions import RemoteServiceError
+    from requests import RequestException
+
+    def attempt(use_cache: bool):
+        rows = client.query_sql(sql, data_release=data_release, cache=use_cache)
+        # A longer HTML page parses as a one-column "table" headed by its doctype.
+        names = getattr(rows, "colnames", None) or []
+        if len(names) == 1 and str(names[0]).lstrip().startswith("<"):
+            raise ValueError(f"SkyServer returned an HTML page ({names[0][:60]!r})")
+        return rows
+
+    try:
+        return attempt(cache)
+    except RequestException:
+        raise
+    except Exception as exc:
+        if cache:
+            logger.warning("SkyServer reply was not a table (%s); retrying uncached", exc)
+            try:
+                return attempt(False)
+            except RequestException:
+                raise
+            except Exception as retry_exc:
+                exc = retry_exc
+        if isinstance(exc, RemoteServiceError):
+            raise exc  # SkyServer refused the query: a service error, not a bad table
+        raise ProviderResponseError(f"SkyServer did not return a table: {str(exc)[:300]}") from exc
 
 
 def _positive_angle(value: object, unit: str) -> float:
@@ -320,7 +361,7 @@ class SDSSQueryBackend(VizierCatalog):
         client = SDSS() if object_ids else None
         sources: TList[CatalogSource] = []
         for q, count in _objid_queries(photoobj_fields, object_ids):
-            rows = client.query_sql(q, data_release=self.data_release, cache=self.cache)
+            rows = _query_sql(client, q, self.data_release, self.cache)
             if rows is not None:
                 sources += self.table_to_sources(rows[:count])
         return sources
@@ -381,7 +422,7 @@ class SDSSQueryBackend(VizierCatalog):
             data_release=self.data_release, limit=limit,
         )
         client = SDSS()
-        rows = client.query_sql(payload["cmd"], data_release=self.data_release, cache=self.cache)
+        rows = _query_sql(client, payload["cmd"], self.data_release, self.cache)
         if rows is None:
             return []
         return self.table_to_sources(rows[:limit])

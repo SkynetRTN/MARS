@@ -501,6 +501,7 @@ def calibrate_zeropoint(
         )
 
     from algorithms.fieldcal.field_cal import DegenerateCalibrationError, perform_field_calibration
+    from algorithms.query.vizier import ProviderResponseError
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
 
     # The same settings classes the CLI field-cal path constructs -- the ones
@@ -573,6 +574,11 @@ def calibrate_zeropoint(
     except DegenerateCalibrationError as exc:
         return ZeropointComparison(
             errors=[ToolError(code="no_solution", message=str(exc))],
+            warnings=warnings,
+        )
+    except ProviderResponseError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="unusable_response", message=str(exc))],
             warnings=warnings,
         )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
