@@ -1493,7 +1493,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     },
     {
         "name": "load_variable_star_lightcurve",
-        "description": "Validate and merge a paired-source variable-star CSV into an ECSV artifact.",
+        "description": "Validate and merge a paired-source variable-star CSV into an ECSV artifact. "
+        "Source magnitude errors are independent standard uncertainties combined in quadrature; "
+        "error_mse retains its historical name but is a standard deviation, not a variance.",
         "input_schema": {
             "type": "object",
             "properties": {"path": {"type": "string", "description": "Paired-source CSV path."}},
@@ -1502,29 +1504,35 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     },
     {
         "name": "compute_variable_star_periodogram",
-        "description": "Compute the extracted error-weighted variable-star periodogram from a light-curve artifact.",
+        "description": "Compute a weighted floating-mean Lomb-Scargle periodogram from a light-curve artifact. "
+        "Periods are in days. Standard power in [0, 1] is fractional weighted chi-square improvement "
+        "over a constant model, not a detection probability. Cached uncertainties are rederived from "
+        "independent source magnitude errors in quadrature; source covariance and uncertainty in the "
+        "fixed reference magnitude are not included. Recompute older spectra for corrected normalization.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Stage-1 ECSV artifact path."},
                 "variable_star": {"type": "string", "enum": ["source1", "source2"]},
-                "reference_star_magnitude": {"type": "number"},
-                "start_period": {"type": "number", "default": 0.1},
-                "end_period": {"type": "number", "default": 1.0},
+                "reference_star_magnitude": {"type": "number", "description": "Fixed comparison-star magnitude; its uncertainty is not propagated."},
+                "start_period": {"type": "number", "default": 0.1, "description": "Minimum trial period in days."},
+                "end_period": {"type": "number", "default": 1.0, "description": "Maximum trial period in days."},
             },
             "required": ["path", "variable_star", "reference_star_magnitude"],
         },
     },
     {
         "name": "fold_variable_star_lightcurve",
-        "description": "Fold a variable-star light-curve artifact at an explicit period.",
+        "description": "Fold a variable-star light-curve artifact at an explicit period in days. "
+        "Error bars are independent source standard uncertainties combined in quadrature; "
+        "source covariance and uncertainty in the fixed reference magnitude are not included.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Stage-1 ECSV artifact path."},
                 "variable_star": {"type": "string", "enum": ["source1", "source2"]},
-                "reference_star_magnitude": {"type": "number"},
-                "period": {"type": "number", "exclusiveMinimum": 0},
+                "reference_star_magnitude": {"type": "number", "description": "Fixed comparison-star magnitude; its uncertainty is not propagated."},
+                "period": {"type": "number", "exclusiveMinimum": 0, "description": "Folding period in days."},
                 "phase": {"type": "number", "default": 0.0},
                 "display_periods": {"type": "integer", "enum": [1, 2], "default": 2},
             },

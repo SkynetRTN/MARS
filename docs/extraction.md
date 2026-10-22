@@ -3527,6 +3527,9 @@ Target language level: the code uses `**`, optional chaining, and
 
 #### Python M1 weighted-periodogram acceptance contract (2026-10-05)
 
+This section records the M1 state; the M2 correction below supersedes its
+weighted-formula and differential-error parity claims.
+
 The retired TypeScript record above is historical. The current Python port in
 `algorithms/variable_star/periodogram.py` adds first-party ALG-02/TS-03 guards,
 not a replacement for its weighted Lomb--Scargle formula:
@@ -3564,3 +3567,22 @@ Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
 `tests/test_variable_star_algorithms.py` and `tests/test_variable_star_tool.py`.
 Delivery scope and check counts are maintained in
 `docs/working/master-continuation-plan.md`, not inferred from this local change.
+
+#### Python M2 variable-star powers and errors (2026-10-21)
+
+The Python implementation intentionally corrects TS-09 and TS-14. Powers now
+use inverse-variance weighted floating-mean least squares, with standard
+dimensionless fractional chi-square improvement in [0, 1]. The fitted model,
+normalization and numerical rank policy are described in the
+[derivation and acceptance record](analysis/variable-star-powers-errors.md).
+Independent Astropy and full-model SciPy QR references replace the affected
+power parity assertions; the original period grid is retained.
+
+Differential standard errors are `hypot(error1, error2)` for independent source
+errors, with a fixed reference magnitude. The `error_mse` name remains, but
+the halving is removed. Public stages rederive old cached combined values from
+component errors and require re-ingestion when paired cached values lack
+components. Days/magnitudes and normalization/uncertainty-method metadata now
+accompany new artifacts/results. Existing missing-error failures and direct
+constant-series nonfinite behavior remain M3 work; public constants are
+rejected. No covariance model or detection-probability claim is added.

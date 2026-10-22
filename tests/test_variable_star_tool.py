@@ -3,8 +3,10 @@
 from pathlib import Path
 import math
 
+import numpy as np
 import pytest
 from astropy.table import Table
+from scipy.linalg import lstsq
 
 from tools.variable_star import (
     _validate_fold_period,
@@ -61,9 +63,20 @@ def test_bundled_fixture_runs_through_the_offline_variable_pipeline(artifact_dir
     assert list(stage2["period"][:3]) == pytest.approx(
         [0.10000000000000002, 0.1001151955538169, 0.10023052380778998]
     )
-    assert list(stage2["power"][:3]) == pytest.approx(
-        [0.0011733762577678033, 0.03182175083315293, 0.031823436745865116]
-    )
+    # The first trial is an almost collapsed alias of the stored epochs.
+    # Check ordinary resolved frequencies against independent GLS instead of
+    # retaining the TypeScript's incorrectly normalized power literals.
+    times = stage1["mjd"].value - stage1["mjd"][0]
+    values = (stage1["source1"] - stage1["source2"]).value
+    sigma = stage1["error_mse"].value
+    values -= np.average(values, weights=1 / sigma**2)
+    for index in (1, 2):
+        angle = 2 * np.pi * times / stage2["period"][index]
+        design = np.column_stack((np.ones(len(times)), np.cos(angle), np.sin(angle))) / sigma[:, None]
+        coefficients, *_ = lstsq(design, values / sigma, lapack_driver="gelsy")
+        residual = values / sigma - design @ coefficients
+        reference = 1 - np.sum(residual**2) / np.sum((values / sigma)**2)
+        assert stage2["power"][index] == pytest.approx(reference, abs=1e-9)
 
     stage3 = Table.read(folded.artifact.path, format="ascii.ecsv")
     assert list(stage3["phase"]) == pytest.approx(

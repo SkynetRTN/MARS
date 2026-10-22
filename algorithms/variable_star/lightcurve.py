@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sqrt
+from math import hypot, isfinite
 from typing import Mapping, Sequence
 
 
@@ -23,17 +23,21 @@ class VariableDataRow:
 
 
 def error_mse(error1: float | None, error2: float | None) -> float | None:
-    """Return the upstream combined uncertainty for a paired observation.
+    """Standard uncertainty of a difference of independent magnitudes.
 
-    # PORTED: variable-lightcurve.types.ts::errorMSE
+    The historical name is retained; this is a standard deviation, not MSE.
+    M2 intentionally removes the upstream factor of one half.
     """
     if error1 is None or error2 is None:
         return None
-    return sqrt(error1**2 + error2**2) / 2
+    combined = hypot(error1, error2)
+    if not isfinite(combined):
+        raise ValueError("combined uncertainty must remain finite.")
+    return combined
 
 
 def with_error_mse(rows: Sequence[VariableDataRow]) -> list[VariableDataRow]:
-    """Apply the TypeScript ``VariableData.setData`` error-MSE normalization."""
+    """Populate independent quadrature uncertainties from the two source errors."""
     return [
         VariableDataRow(
             row.jd,

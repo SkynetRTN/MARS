@@ -1,14 +1,14 @@
 # MARS release closure gate
 
-Updated 2026-10-21 against `main` at `15f5497`, with the first two M2 checkpoints
+Updated 2026-10-21 against `main` at `15f5497`, with the first three M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the two pulsar checkpoints below. PR #120 is
-abandoned as an implementation path and supplies no closure evidence. Reassess
+M2 remains open after the two pulsar checkpoints and the variable-star checkpoint
+below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
 
@@ -71,10 +71,25 @@ the subsequent work.
   Validation: Python 3.13.15, full offline suite **3,456 passed, 49 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. The changes remain local, unmerged and unpublished.
-- [ ] **Variable-star powers and errors.** Weighted spectra mix weighted and
-  unweighted normalization, changing the reported strength of periodic signals;
-  differential errors are divided by two. Powers and uncertainties need
-  independent scientific checks before being presented as reliable measurements.
+- [x] **Variable-star powers and errors.** Weighted floating-mean least squares
+  uses the same inverse-variance weights for the response, fitted columns and
+  reference variance. Standard power in [0, 1] is fractional weighted chi-square
+  improvement, not a detection probability. SVD uses an estimated solver/phase
+  resolution policy for collapsed aliases; exact constants remain rejected
+  publicly. Differential standard errors use independent quadrature without
+  halving; covariance, shared systematics and uncertainty in the fixed reference
+  magnitude are excluded. Public stages rederive old cached errors from source
+  components, reject unrepresentable full error bars and identify days,
+  magnitudes, normalization and uncertainty convention in results/artifacts.
+  The period grid, work bounds and fold ordering remain. Evidence:
+  [derivation and acceptance record](../analysis/variable-star-powers-errors.md),
+  [21 scientific regressions](../../tests/test_variable_star_science.py),
+  independent Astropy/full-model QR comparisons and public ECSV handoffs.
+  Review found and verified the constant-series correction; final review has
+  no outstanding findings. Validation: Python 3.13.15, full offline suite
+  **3,476 passed, 49 skipped**; compileall, schema goldens, generated-skill
+  consistency, repository shape and `git diff --check` pass. Broader direct
+  helper failures remain M3 work. Changes remain local, unmerged and unpublished.
 - [ ] **Cluster ages and membership.** Legacy HR helpers discard ages above
   13.8 million years, can miss ID `10` when joining IDs in numerical versus
   alphabetical order, and exclude exactly zero proper motion. Supported

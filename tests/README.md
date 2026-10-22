@@ -8,17 +8,17 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 
 ## What this suite is for
 
-MARS's Python folders are **byte-preserving extractions** from Skynet (see
-`CLAUDE.md`, "The extraction contract"). So these are not tests of whether the
-algorithms are *right* — that question was settled upstream. They test whether
-the algorithms still do **exactly what they did before the extraction**,
-including the parts that are wrong.
+Most extracted algorithms have preservation tests against recorded upstream
+output, including known bugs. Passing those tests establishes parity, not
+scientific correctness. Intentional M2 corrections have separate acceptance
+tests against independent scientific references; the pulsar and variable-star
+records under `docs/analysis/` describe their derivations and limits.
 
 Most files are algorithm-preservation tests. Tool smoke tests live here too
 when they cover the public `tools/` surface without network calls or generated
 artifacts, so the default `pytest` run collects them with the rest of the suite.
 
-Three consequences shape everything here:
+For the preservation tests, three conventions apply:
 
 1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
    four complete recorded Skynet zero-point solves. See `data/README.md`.
@@ -67,8 +67,9 @@ Three consequences shape everything here:
 | `test_pulsar_spectrum_semantics.py` | M2 channels and axes: all three spectrum channels in both modes; ECSV channel and coordinate units; actual matplotlib traces, scales, peak markers and confidence lines; older artifacts with unknown channels and missing/stale mode metadata; non-string array channel metadata; standard-format single-flux Data labels. |
 | `test_pulsar_candidates_confidence.py` | M2 candidates and significance: explicit seconds/Hz in both modes, sampling defaults and gaps, stale metadata, finite-sample Beta/Astropy references, fixed-grid Gaussian null ensembles, exact/near Nyquist projections, reciprocal-coordinate guards and legacy uncalibrated threshold labels. These conditional noise bounds do not establish pulsar detection probabilities. |
 | `test_pulsar_probability_precision.py` | M2 endpoint regression: independently calculated quadrature residual tails, public/ECSV parity in both modes, null probabilities and warnings below estimated solver resolution, upward-rounded/omitted power levels, NumPy integer counts, host Decimal context isolation and pre-fix Gaussian artifact fallback. |
+| `test_variable_star_science.py` | M2 weighted floating-mean standard powers checked against Astropy and full-model SciPy QR; sample/scale/epoch invariance, collapsed aliases, constant-series rejection, independent quadrature errors, both fold selections, units and old-artifact cache correction. |
 | `test_variable_star_fold_limits.py` | M1 TS-02: kill/reap-bounded direct fold/modulo probes, shared tool/algorithm work validation, pre-allocation row limit and finite derived coordinates; preserves strict subtraction, default/zero-period semantics and existing TS-04 parity assertions. |
-| `test_variable_star_periodogram_limits.py` | M1 ALG-02: kill/reap-bounded weighted-grid stalls; finite/range/integer-step, sample/aggregate-work and representable-weight validation; pre-allocation sentinels and runtime guards after bypassing preflight. Existing weighted arithmetic and direct constant-series NaN remain pinned separately. |
+| `test_variable_star_periodogram_limits.py` | M1 ALG-02: kill/reap-bounded weighted-grid stalls; finite/range/integer-step, sample/aggregate-work and representable-weight validation; pre-allocation sentinels and runtime guards after bypassing preflight. M2 powers have independent scientific checks; direct constant-series NaN remains pinned separately. |
 | `test_variable_star_weighted_contract.py` | M1 TS-03 / TS-17 public containment: aligned paired-row uncertainties; object/null and numeric masked ECSV handoffs; raw partial-source ingest; skipped-row warnings; missing/invalid weights, nonscalar cells, empty/constant spectra and work-limit failures produce no success artifact. |
 | `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
 | `test_photometry_registry_smoke.py` | `tools/photometry.py`'s `list_photometry_targets`/`run_photometry_on_target` -- bundled-target resolution, fast offline runs, exposure-time consistency, and the sky-position/source-table fields that bridge into `tools.hr_diagram`. |

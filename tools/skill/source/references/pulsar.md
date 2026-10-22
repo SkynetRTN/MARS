@@ -141,8 +141,23 @@ empty/constant/non-finite spectra, return `invalid_input` without an artifact.
 Do not interpret those failures as a period measurement or retry unchanged.
 The public grid remains fixed at 2,000 steps (normally 2,001 output rows due
 to float accumulation); it shares finite/progress/work guards with the direct
-algorithm. Input artifacts remain limited to 5 MiB/2,000 rows. These guards
-do not correct the preserved weighted-normalization or uncertainty formula.
+algorithm. Input artifacts remain limited to 5 MiB/2,000 rows.
+
+Periods and folded time coordinates are in days. The M2 correction uses a
+weighted floating-mean sinusoidal fit and `power_normalization=standard`:
+dimensionless power in [0, 1] is the fractional reduction in weighted chi-square
+from a constant model, not a detection probability. Rank-deficient trials use
+only numerically resolved model columns; a high power alone does not resolve
+aliases or establish a period uncertainty. Recompute older saved spectra.
+
+`uncertainty_method=independent_quadrature` combines the two supplied source
+standard errors as the square root of their summed variances, without the historical halving.
+The `error_mse` column keeps its name for compatibility but stores a standard
+deviation in magnitudes. Public stages rederive cached combined values from
+the source errors, including older artifacts. Paired data with a cached error
+but missing source-error components need re-ingestion. Source covariance,
+shared calibration systematics and uncertainty in the fixed comparison-star
+magnitude are not included; duplicated fold points do not reduce error bars.
 
 A period you fold at came from step 2 or from somewhere else, and the answer
 says which.

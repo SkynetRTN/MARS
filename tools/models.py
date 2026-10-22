@@ -528,6 +528,7 @@ class VariableStarLightCurve(MARSToolModel):
     rows_read: int = 0
     rows_merged: int = 0
     source_ids: list[str] = Field(default_factory=list)
+    uncertainty_method: Literal["independent_quadrature"] | None = None
     preview: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
@@ -542,6 +543,11 @@ class VariableStarPeriodogram(MARSToolModel):
     start_period: float | None = None
     end_period: float | None = None
     variable_star: str | None = None
+    power_normalization: Literal["standard"] | None = None
+    """Fractional reduction in weighted chi-square relative to a constant model."""
+    fit_mean: bool | None = None
+    period_unit: Literal["d"] | None = None
+    uncertainty_method: Literal["independent_quadrature"] | None = None
     preview: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
@@ -556,6 +562,8 @@ class VariableStarFoldedLightCurve(MARSToolModel):
     phase: float | None = None
     display_periods: int | None = None
     rows_folded: int = 0
+    period_unit: Literal["d"] | None = None
+    uncertainty_method: Literal["independent_quadrature"] | None = None
     preview: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
