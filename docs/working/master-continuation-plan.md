@@ -155,9 +155,18 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
   counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
   grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
-- [ ] **Pulsar controls.** Background subtraction and plot labels, background
+- [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
+  *Closed:* stated in `docs/pulsar-tool-pipeline.md` §6b. Background
+  (`back_scale`, `subtract_background`) is public on `load_pulsar_lightcurve`
+  only, where it always applies. `sonify_pulsar` no longer offers it, since it
+  is ignored for the artifact the pipeline passes. Plot labels and sizes,
+  `cal`, sonify `phase`, `max_input_seconds` and `sample_rate` stay
+  Python-only, with reasons. The stage-2 description, prompt and skill now
+  say to retune `back_scale` by rerunning stage 1. Ignored settings warn
+  `background_settings_ignored`. Evidence: `tests/test_m3_pulsar_controls.py`
+  and regenerated schema goldens.
 
 Evidence: [query backends](../../algorithms/query/),
 [coverage and remaining gaps](../../tests/README.md),

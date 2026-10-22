@@ -350,6 +350,29 @@ under M1/MCP-01 and PUL-07 in the master continuation plan.
 
 ---
 
+### 6b. Public and Python-only controls (M3, 2026-10-22)
+
+Every control the Python functions take is either public (in the registered
+schema, so the agent loop and MCP callers can pass it) or Python-only (a direct
+Python caller can pass it; a registered caller cannot, because undeclared
+arguments are refused before dispatch). `tests/test_m3_pulsar_controls.py`
+pins both lists, and fails if a new parameter is added to neither.
+
+| Control | Public on | Python-only on | Why |
+| --- | --- | --- | --- |
+| `back_scale`, `subtract_background` | `load_pulsar_lightcurve` | periodogram, fold, sonify, plot | Background is subtracted once, at ingest. Later stages and the plotter apply these only when handed a raw scan; with a stage-1 artifact they did nothing, silently. `sonify_pulsar` exposed them anyway and so is narrowed. A direct call that passes them with an artifact now gets `background_settings_ignored`. |
+| `x_label`, `y_label` | -- | `plot_pulsar` | Axis labels come from upstream's charts and say which channel and unit is drawn (M2 corrects them). A caller-chosen label could relabel a channel or swap seconds and hertz. |
+| `dpi`, `figsize` | -- | `plot_pulsar` | Presentation only; fixed sizes keep plot artifacts bounded. |
+| `cal` | -- | fold, sonify | Gain on the second polarization (upstream's balance slider). A caller has no measurement to set it from. |
+| `phase` | fold | sonify | On the fold it shifts the profile so a pulse straddling the wrap reads clearly; on the looped audio it only moves where the loop starts. |
+| `max_input_seconds`, `sample_rate` | -- | sonify | Upstream's fixed 60 s input window and 44.1 kHz rate; widening them works against the PUL-02 bounds (§6a). |
+
+`subdir` (all stages) and `directory` (scan listing) are server-side destination
+and data-root keywords, not controls. Retuning a blind search therefore means
+rerunning `load_pulsar_lightcurve` with a different `back_scale`. The stage-2
+description, the shipped prompt and the skill say so; they used to say "vary
+back_scale" on a stage that has no such parameter.
+
 ## 7. Not covered
 
 - **No dedispersion.** These are single-band continuum scans; the pipeline

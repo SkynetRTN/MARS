@@ -140,6 +140,24 @@ def _check_file_budget(file: FileMetadata) -> None:
         raise _LoadError("invalid_input", "pulsar input exceeds the 16 MiB file budget")
 
 
+def _ignored_background(back_scale: float, subtract_background: bool) -> ToolWarning | None:
+    """Warn when background settings were passed with a stage-1 artifact.
+
+    M3: background subtraction happens once, at ingest. A stage-1 artifact was
+    already subtracted with the settings load_pulsar_lightcurve was given, so
+    these only apply to a raw scan -- they are public on that stage alone.
+    """
+    if back_scale == ingest.DEFAULT_BACK_SCALE and subtract_background:
+        return None
+    return ToolWarning(
+        code="background_settings_ignored",
+        message="back_scale and subtract_background apply only when a raw scan is "
+        "ingested; this artifact was background-subtracted when "
+        "load_pulsar_lightcurve wrote it. Rerun load_pulsar_lightcurve with the "
+        "setting to change it.",
+    )
+
+
 def _load(
     file: FileMetadata,
     *,
@@ -156,6 +174,9 @@ def _load(
     _check_file_budget(file)
 
     if (file.suffix or "").lower() == ".ecsv":
+        ignored = _ignored_background(back_scale, subtract_background)
+        if ignored is not None:
+            warnings.append(ignored)
         return _load_artifact(file)
 
     try:
@@ -1378,6 +1399,9 @@ def plot_pulsar(
             raise _LoadError("not_a_file", "Path is not a regular file.")
 
         if (file.suffix or "").lower() == ".ecsv":
+            ignored = _ignored_background(back_scale, subtract_background)
+            if ignored is not None:
+                warnings.append(ignored)
             try:
                 table = Table.read(file.path, format="ascii.ecsv")
             except Exception as exc:  # noqa: BLE001 - parser/read errors are results

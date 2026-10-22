@@ -92,6 +92,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "afterglow_base_convention": "The zero point matches Afterglow's base-20 correction, not an absolute magnitude.",
     "back_scale_too_narrow": "The background window is too narrow for the sample spacing; the running median degenerates.",
     "background_not_subtracted": "No baseline subtraction, so the receiver's drifting continuum dominates long periods.",
+    "background_settings_ignored": "back_scale/subtract_background were passed with a stage-1 pulsar artifact; they apply only when a raw scan is ingested.",
     "blank_filter": "No image filter was supplied, so no reference band could be matched to one.",
     "bundle_not_installed": "An optional data bundle this tool reads is not installed; `mars-mcp fetch-data` fetches it.",
     "catalog_match_rate": "How many detected sources matched at least one catalog, and within what radius.",
