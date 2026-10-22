@@ -182,7 +182,8 @@ consequences for tool design are the load-bearing part:
    computes it and warns `peak_does_not_fold` below 8σ.
 3. **Red-noise peaks move with `back_scale`; real periodicities do not.** On
    B1133+16 the spurious ~2.18 s peak appears at `back_scale` 3, 12 and 30 but
-   the true 1.19 s period wins at 1 and 6. Varying it is the cheapest
+   the true 1.19 s period wins at 1 and 6. Varying it (by rerunning
+   `load_pulsar_lightcurve`, the one stage that takes it) is the cheapest
    diagnostic available.
 4. **A reference period rescues a failed search, and costs the detection
    claim.** A catalogued period turns four of these five scans from failures
@@ -208,7 +209,8 @@ not inputs to the pipeline. The ordering the tools and the system prompt state:
    source the curation does not cover. Agreement confirms the measurement, and
    both numbers get reported with their provenance.
 3. **Retune, do not substitute.** On a disagreement, a low `peak_fold_snr`, or a
-   `peak_does_not_fold` warning: vary `back_scale`, narrow `start`/`stop` away
+   `peak_does_not_fold` warning: rerun `load_pulsar_lightcurve` with a
+   different `back_scale`, narrow `start`/`stop` away
    from the artifact, raise `steps`. The two artifacts on this data are
    0.016665 s (60.006 Hz mains) and a 2.1–2.2 s red-noise peak.
 4. **Fall back, and say so.** Only once a retuned search has failed, fold at the
@@ -360,7 +362,7 @@ pins both lists, and fails if a new parameter is added to neither.
 
 | Control | Public on | Python-only on | Why |
 | --- | --- | --- | --- |
-| `back_scale`, `subtract_background` | `load_pulsar_lightcurve` | periodogram, fold, sonify, plot | Background is subtracted once, at ingest. Later stages and the plotter apply these only when handed a raw scan; with a stage-1 artifact they did nothing, silently. `sonify_pulsar` exposed them anyway and so is narrowed. A direct call that passes them with an artifact now gets `background_settings_ignored`. |
+| `back_scale`, `subtract_background` | `load_pulsar_lightcurve` | periodogram, fold, sonify, plot | Background is subtracted once, at ingest. Later stages and the plotter apply these only when handed a raw scan; with a stage-1 artifact they did nothing, silently. `sonify_pulsar` exposed them anyway and so is narrowed. In Python they default to "not given". A direct call whose setting differs from what the artifact records (`background_subtracted`, `back_scale_s`) gets `background_settings_ignored`, naming the recorded setting. It is a warning rather than a rejection so existing direct callers keep working. |
 | `x_label`, `y_label` | -- | `plot_pulsar` | Axis labels come from upstream's charts and say which channel and unit is drawn (M2 corrects them). A caller-chosen label could relabel a channel or swap seconds and hertz. |
 | `dpi`, `figsize` | -- | `plot_pulsar` | Presentation only; fixed sizes keep plot artifacts bounded. |
 | `cal` | -- | fold, sonify | Gain on the second polarization (upstream's balance slider). A caller has no measurement to set it from. |

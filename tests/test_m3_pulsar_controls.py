@@ -11,6 +11,7 @@ are in ``docs/pulsar-tool-pipeline.md`` ("Public and Python-only controls").
 from __future__ import annotations
 
 import inspect
+import re
 from pathlib import Path
 
 import pytest
@@ -70,26 +71,37 @@ def test_every_python_parameter_is_classified():
 
 # --- guidance matches the schemas ------------------------------------------------
 
+#: Words that make a paragraph advice to change back_scale.
+_RETUNE = re.compile(r"\b(vary|varying|retune|retry|different|change|try)\b", re.IGNORECASE)
+
 
 def _guidance_texts() -> dict[str, str]:
     from tools.agent.prompt import SYSTEM_PROMPT
 
     texts = {"prompt": SYSTEM_PROMPT}
-    for path in (ROOT / "tools/skill/source").rglob("*.md"):
+    for path in [*(ROOT / "tools/skill/source").rglob("*.md"),
+                 ROOT / "docs/pulsar-tool-pipeline.md", ROOT / "CLAUDE.md"]:
         texts[str(path.relative_to(ROOT))] = path.read_text(encoding="utf-8")
     for tool in TOOL_SCHEMAS:
         if "pulsar" in tool["name"]:
             texts[tool["name"]] = tool["description"]
+    for name in ("compute_pulsar_periodogram", "fold_pulsar_lightcurve", "sonify_pulsar", "plot_pulsar"):
+        texts[f"{name} docstring"] = inspect.getdoc(getattr(pulsar, name))
     return texts
 
 
-def test_guidance_never_asks_for_back_scale_where_it_is_not_accepted():
-    # back_scale is public on load_pulsar_lightcurve only: any advice to vary
-    # it must say to rerun that stage.
+def test_retune_advice_for_back_scale_always_names_the_stage_that_takes_it():
+    # back_scale is public on load_pulsar_lightcurve only: advice to change it
+    # anywhere must say to rerun that stage.
+    offenders = []
     for where, text in _guidance_texts().items():
-        for paragraph in text.split("\n\n"):
-            if "back_scale" in paragraph.replace("\n", " ") and "vary" in paragraph.lower():
-                assert "load_pulsar_lightcurve" in paragraph or "at load" in paragraph, (where, paragraph[:200])
+        for paragraph in re.split(r"\n\s*\n", text):
+            flat = " ".join(paragraph.split())
+            if "back_scale" in flat and _RETUNE.search(flat) and not (
+                "load_pulsar_lightcurve" in flat or "at load" in flat
+            ):
+                offenders.append((where, flat[:160]))
+    assert offenders == []
 
 
 def test_the_sonify_schema_no_longer_offers_background_controls():
@@ -97,22 +109,35 @@ def test_the_sonify_schema_no_longer_offers_background_controls():
     assert "load_pulsar_lightcurve" in description
 
 
-# --- an ignored background setting is reported ----------------------------------
+# --- an ignored background setting is reported, truthfully ------------------------
 
 
 @pytest.fixture(scope="module")
-def artifact(tmp_path_factory):
+def artifacts_root(tmp_path_factory):
     import tools.artifacts as artifacts_module
 
-    scan = pulsar.resolve_pulsar_scan("B0329+54").path
-    original = artifacts_module.ARTIFACT_DIR
-    artifacts_module.ARTIFACT_DIR = tmp_path_factory.mktemp("artifacts")
-    try:
-        loaded = pulsar.load_pulsar_lightcurve(scan)
-        assert loaded.errors == []
-        yield loaded.artifact.path, scan
-    finally:
-        artifacts_module.ARTIFACT_DIR = original
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(artifacts_module, "ARTIFACT_DIR", tmp_path_factory.mktemp("artifacts"))
+        yield artifacts_module.ARTIFACT_DIR
+
+
+@pytest.fixture(scope="module")
+def scan():
+    return pulsar.resolve_pulsar_scan("B0329+54").path
+
+
+@pytest.fixture(scope="module")
+def artifact(artifacts_root, scan):
+    loaded = pulsar.load_pulsar_lightcurve(scan)
+    assert loaded.errors == []
+    return loaded.artifact.path
+
+
+@pytest.fixture(scope="module")
+def unsubtracted_artifact(artifacts_root, scan):
+    loaded = pulsar.load_pulsar_lightcurve(scan, subtract_background=False, output_name="raw_baseline")
+    assert loaded.errors == []
+    return loaded.artifact.path
 
 
 CALLS = {
@@ -120,27 +145,52 @@ CALLS = {
     "fold_pulsar_lightcurve": lambda path, **kw: pulsar.fold_pulsar_lightcurve(path, 0.714, **kw),
     "sonify_pulsar": lambda path, **kw: pulsar.sonify_pulsar(path, period_s=0.714, audio_seconds=0.5, **kw),
     "plot_pulsar": lambda path, **kw: pulsar.plot_pulsar(path, **kw),
+    "load_pulsar_lightcurve": lambda path, **kw: pulsar.load_pulsar_lightcurve(path, **kw),
 }
+
+
+def _ignored(result):
+    return [w.message for w in result.warnings if w.code == "background_settings_ignored"]
 
 
 @pytest.mark.parametrize("name", sorted(CALLS))
 @pytest.mark.parametrize("settings", [{"back_scale": 6.0}, {"subtract_background": False}])
-def test_background_settings_on_an_artifact_are_reported_as_ignored(artifact, artifact_dir, name, settings):
-    path, _scan = artifact
-    result = CALLS[name](path, **settings)
+def test_a_setting_the_artifact_does_not_record_is_reported(artifact, name, settings):
+    result = CALLS[name](artifact, **settings)
     assert result.errors == []
-    (warning,) = [w for w in result.warnings if w.code == "background_settings_ignored"]
-    assert "load_pulsar_lightcurve" in warning.message
+    (message,) = _ignored(result)
+    assert "back_scale=3 s" in message  # what the artifact actually records
+    # Never circular: it asks for the raw scan, not a rerun with the artifact.
+    assert "Pass the raw scan to load_pulsar_lightcurve" in message
 
 
 @pytest.mark.parametrize("name", sorted(CALLS))
-def test_default_background_settings_on_an_artifact_warn_nothing(artifact, artifact_dir, name):
-    path, _scan = artifact
-    result = CALLS[name](path)
-    assert "background_settings_ignored" not in {w.code for w in result.warnings}
+def test_settings_matching_the_artifact_are_not_reported(artifact, name):
+    # Was a false positive: back_scale equal to what the artifact records.
+    assert _ignored(CALLS[name](artifact, back_scale=3.0, subtract_background=True)) == []
+    assert _ignored(CALLS[name](artifact)) == []
 
 
-def test_background_settings_on_a_raw_scan_are_applied_not_reported(artifact, artifact_dir):
-    _path, scan = artifact
+def test_an_explicit_default_differing_from_the_artifact_is_reported(artifacts_root, scan):
+    # Was a false negative: back_scale=3.0 asked of an artifact loaded at 6.0.
+    loaded = pulsar.load_pulsar_lightcurve(scan, back_scale=6.0, output_name="wide_baseline")
+    (message,) = _ignored(pulsar.compute_pulsar_periodogram(loaded.artifact.path, steps=200, back_scale=3.0))
+    assert "back_scale=6 s" in message
+
+
+def test_the_message_describes_an_unsubtracted_artifact_truthfully(unsubtracted_artifact):
+    (message,) = _ignored(pulsar.compute_pulsar_periodogram(unsubtracted_artifact, steps=200, back_scale=6.0))
+    assert "written without background subtraction" in message
+    assert _ignored(pulsar.fold_pulsar_lightcurve(unsubtracted_artifact, 0.714, subtract_background=False)) == []
+
+
+def test_a_periodogram_artifact_is_not_attributed_to_stage_one(artifact):
+    periodogram = pulsar.compute_pulsar_periodogram(artifact, steps=200)
+    (message,) = _ignored(pulsar.plot_pulsar(periodogram.artifact.path, back_scale=6.0))
+    assert "periodogram or folded artifact" in message
+    assert "load_pulsar_lightcurve wrote" not in message
+
+
+def test_background_settings_on_a_raw_scan_are_applied_not_reported(artifacts_root, scan):
     result = pulsar.compute_pulsar_periodogram(scan, steps=200, back_scale=6.0)
-    assert "background_settings_ignored" not in {w.code for w in result.warnings}
+    assert _ignored(result) == []
