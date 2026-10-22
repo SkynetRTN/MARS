@@ -57,23 +57,39 @@ def get_histogram_extremes(data: Sequence[float], selected_data: Sequence[float]
 
 # PORTED: git-history:algorithms/hrdiagram/cluster.util.ts::getExtinction
 def _legacy_extinction(filter_name: str, reddening: float, rv: float = 3.1) -> float:
+    """Monochromatic CCM89 IR/optical A(lambda), in magnitudes.
+
+    Fixed effective wavelengths approximate passbands; this is not synthetic
+    band-integrated photometry. WISE/mid-IR needs a different extinction law.
+    """
+    if not math.isfinite(reddening) or reddening < 0:
+        raise ValueError("E(B-V) must be finite and nonnegative.")
+    if not math.isfinite(rv) or not 2 <= rv <= 6:
+        raise ValueError("CCM89 requires finite R(V) between 2 and 6.")
+    if filter_name not in _FILTER_WAVELENGTH:
+        raise ValueError(f"Unknown extinction filter: {filter_name!r}.")
     x = _FILTER_WAVELENGTH[filter_name] ** -1
+    if not 0.3 <= x < 3.3:
+        raise ValueError("Filter is outside the implemented CCM89 IR/optical range; WISE/mid-IR is unsupported.")
     y = x - 1.82
-    a = b = 0.0
-    if 0.3 < x < 1.1:
+    if x < 1.1:
         a = 0.574 * x ** 1.61
         b = -0.527 * x ** 1.61
-    elif 1.1 < x < 3.3:
+    else:
         a = 1 + 0.17699 * y - 0.50447 * y ** 2 - 0.02427 * y ** 3 + 0.72085 * y ** 4 + 0.01979 * y ** 5 - 0.7753 * y ** 6 + 0.32999 * y ** 7
         b = 1.41338 * y + 2.28305 * y ** 2 + 1.07233 * y ** 3 - 5.38434 * y ** 4 - 0.62251 * y ** 5 + 5.3026 * y ** 6 - 2.09002 * y ** 7
-    return 3.1 * reddening * (a + b / rv)
+    extinction = rv * reddening * (a + b / rv)
+    if not math.isfinite(extinction):
+        raise ValueError("Extinction must remain finite.")
+    return extinction
 
 
 # PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::computePlotDelta
 def compute_plot_delta(filters: Mapping[str, str], params: Mapping[str, float]) -> dict[str, float]:
-    blue = _legacy_extinction(filters["blue"], params["reddening"])
-    red = _legacy_extinction(filters["red"], params["reddening"])
-    lum = _legacy_extinction(filters["lum"], params["reddening"])
+    rv = params.get("rv", 3.1)
+    blue = _legacy_extinction(filters["blue"], params["reddening"], rv)
+    red = _legacy_extinction(filters["red"], params["reddening"], rv)
+    lum = _legacy_extinction(filters["lum"], params["reddening"], rv)
     return {"x": red - blue, "y": -lum - 5 * math.log10(params["distance"] * 1000) + 5}
 
 
@@ -292,19 +308,26 @@ def deg(radians: float) -> float:
 
 # PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::d2HMS
 def d2_hms(degrees: float) -> list[float]:
-    hours = math.floor(degrees / 15)
-    minutes = math.floor((degrees - hours * 15) * 4)
-    seconds = ((degrees - hours * 15) * 4 - minutes) * 60
-    return [hours, minutes, seconds]
+    """Signed hours, positive minutes/seconds; no 24-hour wrapping.
+
+    The first component carries the sign, including -0.0 below one hour.
+    """
+    return _signed_sexagesimal(degrees, 15)
 
 
 # PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::d2DMS
 def d2_dms(degrees: float) -> list[float]:
-    degrees = abs(degrees)
-    whole_degrees = math.floor(degrees)
-    minutes = math.floor((degrees - whole_degrees) * 60)
-    seconds = ((degrees - whole_degrees) * 60 - minutes) * 60
-    return [whole_degrees, minutes, seconds]
+    """Signed degrees, positive minutes/seconds, preserving subdegree -0.0."""
+    return _signed_sexagesimal(degrees, 1)
+
+
+def _signed_sexagesimal(degrees: float, degrees_per_unit: int) -> list[float]:
+    magnitude = abs(float(degrees))
+    whole = math.floor(magnitude / degrees_per_unit)
+    fractional_minutes = (magnitude - whole * degrees_per_unit) * (60 / degrees_per_unit)
+    minutes = math.floor(fractional_minutes)
+    seconds = (fractional_minutes - minutes) * 60
+    return [math.copysign(whole, degrees), minutes, seconds]
 
 
 # PORTED: git-history:algorithms/hrdiagram/cluster.util.ts::haversine
@@ -319,6 +342,7 @@ def haversine(dec1: float, dec2: float, ra1: float, ra2: float) -> float:
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getHalfLightRadius
 def get_half_light_radius(sources: Sequence[Mapping[str, Any]], center_ra: float, center_dec: float) -> float:
+    """Legacy upper-median projected number radius in degrees, without light weights."""
     distances = sorted(
         haversine(center_dec, source["astrometry"]["dec"], center_ra, source["astrometry"]["ra"])
         for source in sources
@@ -328,32 +352,52 @@ def get_half_light_radius(sources: Sequence[Mapping[str, Any]], center_ra: float
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPhysicalRadius
 def get_physical_radius(distance: float, angular_radius: float) -> float:
+    """Legacy projected-radius proxy in light-years for distance in kpc, angle in degrees."""
     return 2 * distance * math.tan(rad(angular_radius) / 2) * 3261.56
 
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPmra
 def get_pmra(pmras: Sequence[float]) -> float:
+    """Legacy upper median; the supplied array must already be sorted."""
     return pmras[math.floor(len(pmras) / 2)]
 
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPmdec
 def get_pmdec(pmdecs: Sequence[float]) -> float:
+    """Legacy upper median; the supplied array must already be sorted."""
     return pmdecs[math.floor(len(pmdecs) / 2)]
 
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getVelocityDispersion
 def get_velocity_dispersion(sources: Sequence[Mapping[str, Any]], pmra: float, pmdec: float) -> float:
-    dispersion = sorted(
-        math.sqrt((source["fsr"]["pm_ra"] - pmra) ** 2 + (source["fsr"]["pm_dec"] - pmdec) ** 2)
-        for source in sources
-        if source["fsr"] is not None and source["fsr"]["pm_ra"] is not None and source["fsr"]["pm_dec"] is not None
-    )
-    percentile = 0.683
-    selected = dispersion[
-        math.floor(len(dispersion) * (1 - percentile) / 2):
-        math.ceil(len(dispersion) * (1 - percentile / 2))
-    ]
-    return sum(selected) / len(selected)
+    """Observed isotropic one-dimensional PM RMS about the supplied center.
+
+    Returns sqrt(sum(dpm_ra**2 + dpm_dec**2) / (2*N)), in mas/yr.
+    Missing pairs are omitted; nonfinite measurements fail. No measurement
+    noise subtraction, clipping, center-fit correction or intrinsic-dispersion
+    inference is performed. PM RA must be mu_alpha* (cos(dec)*dRA/dt), and
+    PM Dec must be dDec/dt, in the same tangent-plane convention as the center.
+    """
+    if not math.isfinite(pmra) or not math.isfinite(pmdec):
+        raise ValueError("Proper-motion center must be finite.")
+    offsets: list[float] = []
+    for source in sources:
+        motion = source.get("fsr")
+        if motion is None or motion.get("pm_ra") is None or motion.get("pm_dec") is None:
+            continue
+        if not math.isfinite(motion["pm_ra"]) or not math.isfinite(motion["pm_dec"]):
+            raise ValueError("Paired proper motions must be finite.")
+        dx = float(motion["pm_ra"]) - float(pmra)
+        dy = float(motion["pm_dec"]) - float(pmdec)
+        if not math.isfinite(dx) or not math.isfinite(dy):
+            raise ValueError("Proper-motion offsets must remain finite.")
+        offsets.extend((dx, dy))
+    if not offsets:
+        raise ValueError("Observed dispersion requires at least one paired proper motion.")
+    scale = max(abs(offset) for offset in offsets)
+    if scale == 0:
+        return 0.
+    return scale * math.sqrt(math.fsum((offset / scale) ** 2 for offset in offsets) / len(offsets))
 
 
 # PORTED: git-history:algorithms/hrdiagram/result/cluster-summary.ts::logAgeToMyr
@@ -434,6 +478,12 @@ def equatorial_to_galactic(ra: float, dec: float) -> dict[str, float]:
 
 # PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getMass
 def get_mass(velocity_dispersion: float, distance: float, physical_radius: float) -> float:
+    """Eta=10 virial mass proxy in solar masses, not a calibrated mass estimate.
+
+    Inputs: one-dimensional angular PM RMS in mas/yr, distance in kpc and
+    radius in light-years. The legacy factors together give v=4.74*mu*d km/s;
+    changing either cancelling factor alone would break this conversion.
+    """
     sigma = 3.086 * 10 ** 13 * distance * rad(velocity_dispersion) / (
         3600 * 365.25 * 24 * 3600
     )
@@ -450,7 +500,11 @@ def compute_cluster_summary(
     pmdecs: Sequence[float],
     plot_params: Mapping[str, float],
     isochrone_params: Mapping[str, float],
-) -> dict[str, float | int]:
+) -> dict[str, Any]:
+    """Legacy summary with units, methods and proxy limitations.
+
+    The PM arrays must be sorted; their upper medians supply the motion center.
+    """
     angular_radius = get_half_light_radius(sources, cluster_ra, cluster_dec)
     galactic = equatorial_to_galactic(cluster_ra, cluster_dec)
     distance = plot_params["distance"]
@@ -476,11 +530,33 @@ def compute_cluster_summary(
         "age": isochrone_params["age"],
         "metallicity": isochrone_params["metallicity"],
         "reddening": plot_params["reddening"],
+        "units": {
+            "angularRadius": "deg", "ra": "deg", "dec": "deg", "l": "deg", "b": "deg",
+            "physicalRadius": "lyr", "pmra": "mas/yr", "pmdec": "mas/yr",
+            "velocityDispersion": "mas/yr", "mass": "solMass", "distance": "kpc",
+            "age": "log10(yr)", "reddening": "mag",
+        },
+        "methods": {
+            "angularRadius": "median_projected_number_radius",
+            "velocityDispersion": "observed_isotropic_1d_rms",
+            "mass": "virial_proxy_eta10",
+        },
+        "warnings": [
+            {"code": "observed_motion_scatter", "message": (
+                "The PM RMS is observed scatter about the supplied center, assuming isotropy; "
+                "measurement noise, binaries and perspective motion are not removed."
+            )},
+            {"code": "virial_mass_proxy", "message": (
+                "Mass is an eta=10 virial proxy using observed PM scatter and a projected number radius, "
+                "not a measured intrinsic dispersion or luminosity-weighted half-light radius; "
+                "equilibrium and structural assumptions are unverified."
+            )},
+        ],
     }
 
 
 _FILTER_WAVELENGTH = {
-    "U": 0.364, "B": 0.442, "V": 0.54, "R": 0.647, "I": 0.7865,
+    "U": 0.364, "B": 0.442, "V": 0.55, "R": 0.647, "I": 0.7865,
     "gprime": 0.475, "rprime": 0.622, "iprime": 0.763, "zprime": 0.905,
     "J": 1.25, "H": 1.65, "K": 2.15,
     "W1": 3.4, "W2": 4.6, "W3": 12.0, "W4": 22.0,

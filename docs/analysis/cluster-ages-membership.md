@@ -117,5 +117,5 @@ the `1e-10` mathematical-boundary band. No review findings remain.
 Full offline validation after the corrections on Python 3.13.15 with locked
 dependencies and `[mcp]`: **3,514 passed, 49 skipped**, with the same 198 existing
 warnings. Compileall, schema goldens, generated-skill consistency, repository
-shape and `git diff --check` pass. The subsequent legacy coordinates,
-extinction and mass checkpoint remains open.
+shape and `git diff --check` pass. The subsequent legacy checkpoint is tracked
+in the [coordinates, extinction and mass record](legacy-coordinates-extinction-mass.md).

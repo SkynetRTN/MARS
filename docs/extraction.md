@@ -2115,8 +2115,8 @@ new capability Astromancer never had.
 `isochrone-matching/isochrone-plot.util.ts::computePlotDelta` and
 `cluster.util.ts::getExtinction`. Two differences from Astromancer are
 permanent, deliberate deviations rather than defects reproduced for parity
-(contrast with the retired extraction's catalogued defects above, which the
-legacy parity surface reproduces):
+(contrast with the retired extraction's catalogued defects above; later
+legacy science corrections are recorded in the dated M1/M2 sections below):
 
 - `get_extinction` uses the caller's `rv` throughout, rather than Astromancer's
   hard-coded leading factor of 3.1 (that extraction's defect #1).
@@ -3605,8 +3605,8 @@ zero-width ellipse axes as closed lines or points.
 
 The registered HR membership tool uses the separate `membership.py`, which
 already accepts zero motion; an actual ECSV regression verifies that boundary.
-No membership probability or new HR fit is introduced. The subsequent legacy
-coordinates, extinction and mass checkpoint remains open. See the
+No membership probability or new HR fit is introduced. See the subsequent
+legacy coordinates/extinction/mass record below and the cluster
 [scope and acceptance record](analysis/cluster-ages-membership.md).
 
 Post-commit review additionally corrects NumPy integer-age arithmetic and
@@ -3615,3 +3615,20 @@ regressions cover signed/unsigned catalogue arrays, both motion components,
 line/ellipse endpoints and the immediately adjacent outside values. Positive
 axis widths normalize from their supplied endpoints, with a strict enclosing
 rectangle rather than a tolerance; see the acceptance record's review follow-up.
+
+#### Python M2 legacy coordinates, extinction and mass (2026-10-22)
+
+Legacy DMS/HMS triples now carry the angle's sign in their first component,
+including negative zero below one degree/hour. The IR/optical CCM89 helper
+rejects unsupported WISE bands, uses R(V) throughout and receives it from plot
+parameters. V uses the nominal 0.55 micron wavelength; monochromatic fixed-band
+approximations are not claimed to be band-integrated color excesses.
+
+The asymmetric trimmed radial mean is replaced by an observed isotropic
+one-dimensional proper-motion RMS about the supplied center. Cluster summaries
+add units, methods and warnings: this is angular observed scatter, and the
+retained eta=10 mass is a virial proxy using a projected number radius, without
+intrinsic-dispersion inference or luminosity weighting. Protected mass and
+radius conversion arithmetic remains intact and has independent Astropy unit
+checks. These legacy APIs have no registered-tool callers; the newer HR fitter
+is unchanged. See the [derivation and acceptance record](analysis/legacy-coordinates-extinction-mass.md).

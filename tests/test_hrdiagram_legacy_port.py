@@ -87,11 +87,11 @@ def test_fsr_merge_and_catalog_star_counts_preserve_legacy_tallies():
     assert counts == {"cluster_stars": 1, "field_stars": 4, "unused_stars": 0}
 
 
-def test_angles_and_result_derivations_preserve_legacy_units_and_percentiles():
+def test_angles_and_result_derivations_retain_units_with_corrected_sign_and_rms():
     assert legacy.rad(180.0) == pytest.approx(3.141592653589793)
     assert legacy.deg(3.141592653589793) == pytest.approx(180.0)
     assert legacy.d2_hms(30.5) == [2, 2, 0.0]
-    assert legacy.d2_dms(-1.5) == [1, 30, 0.0]
+    assert legacy.d2_dms(-1.5) == [-1, 30, 0.0]
     assert legacy.haversine(0.0, 0.0, 0.0, 1.0) == pytest.approx(1.0)
 
     members = [
@@ -99,12 +99,12 @@ def test_angles_and_result_derivations_preserve_legacy_units_and_percentiles():
         {"astrometry": {"ra": 1.0, "dec": 0.0}, "fsr": {"pm_ra": 2.0, "pm_dec": 0.0}},
         {"astrometry": {"ra": {"bad": "shape"}, "dec": 0.0}, "fsr": None},
     ]
-    # The original median picks floor(n / 2), and its dispersion slice is
-    # upper-exclusive; this fixture makes both choices observable.
+    # The radius retains its upper median. M2 replaces the radial trimmed
+    # mean with a two-component, one-dimensional observed RMS.
     assert legacy.get_half_light_radius(members[:2], 0.0, 0.0) == pytest.approx(1.0)
     assert legacy.get_pmra([1.0, 2.0, 3.0]) == 2.0
     assert legacy.get_pmdec([1.0, 2.0, 3.0]) == 2.0
-    assert legacy.get_velocity_dispersion(members[:2], 0.0, 0.0) == pytest.approx(1.5)
+    assert legacy.get_velocity_dispersion(members[:2], 0.0, 0.0) == pytest.approx(1.118033988749895)
     assert legacy.get_physical_radius(1.0, 1.0) == pytest.approx(56.9252, rel=1e-4)
     assert legacy.log_age_to_myr(6.0) == 1.0
 
@@ -131,7 +131,7 @@ def test_galactic_mass_and_summary_derivations_preserve_result_stage_values():
         {"distance": 1.0, "reddening": 0.1}, {"age": 8.0, "metallicity": -0.1},
     )
 
-    assert summary == pytest.approx({
+    expected = {
         "numberOfStars": 2,
         "angularRadius": 1.0,
         "ra": 0.0,
@@ -147,7 +147,8 @@ def test_galactic_mass_and_summary_derivations_preserve_result_stage_values():
         "age": 8.0,
         "metallicity": -0.1,
         "reddening": 0.1,
-    })
+    }
+    assert {key: summary[key] for key in expected} == pytest.approx(expected)
 
 
 def test_catalog_data_shaping_preserves_filter_order_and_fsr_projections():

@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-22 against `main` at `15f5497`, with the first four M2 checkpoints
+Updated 2026-10-22 against `main` at `15f5497`, with the first five M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the two pulsar, variable-star and cluster checkpoints
+M2 remains open after the first five checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -109,13 +109,26 @@ the subsequent work.
   Validation: Python 3.13.15, full offline suite **3,514 passed, 49 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. Changes remain local, unmerged and unpublished.
-- [ ] **Legacy coordinates, extinction and mass.** Negative sexagesimal
-  coordinates lose their sign; W1 extinction returns zero outside the
-  implemented law; the extinction multiplier ignores a non-default `rv`.
-  The V-band wavelength and velocity-dispersion statistic also need scientific
-  checks. Establish which current results use these helpers and which values
-  are valid. The newer HR fitter's corrections do not close these legacy
-  issues. The cancelling mass/radius unit factors are not a separate bug.
+- [x] **Legacy coordinates, extinction and mass.** Signed DMS/HMS triples carry
+  the angle's sign in their first component, including negative zero below one
+  degree/hour. The legacy CCM89 IR/optical helper rejects unsupported WISE
+  bands, honors R(V) throughout, propagates it through plot parameters and uses
+  nominal V wavelength 0.55 microns. Supported domains and monochromatic
+  passband limitations are explicit. The old trimmed radial mean is replaced
+  by observed isotropic one-dimensional PM RMS about the supplied center,
+  with no intrinsic/noise-free dispersion claim. Summaries identify units,
+  methods and limitations: projected number radius and eta=10 virial mass
+  proxy, with unverified structural/equilibrium assumptions. Protected mass
+  and radius conversion arithmetic is unchanged and independently checked.
+  Caller searches found no registered-tool use of these exported legacy APIs;
+  the newer HR fitter remains separate. Evidence:
+  [derivation and acceptance record](../analysis/legacy-coordinates-extinction-mass.md),
+  [51 scientific cases](../../tests/test_hrdiagram_legacy_science.py), independent
+  Astropy/CCM89/Decimal references, and review with no outstanding findings.
+  Validation: **144 focused tests passed**; Python 3.13.15 full offline suite
+  **3,565 passed, 49 skipped**. Compileall, schema goldens, generated-skill
+  consistency, repository shape and `git diff --check` pass. Changes remain
+  local, unmerged and unpublished.
 - [ ] **Accepted sky positions and reference stars.** Without a scale hint,
   the WCS position check can admit a distant solution. After an ATLAS solve,
   reference stars are queried around the original hint rather than the solved
