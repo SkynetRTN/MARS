@@ -133,6 +133,8 @@ historical model benchmark regrading follows from this checkpoint.
 
 ## Validation
 
+Initial checkpoint validation (2026-10-21):
+
 Python 3.13.15 with locked dependencies and `[mcp]`: **3,476 passed, 49 skipped**
 in the full offline suite, with the same 198 existing warnings. The focused
 variable/scientific, schema, skill and registry run passed 189 tests, including
@@ -141,3 +143,27 @@ schema goldens, repository shape and `git diff --check` pass. Independent final
 review has no outstanding findings. This is the third closed M2 checkpoint
 on `feature/m2`; the remaining gates are open, and the changes are unmerged
 and unpublished.
+
+## Review follow-up: response amplitude (2026-10-22)
+
+A fresh review found that squaring tiny residuals and projections could lose
+their energy to underflow. Six irregular samples scaled by `1e-161` produced
+power zero instead of `0.0383141338914464`; the public CSV pipeline reproduced
+the failure. Large finite amplitudes could likewise overflow those energies.
+
+The fit now divides response offsets by their maximum absolute value before
+forming a weighted mean or squared energies. This common scale cancels from
+standard power. Constants keep their existing rejection, and unrepresentable
+offsets or weights still fail explicitly. Three direct amplitude regressions
+(`1e-200`, `1e-161`, `1e200`) and a public tiny-amplitude CSV/ECSV handoff failed
+before the change and pass afterward, bringing the scientific file to 25 tests.
+
+All 116 focused variable-star tests pass. Independent follow-up review compared
+1,500 amplitude cases spanning `1e-300` through `1e300` with full-model QR fits;
+the maximum power difference was `1.08e-13`. It also checked subnormal values,
+negative scales, extreme uncertainties, offsets and constants, and reported no
+outstanding findings. Combined branch validation, including the subsequent
+cluster checkpoint: Python 3.13.15 with locked dependencies and `[mcp]`,
+**3,503 passed, 49 skipped**, with 198 existing warnings. Compileall, schema
+goldens, generated-skill consistency, repository shape and `git diff --check`
+pass.

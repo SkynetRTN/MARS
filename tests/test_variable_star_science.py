@@ -197,3 +197,37 @@ def test_public_fold_rejects_unrepresentable_full_error_bounds(artifact_dir):
     )
     assert [error.code for error in result.errors] == ["invalid_input"]
     assert result.artifact is None
+
+
+@pytest.mark.parametrize("amplitude", [1e-200, 1e-161, 1e200])
+def test_standard_power_does_not_underflow_or_overflow_with_response_amplitude(amplitude):
+    times = [0., .17, .4, .63, 1.1, 1.4]
+    values = np.array([.2, 1.1, -.4, .3, -.7, .9]) * amplitude
+    errors = [.1, .4, .2, .1, .6, .3]
+    samples = periodogram.lomb_scargle_with_error(times, values, errors, 1., 1.001, 1)
+    # Astropy/full-model QR reference at ordinary amplitude; standard power
+    # is a dimensionless ratio and cannot depend on a common response scale.
+    assert samples[0][1] == pytest.approx(.0383141338914464, rel=1e-12, abs=0)
+
+
+def test_public_tiny_amplitudes_keep_resolved_standard_power(tmp_path, artifact_dir):
+    times = np.array([0., .17, .4, .63, 1.1, 1.4])
+    values = np.array([.2, 1.1, -.4, .3, -.7, .9])
+    errors = np.array([.1, .4, .2, .1, .6, .3])
+    path = tmp_path / "tiny-signal.csv"
+    lines = ["id,mjd,mag,mag_error"]
+    for time, value, sigma in zip(times, values, errors, strict=True):
+        component = sigma / np.sqrt(2)
+        lines.extend([f"target,{time},{value * 1e-161},{component}",
+                      f"reference,{time},0,{component}"])
+    path.write_text("\n".join(lines) + "\n")
+    loaded = variable_star.load_variable_star_lightcurve(path)
+    assert loaded.errors == []
+    result = variable_star.compute_variable_star_periodogram(
+        loaded.artifact.path, variable_star="source1", reference_star_magnitude=0.,
+        start_period=1., end_period=1.001,
+    )
+    assert result.errors == []
+    spectrum = Table.read(result.artifact.path, format="ascii.ecsv")
+    reference = LombScargle(times, values, errors).power(1 / spectrum["period"].value, method="slow")
+    np.testing.assert_allclose(spectrum["power"], reference, rtol=1e-11, atol=0)

@@ -112,6 +112,11 @@ def lomb_scargle_with_error(
         offsets = [float(value) - float(values[0]) for value in values]
         for offset in offsets:
             _finite(offset, "value offset")
+        # Standard power is a ratio: remove a common amplitude before means
+        # and squared energies, avoiding both subnormal loss and overflow.
+        amplitude = max(abs(offset) for offset in offsets)
+        if amplitude:
+            offsets = [offset / amplitude for offset in offsets]
         residue_mean = _error_mean(offsets, errors)
         _finite(residue_mean, "weighted mean")
         residues = [value - residue_mean for value in offsets]
