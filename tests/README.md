@@ -46,7 +46,7 @@ Three consequences shape everything here:
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |
 | `test_query_binding_runner.py` | The `(Declaration, Backend)` MRO contract, region validation, config |
-| `test_sdss_query_limits.py` | M1 CAT-02/27 and ALG-03: finite server/client row bounds, literal projection identifiers, geometry/cache preflight, quality-predicate preservation and the pinned SDK's native SQL request/CSV/error contract with offline stubs; named-object and whole-call/HTTP-byte budgets remain separate. |
+| `test_sdss_query_limits.py` | M1 CAT-02/27 and ALG-03: finite server/client row bounds, literal projection identifiers, geometry/cache preflight, quality-predicate preservation and the pinned SDK's native SQL request/CSV/error contract with offline stubs; named-object lookups are in `test_m3_catalog_lookup_failures.py`; whole-call/HTTP-byte budgets remain separate. |
 | `test_photometry_extraction.py` | SEP extraction on real frames, crop regions, WCS construction |
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
@@ -58,6 +58,7 @@ Three consequences shape everything here:
 | `test_runtime_limits.py` | MCP-01/AUD-03: real-process cancellation/deadline, protocol lock release, memory/work/log/reply and cache bounds, Linux separate solver-group cleanup, PID guards and dry-run/marked-only permanent cleanup. Native Windows/macOS are required CI gates. |
 | `test_archive_download_limits.py` | MCP-01: real SDK helpers with offline streaming stubs; counts/declared/actual decoded bytes, missing/lying headers, metadata/decoded-path rejection, operator-file preservation and visible partial metadata; no live downloads. |
 | `test_m1_science_safeguards.py` | CAT-01 V/v passband distinction in selection and resolution, including fallback and explicit transforms; TS-01 legacy longitude against independent Astropy quadrant/pole references and invalid coordinates. New fitter and protected TS-20/21 arithmetic unchanged. |
+| `test_m3_catalog_lookup_failures.py` | M3 catalog lookup failures: CAT-18 SDSS objID lookup over bounded quality-filtered SQL (local name validation, native SDK transport offline); CAT-22 SIMBAD retry after a failed probe and strict outage-vs-no-match reporting through `resolve_target` and `search_casda`; CAT-06 APASS `U` reported as `unsupported_filter` before any query. Offline stubs only. |
 | `test_skylib_stats.py` | `chauvenet` and the statistics under the zero-point solve |
 | `test_skylib_geometry.py` | Pixel/aperture overlap, spherical angles, orientation decomposition |
 | `test_skylib_fits.py` | Gain, exposure, observation time, field of view |

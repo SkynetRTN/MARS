@@ -79,11 +79,19 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
 
 ## M3: failed inputs and services must produce usable failures
 
-- [ ] **Catalog lookup failures.** SDSS named-object lookup still calls
+- [x] **Catalog lookup failures.** SDSS named-object lookup still calls
   `query_object`; M1 repaired only regions. APASS U references an unavailable
   band. SIMBAD's first initialization failure disables resolution for the
   process lifetime. Lookups must return data or explain the specific failure,
   and transient failure must have defined recovery.
+  *Closed:* SDSS objID lookup uses the bounded, quality-filtered SQL contract
+  and rejects non-objID names by value; APASS U returns `unsupported_filter`
+  naming the missing `uprime` and alternative catalogs before any query;
+  a failed SIMBAD probe is retried by the next lookup, and `resolve_target`
+  and `search_casda` report an outage as `provider_unavailable`, not
+  `not_found`. Evidence: `tests/test_m3_catalog_lookup_failures.py`
+  (offline stubs; no live SkyServer or SIMBAD run), `docs/extraction.md`
+  Catalogs §5.7 and Query updates.
 - [ ] **Malformed calibration inputs.** Confirm reported failures with mixed
   catalog row shapes/epochs, absent coordinates, missing FWHM in adaptive
   apertures and degenerate zero-point header writes. These cases must not

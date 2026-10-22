@@ -74,6 +74,7 @@ TOOL_ERROR_CODES: dict[str, str] = {
     "unknown_catalog": "The named photometric catalog is not in the registry.",
     "unknown_catalog_fixture": "The named catalog fixture is not one of the recorded ones.",
     "unknown_tool": "The MCP server was asked for a tool the registry does not serve.",
+    "unsupported_filter": "No requested catalog can supply a reference magnitude for the image's filter; nothing was queried.",
     "unsupported_image_shape": "The image is not 2-D and the operation requires that it be.",
     "write_failed": "Writing an artifact raised.",
     "zero_duration": "The observation spans no time, so there is nothing to render.",

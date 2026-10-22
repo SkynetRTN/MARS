@@ -64,6 +64,32 @@ def _projection_fields(fields: object) -> list[str]:
     return list(fields)
 
 
+#: SkyServer ``objID`` is a signed 64-bit ``bigint``; real IDs are positive.
+_MAX_OBJID = 2**63 - 1
+
+
+def _object_ids(names: object) -> list[int]:
+    """Return distinct objIDs in request order, or raise naming the bad one.
+
+    Only decimal digit strings and plain integers are accepted, so a name is
+    never interpolated into the SQL -- only the integer it parses to is.
+    """
+    if not isinstance(names, (list, tuple)):
+        raise ValueError("SDSS objID lookup requires a list of objIDs.")
+    if len(names) > MAX_SDSS_ROWS:
+        raise ValueError(f"SDSS objID lookup accepts at most {MAX_SDSS_ROWS} objIDs per call.")
+    object_ids: list[int] = []
+    for name in names:
+        text = name.strip() if isinstance(name, str) else None
+        if not text or not text.isascii() or not text.isdigit() or not 0 < int(text) <= _MAX_OBJID:
+            raise ValueError(
+                f"SDSS objID lookup requires positive integer objIDs as strings; got {name!r}. "
+                "Resolve an object name to coordinates first and query a region."
+            )
+        object_ids.append(int(text))
+    return list(dict.fromkeys(object_ids))
+
+
 def _positive_angle(value: object, unit: str) -> float:
     try:
         number = float(Angle(value).to_value(unit))
@@ -225,19 +251,37 @@ class SDSSQueryBackend(VizierCatalog):
     """
 
     def query_objects(self, names: TList[str]) -> TList[CatalogSource]:
-        """Return SDSS objects with the given names, one request each."""
-        sdss = SDSS()
-        rows = []
-        for name in names:
-            rows.append(
-                sdss.query_object(
-                    name,
-                    data_release=self.data_release,
-                    photoobj_fields=self._columns,
-                    cache=self.cache,
-                )[0]
+        """Return SDSS objects with the given objIDs, in one SQL request.
+
+        EXTRACTED: was one ``sdss.query_object(name, ...)[0]`` call per name.
+        ``SDSSClass`` has no ``query_object`` (CAT-18), so every named lookup
+        raised ``AttributeError``. The names here are what ``col_mapping``
+        reports as a source's ``id`` -- SkyServer ``objID`` integers -- and
+        they are matched with the same ``Star``/quality/clean predicates as a
+        region, so a named row is as trustworthy as a region row. As with
+        ``VizierCatalog.query_objects``, an objID with no qualifying row is
+        absent from the result rather than an error.
+        """
+        object_ids = _object_ids(names)
+        if not object_ids:
+            return []
+        limit = len(object_ids)
+        photoobj_fields = _projection_fields(self._columns)
+        # noinspection SqlResolve
+        q = 'SELECT DISTINCT TOP {} {} ' \
+            'FROM Star AS s ' \
+            'JOIN Field f ON s.fieldID = f.fieldID ' \
+            'WHERE s.objID IN ({}) AND f.quality = 3 AND s.clean = 1' \
+            .format(
+                limit,
+                ', '.join('s.{0}'.format(field) for field in photoobj_fields),
+                ', '.join(str(object_id) for object_id in object_ids),
             )
-        return self.table_to_sources(rows)
+        client = SDSS()
+        rows = client.query_sql(q, data_release=self.data_release, cache=self.cache)
+        if rows is None:
+            return []
+        return self.table_to_sources(rows[:limit])
 
     def query_box(
         self,

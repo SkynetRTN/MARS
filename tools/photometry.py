@@ -74,6 +74,41 @@ __all__ = [
 ]
 
 
+class UnsupportedFilterError(ValueError):
+    """No catalog the calibration would use can supply the image's filter."""
+
+
+def _check_filter_supported(image_filter, catalogs: list[str]) -> None:
+    """Raise :class:`UnsupportedFilterError` when every catalog is certain to
+    produce no reference magnitude for ``image_filter`` (CAT-06).
+
+    Without this the solve queried the catalog and then failed with "No
+    calibration sources matched catalog magnitudes", naming neither the filter
+    nor the catalog. The message names both, the missing band, and the
+    catalogs that can supply the filter.
+    """
+    from algorithms.catalogs import CATALOGS
+
+    from tools.catalogs import reference_band_unavailable
+
+    if not isinstance(image_filter, str) or not image_filter.strip() or not catalogs:
+        return
+    reasons = [reference_band_unavailable(name, image_filter) for name in catalogs]
+    if not all(reasons):
+        return
+    # VSX lists variable stars: it is the variability cross-check, never a
+    # calibration reference, so it is not offered as an alternative.
+    alternatives = [
+        name for name in CATALOGS
+        if name != "VSX" and name not in catalogs
+        and reference_band_unavailable(name, image_filter) is None
+    ]
+    message = " ".join(reasons)
+    if alternatives:
+        message += f" Catalogs that can calibrate {image_filter.strip()!r}: {', '.join(alternatives)}."
+    raise UnsupportedFilterError(message)
+
+
 def _resolve_calibration_inputs(
     header,
     wcs,
@@ -99,6 +134,7 @@ def _resolve_calibration_inputs(
     if catalog_sources is None:
         if not selected_catalogs:
             raise ValueError(f"No calibration catalog supports filter {image_filter!r}")
+        _check_filter_supported(image_filter, selected_catalogs)
         catalog_sources = query_catalogs(
             selected_catalogs,
             wcs=wcs,
@@ -106,10 +142,13 @@ def _resolve_calibration_inputs(
             stop_on_success=True,
             image_filter=image_filter,
         )
-    elif not selected_catalogs:
-        selected_catalogs = sorted(
+    else:
+        row_catalogs = sorted(
             {name for name in (getattr(source, "catalog_name", None) for source in catalog_sources) if name}
         )
+        if not selected_catalogs:
+            selected_catalogs = row_catalogs
+        _check_filter_supported(image_filter, row_catalogs or selected_catalogs)
 
     if (
         variable_sources is None
@@ -511,6 +550,11 @@ def calibrate_zeropoint(
             extraction_settings=SourceExtractionSettings(),
             catalog_sources=resolved_sources,
             variable_sources=variable_sources,
+        )
+    except UnsupportedFilterError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="unsupported_filter", message=str(exc))],
+            warnings=warnings,
         )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
         return ZeropointComparison(

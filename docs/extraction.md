@@ -1417,6 +1417,23 @@ no-compatible-catalog selection fallback is retained; reference resolution
 still rejects the unsafe pairing. This deliberately supersedes V/v token
 preservation assertions, tested in `test_m1_science_safeguards.py`.
 
+##### 5.7 CAT-06 APASS U is reported, not attempted (2026-10-21)
+
+APASS's `U` transform (`B + 0.78*(uprime - gprime) - 0.88`) needs `uprime`,
+which APASS does not carry, so a U-band calibration against APASS matched every
+star and then failed with "No calibration sources matched catalog magnitudes",
+naming neither filter nor catalog. The declaration is unchanged in both
+registries. Instead `tools.catalogs.reference_band_unavailable` reports the
+failures that are certain under a default solve -- an explicit transform
+needing a band the catalog lacks, or a pairing resolution refuses (SkyMapper
+`V`, §5.6) -- and the calibration tools check it before querying (or, for
+supplied rows, before solving). `calibrate_zeropoint` returns
+`unsupported_filter`, naming the filter, the catalog, the missing band and the
+catalogs that can calibrate the filter; `resolve_reference_band` warns with the
+missing band. Filters with no transform at all are not rejected: the solve's
+preferred-band fallback still applies to them. Tested in
+`test_m3_catalog_lookup_failures.py`.
+
 #### 6. Dependencies
 
 `pydantic` v2 only. Deliberately no `astroquery`, no `astropy` except
@@ -1549,6 +1566,16 @@ The availability probe also moved: upstream ran `add_votable_fields("otype")` at
 import time, so importing the module did network-adjacent work. It is now lazy
 and cached on first use.
 
+*Update 2026-10-21 (M3, CAT-22):* only a successful probe is cached. Caching
+the failure too latched resolution off for the rest of the process after one
+transient error; a failed probe is now retried by the next lookup.
+`resolve_simbad` keeps the extracted never-raise default, but
+`resolve_simbad(name, strict=True)` raises `SimbadUnavailableError` for an
+initialization or query failure, so an empty list means only that SIMBAD
+answered without a usable match. `tools.resolve` (and so `resolve_target` and
+`search_casda`'s name path) is strict: an outage is `provider_unavailable`,
+never `not_found`. Tested in `test_m3_catalog_lookup_failures.py`.
+
 ##### 4.6 `AfterglowError` → `UnknownCatalogError(ValueError)`
 
 `afterglow_core/errors/catalog.py` defined `UnknownCatalogError` as an
@@ -1670,8 +1697,16 @@ building the quality-filtered SQL explicitly and using the SDK's supported
 `query_sql` endpoint/parser. Offline tests exercise native request construction
 and CSV/error parsing with stub responses, not a live SkyServer. The inherited
 native `MARSSDSS.query_region` interface remains unsupported; backend code must
-not return to it. Named-object queries (CAT-18) remain a separate broken path
-and must reuse the bounded contract when repaired.
+not return to it.
+
+*Update 2026-10-21 (M3, CAT-18):* named-object queries are repaired.
+`query_objects` called `sdss.query_object`, which `SDSSClass` does not have, so
+every call raised `AttributeError`. It now sends one bounded SQL request through
+`query_sql` with `s.objID IN (...)` and the same `Star`/quality/clean
+predicates as a region. Names must be positive integer objIDs (the `id` the
+declaration reports), at most 5,000 per call; anything else is rejected
+locally, naming the value, and only parsed integers reach the SQL. Like
+VizieR's, an objID with no qualifying row is absent from the result.
 
 Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
 mapping remain preserved; ignored constraints (§5.8) and public schemas are

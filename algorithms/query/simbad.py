@@ -36,7 +36,13 @@ from astropy.coordinates import Angle
 
 from algorithms.catalogs.simbad import SIMBAD_OBJECT_TYPES
 
-__all__ = ["ResolvedTarget", "resolve_simbad", "resolve_targets", "simbad_available"]
+__all__ = [
+    "ResolvedTarget",
+    "SimbadUnavailableError",
+    "resolve_simbad",
+    "resolve_targets",
+    "simbad_available",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +51,15 @@ J2000 = datetime(2000, 1, 1, 12, 0, 0)
 
 _simbad = None
 _simbad_enabled: Optional[bool] = None
+_simbad_init_error: Optional[BaseException] = None
+
+
+class SimbadUnavailableError(RuntimeError):
+    """SIMBAD could not be asked: it failed to initialize or the query failed.
+
+    Raised only by ``resolve_simbad(..., strict=True)``, so a caller can tell
+    an unreachable service from a name SIMBAD does not know.
+    """
 
 
 @dataclass
@@ -69,37 +84,49 @@ def simbad_available() -> bool:
     """Return whether SIMBAD lookups can run.
 
     Resolution needs the ``otype`` VOTable field, which older astroquery
-    versions and some SIMBAD mirrors do not offer. The probe runs once, on first
-    use, and its result is cached — upstream ran it at import time, which made
-    importing the module do network-adjacent work.
+    versions and some SIMBAD mirrors do not offer. Upstream ran the probe at
+    import time, which made importing the module do network-adjacent work, so
+    it runs on first use instead.
+
+    Only success is cached. A failed probe is retried on the next call, so a
+    transient failure costs that one lookup rather than disabling resolution
+    for the rest of the process (CAT-22). The failure is kept for
+    ``resolve_simbad(..., strict=True)`` to report.
     """
-    global _simbad, _simbad_enabled
-    if _simbad_enabled is not None:
-        return _simbad_enabled
+    global _simbad, _simbad_enabled, _simbad_init_error
+    if _simbad_enabled:
+        return True
 
     try:
         from astroquery.simbad import Simbad
 
-        _simbad = Simbad()
-        _simbad.add_votable_fields("otype")
-        _simbad_enabled = True
-    except Exception:
-        logger.warning("SIMBAD object-type field unavailable; resolution disabled",
+        simbad = Simbad()
+        simbad.add_votable_fields("otype")
+    except Exception as exc:
+        logger.warning("SIMBAD object-type field unavailable; will retry on next lookup",
                        exc_info=True)
+        _simbad_init_error = exc
         _simbad_enabled = False
+        return False
 
-    return _simbad_enabled
+    _simbad = simbad
+    _simbad_init_error = None
+    _simbad_enabled = True
+    return True
 
 
-def resolve_simbad(name: str) -> list[ResolvedTarget]:
+def resolve_simbad(name: str, *, strict: bool = False) -> list[ResolvedTarget]:
     """Resolve ``name`` against SIMBAD.
 
     Returns every row SIMBAD matched, which for an ambiguous identifier is more
     than one. Rows with no coordinates, or coordinates astropy cannot parse, are
     skipped rather than failing the lookup — a partial answer beats none.
 
-    Returns an empty list, never raises, when SIMBAD is unavailable or the query
-    fails. Upstream printed such failures to stdout; MARS logs them.
+    By default returns an empty list, never raises, when SIMBAD is unavailable
+    or the query fails. Upstream printed such failures to stdout; MARS logs
+    them. That makes an outage look like an unknown name, so ``strict=True``
+    raises :class:`SimbadUnavailableError` for either failure instead, leaving
+    an empty list to mean only that SIMBAD answered with no usable match.
 
     PRESERVED BEHAVIOUR: the identifier is lower-cased before the query.
     SIMBAD's matching is case-insensitive so this is normally invisible, and it
@@ -112,12 +139,18 @@ def resolve_simbad(name: str) -> list[ResolvedTarget]:
         return results
 
     if not simbad_available():
+        if strict:
+            raise SimbadUnavailableError(
+                f"SIMBAD could not be initialized: {_simbad_init_error}"
+            ) from _simbad_init_error
         return results
 
     try:
         rows = _simbad.query_object(name, wildcard=False)
-    except Exception:
+    except Exception as exc:
         logger.warning("SIMBAD query failed for %r", name, exc_info=True)
+        if strict:
+            raise SimbadUnavailableError(f"SIMBAD query failed: {exc}") from exc
         return results
 
     if not rows:
