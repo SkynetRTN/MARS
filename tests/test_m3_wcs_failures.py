@@ -214,3 +214,124 @@ def test_a_genuine_miss_is_still_no_solution(fake_anet, monkeypatch, tmp_path):
     assert summary.errors == []
     assert [warning.code for warning in summary.warnings] == ["no_solution"]
     assert not summary.has_wcs
+
+
+# --- review follow-ups on c119ce0 ---------------------------------------------
+
+
+def test_an_astrometry_net_timeout_is_not_a_genuine_miss(fake_anet, monkeypatch, tmp_path):
+    from algorithms.skylib_lite.astrometry.anet import SolveFieldTimeout
+
+    def timed_out(request, config):
+        raise SolveFieldTimeout(["solve-field"], 30.0)
+
+    monkeypatch.setattr("algorithms.wcs.wcs.anet_solve_field_glob", timed_out)
+    summary = solve_astrometry(_frame(tmp_path, "hinted"), index_path=fake_anet)
+    assert [error.code for error in summary.errors] == ["solver_failed"]
+    assert "timed out after 30 s" in summary.errors[0].message
+
+
+def test_an_atlas_timeout_is_not_a_genuine_miss(fake_atlas_root, monkeypatch, tmp_path):
+    monkeypatch.delenv("ANET_INDEX_PATH", raising=False)
+    monkeypatch.setattr("algorithms.wcs.wcs.AtlasBackend.solve",
+                        lambda self, request, config: SolveSolution(backend="atlas", failure_reason="timeout"))
+    summary = solve_astrometry(_frame(tmp_path, "hinted"))
+    assert [error.code for error in summary.errors] == ["solver_failed"]
+    assert "atlas: timed out" in summary.errors[0].message
+
+
+@pytest.mark.parametrize("radesys, equinox, frame, epoch", [
+    ("FK5", "B1950", FK5, "B1950.000"), ("FK4", "J2000", FK4, "J2000.000"),
+    ("FK5", "J2000", FK5, "J2000.000"), ("FK4", 1950.0, FK4, "B1950.000"),
+])
+def test_an_explicit_prefix_keeps_its_epoch_under_radesys(radesys, equinox, frame, epoch):
+    result = _frame_from_header(fits.Header({"RADESYS": radesys, "EQUINOX": equinox}))
+    assert isinstance(result, frame)
+    assert result.equinox.to_string() == epoch or result.equinox.value == pytest.approx(float(epoch[1:]))
+    assert result.equinox.format == ("byear_str" if epoch[0] == "B" else "jyear_str")
+
+
+@pytest.mark.parametrize("equinox", [float("nan"), float("inf")])
+def test_a_non_finite_numeric_equinox_falls_back_to_icrs(equinox):
+    # A FITS Header cannot hold NaN; headers built in code (plain mappings) can.
+    assert isinstance(_frame_from_header({"EQUINOX": equinox}), ICRS)
+
+
+def test_radesys_names_the_frame_even_against_the_equinox_year():
+    # Upstream's FK5 branch matched EQUINOX >= 1980 before RADESYS='FK4'.
+    assert isinstance(_frame_from_header(fits.Header({"RADESYS": "FK4", "EQUINOX": 2000.0})), FK4)
+
+
+def test_equinox_zero_keeps_the_upstream_fk4_reading():
+    result = _frame_from_header(fits.Header({"EQUINOX": 0}))
+    assert isinstance(result, FK4)
+
+
+def test_an_astrometry_net_miss_stays_no_solution_when_atlas_had_no_hint(
+    fake_anet, fake_atlas_root, monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("algorithms.wcs.wcs.anet_solve_field_glob",
+                        lambda request, config: SolveSolution(backend="astrometry.net"))
+    monkeypatch.setattr("tools.wcs._atlas_catalog_problem", lambda settings: None)
+    summary = solve_astrometry(_frame(tmp_path, "nohint", pointing=False), index_path=fake_anet)
+    assert summary.errors == []
+    (warning,) = [w for w in summary.warnings if w.code == "no_solution"]
+    assert "ATLAS did not run: the frame has no pointing hint" in warning.message
+
+
+def test_the_skip_message_names_the_missing_coordinate(fake_atlas_root, monkeypatch, tmp_path):
+    monkeypatch.delenv("ANET_INDEX_PATH", raising=False)
+    path = _frame(tmp_path, "ra_only", pointing=False, OBJRA="21:29:58.3")
+    summary = solve_astrometry(path)
+    message = summary.errors[0].message
+    assert "gives no Dec" in message and "RA and" not in message
+    assert "TARGRA/TARGDEC" in message
+
+
+def test_the_atlas_backend_itself_rejects_a_missing_hint(tmp_path):
+    from algorithms.skylib_lite.astrometry.atlas.backend import AtlasBackend, AtlasConfig
+    from algorithms.skylib_lite.astrometry.types import SolveRequest
+
+    request = SolveRequest(image_path=tmp_path / "x.fits", width=10, height=10,
+                           ra_hours=None, dec_degs=None, min_scale=0.5, max_scale=1.0)
+    with pytest.raises(ValueError, match="pointing hint"):
+        AtlasBackend().solve(request, AtlasConfig())
+
+
+def test_a_reused_failure_list_does_not_leak_into_the_next_result(tmp_path):
+    failures = ["astrometry.net: from an earlier frame"]
+    attempts = ["astrometry.net"]
+    with fits.open(_frame(tmp_path, "hinted")) as hdul:
+        header, data = hdul[0].header.copy(), hdul[0].data
+    result = wcs_module.solve_wcs(
+        header, data, tmp_path,
+        solver_settings=SolverSettings(atlas_catalog_root=str(tmp_path / "missing"), atlas_catalog="ucac5"),
+        solver_failures=failures, solver_attempts=attempts,
+    )
+    assert len(result.metadata.solver_failures) == 1
+    assert result.metadata.solver_failures[0].startswith("atlas: ")
+    assert failures[0] == "astrometry.net: from an earlier frame"  # the caller's list keeps both
+
+
+def test_one_warning_per_code_when_a_solve_skipped_a_backend(fake_anet, fake_atlas_root, monkeypatch, tmp_path):
+    from algorithms.skylib_lite.astrometry.anet import AstrometryNetError
+    from tools.models import ToolWarning
+
+    monkeypatch.setattr("tools.wcs._atlas_catalog_problem", lambda settings: None)
+    original = __import__("tools.wcs", fromlist=["_configured_backend_warnings"])._configured_backend_warnings
+
+    def with_config_warning(settings):
+        available, warnings = original(settings)
+        return available, warnings + [ToolWarning(code="solver_backend_unavailable", message="One index dir was ignored.")]
+
+    monkeypatch.setattr("tools.wcs._configured_backend_warnings", with_config_warning)
+    monkeypatch.setattr("algorithms.wcs.wcs.anet_solve_field_glob",
+                        lambda request, config: (_ for _ in ()).throw(AstrometryNetError("boom")))
+    monkeypatch.setattr("algorithms.wcs.wcs.AtlasBackend.solve",
+                        lambda self, request, config: SolveSolution(wcs=_solved_wcs(), backend="atlas"))
+    monkeypatch.setattr("algorithms.wcs.wcs._load_atlas_catalog_sources", lambda *args, **kwargs: [])
+    summary = solve_astrometry(_frame(tmp_path, "hinted"), index_path=fake_anet)
+    assert summary.has_wcs
+    matching = [w for w in summary.warnings if w.code == "solver_backend_unavailable"]
+    assert len(matching) == 1
+    assert "One index dir was ignored." in matching[0].message and "boom" in matching[0].message

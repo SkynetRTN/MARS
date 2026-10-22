@@ -113,6 +113,13 @@ WCS_REGEX = re.compile(
 _OBS_TIME_KEYS = ("DATE-OBS", "MJD-OBS", "DATEREF", "MJDREFI", "MJDREFF")
 
 
+#: The pointing sources ``solve_wcs`` reads a hint from, for its messages.
+POINTING_HINT_SOURCES = (
+    "a celestial WCS or a pointing keyword pair such as OBJRA/OBJDEC, "
+    "TELRA/TELDEC, RA/DEC, RA_PNT/DEC_PNT, OBJCTRA/OBJCTDEC or TARGRA/TARGDEC"
+)
+
+
 class SearchRadiusWithoutHint(ValueError):
     """A bounded ``WcsSearchBounds.radius_deg`` with no pointing hint to centre it on.
 
@@ -482,6 +489,8 @@ def solve_wcs(
     # direct caller can tell it from a genuine miss without passing a list.
     failures = solver_failures if solver_failures is not None else []
     attempts = solver_attempts if solver_attempts is not None else []
+    # A reused list may hold an earlier call's entries; report only this call's.
+    first_failure, first_attempt = len(failures), len(attempts)
 
     # The observer's plate-solve preferences (ASSET_PIPELINE_RUN_REVIEW.md §3.3).
     # Only the two knobs that shape the *written* WCS are exposed — SIP order and
@@ -611,10 +620,8 @@ def solve_wcs(
     if search_radius_deg < 180 and (ra_hint_deg is None or dec_hint_deg is None):
         raise SearchRadiusWithoutHint(
             f"search radius {search_radius_deg:g} deg needs a pointing hint to "
-            "centre on, and the FITS header yields none (no celestial WCS and no "
-            "pointing keyword pair such as OBJRA/OBJDEC, TELRA/TELDEC, RA/DEC, "
-            "RA_PNT/DEC_PNT, OBJCTRA/OBJCTDEC or TARGRA/TARGDEC); drop the radius "
-            "or supply a frame that records where it was pointed"
+            f"centre on, and the FITS header yields none (it needs {POINTING_HINT_SOURCES}); "
+            "drop the radius or supply a frame that records where it was pointed"
         )
 
     # P6: what the backends are asked to search, reported on every return path.
@@ -714,6 +721,9 @@ def solve_wcs(
                         attempts.append("astrometry.net")
                         solution = anet_solve_field_glob(request, anet_config)
                     except SolveFieldTimeout as exc:
+                        # M3: a timeout is not a completed search; recorded so
+                        # it is not reported as a genuine miss.
+                        failures.append(f"astrometry.net: timed out after {exc.timeout_sec:g} s")
                         logger.warning(
                             "solve_wcs: anet timed out after %gs — "
                             "falling back to ATLAS (file_id=%s)",
@@ -764,13 +774,19 @@ def solve_wcs(
         # one its float(None) raised TypeError. It is skipped, and recorded.
         atlas_skipped = None
         if atlas_config is not None and (ra_hint_deg is None or dec_hint_deg is None):
+            absent = " and ".join(
+                name for name, value in (("RA", ra_hint_deg), ("Dec", dec_hint_deg)) if value is None
+            )
             atlas_skipped = (
-                "atlas: needs a pointing hint, and the FITS header records none (no "
-                "celestial WCS and no pointing keyword pair such as OBJRA/OBJDEC, "
-                "TELRA/TELDEC, RA/DEC or OBJCTRA/OBJCTDEC)"
+                f"atlas: needs a pointing hint, and the FITS header gives no {absent} "
+                f"(it needs {POINTING_HINT_SOURCES})"
             )
         if (solution is None or solution.wcs is None) and atlas_skipped:
-            failures.append(atlas_skipped)
+            search_metadata["atlas_failure_reason"] = "no_pointing_hint"
+            # When astrometry.net searched and missed, that miss is the outcome
+            # and the skipped fallback is a note on it, not a solver failure.
+            if "astrometry.net" not in attempts[first_attempt:]:
+                failures.append(atlas_skipped)
             logger.warning("solve_wcs: %s (file_id=%s)", atlas_skipped, file_id)
         if (solution is None or solution.wcs is None) and atlas_config is not None and not atlas_skipped:
             logger.info("solve_wcs: trying Atlas backend (file_id=%s)", file_id)
@@ -841,6 +857,8 @@ def solve_wcs(
             search_metadata["atlas_source_count"] = solution.source_count
             search_metadata["atlas_catalog_count"] = atlas_metadata.get("n_catalog")
             search_metadata["atlas_failure_reason"] = solution.failure_reason
+            if solution.failure_reason == "timeout":
+                failures.append("atlas: timed out before its search finished")
 
             if solution and solution.wcs is not None:
                 accepted, reason = _accept_solution(
@@ -878,7 +896,7 @@ def solve_wcs(
                 )
 
     except Exception as exc:
-        backend = attempts[-1] if attempts else "solver"
+        backend = attempts[-1] if len(attempts) > first_attempt else "solver"
         failures.append(f"{backend}: {exc}")
         logger.exception("Astrometric solution failed for file_id=%s", file_id)
         return WcsSolveResult(
@@ -889,7 +907,7 @@ def solve_wcs(
                 height_px=height,
                 n_field=int(len(sources)),
                 **search_metadata,
-                solver_failures=tuple(failures),
+                solver_failures=tuple(failures[first_failure:]),
             ),
         )
 
@@ -903,7 +921,7 @@ def solve_wcs(
                 height_px=height,
                 n_field=int(len(sources)),
                 **search_metadata,
-                solver_failures=tuple(failures),
+                solver_failures=tuple(failures[first_failure:]),
             ),
         )
 
@@ -1010,6 +1028,6 @@ def solve_wcs(
             delta_dec_arcsec=delta_dec_arcsec,
             n_field=int(len(sources)),
             **search_metadata,
-            solver_failures=tuple(failures),
+            solver_failures=tuple(failures[first_failure:]),
         ),
     )

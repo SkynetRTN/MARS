@@ -244,13 +244,14 @@ def _equinox_year(value) -> tuple[str | None, float] | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return None, float(value)
-    text = str(value).strip().upper()
-    prefix = text[0] if text[:1] in ("J", "B") else None
-    try:
-        year = float(text[1:] if prefix else text)
-    except ValueError:
-        return None
+        prefix, year = None, float(value)
+    else:
+        text = str(value).strip().upper()
+        prefix = text[0] if text[:1] in ("J", "B") else None
+        try:
+            year = float(text[1:] if prefix else text)
+        except ValueError:
+            return None
     return (prefix, year) if year == year and abs(year) != float("inf") else None
 
 
@@ -271,13 +272,26 @@ def _frame_from_header(header):
     if radesys == "ICRS":
         return ICRS()
 
+    # An explicit RADESYS names the frame and is honoured first (M3: upstream
+    # tested its FK5 branch first, so RADESYS='FK4' with EQUINOX >= 1980 came
+    # back FK5). An explicit prefix still names the equinox's epoch.
+    if radesys == "FK5":
+        return FK5(equinox=f"{prefix or 'J'}{eq if eq else 2000.0}")
+    if radesys == "FK4":
+        return FK4(equinox=f"{prefix or 'B'}{eq if eq else 1950.0}")
+
     # FK5 / J2000 (typical)
-    if radesys == "FK5" or (eq and is_julian):
-        return FK5(equinox=f"J{eq if eq else 2000.0}")
+    if eq and is_julian:
+        return FK5(equinox=f"{prefix or 'J'}{eq}")
 
     # FK4 / B1950
-    if radesys == "FK4" or (eq and not is_julian):
-        return FK4(equinox=f"B{eq if eq else 1950.0}")
+    if eq and not is_julian:
+        return FK4(equinox=f"{prefix or 'B'}{eq}")
+
+    # If RADESYS missing but EQUINOX present (upstream: EQUINOX=0 reaches
+    # here and gives FK4 at B0), assume FK5 for J*, FK4 for B*.
+    if eq is not None:
+        return FK5(equinox=f"J{eq}") if is_julian else FK4(equinox=f"B{eq}")
 
     # Fallback
     return ICRS()

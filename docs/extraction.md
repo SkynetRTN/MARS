@@ -526,6 +526,21 @@ misconfigured backend as `solver_unavailable` and a backend that raised as
   succeeded without a failed backend now carries a `solver_backend_unavailable`
   warning from the tool.
 
+* **Review follow-ups.** Timeouts are recorded too (astrometry.net's raised
+  `SolveFieldTimeout`, ATLAS's returned `failure_reason="timeout"`): a cut-short
+  search is not a miss. When astrometry.net searched and missed, an ATLAS
+  hint-skip is a note on the `no_solution` warning, not a solver failure.
+  Entries from a caller's reused list are not reported as this call's.
+  `AtlasBackend.solve` itself rejects a missing hint with `ValueError`. The
+  skip message names the missing coordinate and shares one keyword list with
+  `SearchRadiusWithoutHint`. A tool warning merges into an existing
+  `solver_backend_unavailable` rather than duplicating the code.
+* **Frame selection diverges from upstream in one place, deliberately.** An
+  explicit `RADESYS` is honoured before the equinox year, so
+  `RADESYS='FK4', EQUINOX=2000` is FK4 (upstream's branch order made it FK5),
+  and a `J`/`B` prefix keeps its epoch under either `RADESYS`. Non-finite
+  numeric equinoxes fall back to ICRS; `EQUINOX=0` keeps upstream's FK4 at B0.
+
 An empty `solver_failures` with no WCS is therefore a genuine miss, and the tool
 keeps `no_solution` for exactly that case. Tests:
 `tests/test_m3_wcs_failures.py` (stubbed backends); the real-solver runs above
