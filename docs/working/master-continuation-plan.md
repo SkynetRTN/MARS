@@ -106,8 +106,9 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   matching, positionless rows and non-finite magnitudes are left out (with
   specific errors when nothing usable remains), solves without a finite zero
   point and positive uncertainty raise `DegenerateCalibrationError` before any
-  header write (`no_solution` from the tool), and `mode="auto"` receives the
-  detected FWHM. Evidence: `tests/test_m3_calibration_inputs.py`,
+  header write (`no_solution` from both calibration tools), and `mode="auto"`
+  receives the detected FWHM. Refusing a single-star solve diverges from
+  upstream, which returns it with a NaN error. Evidence: `tests/test_m3_calibration_inputs.py`,
   `tests/test_m3_calibration_inputs_live.py` (`network`, live SkyMapper and
   UCAC), `docs/extraction.md` Field Calibration §5b. The live runs show
   SkyMapper and UCAC B zero points 1.27 and 0.72 mag from APASS through the

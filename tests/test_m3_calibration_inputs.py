@@ -62,7 +62,7 @@ def _calibrate(frame_path, rows):
     return calibrate_zeropoint(frame_path, catalog_sources=rows, compare_to=FIELD)
 
 
-def _direct(frame_path, rows, *, photometry_settings=None):
+def _direct(frame_path, rows, *, photometry_settings=None, field_cal_settings=None):
     with fits.open(frame_path) as hdul:
         header = hdul[0].header.copy()
         data = hdul[0].data.astype(float)
@@ -71,7 +71,8 @@ def _direct(frame_path, rows, *, photometry_settings=None):
         data,
         wcs=build_wcs_from_header(header),
         catalog_sources=rows,
-        field_cal_settings=PhotometricCalibrationSettings(catalogs=["APASS"], variable_check_tol=0),
+        field_cal_settings=field_cal_settings
+        or PhotometricCalibrationSettings(catalogs=["APASS"], variable_check_tol=0),
         photometry_settings=photometry_settings
         or PhotometrySettings(mode="aperture", a=5.0, a_in_px=8.0, a_out_px=12.0),
         extraction_settings=SourceExtractionSettings(),
@@ -298,3 +299,94 @@ def test_adaptive_apertures_without_any_fwhm_fail_by_name(frame_path, monkeypatc
     monkeypatch.setattr(field_cal, "run_source_extraction", no_fwhm)
     with pytest.raises(ValueError, match="Centroiding radius must be provided"):
         _direct(frame_path, _rows("selected_rows"), photometry_settings=PhotometrySettings(mode="auto"))
+
+
+# --- review follow-ups on 30e1a31 --------------------------------------------
+
+
+def test_a_float_integer_id_and_a_nan_id_are_accepted(frame_path, baseline):
+    # A masked integer id column can reach the solve as float.
+    rows = _rows()
+    for index, row in enumerate(rows):
+        row.id = float(2_000_000 + index)
+    rows[0].id = float("nan")
+    result = _calibrate(frame_path, rows)
+    assert result.errors == []
+    assert result.zero_point == pytest.approx(baseline, abs=1e-9)
+
+
+def test_a_nan_catalog_error_does_not_poison_the_collected_sources(monkeypatch):
+    # Supplied NaNs are already cleaned to None by model_dump at normalization,
+    # so this is reached only through the band resolver. NaN is truthy, so
+    # calc_solution's `error or 0` would keep it and turn the solve into NaN.
+    from algorithms.fieldcal.schemas import PhotometryData
+
+    monkeypatch.setattr(field_cal, "resolve_ref_mag_for_filter", lambda **kwargs: (15.0, float("nan")))
+    collected = field_cal._collect_calibration_sources(
+        [PhotometryData(id="s1", mag=14.0, mag_error=0.02, filter="B")],
+        [CatalogSource(id="s1", catalog_name="APASS", mags={"B": {"value": 15.0}})],
+        catalog_filter_lookup={"APASS": {}}, custom_filter_lookup=None,
+    )
+    assert [(source.ref_mag, source.ref_mag_error) for source in collected] == [(15.0, None)]
+
+
+def test_an_infinite_measurement_error_is_dropped_before_the_solve(frame_path, monkeypatch):
+    # Reachable when the SNR window is open; the default min_snr drops it.
+    # calc_solution keeps it (inf > 0) and its zero SNR makes limmag5 NaN.
+    original = field_cal.run_photometry
+
+    def infinite_errors(*args, **kwargs):
+        results = original(*args, **kwargs)
+        for result in results[:5]:
+            result.mag_error = float("inf")
+        return results
+
+    monkeypatch.setattr(field_cal, "run_photometry", infinite_errors)
+    (zero_point, result), _header = _direct(
+        frame_path, _rows("selected_rows"),
+        field_cal_settings=PhotometricCalibrationSettings(variable_check_tol=0, min_snr=0, max_snr=None),
+    )
+    assert math.isfinite(zero_point)
+    assert math.isfinite(result.limmag5)
+
+
+def test_the_degenerate_message_counts_stars_that_survived_rejection(frame_path, monkeypatch):
+    # Five go in, Chauvenet keeps one: the cause is the rejection, not "5 stars".
+    monkeypatch.setattr(field_cal, "calc_solution",
+                        lambda sources: (21.0, float("nan"), 0.0, 18.0, 100 * (len(sources) - 1) / len(sources)))
+    with pytest.raises(DegenerateCalibrationError,
+                       match=r"1 of \d+ calibration stars survived outlier rejection") as caught:
+        _direct(frame_path, _rows("selected_rows"))
+    assert caught.value.num_stars == 1
+
+
+def test_the_reference_replay_reports_a_degenerate_solve_as_no_solution(monkeypatch):
+    from tools.fieldcal_reference import replay_field_calibration
+
+    def degenerate(*args, **kwargs):
+        raise DegenerateCalibrationError("The zero point is not usable: 1 calibration star.", num_stars=1)
+
+    monkeypatch.setattr(field_cal, "perform_field_calibration", degenerate)
+    replay = replay_field_calibration(FIELD)
+    assert [error.code for error in replay.errors] == ["no_solution"]
+
+
+def test_pixel_mode_rows_projecting_to_nan_are_warned_about(caplog):
+    from astropy.wcs import WCS
+
+    wcs = WCS(naxis=2)
+    wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    wcs.wcs.crval = [180.0, 20.0]
+    wcs.wcs.crpix = [10.0, 10.0]
+    wcs.wcs.cdelt = [-1 / 3600, 1 / 3600]
+    rows = [
+        CatalogSource(id="near", ra_hours=12.0, dec_degs=20.0),
+        CatalogSource(id="behind", ra_hours=0.0, dec_degs=-20.0),  # opposite hemisphere: no TAN projection
+    ]
+    detected = [SourceExtractionData(id="d1", x=10.0, y=10.0)]  # no RA/Dec: pixel mode
+    with caplog.at_level("WARNING", logger="algorithms.fieldcal.field_cal"):
+        matched = field_cal._match_detected_sources(
+            rows, detected, wcs=wcs, header=fits.Header(), data=np.zeros((20, 20)), source_match_tol=2.0,
+        )
+    assert [source.id for source in matched] == ["near"]
+    assert "check the WCS projection" in caplog.text

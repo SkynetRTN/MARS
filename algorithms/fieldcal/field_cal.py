@@ -6,8 +6,10 @@ observation_asset_processing/optical_data_processing/field_cal.py (701 lines).
 Copied verbatim. The maintained interface supplies WCS and catalog rows
 explicitly, while deterministic extraction and photometry are ordinary imports.
 No numerical expression, constant, or ordering has been changed. The M3
-malformed-input guards, marked ``M3`` inline, change only inputs that used to
-abort the solve or yield an unusable zero point (``docs/extraction.md``, Field
+malformed-input guards, marked ``M3`` inline, do change outcomes: inputs that
+used to abort now solve or fail by name, unusable rows are left out, and a
+degenerate solve -- including upstream's single-star zero point with a NaN
+error -- is refused rather than returned (``docs/extraction.md``, Field
 Calibration §5b).
 """
 from __future__ import annotations
@@ -81,9 +83,13 @@ def _normalize_catalog_sources(
         # M3: catalog backends assign provider values without validation, so
         # SkyMapper (int32), SDSS (uint64), UCAC and PanSTARRS (int64) rows
         # arrive with integer ids that ``CatalogSource.id: str`` rejects here.
+        # A masked integer column can arrive as float; NaN means no id, and
+        # _ensure_unique_source_ids assigns one.
         source_id = data.get("id")
         if isinstance(source_id, Integral) and not isinstance(source_id, bool):
             data["id"] = str(int(source_id))
+        elif isinstance(source_id, float):
+            data["id"] = str(int(source_id)) if source_id.is_integer() else None
         normalized.append(CatalogSource(**data))
     return normalized
 
@@ -220,7 +226,7 @@ def _match_detected_sources(
     header,
     data: np.ndarray,
     source_match_tol: float | None,
-    fwhm_by_source: dict | None = None,
+    matched_shapes: list | None = None,
 ) -> list[CatalogSource]:
     if not detected_sources:
         return catalog_sources
@@ -371,8 +377,13 @@ def _match_detected_sources(
         # are left out; ``catalog_index`` maps tree indices back to the list.
         positioned = np.isfinite(coords).all(axis=1)
         if not positioned.all():
-            logger.info("Skipping %d catalog sources with no usable position",
-                        int((~positioned).sum()))
+            # Warning, not info: in pixel mode a valid RA/Dec projecting to
+            # NaN points at the WCS, and the solve then runs on what is left.
+            logger.warning(
+                "Skipping %d of %d catalog sources with no usable match position%s",
+                int((~positioned).sum()), len(positioned),
+                "" if use_angular else " (in pixel mode, check the WCS projection)",
+            )
         catalog_index_for_file[file_id] = np.flatnonzero(positioned)
         coords = coords[positioned]
         catalog_source_coord_for_file[file_id] = coords
@@ -463,12 +474,13 @@ def _match_detected_sources(
                 source_map[attr] = val
 
         matched_sources.append(CatalogSource(**source_map))
-        if fwhm_by_source is not None:
+        if matched_shapes is not None:
             # M3 (PHOT-11): CatalogSource has no FWHM fields, so the detected
             # shape was lost here and adaptive photometry had none to scale.
-            fwhm_by_source[(source_map.get("id"), source_map.get("file_id"))] = {
-                attr: getattr(source, attr, None) for attr in ("fwhm_x", "fwhm_y", "theta")
-            }
+            # Kept aligned with matched_sources, index for index.
+            matched_shapes.append(
+                {attr: getattr(source, attr, None) for attr in ("fwhm_x", "fwhm_y", "theta")}
+            )
 
     if not matched_sources:
         listed = sum(len(rows) for rows in catalog_sources_for_file.values())
@@ -522,6 +534,11 @@ def _collect_calibration_sources(
             )
         if ref_mag is None or not math.isfinite(ref_mag):
             continue
+        if ref_err is not None and not math.isfinite(ref_err):
+            # M3: calc_solution's `error or 0` keeps NaN (it is truthy), which
+            # turns every weight -- and the zero point -- into NaN. An unusable
+            # catalog error is treated as no catalog error.
+            ref_err = None
 
         source.ref_mag = ref_mag
         if ref_err is not None:
@@ -584,7 +601,7 @@ def perform_field_calibration(
             file_id=file_id,
         )
 
-    fwhm_by_source: dict = {}
+    matched_shapes: list[dict] = []
     sources = _match_detected_sources(
         sources,
         detected_sources or [],
@@ -592,7 +609,7 @@ def perform_field_calibration(
         header=header,
         data=data,
         source_match_tol=settings.source_match_tol,
-        fwhm_by_source=fwhm_by_source,
+        matched_shapes=matched_shapes,
     )
     logger.info("Catalog sources after detected-source matching: %d", len(sources))
     logger.info(
@@ -621,7 +638,9 @@ def perform_field_calibration(
             photometry_results.append(PhotometryData(**src_map))
     else:
         normalized_sources: list[SourceExtractionData] = []
-        for source in sources:
+        # matched_shapes is empty when no detections were matched (no-op path).
+        shapes = matched_shapes if len(matched_shapes) == len(sources) else [{}] * len(sources)
+        for source, shape in zip(sources, shapes):
             src_map = source.model_dump(
                 exclude_unset=True,
                 exclude={
@@ -639,9 +658,7 @@ def perform_field_calibration(
                 src_map["file_id"] = file_id
             # M3 (PHOT-11): restore the matched detection's FWHM. Read only by
             # mode="auto"; aperture photometry ignores it.
-            for attr, value in fwhm_by_source.get((source.id, source.file_id), {}).items():
-                if value is not None and src_map.get(attr) is None:
-                    src_map[attr] = value
+            src_map.update({attr: value for attr, value in shape.items() if value is not None})
             normalized_sources.append(SourceExtractionData(**src_map))
 
         # LEGACY AFTERGLOW PARITY — DO NOT "CLEAN UP".  Forcing apcorr_tol to 0
@@ -662,9 +679,12 @@ def perform_field_calibration(
             background_rms=None,
         )
     # M3: a non-finite magnitude reached calc_solution and raised LinAlgError.
+    # An infinite mag_error survives calc_solution's `> 0` filter, gives a
+    # zero SNR, and turns the limiting magnitude (limmag5) into NaN.
     photometry_results = [
         source for source in photometry_results
         if source.mag is not None and math.isfinite(source.mag)
+        and (source.mag_error is None or math.isfinite(source.mag_error))
     ]
 
     if not photometry_results:
@@ -726,21 +746,28 @@ def perform_field_calibration(
     # solve without a finite zero point and a finite, positive uncertainty is
     # refused here, before the header is touched.
     num_stars = len(calibration_sources)
+    # calc_solution reports rejection only as a percentage of its input.
+    survivors = int(round(num_stars * (100 - rej_percent) / 100)) if np.isfinite(rej_percent) else num_stars
     if not np.isfinite(m0):
         raise DegenerateCalibrationError(
             f"The solve over {num_stars} calibration star(s) produced a non-finite zero point.",
             num_stars=num_stars,
         )
     if m0_error is None or not np.isfinite(m0_error) or m0_error <= 0:
-        reason = (
-            "at least two are needed to estimate its uncertainty"
-            if num_stars < 2
-            else f"its uncertainty is {m0_error!r} (identical residuals or no usable errors)"
-        )
+        if survivors < 2:
+            reason = (
+                f"{survivors} of {num_stars} calibration stars survived outlier rejection"
+                if survivors != num_stars
+                else f"{num_stars} calibration star"
+            ) + "; at least two are needed to estimate its uncertainty"
+        else:
+            reason = (
+                f"over {survivors} calibration stars its uncertainty is {m0_error!r} "
+                "(identical residuals or no usable errors)"
+            )
         raise DegenerateCalibrationError(
-            f"The zero point from {num_stars} calibration star{'s' if num_stars != 1 else ''} "
-            f"is not usable: {reason}.",
-            num_stars=num_stars,
+            f"The zero point is not usable: {reason}.",
+            num_stars=survivors,
         )
 
     # Write photometric zero-point to FITS header if accessible
@@ -750,8 +777,7 @@ def perform_field_calibration(
             float(m0) + float(zero_point_offset),
             "Photometric zero point",
         )
-        if m0_error is not None and np.isfinite(m0_error):
-            header["PHOT_M0E"] = (float(m0_error), "Photometric zero point error")
+        header["PHOT_M0E"] = (float(m0_error), "Photometric zero point error")
         catalog_str = ", ".join(_catalogs_from_sources(calibration_sources)) or "unknown"
         header["PHOT_CAL"] = (catalog_str[:68], "Photometric calibration catalog")
     except Exception as exc:

@@ -975,7 +975,7 @@ def replay_field_calibration(
     import numpy as np
     from astropy.io import fits
 
-    from algorithms.fieldcal.field_cal import perform_field_calibration
+    from algorithms.fieldcal.field_cal import DegenerateCalibrationError, perform_field_calibration
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
     from algorithms.photometry.source_extraction import build_wcs_from_header
     from algorithms.query.geometry import clip_sources_to_wcs
@@ -1028,6 +1028,13 @@ def replay_field_calibration(
             variable_sources=variables,
             detected_sources=detections,
             use_provided_photometry=True,
+        )
+    except DegenerateCalibrationError as exc:
+        # Same code calibrate_zeropoint gives the same condition.
+        return FieldCalReplay(
+            **inputs,
+            errors=[ToolError(code="no_solution", message=str(exc))],
+            warnings=warnings,
         )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence
         return FieldCalReplay(

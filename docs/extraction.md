@@ -1190,16 +1190,21 @@ Delivery scope and validation counts live in the master continuation plan.
 
 #### 5b. M3 malformed-input guards (2026-10-21)
 
-Each of these reproduced against current code before the change, and each
-diverges from upstream only on inputs that used to abort the solve or yield an
-unusable zero point. Solves over well-formed inputs are unchanged: the
-recorded parity and replay tests pass as before.
+Each of these reproduced against current code before the change. Solves over
+ordinary inputs are unchanged: the recorded parity and replay tests pass as
+before. They are not all crash fixes, though. Unusable rows are now left out
+rather than aborting the solve, and one change refuses a result upstream
+returned: a single-star solve, which upstream reports as a zero point with a
+NaN error (below).
 
 * **Integer row ids.** Catalog backends assign provider values without
   validation, so SkyMapper (`int32`), SDSS (`uint64`), UCAC and PanSTARRS
   (`int64`) rows reached `_normalize_catalog_sources` with integer ids that
   `CatalogSource.id: str` rejected, and every live calibration against those
-  catalogs failed. Integral ids are converted to strings there.
+  catalogs failed. Integral ids are converted to strings there, as are
+  integer-valued floats from a masked id column; a NaN id becomes `None` and is
+  assigned one. The backends still emit raw provider types; consistent row
+  types are part of the separate provider-response item.
 * **Proper-motion epochs (PHOT-04).** `_match_detected_sources` transposed rows
   that held `pm_epoch` alongside the floats, so one `datetime` made every
   column an object array and `np.isfinite` raised `TypeError`. Epochs now
@@ -1208,23 +1213,34 @@ recorded parity and replay tests pass as before.
   detection at the frame epoch.
 * **Absent coordinates (PHOT-05).** One row without a finite position made
   `cKDTree` reject the whole catalog; with none, `cx` was unbound. Rows with no
-  usable match coordinates are left out of the tree, and a catalog with no
-  positioned row fails with "No catalog source has a usable position".
-* **Non-finite magnitudes.** A NaN or infinite measured or reference magnitude
-  reached `calc_solution`, which raised `LinAlgError`. Such sources are dropped
-  first, and a non-finite supplied `ref_mag` is treated as absent, so the
-  row's own bands are used instead.
+  usable match coordinates are left out of the tree, with a warning naming the
+  count (in pixel mode, a valid RA/Dec projecting to NaN points at the WCS),
+  and a catalog with no positioned row fails with "No catalog source has a
+  usable position".
+* **Non-finite magnitudes and errors.** A NaN or infinite measured magnitude
+  reached `calc_solution`, which raised `LinAlgError`; such measurements are
+  dropped first. An infinite `mag_error` (only past an open SNR window) made
+  `limmag5` NaN and is dropped too. A non-finite `ref_mag` is treated as
+  absent, so the row's own bands are used, and a non-finite `ref_mag_error`
+  as no catalog error: `calc_solution`'s `error or 0` keeps NaN, which would
+  make every weight NaN. Supplied rows mostly arrive cleaned already, since
+  `model_dump` turns NaN/inf into `None`; the guards cover the band resolver
+  and direct callers.
 * **Degenerate solves (PHOT-08).** A NaN zero point made astropy reject
   `PHOT_M0`; the warning was logged and the NaN returned as a calibration. A
   single-star solve returned a zero point with a NaN error, and identical
   residuals an error of 0. A solve without a finite zero point and a finite,
   positive uncertainty now raises `DegenerateCalibrationError` before any
-  `PHOT_*` keyword is written; `calibrate_zeropoint` reports it as
-  `no_solution`.
+  `PHOT_*` keyword is written, naming how many stars survived outlier
+  rejection; `calibrate_zeropoint` and `replay_field_calibration` both report
+  it as `no_solution`. **This is a deliberate divergence on input upstream
+  accepts:** a single surviving star yields a zero point with no estimable
+  uncertainty, which MARS no longer stores or reports as a calibration.
 * **Adaptive apertures (PHOT-11).** `CatalogSource` has no FWHM fields, so
   matching dropped the detection's shape and `mode="auto"` always raised for
-  want of a centroid radius. The matched detection's `fwhm_x`/`fwhm_y`/`theta`
-  are restored for photometry; aperture mode never reads them. The registered
+  want of a centroid radius. The matcher now returns each match's
+  `fwhm_x`/`fwhm_y`/`theta` alongside it, index for index, and they are
+  restored for photometry; aperture mode never reads them. The registered
   tools use aperture mode, so this is a Python API repair.
 
 Tests: `tests/test_m3_calibration_inputs.py`, and live against SkyMapper and
