@@ -2,6 +2,7 @@
 
 import math
 
+import numpy as np
 import pandas as pd
 import pytest
 from astropy.table import Table
@@ -23,6 +24,12 @@ def test_age_histogram_retains_the_13_8_gyr_window_without_overflow():
         math.log10(14e9), math.log10(12.5e9), 9.,
     ]]
     assert legacy.get_mwsc_age_distribution(clusters) == pytest.approx([1_000., 12_500.])
+
+
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.uint64])
+def test_age_histogram_accepts_integer_catalogue_arrays_without_wrapping(dtype):
+    clusters = [{"age": age} for age in np.array([9, 0, 5, 6], dtype=dtype)]
+    assert legacy.get_mwsc_age_distribution(clusters) == pytest.approx([1e-6, .1, 1., 1000.])
 
 
 def _fsr(identifier, pm_ra=0., pm_dec=0.):
@@ -110,6 +117,22 @@ def test_ellipse_includes_boundary_but_excludes_rectangle_corners_without_mutati
     assert [source["id"] for source in result["fsr"]] == ["0", "1", "3"]
     assert [source["id"] for source in result["not_fsr"]] == ["2"]
     assert sources == original
+
+
+@pytest.mark.parametrize("component", ["pm_ra", "pm_dec"])
+@pytest.mark.parametrize("bounds", [(.1, .3), (1.2, 1.6)])
+@pytest.mark.parametrize("line", [False, True])
+def test_decimal_endpoints_are_inclusive_and_adjacent_outside_values_are_rejected(component, bounds, line):
+    other_bounds = (0., 0.) if line else (-1., 1.)
+    selection = _selection(bounds, other_bounds) if component == "pm_ra" else _selection(other_bounds, bounds)
+    points = [bounds[0], bounds[1], math.nextafter(bounds[0], -math.inf), math.nextafter(bounds[1], math.inf)]
+    sources = [
+        {"id": str(index), "fsr": {**_fsr(str(index)), component: value}}
+        for index, value in enumerate(points)
+    ]
+    result = legacy.update_cluster_field_sources(sources, selection)
+    assert [source["id"] for source in result["fsr"]] == ["0", "1"]
+    assert [source["id"] for source in result["not_fsr"]] == ["2", "3"]
 
 
 def test_join_and_partition_keep_zero_motion_id_10():

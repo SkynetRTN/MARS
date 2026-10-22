@@ -97,14 +97,16 @@ the subsequent work.
   numeric conversion; source order, in-place updates and first duplicate
   results are retained. Membership accepts finite zero proper motion and
   rejects missing/nonfinite components, including with unbounded selection.
-  Zero-width ellipse axes define closed lines or points. These exported legacy
+  Zero-width ellipse axes define closed lines or points. Post-commit review
+  corrected NumPy integer-age arithmetic and exact decimal ellipse endpoints
+  while rejecting immediately adjacent outside values. These exported legacy
   helpers have no registered-tool callers; the separate registered membership
   implementation already accepts zero motion, verified through its written
   ECSV output. No membership probabilities are claimed. Evidence:
   [scope and acceptance record](../analysis/cluster-ages-membership.md),
-  [23 regressions](../../tests/test_cluster_ages_membership.py), and independent
-  review with **62 passing cluster/HR tests** and no outstanding findings.
-  Validation: Python 3.13.15, full offline suite **3,503 passed, 49 skipped**;
+  [34 regressions](../../tests/test_cluster_ages_membership.py), and independent
+  follow-up review with no outstanding findings. **73 cluster/HR tests** pass.
+  Validation: Python 3.13.15, full offline suite **3,514 passed, 49 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. Changes remain local, unmerged and unpublished.
 - [ ] **Legacy coordinates, extinction and mass.** Negative sexagesimal

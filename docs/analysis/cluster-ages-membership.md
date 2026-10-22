@@ -53,11 +53,12 @@ introduced.
 
 ## Acceptance evidence
 
-`tests/test_cluster_ages_membership.py` has 23 cases covering old clusters up
+`tests/test_cluster_ages_membership.py` has 34 cases covering old clusters up
 to log-age 10.1, invalid/extreme ages without exponentiation overflow,
 three source orderings, opaque IDs, duplicate/unmatched results, finite zero
 motion with and without bounds, both missing/nonfinite components, ellipse
-boundaries and zero-width selections. A join-to-selection regression keeps
+boundaries and zero-width selections, including the post-commit review
+regressions below. A join-to-selection regression keeps
 the previously lost zero-motion source `10`.
 
 The first run reproduced 14 failures in 17 cases before implementation. The
@@ -68,6 +69,8 @@ rejecting a missing-motion row and an outlier; only its literature lookup is
 stubbed. Existing HR fitting and membership tests remain separate checks.
 
 ## Validation
+
+Initial checkpoint validation:
 
 Focused cluster/HR and variable-star scientific/limit tests: **105 passed**.
 Independent review ran all five cluster/HR test files: **62 passed**. It also
@@ -81,3 +84,38 @@ goldens, generated-skill consistency, repository shape and `git diff --check`
 pass. Skips retain the existing live-service, untracked benchmark, native
 Windows and external solver-data gates. This is the fourth closed M2
 checkpoint; the branch remains local, unmerged and unpublished.
+
+## Post-commit review correction (2026-10-22)
+
+A fresh review of `b5f3dd0..6a9d875` found two localized numerical issues:
+
+- Subtracting six from a NumPy integer logarithmic age could leave an integer
+  exponent or wrap an unsigned value. For example, `np.int64(5)` raised rather
+  than returning `0.1` Myr; `np.uint64(5)` disappeared with an overflow warning.
+  The finite logarithmic age now becomes a Python float before arithmetic.
+- Computing normalized motion from a rounded midpoint could reject exact
+  decimal endpoints. The supplied RA minimum `0.1` of `[0.1, 0.3]` could produce
+  normalized displacement `-1.0000000000000002`. This behavior was inherited,
+  but contradicted the inclusive-selection contract. Positive-width axes now
+  normalize from their supplied endpoints. A strict enclosing-rectangle check
+  rejects points even one float outside those bounds; collapsed rectangles
+  directly define their closed lines or points. No tolerance widens the cuts.
+
+All eleven new regression cases failed before the corrections: three signed
+and unsigned integer-array variants, and eight decimal-endpoint cases covering
+both motion components and line/ellipse selections. Independent review of the
+variable-star amplitude correction also checked 540 random signed amplitudes
+from `1e-300` through `1e300` against full-model QR, with maximum absolute power
+difference `4.86e-15` and no further finding there.
+
+All **73 cluster/HR tests pass** after the corrections. Independent follow-up
+review passed 55 focused tests, 8,000 randomized endpoint/adjacent-outside
+probes, and five signed/unsigned NumPy integer age types. Another 15,000
+classifications agreed with a 60-digit Decimal ellipse reference, excluding
+the `1e-10` mathematical-boundary band. No review findings remain.
+
+Full offline validation after the corrections on Python 3.13.15 with locked
+dependencies and `[mcp]`: **3,514 passed, 49 skipped**, with the same 198 existing
+warnings. Compileall, schema goldens, generated-skill consistency, repository
+shape and `git diff --check` pass. The subsequent legacy coordinates,
+extinction and mass checkpoint remains open.

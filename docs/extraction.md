@@ -3608,3 +3608,10 @@ already accepts zero motion; an actual ECSV regression verifies that boundary.
 No membership probability or new HR fit is introduced. The subsequent legacy
 coordinates, extinction and mass checkpoint remains open. See the
 [scope and acceptance record](analysis/cluster-ages-membership.md).
+
+Post-commit review additionally corrects NumPy integer-age arithmetic and
+inclusive decimal ellipse endpoints in the same legacy helpers. Eleven
+regressions cover signed/unsigned catalogue arrays, both motion components,
+line/ellipse endpoints and the immediately adjacent outside values. Positive
+axis widths normalize from their supplied endpoints, with a strict enclosing
+rectangle rather than a tolerance; see the acceptance record's review follow-up.

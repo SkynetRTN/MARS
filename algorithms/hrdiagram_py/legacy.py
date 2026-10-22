@@ -109,7 +109,7 @@ def get_mwsc_age_distribution(clusters: Sequence[Mapping[str, Any]]) -> list[flo
         log_age = cluster.get("age")
         if log_age is None or not math.isfinite(log_age) or log_age >= max_log_age:
             continue
-        age_myr = 10 ** (log_age - 6)
+        age_myr = 10 ** (float(log_age) - 6)
         if age_myr > 0:
             ages.append(age_myr)
     return sorted(ages)
@@ -156,10 +156,9 @@ def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fs
         return {"fsr": [], "not_fsr": []}
     pm_global = fsr.get("pm_ra") is None or fsr.get("pm_dec") is None
     if not pm_global:
-        a = (fsr["pm_ra"]["max"] - fsr["pm_ra"]["min"]) / 2
-        b = (fsr["pm_dec"]["max"] - fsr["pm_dec"]["min"]) / 2
-        center_ra = (fsr["pm_ra"]["max"] + fsr["pm_ra"]["min"]) / 2
-        center_dec = (fsr["pm_dec"]["max"] + fsr["pm_dec"]["min"]) / 2
+        min_ra, max_ra = fsr["pm_ra"]["min"], fsr["pm_ra"]["max"]
+        min_dec, max_dec = fsr["pm_dec"]["min"], fsr["pm_dec"]["max"]
+        width_ra, width_dec = max_ra - min_ra, max_dec - min_dec
     selected: list[Mapping[str, Any]] = []
     rejected: list[Mapping[str, Any]] = []
     for source in sources:
@@ -172,15 +171,15 @@ def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fs
             and math.isfinite(pm_ra) and math.isfinite(pm_dec)
         )
         if pm_ok and not pm_global:
-            dx, dy = pm_ra - center_ra, pm_dec - center_dec
-            if a < 0 or b < 0:
-                pm_ok = False
-            elif a == 0:
-                pm_ok = dx == 0 and abs(dy) <= b
-            elif b == 0:
-                pm_ok = dy == 0 and abs(dx) <= a
-            else:
-                pm_ok = math.hypot(dx / a, dy / b) <= 1
+            # Check the supplied bounds first, including adjacent outside
+            # floats. A collapsed rectangle is already the closed line/point.
+            pm_ok = min_ra <= pm_ra <= max_ra and min_dec <= pm_dec <= max_dec
+            if pm_ok and width_ra > 0 and width_dec > 0:
+                # Normalize from endpoints so they map exactly to -1/+1;
+                # subtracting a rounded midpoint can push a tip outside.
+                norm_ra = 2 * ((pm_ra - min_ra) / width_ra) - 1
+                norm_dec = 2 * ((pm_dec - min_dec) / width_dec) - 1
+                pm_ok = math.hypot(norm_ra, norm_dec) <= 1
         (selected if distance_ok and pm_ok else rejected).append(source)
     return {"fsr": selected, "not_fsr": rejected}
 
