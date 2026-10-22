@@ -111,6 +111,13 @@ def test_a_constant_weighted_series_is_rejected_not_nan(values):
         lomb_scargle_with_error([1.0, 2.0, 3.0, 4.0], values, [0.1, 0.2, 0.1, 0.3], 0.5, 2.0, 5)
 
 
+@pytest.mark.parametrize("n, value", [(24, 0.1), (25, 1 / 3), (29, 14.123)])
+def test_a_constant_series_with_a_rounding_residue_is_still_rejected(n, value):
+    # Summing these leaves a variance near 1e-34, not 0, and finite powers.
+    with pytest.raises(ValueError, match="constant"):
+        lomb_scargle_with_error(list(range(n)), [value] * n, [0.1] * n, 0.5, 2.0, 3)
+
+
 def test_a_constant_differential_light_curve_is_rejected_by_the_periodogram():
     # This one produced inf rather than NaN: the weighted mean's rounding left
     # tiny nonzero residues over an exactly zero variance.
@@ -221,7 +228,13 @@ def test_the_fold_tool_masks_bounds_for_a_row_without_a_combined_error(artifact_
     assert folded.errors == []  # was invalid_input: "list index out of range"
     assert folded.rows_folded == 8
     assert [warning.code for warning in folded.warnings] == ["unbounded_points_folded"]
-    assert "2 folded points" in folded.warnings[0].message
+    # One observation, though display_periods=2 folds it twice.
+    assert folded.warnings[0].message.startswith("1 folded observation(s)")
+    # The preview a model reads shows no bounds, not a 0.0 "error bar".
+    previewed = [(row["error_low"], row["error_high"]) for row in folded.preview]
+    assert (None, None) in previewed
+    assert all((low is None) == (high is None) for low, high in previewed)
+    assert 0.0 not in {value for pair in previewed for value in pair}
 
     stage3 = Table.read(folded.artifact.path, format="ascii.ecsv")
     masked = list(stage3["error_low"].mask)

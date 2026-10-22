@@ -2835,9 +2835,11 @@ Neither extraction is complete without the other:
 
 #### 9. Preserved quirks — suspected bugs left intact
 
-Per the extraction contract, nothing here was fixed. Each item is preserved
-verbatim and flagged in-file; this list exists so the behaviour is not mistaken
-for something the extraction introduced.
+Per the extraction contract, nothing here was fixed in the extraction. Each item
+is preserved verbatim and flagged in-file; this list exists so the behaviour is
+not mistaken for something the extraction introduced. *Update 2026-10-21 (M3):*
+items 1 and 2 are corrected in the Python port (`fold_with_error`); see Python
+M3 direct-helper contracts below. The TypeScript behaviour is as described.
 
 1. **Misaligned parallel filters in the variable period fold** — *most likely to
    bite.* `getPeriodFoldingChartDataWithError`

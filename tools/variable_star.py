@@ -314,11 +314,16 @@ def fold_variable_star_lightcurve(
         "error_high": MaskedColumn([row[2] or 0.0 for row in errors], mask=unbounded),
     })
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_folded", subdir=subdir)
+    unbounded_rows = sum(
+        row.jd is not None and row.source1 is not None and row.source2 is not None
+        and row.error_mse is None
+        for row in rows
+    )
     warnings = [ToolWarning(
         code="unbounded_points_folded",
-        message=f"{sum(unbounded)} folded points come from observations without a combined "
-        "uncertainty; their error bounds are masked.",
-    )] if any(unbounded) else []
+        message=f"{unbounded_rows} folded observation(s) have no combined uncertainty; "
+        "their error bounds are masked.",
+    )] if unbounded_rows else []
     return VariableStarFoldedLightCurve(
         file=file, artifact=artifact, period=period, phase=phase, display_periods=display_periods,
         rows_folded=len(data), preview=artifacts.preview_rows(table, PREVIEW_ROWS),

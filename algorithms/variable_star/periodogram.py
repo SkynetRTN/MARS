@@ -141,7 +141,9 @@ def lomb_scargle_with_error(
         _finite(two_variance, "twice the variance")
     except (OverflowError, ZeroDivisionError) as exc:
         raise ValueError("weighted normalization is not representable.") from exc
-    if two_variance == 0:
+    # Tested on the values: summing a constant can leave a rounding residue,
+    # so its computed variance need not be exactly zero (e.g. 24 x 0.1).
+    if two_variance == 0 or min(values) == max(values):
         raise ValueError("A constant series has no variance; its periodogram is undefined.")
     result: list[tuple[float, float]] = []
     x_value = start

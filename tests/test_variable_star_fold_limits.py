@@ -99,7 +99,7 @@ def test_sample_budget_is_checked_before_differential_allocation(monkeypatch):
     def allocated(*args, **kwargs):
         pytest.fail("oversized fold reached differential allocation")
 
-    monkeypatch.setattr(folding, "_differential", allocated)
+    monkeypatch.setattr(folding, "differential_magnitude", allocated)
     rows = [VariableDataRow(0., 14., 12., .1, .1, .1)] * 2
     with pytest.raises(ValueError, match="sample limit"):
         folding.fold_with_error(rows, "source1", 12., period=.5)

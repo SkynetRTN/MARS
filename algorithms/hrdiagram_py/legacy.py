@@ -30,7 +30,7 @@ def get_cmd_data(sources: Sequence[Mapping[str, Any]], filters: Sequence[str]) -
 
 
 # PORTED: git-history:algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getDefaultBin
-def get_default_bin(plot_data: Sequence[float]) -> int | float:
+def get_default_bin(plot_data: Sequence[float]) -> int:
     if not plot_data:
         return 10
     n = len(plot_data)
