@@ -1,8 +1,8 @@
 # MARS release closure gate
 
 Updated 2026-10-20 against `main` at `a6785aa`, after pulling the latest changes.
-M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
-the published `0.1.0rc6`. Publication remains deferred until the remaining
+M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
+and #123; their changes are absent from the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
 M2 is open in full. PR #120 is abandoned as an implementation path and supplies
