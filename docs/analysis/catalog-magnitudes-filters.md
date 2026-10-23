@@ -158,3 +158,40 @@ checks over 317 mapped stars**, plus the two M3 identifier checks. The earlier
 connection timeouts remain recorded above; none was hidden as a skipped test.
 The catalog-magnitudes-and-filters checkpoint is closed. Coverage/sufficiency,
 remaining warning/benchmark work and live ADS grouping validation stay open.
+
+
+## Review of the committed checkpoint
+
+A fresh review of `c8bd0de` identified a remaining source-name override mismatch:
+selection under `Stetson` could discard a custom mapping keyed `StetsonGlobs`
+that numeric resolution of returned rows accepted. Every entry point now merges
+the registry-key map followed by the declared plugin/source-name map, within
+each base/custom layer. This priority is independent of the input alias and
+mapping insertion order, including when both maps define conflicting targets.
+
+Warning and scale-label inference also needed actual provenance. A caller's
+pre-resolved `ref_mag`, or a directly supplied native Halpha band, must not be
+reported as an unperformed broadband transformation. The internal resolver now
+records the used terminal band/expression and route kind, while the public
+resolver retains its magnitude/error pair and every calculation. Internal
+provenance follows the exact solver survivor mask: an outlier or zero-error
+pre-filtered proxy cannot determine the scale of an otherwise native-reference
+fit. Candidate rows remain in the public diagnostic result. Provenance stays
+private and absent from serialized results and schemas. Photographic epochs
+and Landolt colour expressions are recognized as continuum references when
+used by explicit narrowband mappings.
+
+`tests/test_catalog_filter_review.py` adds 18 cases covering source-name-only
+selection through the real query runner, direct/provided references, actual
+public photometry warnings/labels, custom targets, and rejected proxies in
+both input orders and both rejection paths. A 586-test focused group passes.
+Independent review repeated 14,663 production magnitude/error comparisons over
+every nonempty APASS/Landolt/Stetson band subset with zero differences, and
+confirmed no remaining actionable findings after the fixes. Source checks
+again preserve all numerical transforms. The live catalog and M3 identifier
+checks passed all 12 tests during this follow-up: 3,355 value comparisons over
+317 stars in ten calibration catalogs, plus two M3 identifier checks. The
+concluding Python 3.13.15 offline suite passed **3,934 tests, 85 skipped,
+216 warnings in 525.64 seconds**. Compilation, generated-guidance consistency,
+schema goldens, repository shape and whitespace checks pass. No actionable
+review findings remain.

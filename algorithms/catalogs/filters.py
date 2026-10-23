@@ -53,13 +53,16 @@ def catalog_filter_lookup(
     from . import CATALOGS
 
     key = catalog_key(name)
-    lookup = dict(getattr(CATALOGS.get(key), "filter_lookup", {}) or {})
+    catalog = CATALOGS.get(key)
+    lookup = dict(getattr(catalog, "filter_lookup", {}) or {})
     for mapping in (base_filter_lookup, custom_filter_lookup):
         if not mapping:
             continue
-        # Registry-key overrides also work for sources stamped StetsonGlobs,
-        # Tycho2, UCAC5 or USNOB1; a literal source-name override takes priority.
-        for candidate in dict.fromkeys((key, name)):
+        # A catalog has one effective map regardless of the identity used to
+        # reach it. The declared source-name override always follows the
+        # registry-key override, including during registry-key preselection.
+        identities = (key, catalog.name) if catalog is not None else (name,)
+        for candidate in identities:
             lookup.update(mapping.get(candidate, {}))
     return lookup
 

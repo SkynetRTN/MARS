@@ -182,14 +182,20 @@ the subsequent work.
   references. All 65 numerical catalog expressions, including APASS H-alpha's
   production Lupton R expression, are unchanged by explicit maintainer request.
   Evidence: [acceptance, supported bands and retained limits](../analysis/catalog-magnitudes-filters.md),
-  82 new offline cases, 135 production magnitude/error pairs and 45 selection
-  lists, and concluding review with no outstanding actionable findings. The
-  full offline suite passes **3,916 tests, 85 skipped**. Fresh VizieR checks
+  82 initial offline cases and 18 review regressions, 135 production magnitude/error
+  pairs and 45 selection lists. Follow-up review fixes source-name override
+  priority and carries actual reference provenance through the exact solver
+  survivor mask; provided/native references and rejected proxies cannot cause
+  false transformation disclosures. Independent review also checked 14,663
+  production magnitude/error pairs over partial band sets with no differences
+  and found no outstanding actionable findings. The full offline suite passes
+  **3,934 tests, 85 skipped**. Fresh VizieR checks
   pass 2,688 values across 294 stars in nine calibration catalogs, plus two M3
   identifier checks. After earlier connection timeouts, the concluding fresh
   SDSS retry passes **667 values across 23 stars**, including its unchanged
   narrowband aliases. Together the ten calibration catalogs pass **3,355 value
-  comparisons across 317 stars**. Compilation, schema goldens, generated
+  comparisons across 317 stars**; all ten catalogs and both M3 identifier
+  checks passed again during follow-up review. Compilation, schema goldens, generated
   guidance, repository shape and whitespace checks pass. Changes remain local
   to `feature/m2`; coverage/sufficiency and the separate retained-defect
   warnings/benchmark gate remain open.

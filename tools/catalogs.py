@@ -10,6 +10,11 @@ from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 from tools.models import CatalogSummary, ReferenceBandResolution, ToolError, ToolWarning
 
 _MATH_NAMES = frozenset(("abs", "exp", "log", "log10", "sqrt"))
+_BROADBAND_MAGNITUDES = frozenset((
+    "U", "B", "V", "R", "I", "J", "H", "K", "BT", "VT", "Bphot", "Rphot",
+    "Bopt", "Ropt", "Open", "G", "u", "v", "g", "r", "i", "z", "y",
+    "uprime", "gprime", "rprime", "iprime", "zprime",
+))
 
 
 def _filter_token_candidates(image_filter: str) -> list[str]:
@@ -163,39 +168,47 @@ def list_photometric_catalogs() -> list[CatalogSummary]:
     return summaries
 
 
-def reference_band_warnings(catalog: str | None, image_filter: str | None) -> list[ToolWarning]:
-    """Disclose retained transform limitations without changing their numbers."""
+def reference_band_warnings(
+    catalog: str | None, image_filter: str | None, *, reference: str | None, kind: str,
+) -> list[ToolWarning]:
+    """Disclose the actual resolved reference, never an unperformed transform."""
+    if kind == "provided" or reference is None:
+        return []
     key = catalog_key(catalog)
     tokens = set(filter_token_candidates(image_filter or ""))
     folded = {token.casefold() for token in tokens}
     warnings: list[ToolWarning] = []
-    if key == "UCAC" and "open" in folded:
+    if key == "UCAC" and reference == "Open":
         warnings.append(ToolWarning(
             code="nonstandard_passband",
             message="UCAC Open is the native UCAC model magnitude (approximately 579-642 nm). "
             "It does not establish Johnson V photometry or match every instrument's clear response.",
         ))
-    if folded & {"halpha", "hbeta", "oiii", "sii"}:
+    deps = _expression_deps(reference)
+    declared_bands = set(CATALOGS[key].mags) if key is not None else set()
+    if (kind != "direct_band" and folded & {"halpha", "hbeta", "oiii", "sii"}
+            and deps and deps <= (_BROADBAND_MAGNITUDES | declared_bands)):
         warnings.append(ToolWarning(
             code="broadband_reference",
             message=f"{catalog}: filter {image_filter!r} uses a broadband stellar reference. "
             "This is a relative zero point, not an absolute narrowband magnitude or emission-line flux calibration.",
         ))
-    if key == "2MASS" and tokens & {"B", "V", "R", "I"}:
+    lookup = catalog_filter_lookup(key)
+    if key == "2MASS" and reference in lookup.values() and kind != "direct_band":
         warnings.append(ToolWarning(
             code="approximate_transform",
             message="The retained 2MASS J-K optical conversion is a stellar approximation. "
             "Its validity for this source is not established; values are not range-clipped, "
             "and propagated measurement errors exclude transformation scatter.",
         ))
-    if key == "APASS" and "I" in tokens:
+    if key == "APASS" and reference == lookup.get("I") and kind != "direct_band":
         warnings.append(ToolWarning(
             code="approximate_transform",
             message="APASS I uses the retained r'-i' stellar-locus approximation, "
             "not a measured I magnitude or the published i-z relation. "
             "Propagated measurement errors exclude transformation scatter.",
         ))
-    if key == "SkyMapper" and tokens & {"uprime", "gprime", "rprime", "iprime", "zprime"}:
+    if key == "SkyMapper" and reference in lookup.values() and kind != "direct_band":
         warnings.append(ToolWarning(
             code="approximate_transform",
             message="The retained SkyMapper prime-band offsets are for an F5V spectrum. "
@@ -204,13 +217,17 @@ def reference_band_warnings(catalog: str | None, image_filter: str | None) -> li
     return warnings
 
 
-def calibration_reference_warnings(sources) -> list[ToolWarning]:
+def calibration_reference_warnings(
+    sources, reference_routes: dict[str, tuple[str, str | None]] | None = None,
+) -> list[ToolWarning]:
     """Carry each used catalog/filter limitation into a completed calibration."""
     warnings: list[ToolWarning] = []
     seen: set[tuple[str, str]] = set()
     for source in sources or []:
+        kind, reference = (reference_routes or {}).get(getattr(source, "id", None), ("unresolved", None))
         for warning in reference_band_warnings(
             getattr(source, "catalog_name", None), getattr(source, "filter", None),
+            kind=kind, reference=reference,
         ):
             signature = (warning.code, warning.message)
             if signature not in seen:
@@ -268,7 +285,9 @@ def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceB
         elif route_kind == "wildcard" and supported:
             kind = "wildcard"
         if supported and reference_resolves:
-            warnings.extend(reference_band_warnings(catalog_name, normalized_filter))
+            warnings.extend(reference_band_warnings(
+                catalog_name, normalized_filter, reference=reference, kind=kind,
+            ))
         return ReferenceBandResolution(
             catalog=catalog_name,
             image_filter=normalized_filter,

@@ -46,6 +46,7 @@ For the preservation tests, three conventions apply:
 | `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's 35 matches selected from the recorded 132-row APASS cone (45 once clipped, minus VSX variables) with bit-exact reference magnitudes and independent fit expectations, under a `socket.connect` guard |
 | `test_catalogs_registries.py` | Current declarations, retained historical secondary export, no-network guarantee |
 | `test_catalog_magnitudes_filters.py` | M2 shared production routing, native band identities, exact transform values, composed spelling, invalid/zero values, overrides and relative narrowband warning/label |
+| `test_catalog_filter_review.py` | Follow-up catalog review: equivalent alias overrides, actual reference provenance, supplied/native magnitude warnings, public photometry labels and exact rejection-mask disclosures |
 | `test_catalog_magnitudes_filters_live.py` | `network`-marked: fresh queries for ten calibration catalogs, raw native values and independent transformed values; mandatory per-catalog filters prevent silent loss of transform coverage |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |

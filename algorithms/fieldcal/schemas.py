@@ -15,7 +15,7 @@ import math
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional, Type
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer, model_validator
 from pydantic.alias_generators import to_camel
 
 from algorithms.catalogs.schemas import (
@@ -246,4 +246,7 @@ class FieldCalResult(MARSBaseModel):
     zero_point_slop: Optional[float] = None
     limmag5: Optional[float] = None
     rej_percent: Optional[float] = None
+    # Actual resolver provenance, keyed by source ID. Kept internal so the
+    # extracted public result shape and serialized per-star rows stay stable.
+    _reference_routes: Dict[str, tuple[str, str | None]] = PrivateAttr(default_factory=dict)
 # (Ports legacy FieldCalResult fields.)  # :contentReference[oaicite:5]{index=5}

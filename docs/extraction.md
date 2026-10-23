@@ -1512,6 +1512,11 @@ one canonical effective map. APASS Halpha/H_alpha use the unchanged production
 Lupton R expression. Pan-STARRS retains its prior narrowband aliases. See
 [catalog magnitudes and filters](analysis/catalog-magnitudes-filters.md) for
 native-system names, intentional routing changes and live numerical checks.
+Follow-up review gives registry-key and declared source-name overrides one
+consistent priority. Calibration disclosures follow the actual resolved
+band/expression of solver survivors; supplied references and rejected stars
+cannot imply an unperformed transform. This provenance stays private, and
+the numerical transform expressions and public magnitude/error API are unchanged.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
 

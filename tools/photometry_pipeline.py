@@ -57,6 +57,7 @@ class ZeroPointResolution:
     # the warning code the tool reports it under (M3); None otherwise.
     failure: str | None = None
     failure_code: str | None = None
+    reference_routes: dict[str, tuple[str, str | None]] | None = None
 
 
 #: compute_field_cal_zero_point's message prefix for an unusable catalog
@@ -332,6 +333,7 @@ def select_zero_point_mag(
                 verified=True,
                 diagnostics=diagnostics,
                 calibration_sources=field_cal_result.phot_results if field_cal_result else None,
+                reference_routes=getattr(field_cal_result, "_reference_routes", None),
             )
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
         # M3: the reason used to reach only stderr; the tool now reports it.
@@ -716,7 +718,10 @@ def magnitude_label_for(zero_point: ZeroPointResolution) -> str:
     if zero_point.verified:
         from tools.catalogs import calibration_reference_warnings
 
-        warnings = calibration_reference_warnings(getattr(zero_point, "calibration_sources", None))
+        warnings = calibration_reference_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            getattr(zero_point, "reference_routes", None),
+        )
         if any(warning.code == "broadband_reference" for warning in warnings):
             return "relative magnitude (broadband reference)"
         return "calibrated magnitude"

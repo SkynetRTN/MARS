@@ -187,11 +187,20 @@ def test_narrowband_calibration_reports_its_broadband_reference(frame_path, tmp_
 
 
 def test_narrowband_magnitude_label_describes_relative_calibration():
-    from types import SimpleNamespace
+    from algorithms.catalogs.schemas import CatalogSource
+    from algorithms.fieldcal.field_cal import _collect_calibration_sources
+    from algorithms.fieldcal.schemas import PhotometryData
     from tools.photometry_pipeline import ZeroPointResolution, magnitude_label_for
 
+    routes = {}
+    sources = _collect_calibration_sources(
+        [PhotometryData(id="x", filter="Halpha")],
+        [CatalogSource(id="x", catalog_name="APASS",
+                       mags={"rprime": {"value": 14.4}, "iprime": {"value": 14.25}})],
+        catalog_filter_lookup=None, custom_filter_lookup=None, reference_routes=routes,
+    )
     zero_point = ZeroPointResolution(value=20.0, source="field-cal", verified=True,
-        calibration_sources=[SimpleNamespace(catalog_name="APASS", filter="Halpha")])
+        calibration_sources=sources, reference_routes=routes)
     assert magnitude_label_for(zero_point) == "relative magnitude (broadband reference)"
 
 
@@ -242,7 +251,8 @@ def test_conflicting_alias_overrides_have_the_same_priority_in_pipeline_and_reso
     overrides = {"StetsonGlobs": {"Open": "V - 1"}, "Stetson": {"Open": "V - 2"}}
     if reverse:
         overrides = dict(reversed(list(overrides.items())))
-    expected = 13.6 if source_name == "StetsonGlobs" else 12.6
+    # One catalog has one map, independent of the alias used by each entry point.
+    expected = 13.6
     assert resolve(source_name, "Open", {"V": 14.6}, custom_filter_lookup=overrides) == (expected, None)
     result, = _collect_calibration_sources(
         [PhotometryData(id="x", filter="Open")],

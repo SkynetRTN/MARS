@@ -236,8 +236,9 @@ def test_a_degenerate_solve_writes_no_zero_point_keywords(frame_path):
 
 
 def test_a_non_finite_zero_point_is_refused_before_the_header(frame_path, monkeypatch):
-    monkeypatch.setattr(field_cal, "calc_solution",
-                        lambda sources: (float("nan"), float("nan"), 0.0, float("nan"), 0.0))
+    monkeypatch.setattr(field_cal, "_calc_solution_with_mask", lambda sources: (
+        (float("nan"), float("nan"), 0.0, float("nan"), 0.0), np.ones(len(sources), dtype=bool),
+    ))
     written = {}
 
     class Recording(fits.Header):
@@ -321,7 +322,10 @@ def test_a_nan_catalog_error_does_not_poison_the_collected_sources(monkeypatch):
     # calc_solution's `error or 0` would keep it and turn the solve into NaN.
     from algorithms.fieldcal.schemas import PhotometryData
 
-    monkeypatch.setattr(field_cal, "resolve_ref_mag_for_filter", lambda **kwargs: (15.0, float("nan")))
+    from algorithms.fieldcal.ref_mag import _ReferenceMagnitude
+
+    monkeypatch.setattr(field_cal, "_resolve_ref_mag_for_filter_with_route",
+                        lambda **kwargs: _ReferenceMagnitude(15.0, float("nan"), "direct_band", "V"))
     collected = field_cal._collect_calibration_sources(
         [PhotometryData(id="s1", mag=14.0, mag_error=0.02, filter="B")],
         [CatalogSource(id="s1", catalog_name="APASS", mags={"B": {"value": 15.0}})],
@@ -352,8 +356,10 @@ def test_an_infinite_measurement_error_is_dropped_before_the_solve(frame_path, m
 
 def test_the_degenerate_message_counts_stars_that_survived_rejection(frame_path, monkeypatch):
     # Five go in, Chauvenet keeps one: the cause is the rejection, not "5 stars".
-    monkeypatch.setattr(field_cal, "calc_solution",
-                        lambda sources: (21.0, float("nan"), 0.0, 18.0, 100 * (len(sources) - 1) / len(sources)))
+    monkeypatch.setattr(field_cal, "_calc_solution_with_mask", lambda sources: (
+        (21.0, float("nan"), 0.0, 18.0, 100 * (len(sources) - 1) / len(sources)),
+        np.arange(len(sources)) == 0,
+    ))
     with pytest.raises(DegenerateCalibrationError,
                        match=r"1 of \d+ calibration stars survived outlier rejection") as caught:
         _direct(frame_path, _rows("selected_rows"))

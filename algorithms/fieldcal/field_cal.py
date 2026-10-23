@@ -43,8 +43,8 @@ from .schemas import (
 # EXTRACTED: was `from skynet_db.runners.utils import calc_solution,
 # resolve_ref_mag_for_filter` (907-line grab-bag module; the two field-cal
 # functions now live in fieldcal/solution.py and fieldcal/ref_mag.py).
-from .solution import calc_solution
-from .ref_mag import resolve_ref_mag_for_filter
+from .solution import _calc_solution_with_mask
+from .ref_mag import _resolve_ref_mag_for_filter_with_route
 # Catalog metadata (band tables and colour transforms) is pure local data.
 from algorithms.catalogs import CATALOGS
 from algorithms.photometry.photometry import run_photometry
@@ -501,6 +501,7 @@ def _collect_calibration_sources(
     catalog_filter_lookup: dict[str, dict[str, str]] | None,
     custom_filter_lookup: dict[str, dict[str, str]] | None,
     allow_preferred_band_fallback: bool = True,
+    reference_routes: dict[str, tuple[str, str | None]] | None = None,
 ) -> list[PhotometryData]:
     from algorithms.catalogs.filters import catalog_filter_lookup as filter_lookup_for
     sources: list[PhotometryData] = []
@@ -530,13 +531,17 @@ def _collect_calibration_sources(
             lookup = filter_lookup_for(
                 catalog_name, custom_filter_lookup, base_filter_lookup=catalog_filter_lookup,
             )
-            ref_mag, ref_err = resolve_ref_mag_for_filter(
+            resolved = _resolve_ref_mag_for_filter_with_route(
                 image_filter=getattr(source, "filter", None),
                 catalog_name=catalog_name,
                 cs_mags=catalog_source.mags,
                 custom_filter_lookup={catalog_name: lookup} if catalog_name else None,
                 allow_preferred_band_fallback=allow_preferred_band_fallback,
             )
+            ref_mag, ref_err = resolved.value, resolved.error
+            route = (resolved.kind, resolved.reference)
+        else:
+            route = ("provided", None)
         if ref_mag is None or not math.isfinite(ref_mag):
             continue
         if ref_err is not None and not math.isfinite(ref_err):
@@ -549,6 +554,8 @@ def _collect_calibration_sources(
         if ref_err is not None:
             source.ref_mag_error = ref_err
         source.catalog_name = catalog_name
+        if reference_routes is not None and source.id is not None:
+            reference_routes[source.id] = route
         sources.append(source)
 
     return sources
@@ -710,12 +717,14 @@ def perform_field_calibration(
         if not photometry_results:
             raise RuntimeError("All sources violate SNR constraints")
 
+    reference_routes: dict[str, tuple[str, str | None]] = {}
     calibration_sources = _collect_calibration_sources(
         photometry_results,
         sources,
         catalog_filter_lookup=_catalog_filter_lookup_map(sources, configured_catalogs),
         custom_filter_lookup=settings.custom_filter_lookup or None,
         allow_preferred_band_fallback=not settings.strict_filter_parity,
+        reference_routes=reference_routes,
     )
     logger.info("Calibration sources after ref-mag resolution: %d", len(calibration_sources))
 
@@ -737,7 +746,8 @@ def perform_field_calibration(
         ", ".join(_catalogs_from_sources(sources)) or "unknown",
     )
 
-    m0, m0_error, slop, limmag, rej_percent = calc_solution(calibration_sources)
+    solution, survivor_mask = _calc_solution_with_mask(calibration_sources)
+    m0, m0_error, slop, limmag, rej_percent = solution
     logger.info(
         "Field calibration solution: m0=%.4f m0_err=%s slop=%s limmag=%s rej=%.1f%%",
         m0,
@@ -798,4 +808,9 @@ def perform_field_calibration(
         limmag5=limmag,
         rej_percent=rej_percent,
     )
+    result._reference_routes = {
+        source.id: reference_routes[source.id]
+        for source, survived in zip(result.phot_results, survivor_mask)
+        if survived and source.id in reference_routes
+    }
     return result.zero_point_corr, result
