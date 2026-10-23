@@ -141,44 +141,31 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
   `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
   because it omits configured settings, which is M4's.
-- [ ] **Provider response changes.** Renamed, missing or non-finite columns
+- [x] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
   need focused contract evidence. ADS `abs:`/`object:` grouping remains an
   unconfirmed workaround. Distinguish no matches from unusable responses.
-  *Progress 2026-10-21 (not closed):* every listed mapping and chain was
-  checked live and fixed where a populated response looked empty or escaped as
-  an exception. Unusable responses now raise `ProviderResponseError` /
-  `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
-  lost every id to a column rename, B1950-only radio catalogs (3C among them)
-  could never match, and cached SkyServer error pages made SDSS queries fail
-  until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
-  counterpart, `docs/extraction.md` Query §5.12. **Open, tied to the SciX
-  transition:** ADS moves to Science Explorer (SciX) on 2026-11-16. The ADS
-  team states that the API, accounts and tokens carry over, and on 2026-10-22
-  `api.adsabs.harvard.edu` and `api.scixplorer.org` returned the same
-  unauthenticated response; neither shows behavior after the cutover, so a run
-  before it cannot close this. `astroquery.nasa_ads` 0.4.11 fixes its host at
-  `api.adsabs.harvard.edu` when imported, and `requests` drops the token on a
-  cross-host redirect, so a redirect to SciX would read as a missing token.
-  The live run on 2026-10-22, with a token, failed for a different reason:
-  `/v1/search/query` rejects `object:` in every form, alone or grouped, as
-  `undefined field object`, so `object_name` fails on `search_ads` and
-  `build_literature_review` and grouping was never the cause. `POST
-  /v1/objects/query` translates it into `=abs:`/`simbid:`/`nedid:` clauses,
-  and the translated query succeeds (564 papers; an unknown object returns
-  none). Citation, reference and fielded searches pass live, and the token
-  also answers on `api.scixplorer.org`. `tools.ads` now translates `object:`
-  before searching; live stress runs also found, and the branch fixes, a
-  crash on any ADS result past the first page, and sorts, years and doctypes
-  ADS silently ignores, now `invalid_input`. The three live ADS tests pass
-  (`docs/extraction.md` Query §5.12). **Remaining, after 2026-11-16:** rerun
-  them and record which API host answers. The token and search-syntax links
-  given to users must name SciX; they still name ADS, whose links SciX will
-  redirect, because on 2026-10-22 SciX served only an empty script shell to
-  non-browser clients and its help-page URLs could not be confirmed. If the
-  ADS API no longer serves MARS, record a maintainer decision to port, caveat
-  or withdraw the four literature tools.
+  *Closed:* every listed mapping and chain was checked live and fixed where a
+  populated response looked empty or escaped as an exception; unusable
+  responses raise `ProviderResponseError` / `unusable_response`. Live findings
+  fixed: Landolt crashed on every query, 2MASS lost every id to a column
+  rename, B1950-only radio catalogs (3C among them) could never match, and
+  cached SkyServer error pages made SDSS queries fail until expiry. The ADS
+  grouping was never the cause: live with a key (2026-10-22), the search
+  rejects `object:` in every form, so `object_name` never worked. `tools.ads`
+  now translates it through `POST /v1/objects/query` first, parses all result
+  pages together (any result past the first page used to crash), and refuses
+  the sorts, years, doctypes and query syntax ADS silently ignores as
+  `invalid_input`. Evidence: `tests/test_m3_provider_responses.py`, its
+  `_live` counterpart (19 passed with `ADS_DEV_KEY`), `docs/extraction.md`
+  Query §5.12, PR #123. ADS moves to Science Explorer (SciX) on 2026-11-16;
+  the API and tokens are stated to carry over, and on 2026-10-22 the same
+  token answered on `api.scixplorer.org`. By maintainer decision the item is
+  closed now, and the post-cutover rerun of the live ADS tests is tracked
+  outside this plan. The token and search-syntax links shown to users still
+  name ADS, whose links SciX will redirect; SciX's own URLs could not be
+  confirmed before the cutover.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
