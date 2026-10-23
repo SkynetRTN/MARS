@@ -190,6 +190,12 @@ Evidence: [query backends](../../algorithms/query/),
   OS/app versions and demonstrate registration, calls, instructions, approvals
   and media. Missing macOS/Windows and other advertised-host evidence must
   remain explicit.
+  *In progress:* the procedure and record are
+  [desktop-acceptance.md](desktop-acceptance.md): Claude Desktop on an Apple
+  Silicon Mac and x64 Windows, and the ChatGPT app's Codex threads on those
+  and Fedora 44 Workstation, against rc6 by maintainer decision. The
+  extension's launch command passed a cold `self-test` against rc6 on Linux
+  (2026-10-23); no real app has run yet.
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
@@ -208,8 +214,36 @@ Evidence: [query backends](../../algorithms/query/),
 - [ ] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.
+- [ ] **Console first launch.** An installed `mars` with no key or reachable
+  model exits before its interface opens, telling the user to edit "the
+  repository's .env", which an installed copy has neither of nor reads.
+  `../installing.md` does not cover the console, and the default Ollama
+  model's `-mlx` tag may exist only on Apple Silicon. A clean install on
+  each supported OS must reach a working session or an accurate next step.
+- [ ] **Console terminals and long runs.** Nothing records the console in
+  Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
+  questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the
+  forced dark theme on light terminals, `NO_COLOR`, and an 80-column status
+  line that cuts off the stop hint and never names a quit key. Esc cannot
+  stop a running tool, quitting during a plate solve may wait for it, and
+  progress reads in raw milliseconds. Record supported terminals and the
+  measured stop and quit behavior during a real solve.
+- [ ] **Console failures and commands.** A tool that returns an error is
+  marked ✓, and a backend failure mid-turn reports only "Session finished:
+  error." `/status`, `/tools`, `/approve`, `/prompt` and `/new` are listed
+  in the menu and `/help` but have no handler, so context can be cleared
+  only by restarting. Approval needs the mouse or Tab focus, and Esc's
+  effect on an open approval is unclear. Failures must name their cause and a
+  next step, approvals must work from the keyboard, and each listed command
+  must work or be removed. Resume showing only assistant text needs a
+  decision.
+
+Animations, Markdown rendering, input history, notifications, inline
+scrollback and theme memory are polish, not release requirements; add any of
+them as a gate only with a failing supported use case.
 
 Evidence: [installation guide](../installing.md),
+[console](../../tools/tui/),
 [Claude installer](../../installers/claude-desktop/README.md),
 [Codex installer](../../installers/codex/README.md),
 [test coverage](../../tests/README.md).
