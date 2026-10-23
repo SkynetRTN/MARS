@@ -1,8 +1,8 @@
 # MARS release closure gate
 
 Updated 2026-10-20 against `main` at `a6785aa`, after pulling the latest changes.
-M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
-the published `0.1.0rc6`. Publication remains deferred until the remaining
+M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
+and #123; their changes are absent from the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
 M2 is open in full. PR #120 is abandoned as an implementation path and supplies
@@ -141,20 +141,31 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
   `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
   because it omits configured settings, which is M4's.
-- [ ] **Provider response changes.** Renamed, missing or non-finite columns
+- [x] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
   need focused contract evidence. ADS `abs:`/`object:` grouping remains an
   unconfirmed workaround. Distinguish no matches from unusable responses.
-  *Progress 2026-10-21 (not closed):* every listed mapping and chain was
-  checked live and fixed where a populated response looked empty or escaped as
-  an exception. Unusable responses now raise `ProviderResponseError` /
-  `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
-  lost every id to a column rename, B1950-only radio catalogs (3C among them)
-  could never match, and cached SkyServer error pages made SDSS queries fail
-  until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
-  counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
-  grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
+  *Closed:* every listed mapping and chain was checked live and fixed where a
+  populated response looked empty or escaped as an exception; unusable
+  responses raise `ProviderResponseError` / `unusable_response`. Live findings
+  fixed: Landolt crashed on every query, 2MASS lost every id to a column
+  rename, B1950-only radio catalogs (3C among them) could never match, and
+  cached SkyServer error pages made SDSS queries fail until expiry. The ADS
+  grouping was never the cause: live with a key (2026-10-22), the search
+  rejects `object:` in every form, so `object_name` never worked. `tools.ads`
+  now translates it through `POST /v1/objects/query` first, parses all result
+  pages together (any result past the first page used to crash), and refuses
+  the sorts, years, doctypes and query syntax ADS silently ignores as
+  `invalid_input`. Evidence: `tests/test_m3_provider_responses.py`, its
+  `_live` counterpart (19 passed with `ADS_DEV_KEY`), `docs/extraction.md`
+  Query §5.12, PR #123. ADS moves to Science Explorer (SciX) on 2026-11-16;
+  the API and tokens are stated to carry over, and on 2026-10-22 the same
+  token answered on `api.scixplorer.org`. By maintainer decision the item is
+  closed now, and the post-cutover rerun of the live ADS tests is tracked
+  outside this plan. The token and search-syntax links shown to users still
+  name ADS, whose links SciX will redirect; SciX's own URLs could not be
+  confirmed before the cutover.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.

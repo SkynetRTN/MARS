@@ -128,9 +128,29 @@ def test_live_ned_photometry_columns_and_spectrum():
 
 
 @pytest.mark.skipif(not os.environ.get("ADS_DEV_KEY"), reason="needs ADS_DEV_KEY to query ADS")
-def test_live_ads_accepts_grouped_abs_and_object_clauses():
+def test_live_ads_object_name_is_translated_and_searched():
     from tools.ads import search_ads
 
+    # The search endpoint rejects a bare object: clause; 564 papers on 2026-10-22.
     result = search_ads(abstract="millisecond pulsar", object_name="PSR B1937+21", max_results=5)
-    assert result.status in ("ok", "not_found"), result.errors
-    assert not result.errors
+    assert result.status == "ok", result.errors
+    assert result.count == 5
+
+
+@pytest.mark.skipif(not os.environ.get("ADS_DEV_KEY"), reason="needs ADS_DEV_KEY to query ADS")
+def test_live_ads_pages_stack_past_the_first_page():
+    from tools.ads import search_ads
+
+    # Three pages; their `page` columns came back typed differently and
+    # vstack used to raise out of the tool (2026-10-22).
+    result = search_ads(object_name="M31", year=2020, max_results=120)
+    assert result.status == "ok", result.errors
+    assert result.count == 120
+
+
+@pytest.mark.skipif(not os.environ.get("ADS_DEV_KEY"), reason="needs ADS_DEV_KEY to query ADS")
+def test_live_ads_unknown_object_is_not_found():
+    from tools.ads import search_ads
+
+    result = search_ads(object_name="NoSuchThing XYZ123", max_results=5)
+    assert result.status == "not_found", result.errors
