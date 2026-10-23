@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-22 against `main` at `9544782` (M3 PR #122), with the first six M2 checkpoints
+Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first seven M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the first six checkpoints
+M2 remains open after the first seven checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -155,12 +155,24 @@ the subsequent work.
   consistency, repository shape and whitespace checks pass. Native convergence,
   sampled-distortion limits and catalog completeness retain their separately
   documented evidence gates. Changes remain local to `feature/m2`.
-- [ ] **Photometric calibration.** Outlier rejection does not run for ten
-  or fewer calibration stars; brightness trimming can retain saturated stars
-  and mishandle magnitude zero. The fit reports extra scatter even when
-  measurement errors explain the residuals, and explicit gain `1` can be
-  replaced by the FITS header. Selection, uncertainties and the gain used must
-  agree with the requested measurement.
+- [x] **Photometric calibration.** PHOT-03/09/10/14: rejection runs for small
+  samples while retaining at least two stars; weighted residuals use each
+  star's measurement error plus fitted scatter. The likelihood admits zero
+  additional variance, preserves heterogeneous weights and compares positive
+  minima with the boundary. Known saturated measurements are removed before
+  brightness trimming, magnitude zero sorts normally, and explicit gain `1`
+  is honored. Solver and plot share an exact surviving-row mask. Empirical
+  zero-point errors avoid the former cancellation crash; M3's degenerate-solve
+  safeguards remain. Evidence: [acceptance, independent references and limits](../analysis/photometric-calibration.md),
+  22 new scientific cases, real-frame gain control, independent joint fits on
+  all four unchanged recorded inputs and fresh review with no outstanding
+  findings. The corrected NGC 5128 result exceeds the historical parity
+  tolerance; comparisons disclose this without changing fixtures or thresholds.
+  Final Python 3.13.15 offline suite: **3,834 passed, 75 skipped**. Compilation,
+  schema goldens, generated guidance, repository shape and whitespace checks
+  pass. PHOT-06 downsampled saturation counts, calibration sufficiency and
+  retained numerical limitations remain open in their separate gates.
+  Changes remain local to `feature/m2`.
 - [ ] **Catalog magnitudes and filters.** Photographic B/R and Tycho BT/VT
   are offered under standard band names; UCAC's Open magnitude can satisfy
   every filter; catalog-name mismatches prevent some transform lookups.
@@ -176,6 +188,9 @@ the subsequent work.
   are not consistently disclosed in tool results. The answer grader can accept
   invented author attribution when numbers are sourced. Users need relevant
   limitations, and benchmark conclusions must account for attribution errors.
+  Calibration limitations include PHOT-06 downsampled saturation counts and
+  the near-flat SNR regression's implausible limiting magnitudes; see the
+  [calibration acceptance record](../analysis/photometric-calibration.md).
 
 Evidence: [pulsar tool](../../tools/pulsar.py),
 [legacy HR helpers](../../algorithms/hrdiagram_py/legacy.py),

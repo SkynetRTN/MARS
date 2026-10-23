@@ -11,8 +11,9 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 Most extracted algorithms have preservation tests against recorded upstream
 output, including known bugs. Passing those tests establishes parity, not
 scientific correctness. Intentional M2 corrections have separate acceptance
-tests against independent scientific references; the pulsar, variable-star
-and cluster records under `docs/analysis/` describe their derivations and limits.
+tests against independent scientific references; the pulsar, variable-star,
+cluster and photometric-calibration records under `docs/analysis/` describe
+their derivations and limits.
 
 Most files are algorithm-preservation tests. Tool smoke tests live here too
 when they cover the public `tools/` surface without network calls or generated
@@ -22,10 +23,10 @@ For the preservation tests, three conventions apply:
 
 1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
    four complete recorded Skynet zero-point solves. See `data/README.md`.
-2. **Recorded output, not recomputed expectations.** The centrepiece,
-   `test_fieldcal_solution.py`, feeds `calc_solution` the exact rows Skynet fed
-   it and compares against the exact numbers Skynet returned — bit-for-bit on
-   four fields.
+2. **Preserve recorded evidence.** Historical outputs stay unchanged. M2's
+   corrected field-calibration solver uses the same four recorded inputs,
+   checked against an independent scientific fit; historical Skynet/Afterglow
+   agreement is tested separately from the corrected output.
 3. **Known bugs are pinned, not fixed.** Where a test documents a defect it says
    so in capitals, gives the upstream file it was verified against, and states
    what to do if someone decides to diverge. Deleting such a test is part of
@@ -36,12 +37,13 @@ For the preservation tests, three conventions apply:
 | File | Covers |
 | --- | --- |
 | `conftest.py` | Fixtures, frame aliases, skip guards, the `network` opt-in |
-| `test_fieldcal_solution.py` | **`calc_solution` bit-exact parity** against four recorded Skynet fits |
-| `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
+| `test_fieldcal_solution.py` | Corrected `calc_solution` on four unchanged recorded inputs, checked against an independent two-parameter optimizer and Gaussian tails in `fieldcal_oracle.py`; exact solver/plot survivor masks and stable empirical errors |
+| `test_photometric_calibration_science.py` | M2 calibration: small weighted/unweighted samples, analytic zero/positive extra variance, heterogeneous-error likelihood and rejection, known saturated sources, magnitude zero and matching saturation preservation; explicit unit gain is in `test_photometry_pipeline.py` |
+| `test_fieldcal_afterglow_parity.py` | Historical Skynet/Afterglow agreement and retained measurement settings; no claim that M2 reproduces the historical fit |
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms and lexical/numeric-AST guardrails |
 | `test_fieldcal_expression_limits.py` | M1 PHOT-15: bounded numeric AST (no eval), pre-parser/pre-evaluator sentinels, literal regex band matching, namespace/alias/integer work limits, kill/reap-bounded powers and direct calibration-collection failures; exact shipped-polynomial arithmetic and existing uncertainty propagation stay preserved. |
 | `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
-| `test_fieldcal_reference.py` | The recorded ground truth as tool results (`tools/fieldcal_reference.py`), the offline replays, and the end-to-end **selection** replay: NGC 5128 B's 35 calibration stars re-chosen from the recorded 132-row APASS cone (45 candidates once clipped to the frame, minus the recorded VSX variables) with bit-exact reference magnitudes and solution, under a `socket.connect` guard |
+| `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's 35 matches selected from the recorded 132-row APASS cone (45 once clipped, minus VSX variables) with bit-exact reference magnitudes and independent fit expectations, under a `socket.connect` guard |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |
@@ -126,7 +128,6 @@ changed — which may be the intent, but is never an accident.
 | `wcs/header_utils.py` | `_parse_ra_dec_values` **raises** on the comma decimal separators three fixture frames use (`'00:42:44,3'`), and `guess_icrs_radec_from_header` does not catch it. Latent only because those frames are solved, so `CRVAL` answers at step 1. An unsolved frame from the same telescope — exactly the case a solver hint exists for — would raise. | `test_wcs_headers.py` |
 | `wcs/wcs.py` | `_clear_wcs_solution_fields` clears `ra`/`dec`/`pixel_scale`/`rotation` while the solve writes `ra_deg`/`dec_deg`/`pixel_scale_arcsec_per_px`/`rotation_deg`. The four clears are no-ops and stale astrometry survives a failed solve. Documented in `docs/extraction.md`, WCS §5.2; `WcsSolution` is deliberately **not** a `slots` dataclass so this stays a silent no-op rather than an `AttributeError`. | `test_wcs_solution.py` |
 | `wcs/wcs.py` | A header rewrite clears `RADESYS` but **not** `EQUINOX` or `RADECSYS`, so a stale frame declaration can outlive the solution it described — a ~0.6° error if a B1950 `EQUINOX` survives onto an ICRS solve. Latent: no fixture frame carries either keyword. | `test_wcs_solution.py` |
-| `fieldcal/solution.py` | `calc_solution` raises `ValueError` on perfectly zero-scatter input, via float cancellation in the weighted-error term at `solution.py:141` (the exception text differs by Python version). Unreachable with real photometry; very reachable from a tidy synthetic fixture. Pinned against a real frame because the cancellation depends on the exact magnitudes. | `test_fieldcal_solution.py` |
 
 ### Divergences and dead code
 

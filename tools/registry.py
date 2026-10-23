@@ -1429,8 +1429,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "here (for NGC 5128 B: 35 of the 45 candidates on the frame, from a "
         "132-row cone) and the result reports cone/candidate/matched/"
         "not-selected counts, each match with its reference magnitude, the "
-        "ABSOLUTE zero point, and whether the selection and the solve reproduce "
-        "what fit_summary.json recorded (they do, bit for bit). Only "
+        "ABSOLUTE zero point, and selection agreement plus numerical differences "
+        "from fit_summary.json. M2's corrected scatter and rejection can change "
+        "the historical fit even when selected identities match exactly. Only "
         "ngc5128_b_002 has the recorded response and a bundled frame; other "
         "fields return the errors that stop them.",
         "input_schema": {
@@ -1569,7 +1570,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": "Solve offline from the catalog rows recorded "
                     "for the solve named by compare_to (required with this). "
                     "'selected_rows': the 35 APASS rows Skynet actually matched "
-                    "-- the small bit-exact regression case; every row is known "
+                    "-- the small recorded-row regression case; every row is known "
                     "to match, so catalog selection is not exercised. "
                     "'full_response': the end-to-end selection replay -- the "
                     "recorded APASS response for the whole field (a 132-row "

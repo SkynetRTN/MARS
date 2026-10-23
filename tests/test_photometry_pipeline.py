@@ -401,13 +401,7 @@ def test_header_metadata_is_restamped_onto_results(measured):
 
 @pytest.mark.slow
 def test_gain_is_read_from_the_header_when_not_supplied(frame_image):
-    """A supplied ``gain`` of exactly 1 is treated as "unset", not as a value.
-
-    ``run_photometry`` falls back to the header when ``settings.gain`` is
-    ``None`` *or* ``1``. That second condition is easy to miss and means a
-    caller genuinely wanting unit gain cannot ask for it — pinned because it
-    changes the reported flux errors.
-    """
+    """M2: only None falls back to the header; explicit unit gain is valid."""
     data, header = frame_image("ngc3628")
     working = np.array(data)
     detections, _, _ = run_source_extraction(
@@ -423,9 +417,11 @@ def test_gain_is_read_from_the_header_when_not_supplied(frame_image):
         working, header, detections, PhotometrySettings(a=5.0, gain=4.0)
     )
 
-    # gain=1 behaves identically to unset.
-    assert [r.mag_error for r in gain_one] == [r.mag_error for r in from_header]
-    # A genuinely different gain changes the uncertainties.
+    header_one = header.copy()
+    header_one["GAIN"] = 1.0
+    unit_header = run_photometry(working, header_one, detections, PhotometrySettings(a=5.0))
+    assert [r.mag_error for r in gain_one] == [r.mag_error for r in unit_header]
+    assert [r.mag_error for r in gain_one] != [r.mag_error for r in from_header]
     assert [r.mag_error for r in explicit] != [r.mag_error for r in from_header]
 
 

@@ -1,23 +1,8 @@
-"""Zero-point solve parity: ``algorithms.fieldcal.solution.calc_solution``.
+"""M2 scientific fits over the unchanged recorded Skynet calibration rows.
 
-This is the load-bearing test of the whole suite. ``calc_solution`` was copied
-verbatim out of ``skynet_db/runners/utils.py`` (lines 468-603), and
-``data/fieldcal/zp_solutions/`` holds four *complete* Skynet field
-calibrations — the exact source rows that were fed in, and the exact five
-numbers that came out. So this is not a self-consistency check against values
-MARS generated: it compares MARS's extracted solver against output recorded
-upstream, before the extraction happened.
-
-The solver is a fixed-slope (slope = 1) weighted offset fit with iterative
-Chauvenet rejection, so a change anywhere in the loop — the weighting, the
-``brenth`` bracket walk, the rejection criterion, the ``no_errors`` branch —
-moves the zero point. All four cases currently reproduce bit-for-bit; the one
-value with any float drift at all is ``limmag5``, which goes through
-``np.polyfit``.
-
-Modelled on ``skynet .../tests/runners/test_field_cal.py::TestCalcSolution``,
-which pins the same function against hand-built inputs. The recorded-solve cases
-below are the real-data half that suite does not have.
+The original summaries and accepted-row flags remain historical evidence.
+The corrected solver is checked against an independent two-parameter fit;
+analytic synthetic cases live in test_photometric_calibration_science.py.
 """
 
 from __future__ import annotations
@@ -31,12 +16,7 @@ from algorithms.fieldcal.schemas import PhotometryData
 from algorithms.fieldcal.solution import _sigma_eq, calc_solution
 
 from .conftest import ZP_CASES
-
-# Exact equality is what these fixtures actually deliver for the first three
-# return values. limmag5 is allowed a float-noise window because polyfit's
-# lstsq is not bit-reproducible across BLAS builds.
-EXACT = 0.0
-LIMMAG_TOL = 1e-9
+from .fieldcal_oracle import scientific_solution
 
 
 def _sources(rows: list[dict]) -> list[PhotometryData]:
@@ -56,30 +36,18 @@ def _sources(rows: list[dict]) -> list[PhotometryData]:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("case", ZP_CASES)
-def test_reproduces_recorded_skynet_solve(zp_case, case):
-    """Every number Skynet's calc_solution returned, reproduced exactly."""
-    rows, summary = zp_case(case)
-    expected = summary["production_calc_solution"]
-
-    zp, zp_err, slop, limmag5, rej_percent = calc_solution(_sources(rows))
-
-    assert zp == pytest.approx(expected["zero_point"], abs=EXACT)
-    assert zp_err == pytest.approx(expected["zero_point_error"], abs=EXACT)
-    assert slop == pytest.approx(expected["zero_point_slop"], abs=EXACT)
-    assert rej_percent == pytest.approx(expected["rej_percent"], abs=EXACT)
-    assert limmag5 == pytest.approx(expected["limmag5"], abs=LIMMAG_TOL)
+def test_recorded_rows_match_an_independent_scientific_solve(zp_case, case):
+    rows, _ = zp_case(case)
+    expected, keep = scientific_solution(_sources(rows))
+    actual = calc_solution(_sources(rows))
+    np.testing.assert_allclose(actual[:4], expected[:4], rtol=0, atol=1e-7)
+    assert actual[4] == pytest.approx(expected[4], abs=1e-12)
+    from tools.photometry_pipeline import _replicate_zero_point_rejection
+    np.testing.assert_array_equal(_replicate_zero_point_rejection(_sources(rows)), keep)
 
 
 @pytest.mark.parametrize("case", ZP_CASES)
-def test_survivor_count_matches_recorded_run(zp_case, case):
-    """``rej_percent`` implies the same number of survivors Skynet recorded.
-
-    The summary reports the outcome two ways — as a percentage from the solver,
-    and as ``num_fit_accepted_sources``, which the CSV's ``accepted_by_fit``
-    column independently agrees with. Pinning the count as well as the zero
-    point catches a rejection loop that lands on the same offset via a different
-    set of survivors.
-    """
+def test_survivor_count_and_historical_record_are_reported_separately(zp_case, case):
     rows, summary = zp_case(case)
     n_in = len(rows)
     assert n_in == summary["num_candidates"]
@@ -87,29 +55,21 @@ def test_survivor_count_matches_recorded_run(zp_case, case):
     *_, rej_percent = calc_solution(_sources(rows))
     n_kept = round(n_in * (1 - rej_percent / 100))
 
-    assert n_kept == summary["num_fit_accepted_sources"]
+    _, keep = scientific_solution(_sources(rows))
+    assert n_kept == int(keep.sum())
     assert sum(r["accepted"] for r in rows) == summary["num_fit_accepted_sources"]
 
 
 def test_rej_percent_counts_pre_fit_drops_not_just_chauvenet():
-    """``rej_percent`` is measured against the *input* list, not the fit input.
+    from tools.photometry_pipeline import _replicate_zero_point_rejection
 
-    Its denominator is ``len(sources)`` as passed in, while the numerator is the
-    survivor count after both the ``mag_error > 0`` pre-filter and Chauvenet
-    rejection. So a source dropped before the fit ever sees it still shows up as
-    "rejected" — which is why the NGC 5128 fixture reports 25.7% (9 of 35) while
-    only 3 of those were actual outlier rejections.
-
-    The three NGC 5286 fixtures have no zero-error rows, so there the two
-    readings coincide; NGC 5128 is the case that separates them, and it is the
-    reason this is asserted rather than assumed.
-    """
-    kept = 26
-    dropped_zero_error = 6
-    chauvenet_rejected = 3
-    n_in = kept + dropped_zero_error + chauvenet_rejected
-    assert n_in == 35
-    assert (1 - kept / n_in) * 100 == pytest.approx(25.71428571428571, abs=1e-12)
+    offsets = [30, 19.999, 20.001, 20.002, 19.998, 20, 20.001, 24]
+    sources = [PhotometryData(mag=15 + i / 10, mag_error=0 if i == 0 else 0.02,
+                              ref_mag=15 + i / 10 + offset, ref_mag_error=0.01)
+               for i, offset in enumerate(offsets)]
+    assert calc_solution(sources)[4] == 25.0
+    np.testing.assert_array_equal(_replicate_zero_point_rejection(sources),
+                                  [False, True, True, True, True, True, True, False])
 
 
 @pytest.mark.parametrize("case", ("ngc5286_b_000", "ngc5286_b_001", "ngc5286_b_002"))
@@ -199,26 +159,11 @@ def test_sources_with_nonpositive_mag_error_are_dropped_when_any_error_is_set():
 
 
 @pytest.mark.slow
-def test_zero_scatter_input_is_a_known_failure_mode(frame_image):
-    """A noiseless offset over real photometry raises ``ValueError``.
+def test_zero_scatter_input_has_no_cancellation_crash(frame_image):
+    """Stable empirical errors remain nonnegative at the zero-scatter boundary.
 
-    Recorded rather than fixed, per the extraction contract: this is upstream
-    behaviour and these tests exist to preserve it, not improve it.
-
-    The mechanism is the weighted-error expression at ``solution.py:141``. When
-    every residual is identical, ``sigma2`` collapses toward zero and the
-    bracketed term ``(d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum()``
-    — algebraically non-negative — lands just below zero through float
-    cancellation, and ``math.sqrt`` rejects it. The exception text differs
-    between supported Python versions, so the assertion accepts both forms.
-
-    Whether the cancellation actually goes negative depends on the exact
-    magnitudes and the spread of weights, so this is pinned against a real
-    frame's photometry rather than a synthetic list: hand-built inputs with a
-    tidy error distribution survive it, and would make this a false negative.
-    Real photometry always carries scatter, so this cannot fire in production —
-    but it does fire in constructed tests, and when it does the fix is to give
-    the fixture realistic noise, not to change the solver.
+    This tests the numerical solver; M3 still refuses degenerate calibration
+    results before writing header keywords.
     """
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import (
@@ -242,11 +187,10 @@ def test_zero_scatter_input_is_a_known_failure_mode(frame_image):
                        ref_mag=m.mag + 21.0, ref_mag_error=0.02)
         for m in usable
     ]
-    with pytest.raises(
-        ValueError,
-        match=r"math domain error|expected a nonnegative input",
-    ):
-        calc_solution(exact)
+    zero_point, error, scatter, _, _ = calc_solution(exact)
+    assert zero_point == pytest.approx(21, abs=1e-12)
+    assert math.isfinite(error) and error >= 0
+    assert scatter == 0
 
     # The same sources with a whisker of catalog noise solve cleanly.
     rng = np.random.default_rng(20260811)
@@ -298,15 +242,8 @@ def test_outlier_is_rejected_and_does_not_move_the_zero_point():
     assert zp == pytest.approx(clean_zp, abs=1e-2)
 
 
-def test_sigma_eq_is_the_derivative_root_the_solver_brackets():
-    """``_sigma_eq`` must cross zero at the maximum-likelihood scatter.
-
-    The solver walks a bracket outward until the sign flips, then hands it to
-    ``brenth``. That only terminates because ``_sigma_eq`` is monotone
-    decreasing in ``sigma2`` and positive below the root — pin that shape, since
-    a sign error here turns the fit into a 100-iteration no-op that silently
-    returns the seed value.
-    """
+def test_sigma_eq_signs_for_equal_measurement_errors():
+    """The historical score helper changes sign across this equal-error root."""
     b = np.array([1.20, 1.31, 1.25, 1.18, 1.29])
     sigmas2 = np.full(5, 0.0004)
     m0 = float(b.mean())

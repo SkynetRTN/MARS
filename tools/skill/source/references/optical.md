@@ -93,8 +93,9 @@ a correction instead; never compare the two without adding Afterglow's base.
   `compare_to="ngc5128_b_002"` runs end to end offline.
 - `list_zeropoint_references`, `load_zeropoint_reference`,
   `replay_field_calibration`, `compare_zeropoint_to_reference` — the recorded
-  Skynet solves bundled as ground truth, a bit-exact offline replay of one, and
-  a check of any computed zero point against them.
+  Skynet solves bundled as historical references, an offline selection replay,
+  and a check of any computed zero point against them. M2's corrected scatter
+  and rejection can change the fit even when the selected identities match.
 
 > Authority: `tools/registry.py`, the `calibrate_zeropoint`,
 > `replay_field_calibration` and `compare_zeropoint_to_reference`

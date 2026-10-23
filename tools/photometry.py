@@ -412,8 +412,9 @@ def calibrate_zeropoint(
     ``ngc5128_b_002`` has a recorded full response, so ``"full_response"``
     remains limited to it while ``"selected_rows"`` works for all four. This
     path re-measures the photometry from pixels, so it is a real solve, not a
-    bit-exact one; ``tools.fieldcal_reference.replay_field_calibration`` is
-    the bit-exact selection replay over the recorded detections.
+    recorded-row replay; ``tools.fieldcal_reference.replay_field_calibration``
+    instead selects from the recorded detections and catalog response. Both
+    use M2's corrected solver, which can differ from the historical fit.
 
     ``compare_to`` handles the two fixture families' differing
     instrumental-magnitude scales: the solved value is put on the reference's

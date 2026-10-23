@@ -575,111 +575,14 @@ def plot_photometry(
 
 
 def _replicate_zero_point_rejection(sources: Sequence[object]) -> np.ndarray:
-    """Recover which calibration sources the zero-point solve's Chauvenet loop kept.
+    """Read the solver's own surviving-row mask for the diagnostic plot.
 
-    ``algorithms.fieldcal.solution.calc_solution`` is a byte-preserved
-    extraction from Skynet (see CLAUDE.md, "The extraction contract") and its
-    public return is aggregate-only -- zero point, its error, scatter, limiting
-    magnitude, and an overall rejection percentage. It never reports *which*
-    sources survived, so there is nothing to read off for per-star plotting.
-
-    Rather than change that extracted function's signature, this mirrors its
-    iterative weighted-mean-plus-Chauvenet-rejection loop line for line (down
-    to reusing its private `_sigma_eq` helper), adding only index bookkeeping
-    to track which sources survive each round. Keep this in sync by hand if
-    `calc_solution` ever changes.
-
-    Returns a boolean array the same length as ``sources``, True where the
-    source survived to the final solution.
+    M2 shares the fit implementation so plotted rejections and the returned
+    zero point cannot diverge when the numerical/rejection policy changes.
     """
-    from math import sqrt
+    from algorithms.fieldcal.solution import _calc_solution_with_mask
 
-    from scipy.optimize import brenth
-
-    from algorithms.fieldcal.solution import _sigma_eq
-    from algorithms.skylib_lite.util.stats import chauvenet
-
-    n_total = len(sources)
-    kept = np.ones(n_total, dtype=bool)
-    if n_total == 0:
-        return kept
-
-    mag_arr, mag_error_arr, ref_mag_arr, ref_mag_error_arr = np.transpose([
-        (
-            source.mag,
-            getattr(source, "mag_error", None) or 0,
-            source.ref_mag,
-            getattr(source, "ref_mag_error", None) or 0,
-        )
-        for source in sources
-    ])
-    orig_idx = np.arange(n_total)
-
-    if mag_error_arr.any():
-        good = mag_error_arr > 0
-        mag_error_arr, ref_mag_error_arr = mag_error_arr[good], ref_mag_error_arr[good]
-        ref_mag_arr = ref_mag_arr[good]
-        orig_idx = orig_idx[good]
-        b = ref_mag_arr - mag_arr[good]
-    else:
-        b = ref_mag_arr - mag_arr
-
-    sigmas2 = mag_error_arr**2 + ref_mag_error_arr**2
-    no_errors = not sigmas2.any()
-    if no_errors:
-        sigmas2 = 0
-    sigma2 = 0
-    weights = None
-
-    while True:
-        for _ in range(100):
-            if no_errors:
-                m0 = b.mean()
-            else:
-                m0 = (b / (sigmas2 + sigma2)).sum() / (1 / (sigmas2 + sigma2)).sum()
-
-            prev_sigma2 = sigma2
-            sigma2 = ((b - m0) ** 2).sum() / len(b)
-            left, right = 0.9 * sigma2, 1.1 * sigma2
-            for __ in range(100):
-                if _sigma_eq(left, sigmas2, b, m0) * _sigma_eq(right, sigmas2, b, m0) < 0:
-                    break
-                left *= 0.9
-                right *= 1.1
-            try:
-                sigma2 = brenth(_sigma_eq, left, right, (sigmas2, b, m0))
-            except Exception:
-                pass
-
-            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
-                break
-
-        if no_errors:
-            denom = len(b) - 1
-            sigma_override = sqrt(((b - m0) ** 2).sum() / denom) if denom > 0 else float("inf")
-            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
-        else:
-            weights = 1 / (sigmas2 + sigma2)
-            sum_weights = weights.sum()
-            sigma_override = sqrt(
-                (weights * (b - m0) ** 2).sum() / (sum_weights - (weights**2).sum() / sum_weights)
-            )
-            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
-
-        if not rejected.any():
-            break
-
-        good = ~rejected
-        b = b[good]
-        orig_idx = orig_idx[good]
-        if weights is not None:
-            weights = weights[good]
-        if not no_errors:
-            sigmas2 = sigmas2[good]
-
-    kept[:] = False
-    kept[orig_idx] = True
-    return kept
+    return _calc_solution_with_mask(sources)[1]
 
 
 def plot_zero_point_solution(

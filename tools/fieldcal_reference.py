@@ -8,7 +8,6 @@ before this module nothing outside ``tests/`` could read any of it.
 Everything here is offline. ``data/README.md`` spells out the chain for
 NGC 5128 B::
 
-    MARS calc_solution        21.147659857998637   (bit-exact)
     Skynet recorded local fit   21.147659857998637
     Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
     Afterglow web table         21.147                (3 dp, recorded by hand)
@@ -20,8 +19,9 @@ full Afterglow-parity record, against ``ngc5128_galaxy_b_001.fits``.
 All four now have a bundled frame (P8); the NGC 5286 three are
 ``ngc5286_globular_b_00N.fits``, Git LFS objects. ``skynet_zero_point`` --
 ``calc_solution``'s ``catalog_mag = instrumental_mag + zero_point`` offset --
-is recorded for all four and reproduced bit-for-bit by
-:func:`solve_zeropoint_from_reference`.
+is recorded for all four. :func:`solve_zeropoint_from_reference` runs the
+current scientific solver on those rows; M2 corrects its scatter/rejection
+policy, so current output can differ from the historical references.
 
 The two families do **not** share an instrumental-magnitude scale: both record
 ``mag = -2.5 log10(flux / exposure) + zero``, with ``zero`` at 20.0 for the
@@ -89,7 +89,7 @@ FIELDCAL_DATA_DIR_ENV = "MARS_FIELDCAL_DATA_DIR"
 PARITY_ZP_TOLERANCE = 0.0005
 
 #: The two inputs an offline replay can be asked for, by name. ``selected_rows``
-#: is the small bit-exact regression case: the rows ``fit_data.csv`` marks
+#: is the small recorded-row regression case: the rows ``fit_data.csv`` marks
 #: ``used_for_calibration``, i.e. the catalog rows that are already known to
 #: match. ``full_response`` is the end-to-end selection replay: the recorded
 #: VizieR response for the whole field, from which the matches still have to
@@ -415,8 +415,8 @@ def solve_zeropoint_from_reference(
     """Re-solve the zero point from a recorded solve's own calibration rows.
 
     This replays ``calc_solution`` over the exact ``(instrumental, reference)``
-    magnitude pairs upstream fed it, so the result is bit-exact against
-    ``skynet_zero_point``. It is *not* a pixel-level check -- nothing is
+    magnitude pairs upstream fed it. M2's corrected scatter/rejection policy
+    can differ from ``skynet_zero_point``. It is *not* a pixel-level check -- nothing is
     re-measured from a frame here; see ``tools.photometry.calibrate_zeropoint``
     for that.
     """
@@ -766,7 +766,7 @@ def replay_catalog_sources(
 
     ``"selected_rows"`` (default) -- the rows Skynet actually matched: the
     ``used_for_calibration`` rows of ``fit_data.csv``, with position and
-    reference magnitude. This is the small, bit-exact regression case. It
+    reference magnitude. This is the small recorded-row regression case. It
     exercises photometry -> matching -> ref-mag -> solve, but not selection:
     every row it carries is already known to match, and the rows that failed
     to match were never written down, so ``fit_summary.json``'s

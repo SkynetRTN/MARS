@@ -472,9 +472,8 @@ def test_perform_field_calibration_end_to_end_on_a_real_frame(frame_image):
     assert len(by_id) > 10
 
     # Catalog magnitudes carry ~0.02 mag of scatter, matching a real APASS
-    # column. A perfectly noiseless offset is not merely unrealistic here: it
-    # drives the solver's variance estimate to zero and it raises — see
-    # test_fieldcal_solution.test_zero_scatter_input_is_a_known_failure_mode.
+    # column. This exercises an estimable empirical zero-point uncertainty;
+    # the zero-scatter boundary has its own numerical regression.
     rng = np.random.default_rng(20260811)
     catalog_sources = [
         CatalogSource(

@@ -982,8 +982,9 @@ _Former source: `algorithms/fieldcal/EXTRACTION.md`._
 Photometric zero-point calibration, extracted from the Skynet optical
 data-processing pipeline (`/home/claude/skynet`) into `algorithms/fieldcal/`.
 
-This was an **extraction, not a rewrite**. Algorithms, numeric constants,
-ordering and comments are verbatim. Every place a Skynet dependency was cut is
+This began as an extraction. The M2 calibration correction below intentionally
+changes selection, scatter fitting and small-sample rejection. Other extraction
+details retain their historical provenance. Every place a Skynet dependency was cut is
 marked in-code with an `# EXTRACTED:` comment; this document is the index of
 those seams.
 
@@ -1027,7 +1028,7 @@ unless noted. `OPD/` abbreviates
 | MARS file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
 | `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
-| `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
+| `solution.py` | 166 at extraction | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | Originally byte-identical; M2 scientific correction below changes scatter fitting, rejection and empirical-error evaluation while retaining the public return shape. |
 | `ref_mag.py` | 217 at extraction | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Originally verbatim (one blank line lost trailing whitespace); first-party PHOT-15 bounded arithmetic/literal substitution added 2026-10-05 (§5a). Accepted transforms, resolution precedence and numeric error propagation remain unchanged. |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
 | batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
@@ -1322,6 +1323,27 @@ NaN error (below).
 
 Tests: `tests/test_m3_calibration_inputs.py`, and live against SkyMapper and
 UCAC in `tests/test_m3_calibration_inputs_live.py`.
+
+#### 5c. M2 photometric calibration correction (2026-10-23)
+
+PHOT-03/09/10/14 intentionally diverge from extraction.
+The offset fit compares zero additional variance with positive minima of the
+profiled Gaussian likelihood. Rejection runs below eleven stars, standardizes
+weighted residuals by each star's total error, and keeps at least two rows.
+The empirical weighted-mean uncertainty is evaluated on residuals to avoid
+cancellation; the public five-value return and aperture-correction override
+remain. Plotting consumes the exact solver mask, including pre-fit drops.
+
+Known saturated measurements are excluded before the brightest-star cap;
+matching cannot erase a positive image count with catalog zero. Reference
+magnitude zero sorts normally. Only omitted gain falls back to the FITS header.
+Historical Skynet/Afterglow fixtures remain unchanged; current corrected fits
+are checked against an independent two-parameter optimizer, rather than
+claiming old bitwise parity. M3's degenerate-solve/header safeguards remain.
+
+See [acceptance, derivation and limits](analysis/photometric-calibration.md).
+PHOT-06 downsampled saturation counts, other aperture/background defects,
+catalog completeness and calibration sufficiency remain separate open work.
 
 ---
 

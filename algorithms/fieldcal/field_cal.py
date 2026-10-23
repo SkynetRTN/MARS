@@ -467,11 +467,16 @@ def _match_detected_sources(
             "pm_pixel",
             "pm_pos_angle_pixel",
             "pm_epoch",
-            "sat_pixels",
         ):
             val = getattr(catalog_source, attr, None)
             if val is not None:
                 source_map[attr] = val
+
+        # A catalog's default zero must not erase saturation measured in the
+        # image. Keep the most restrictive supplied pixel count.
+        saturation = [s.sat_pixels for s in (source, catalog_source) if s.sat_pixels is not None]
+        if saturation:
+            source_map["sat_pixels"] = max(saturation)
 
         matched_sources.append(CatalogSource(**source_map))
         if matched_shapes is not None:
@@ -685,6 +690,7 @@ def perform_field_calibration(
         source for source in photometry_results
         if source.mag is not None and math.isfinite(source.mag)
         and (source.mag_error is None or math.isfinite(source.mag_error))
+        and not (getattr(source, "sat_pixels", None) or 0) > 0
     ]
 
     if not photometry_results:
@@ -721,7 +727,7 @@ def perform_field_calibration(
     if max_stars and len(calibration_sources) > max_stars:
         calibration_sources = sorted(
             calibration_sources,
-            key=lambda s: getattr(s, "ref_mag", np.inf) or np.inf,
+            key=lambda s: s.ref_mag if s.ref_mag is not None else np.inf,
         )[:max_stars]
         logger.info("Calibration sources after max_stars=%d limit: %d", max_stars, len(calibration_sources))
 

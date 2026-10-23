@@ -1,7 +1,9 @@
 """Zero-point solution: weighted mean magnitude offset with Chauvenet rejection.
 
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/utils.py
-lines 468-603 (``_sigma_eq``, ``calc_solution``), copied verbatim.
+lines 468-603 (``_sigma_eq``, ``calc_solution``). M2 corrects the nonnegative
+scatter boundary and small-sample rejection, and exposes an internal fit mask
+for diagnostics while preserving the five-value public return.
 
 ``skynet_db/runners/utils.py`` is a 907-line grab-bag (S3 download helpers,
 FITS product writers, VizieR cache pruning, header parsing, WCS box helpers,
@@ -34,12 +36,67 @@ def _sigma_eq(sigma2, sigmas2, b, m0):
     w = 1.0 / (sigmas2 + sigma2)
     return (((b - m0) ** 2 * w - 1) * w).sum()
 
-def calc_solution(sources: list[PhotometryData]):
-    from math import sqrt
+
+def _fit_offset_and_scatter(b, sigmas2):
+    """Profile the Gaussian likelihood over nonnegative additional variance.
+
+    Compare zero with positive local minima found by score bracketing on a
+    logarithmic variance grid. A nonpositive boundary score alone does not
+    exclude a better interior minimum for heterogeneous measurement errors.
+    """
     from scipy.optimize import brenth
 
+    if not np.isfinite(sigmas2).all() or np.any(sigmas2 <= 0):
+        raise ValueError("Weighted calibration needs positive finite total measurement variances")
+    centered = b - b[0]
+
+    def profile(variance):
+        total = sigmas2 + variance
+        weights = np.min(total) / total
+        mean = float(np.sum(centered * weights) / np.sum(weights))
+        residual = centered - mean
+        likelihood = float(np.sum(np.log(total) + residual**2 / total))
+        # A positive scaling of the likelihood score avoids squared weights.
+        score = float(np.sum((residual**2 / total - 1) * weights))
+        return mean, likelihood, score
+
+    upper = float(np.ptp(centered)**2)
+    if not np.isfinite(upper):
+        raise ValueError("Calibration residual variance must remain finite")
+    candidates = [0.0]
+    if upper:
+        lower = max(np.nextafter(0.0, 1.0), min(float(np.min(sigmas2)) * 1e-3, upper * 1e-6))
+        grid = np.unique(np.r_[0.0, np.geomspace(lower, upper, 128),
+                               sigmas2[sigmas2 < upper]])
+        previous, previous_score = grid[0], profile(grid[0])[2]
+        for variance in grid[1:]:
+            score = profile(variance)[2]
+            if previous_score > 0 and score <= 0:
+                root = brenth(lambda value: profile(value)[2], previous, variance,
+                              xtol=np.nextafter(0.0, 1.0), rtol=4 * np.finfo(float).eps)
+                candidates.append(root)
+            previous, previous_score = variance, score
+        candidates.append(upper)
+    variance = min(candidates, key=lambda value: profile(value)[1])
+    mean = profile(variance)[0]
+    return b[0] + mean, variance
+
+
+def calc_solution(sources: list[PhotometryData]):
+    return _calc_solution_with_mask(sources)[0]
+
+
+def _calc_solution_with_mask(sources: list[PhotometryData]):
+    """Return the legacy summary and the exact surviving input-row mask.
+
+    Extra variance is nonnegative; measurement errors can explain all scatter.
+    The zero-point error retains the empirical weighted-mean scatter estimator.
+    It is not a propagated catalog-systematic error or a confidence interval.
+    """
+    from math import sqrt
+
     if not sources:
-        return np.nan, np.nan, np.nan, np.nan, 100.0
+        return (np.nan, np.nan, np.nan, np.nan, 100.0), np.zeros(0, dtype=bool)
 
     mags, mag_errors, ref_mags, ref_mag_errors = transpose([
         (
@@ -52,8 +109,10 @@ def calc_solution(sources: list[PhotometryData]):
     ])
 
     logger.debug("calc_solution: starting with %d sources", len(sources))
+    indices = np.arange(len(sources))
     if mag_errors.any():
         good = mag_errors > 0
+        indices = indices[good]
         mags = mags[good]
         mag_errors = mag_errors[good]
         ref_mags = ref_mags[good]
@@ -64,6 +123,8 @@ def calc_solution(sources: list[PhotometryData]):
         snr = None
 
     b = ref_mags - mags
+    if not len(b):
+        return (np.nan, np.nan, np.nan, np.nan, 100.0), np.zeros(len(sources), dtype=bool)
     sigmas2 = mag_errors**2 + ref_mag_errors**2
     no_errors = not sigmas2.any()
     if no_errors:
@@ -73,42 +134,28 @@ def calc_solution(sources: list[PhotometryData]):
 
     iteration = 0
     while True:
-        for _ in range(100):
-            if no_errors:
-                m0 = b.mean()
-            else:
-                m0 = (b / (sigmas2 + sigma2)).sum() / (1 / (sigmas2 + sigma2)).sum()
-
-            prev_sigma2 = sigma2
-            sigma2 = ((b - m0) ** 2).sum() / len(b)
-            left, right = 0.9 * sigma2, 1.1 * sigma2
-            for __ in range(100):
-                if _sigma_eq(left, sigmas2, b, m0) * _sigma_eq(right, sigmas2, b, m0) < 0:
-                    break
-                left *= 0.9
-                right *= 1.1
-            try:
-                sigma2 = brenth(_sigma_eq, left, right, (sigmas2, b, m0))
-            except Exception:
-                pass
-
-            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
-                break
+        if no_errors:
+            m0 = b[0] + (b - b[0]).mean()
+            sigma2 = float(np.mean((b - m0) ** 2))
+        else:
+            m0, sigma2 = _fit_offset_and_scatter(b, sigmas2)
+            weights = 1 / (sigmas2 + sigma2)
+        if len(b) <= 2:
+            break
 
         if no_errors:
             denom = len(b) - 1
             sigma_override = sqrt(((b - m0) ** 2).sum() / denom) if denom > 0 else float("inf")
             rejected = chauvenet(
-                b, mean_override=m0, sigma_override=sigma_override, max_iter=1
+                b, mean_override=m0, sigma_override=sigma_override, min_vals=2, max_iter=1
             )[0]
         else:
-            weights = 1 / (sigmas2 + sigma2)
-            sum_weights = weights.sum()
-            sigma_override = sqrt(
-                (weights * (b - m0) ** 2).sum() / (sum_weights - (weights**2).sum() / sum_weights)
-            )
+            # Each residual is measured against its own known error plus the
+            # fitted extra scatter. An imprecise star is not a strong outlier
+            # merely because it differs from a very precise star.
+            standardized = (b - m0) / np.sqrt(sigmas2 + sigma2)
             rejected = chauvenet(
-                b, mean_override=m0, sigma_override=sigma_override, max_iter=1
+                standardized, mean_override=0.0, sigma_override=1.0, min_vals=2, max_iter=1
             )[0]
         iteration += 1
         logger.debug(
@@ -117,10 +164,11 @@ def calc_solution(sources: list[PhotometryData]):
             int(rejected.sum()),
             int((~rejected).sum()),
         )
-        if not rejected.any():
+        if not rejected.any() or int((~rejected).sum()) < 2:
             break
 
         good = ~rejected
+        indices = indices[good]
         mags = mags[good]
         if snr is not None:
             snr = snr[good]
@@ -136,15 +184,9 @@ def calc_solution(sources: list[PhotometryData]):
             m0_error = sqrt(((b - m0) ** 2).sum() / n / (n - 1))
         else:
             sum_weights = weights.sum()
-            mean_weight = sum_weights / n
-            d1 = weights * b - mean_weight * m0
-            d2 = weights - mean_weight
-            m0_error = sqrt(
-                n
-                / (n - 1)
-                / sum_weights**2
-                * ((d1**2).sum() - 2 * m0 * (d1 * d2).sum() + m0**2 * (d2**2).sum())
-            )
+            # Algebraically the original sandwich expression, evaluated on
+            # residuals to avoid subtracting nearly equal large terms.
+            m0_error = sqrt(n / (n - 1)) * np.linalg.norm((weights / sum_weights) * (b - m0))
     else:
         m0_error = np.nan
 
@@ -164,4 +206,7 @@ def calc_solution(sources: list[PhotometryData]):
             float(np.median(resid)),
         )
 
-    return m0, m0_error, sqrt(sigma2), limmag, (1 - len(b) / len(sources)) * 100
+    kept = np.zeros(len(sources), dtype=bool)
+    kept[indices] = True
+    summary = m0, m0_error, sqrt(sigma2), limmag, (1 - len(b) / len(sources)) * 100
+    return summary, kept

@@ -105,7 +105,7 @@ def run_photometry(
     logger.info("WCS available for photometry: %s", wcs is not None)
 
     gain = None
-    if settings.gain is None or settings.gain == 1:
+    if settings.gain is None:
         gain = get_fits_gain(header)
     else:
         gain = settings.gain
