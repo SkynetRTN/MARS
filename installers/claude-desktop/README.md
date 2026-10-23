@@ -31,9 +31,13 @@ This README is not packed (`.mcpbignore`).
 
 ## Build
 
+Releases after `0.1.0rc6` carry `mars.mcpb`, packed by the release workflow
+from the tagged commit and run there on macOS and Windows before publishing
+(`docs/releasing.md`). To build it yourself:
+
 ```bash
-npx @anthropic-ai/mcpb validate installers/claude-desktop/manifest.json
-npx @anthropic-ai/mcpb pack installers/claude-desktop mars.mcpb
+npx @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
+npx @anthropic-ai/mcpb@2.1.2 pack installers/claude-desktop mars.mcpb
 ```
 
 Without Node, a plain zip of the five packed files is the same extension,

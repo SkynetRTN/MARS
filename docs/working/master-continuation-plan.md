@@ -206,6 +206,11 @@ Evidence: [query backends](../../algorithms/query/),
   installation, interruption and recovery. Record current cold/warm startup
   where host timeouts matter. Claude's MCPB is built manually and is absent
   from release assets; the advertised installation route must say so.
+  *In progress:* the release workflow now packs `mars.mcpb`, runs its launch
+  command through `self-test` against the release build on macOS and
+  Windows runners, and attaches it to the GitHub release; the install guide
+  says which releases carry it. No release has shipped it yet, and the
+  workflow job has not run.
 - [ ] **Configured solver success.** A blind WCS test can skip after failing
   even when resources exist, and omits configured settings. ATLAS reachability
   does not establish blind convergence. A supported known-solution fixture

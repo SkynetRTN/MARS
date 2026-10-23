@@ -50,7 +50,8 @@ the first launch is a real one. Remove or rename any earlier MARS
 registration. On macOS and Windows install uv with its own installer; on
 Fedora use `sudo dnf install uv git gcc` (`../../installers/codex/README.md`).
 
-The `.mcpb` is not attached to releases. Build it from a checkout:
+Releases after rc6 attach `mars.mcpb`; use that once one exists. rc6 has
+none, so for now build it from a checkout:
 
 ```bash
 cd installers/claude-desktop
