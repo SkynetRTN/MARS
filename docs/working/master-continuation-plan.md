@@ -169,8 +169,9 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   and the translated query succeeds (564 papers; an unknown object returns
   none). Citation, reference and fielded searches pass live, and the token
   also answers on `api.scixplorer.org`. `tools.ads` now translates `object:`
-  before searching; a live stress run also found, and the branch fixes, a
-  crash on any ADS result past the first page. The three live ADS tests pass
+  before searching; live stress runs also found, and the branch fixes, a
+  crash on any ADS result past the first page, and sorts, years and doctypes
+  ADS silently ignores, now `invalid_input`. The three live ADS tests pass
   (`docs/extraction.md` Query §5.12). After 2026-11-16, rerun them and record which API host answers. The token and search-syntax links given to users must
   name SciX. If the ADS API no longer serves MARS, record a maintainer
   decision to port, caveat or withdraw the four literature tools.

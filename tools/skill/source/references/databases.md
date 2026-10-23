@@ -101,10 +101,16 @@ returns nothing or noise.
 
 - `query=` is raw ADS syntax for what the fields do not cover (`similar(...)`,
   `trending(...)`, proximity, wildcards), ANDed with any fields given.
-- `object_name=` is a SIMBAD/NED-tagged lookup, not plain text, and combining
-  it with other fields has been seen to fail with a 400. If a call errors, read
-  the error — it carries ADS's own response body — then drop `object_name`
-  first and put the object in `title=` or `abstract=`.
+- `object_name=` is a SIMBAD/NED-tagged lookup, not plain text: ADS
+  translates it to the object's identifiers plus an exact abstract match,
+  within the astronomy collection, and it combines with the other fields. An
+  `object_not_resolved` warning means neither SIMBAD nor NED knew the name, so
+  only abstracts containing it matched — check the name.
+- `sort` is `<field> asc|desc` (`date`, `citation_count`, `read_count`,
+  `first_author`, …); `year` is `2017`, `2015-2020`, `2015-` or `-2015`. ADS
+  silently ignores an unknown sort and matches nothing for an unknown doctype
+  or year form, so MARS refuses them as `invalid_input`. If a call errors, read
+  the error — it carries ADS's own response body — and fix what it names.
 - `get_citing_papers` / `get_referenced_papers` walk the citation graph from a
   bibcode.
 - `build_literature_review` searches and writes a Markdown review with full

@@ -1931,26 +1931,44 @@ fixed where a populated response could look empty or escape as an exception:
   failed translation never reaches the search. The service answers 200 with
   an `Error` key when it cannot translate: "No identifiers/objects found" (an
   empty or unparseable clause) is `invalid_input`, any other `Error` or HTTP
-  failure `provider_unavailable`, and a reply with no query
-  `unusable_response`. `object:` inside a quoted phrase
-  (`title:"object: a study"`) is not translated, since the service refuses
-  it and the search answers it as is. An `object_name` containing `"` is
-  `invalid_input`: the service splits the name there and returns a query the
-  search rejects. Translation adds `database:astronomy`, as the ADS UI's
-  object search does, and a name SIMBAD/NED cannot resolve searches only
-  `=abs:` (`simbid:"0"`/`nedid:"0"`). Live: 564 papers for the test query, an
-  unknown object `not_found`. **Not fixed (ADS):** an unquoted name inside
-  `topn(...)` in a raw `query=` translates with the comma attached and
-  returns nothing (`topn(5, object:"M31", ...)` works), and a 400-character
-  name is a 500 from the service.
+  failure `provider_unavailable`, a reply that is not JSON or has no query
+  `unusable_response`, and a redirect is refused rather than followed
+  (`requests` would drop the token and the body; relevant to the SciX move).
+  `object:` inside a quoted phrase (`title:"object: a study"`) is not
+  translated, since the service refuses it and the search answers it as is.
+  `_quote` now escapes backslashes too: a value ending in one escaped its
+  closing quote and hid the clauses after it. An `object_name` containing
+  `"` is `invalid_input`: the service splits the name there and returns a
+  query the search rejects (escaped quotes in other fields translate fine).
+  Translation adds `database:astronomy`, as the ADS UI's object search does.
+  A name SIMBAD and NED both miss (`simbid:"0"`/`nedid:"0"`; live: the typo
+  `M311`, and `Sun`) still searches the `=abs:` text match, and carries an
+  `object_not_resolved` warning naming the query that ran. Live: 564 papers
+  for the test query, an unknown object `not_found`. **Not fixed (ADS):** an
+  unquoted name inside `topn(...)` in a raw `query=` translates with the
+  comma attached and resolves nothing, now with that warning
+  (`topn(5, object:"M31", ...)` works), and a 400-character name is a 500
+  from the service.
 * **ADS results past the first page crashed the tool.** astroquery types each
   page's columns from that page alone: a field in every row is a 2-D `str`
   column, one missing from some row a 1-D `object` column holding `[None]`.
   `vstack` refused the mix (live: `page`, M31 in 2020, 120 rows), and the
   `TableMergeError` escaped every ADS tool asking for more than 50 rows.
-  `_stack_pages` rebuilds a column whose dtype kind or cell shape differs
-  between pages as 1-D `object` cells. ADS moves to SciX on 2026-11-16, and
-  the live tests need a rerun after it.
+  `_paged_query` now collects each page's raw docs
+  (`query_simple(get_raw_response=True)`) and parses them once with
+  astroquery's `_parse_response`, so a result has one schema whatever its
+  length (live: the same citations query at 50 and 51 rows both type `page`
+  as `<U6`).
+* **Inputs ADS ignores are refused.** Live, ADS answers each of these 200
+  with no error: an unknown sort is dropped (`params.sort` comes back empty,
+  results in default order), and an unknown doctype or malformed year
+  (`abc`, `15`, `2015.5`, a reversed `2020-2015`) matches nothing, which
+  read as `not_found`. The tools now refuse them as `invalid_input`, naming
+  the accepted values: the 12 sort fields and 22 doctypes confirmed live,
+  and years `2017`, `2015-2020`, `2015-`, `-2015` or `[2015 TO 2020]`. A 400
+  from the search (`abs:(pulsar`, which Solr cannot parse) is now
+  `invalid_input` with Solr's message, not `provider_unavailable`. ADS moves
+  to SciX on 2026-11-16, and the live tests need a rerun after it.
 
 Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
 responses) and `tests/test_m3_provider_responses_live.py` (`network`: every

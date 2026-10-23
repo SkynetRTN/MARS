@@ -125,6 +125,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "no_products_for_observations": "The observations are real but carry no data products.",
     "no_products_matched": "No product matched the given filters, so nothing was downloaded.",
     "no_solution": "The configured plate-solving backends returned no solution.",
+    "object_not_resolved": "Neither SIMBAD nor NED resolved an ADS object: name, so only abstracts containing it matched.",
     "observations_capped": "More observations matched than products were fetched for; the cap is adjustable.",
     "peak_below_confidence": "The periodogram peak clears no false-alarm threshold; treat it as a non-detection.",
     "peak_does_not_fold": "The strongest peak folds to a weak profile, so it is probably interference or baseline residual.",

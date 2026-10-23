@@ -429,6 +429,15 @@ def test_ads_fielded_clauses_are_each_grouped():
     assert query == '(abs:"pulsar timing") AND (object:"PSR B1937+21")'
 
 
+def _ads_reply(docs, status=200):
+    from requests import Response
+
+    response = Response()
+    response.status_code, response.encoding = status, "utf-8"
+    response._content = json.dumps({"response": {"numFound": len(docs), "docs": docs}}).encode()
+    return response
+
+
 _TRANSLATED = '(abs:"pulsar timing") AND (((=abs:"PSR B1937+21" OR simbid:"2789895") database:astronomy))'
 
 
@@ -451,12 +460,15 @@ def ads_service(monkeypatch):
         calls["objects"].append((method, url, kwargs.get("json"), kwargs.get("headers")))
         response = Response()
         response.status_code, response.encoding = service["status"], "utf-8"
-        response._content = json.dumps(service["body"]).encode()
+        raw = service.get("raw")
+        response._content = raw if raw is not None else json.dumps(service["body"]).encode()
+        response.headers.update(service.get("headers", {}))
         return response
 
-    def query_simple(query_string, **kwargs):
+    def query_simple(query_string, *, get_raw_response=False, **kwargs):
+        assert get_raw_response, "pages are parsed together, from raw replies"
         calls["search"].append(query_string)
-        return Table({"bibcode": ["2020ApJ...1..1A"], "title": [["A paper"]]})
+        return _ads_reply([{"bibcode": ["2020ApJ...1..1A"], "title": ["A paper"]}])
 
     monkeypatch.setattr(ADSClass, "_request", request)
     monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
@@ -530,16 +542,15 @@ def test_ads_pages_with_differently_shaped_columns_stack(monkeypatch, ads_servic
     # of a page is a 2-D str column; one missing from some row (astroquery
     # fills [None]) is 1-D object. vstack refused the mix and the exception
     # escaped the tool.
-    def query_simple(query_string, **kwargs):
+    def query_simple(query_string, *, get_raw_response=False, **kwargs):
         start, rows = ads.ADS.NSTART, ads.ADS.NROWS
-        count = min(rows, 120 - start)
-        page = [[f"L{start + i}"] if start == 0 else ([None] if i % 2 else [f"{start + i}"])
-                for i in range(count)]
-        return AstropyTable({
-            "bibcode": [[f"2020b{start + i}"] for i in range(count)],
-            "page": page,
-            "author": [["A, B"] * (1 + i % 2) for i in range(count)],
-        })
+        docs = []
+        for i in range(start, min(start + rows, 120)):
+            doc = {"bibcode": [f"2020b{i}"], "author": ["A, B"] * (1 + i % 2)}
+            if i < 50 or i % 2 == 0:  # the first page has every page; later ones do not
+                doc["page"] = [f"L{i}"]
+            docs.append(doc)
+        return _ads_reply(docs)
 
     monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
     result = ads.search_ads(object_name="M31", max_results=120)
@@ -549,11 +560,126 @@ def test_ads_pages_with_differently_shaped_columns_stack(monkeypatch, ads_servic
     assert len({ads.flatten_value(cell) for cell in table["bibcode"]}) == 120
     assert ads.flatten_value(table["page"][0]) == "L0"
     assert ads.flatten_value(table["page"][51]) is None
+    assert ads.flatten_value(table["author"][1]) == "A, B; A, B"
+
+
+def test_ads_unresolved_object_is_searched_with_a_warning(ads_service):
+    from tools.ads import search_ads
+
+    # Live: a typo (M311) resolves in neither SIMBAD nor NED.
+    calls, service = ads_service
+    service["body"] = {"query": '(((=abs:"M311" OR simbid:"0" OR nedid:"0") database:astronomy))'}
+    result = search_ads(object_name="M311")
+    assert result.status == "ok"
+    assert [w.code for w in result.warnings] == ["object_not_resolved"]
+    assert "simbid" in result.warnings[0].message
+
+
+def test_ads_value_ending_in_a_backslash_does_not_hide_an_object_clause(ads_service):
+    from tools.ads import _build_query, search_ads
+
+    query = _build_query(None, None, False, "foo\\", None, None, None, "M31", None)
+    assert query == '(title:"foo\\\\") AND (object:"M31")'
+    calls, _ = ads_service
+    assert search_ads(title="foo\\", object_name="M31").status == "ok"
+    assert len(calls["objects"]) == 1
+
+
+@pytest.mark.parametrize("service_update, code", [
+    ({"status": 301, "headers": {"Location": "https://api.scixplorer.org/v1/objects/query"}},
+     "provider_unavailable"),
+    ({"raw": b"<html><body>Maintenance</body></html>"}, "unusable_response"),
+])
+def test_ads_objects_redirect_or_non_json_never_searches(ads_service, service_update, code):
+    from tools.ads import search_ads
+
+    calls, service = ads_service
+    service.update(service_update)
+    result = search_ads(object_name="M31")
+    assert [e.code for e in result.errors] == [code]
+    assert calls["search"] == []
+    if service_update.get("status") == 301:
+        assert "scixplorer" in result.errors[0].message
+
+
+def test_ads_non_json_search_reply_is_unusable_response(monkeypatch, ads_service):
+    import tools.ads as ads
+    from requests import Response
+
+    def query_simple(query_string, **kwargs):
+        response = Response()
+        response.status_code, response.encoding, response._content = 200, "utf-8", b"<html>oops</html>"
+        return response
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    assert [e.code for e in ads.search_ads(abstract="pulsar").errors] == ["unusable_response"]
+
+
+# Live 2026-10-22: ADS answers each of these 200 with nothing -- an unknown
+# sort is dropped (default order), a malformed year or unknown doctype
+# matches no paper -- so only MARS can say the input was wrong.
+@pytest.mark.parametrize("kwargs", [
+    {"year": "abc"}, {"year": "15"}, {"year": "2015.5"}, {"year": "2020-2015"}, {"year": 20155},
+    {"doctype": "notatype"}, {"doctype": "intechreport"},
+    {"sort": "nonsense desc"}, {"sort": "date sideways"}, {"sort": "date"}, {"sort": "title asc"},
+    {"sort": "date desc, title asc"},
+])
+def test_ads_inputs_ads_ignores_are_invalid_input(ads_service, kwargs):
+    from tools.ads import build_literature_review, search_ads
+
+    calls, _ = ads_service
+    for result in (search_ads(abstract="pulsar", **kwargs), build_literature_review(abstract="pulsar", **kwargs)):
+        assert [e.code for e in result.errors] == ["invalid_input"], kwargs
+        assert next(iter(kwargs)) in result.errors[0].message
+    assert calls["search"] == []
+
+
+@pytest.mark.parametrize("sort", ["nonsense desc", "date"])
+def test_ads_citation_tools_refuse_an_unknown_sort(ads_service, sort):
+    from tools.ads import get_citing_papers, get_referenced_papers
+
+    calls, _ = ads_service
+    for tool in (get_citing_papers, get_referenced_papers):
+        assert [e.code for e in tool("1982Natur.300..615B", sort=sort).errors] == ["invalid_input"]
+    assert calls["search"] == []
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"year": "2017"}, {"year": 2017}, {"year": "2015-2020"}, {"year": "2015-"}, {"year": "-2015"},
+    {"year": "[2015 TO 2020]"}, {"doctype": "article"}, {"doctype": "phdthesis"},
+    {"sort": "citation_count desc"}, {"sort": "first_author asc"},
+    {"sort": "citation_count desc, bibcode asc"},
+])
+def test_ads_inputs_ads_accepts_are_searched(ads_service, kwargs):
+    from tools.ads import search_ads
+
+    calls, _ = ads_service
+    assert search_ads(abstract="pulsar", **kwargs).status == "ok", kwargs
+    assert len(calls["search"]) == 1
+
+
+def test_ads_query_syntax_error_is_invalid_input(monkeypatch, ads_service):
+    import tools.ads as ads
+    from requests import HTTPError, Response
+
+    # Live reply to abs:(pulsar -- a 400 carrying Solr's parse error.
+    def query_simple(query_string, **kwargs):
+        response = Response()
+        response.status_code, response.encoding = 400, "utf-8"
+        response._content = json.dumps({"error": {"code": 400, "msg": "org.apache.solr.search.SyntaxError: "
+                                                  "Cannot parse 'abs:(pulsar'"}}).encode()
+        raise HTTPError("400 Client Error: BAD REQUEST", response=response)
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = ads.search_ads("abs:(pulsar")
+    assert [e.code for e in result.errors] == ["invalid_input"]
+    assert "Cannot parse" in result.errors[0].message
 
 
 @pytest.mark.parametrize("status, body, code", [
     (503, {"message": "down"}, "provider_unavailable"),
     (500, {"message": "Internal Server Error"}, "provider_unavailable"),
+    (400, {"message": "bad request"}, "invalid_input"),
     (200, {"Error": "Unable to get results!", "Error Info": "SIMBAD returned status 500"},
      "provider_unavailable"),
     # Live reply to an object: clause the service cannot parse (object:"").
