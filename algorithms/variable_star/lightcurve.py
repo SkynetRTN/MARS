@@ -51,6 +51,15 @@ def with_error_mse(rows: Sequence[VariableDataRow]) -> list[VariableDataRow]:
     ]
 
 
+def differential_magnitude(
+    row: VariableDataRow, variable_star: str, reference_star_magnitude: float
+) -> float:
+    """Return one complete row's target-minus-comparison magnitude."""
+    if variable_star == "source1":
+        return row.source1 - row.source2 + reference_star_magnitude
+    return row.source2 - row.source1 + reference_star_magnitude
+
+
 def differential_data(
     rows: Sequence[VariableDataRow], variable_star: str, reference_star_magnitude: float
 ) -> list[tuple[float, float]]:
@@ -64,12 +73,7 @@ def differential_data(
     for row in rows:
         if row.jd is None or row.source1 is None or row.source2 is None:
             continue
-        magnitude = (
-            row.source1 - row.source2 + reference_star_magnitude
-            if variable_star == "source1"
-            else row.source2 - row.source1 + reference_star_magnitude
-        )
-        values.append((row.jd, magnitude))
+        values.append((row.jd, differential_magnitude(row, variable_star, reference_star_magnitude)))
     return values
 
 
@@ -91,18 +95,20 @@ def differential_errors(
             or row.error_mse is None
         ):
             continue
-        magnitude = (
-            row.source1 - row.source2 + reference_star_magnitude
-            if variable_star == "source1"
-            else row.source2 - row.source1 + reference_star_magnitude
-        )
+        magnitude = differential_magnitude(row, variable_star, reference_star_magnitude)
         values.append((row.jd, magnitude - row.error_mse, magnitude + row.error_mse))
     return values
 
 
 def jd_range(rows: Sequence[VariableDataRow]) -> float:
-    """Return the upstream four-decimal observation baseline."""
+    """Return the upstream four-decimal observation baseline.
+
+    M3 (TS-31): with no dated row upstream returned ``-Infinity`` and the port
+    raised ``ValueError`` from ``max()``; no dates is now no baseline, ``0.0``.
+    """
     values = [row.jd for row in rows if row.jd is not None]
+    if not values:
+        return 0.0
     return float(f"{max(values) - min(values):.4f}")
 
 

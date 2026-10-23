@@ -178,6 +178,10 @@ def _to_native(value):
 
     if value is None:
         return None
+    # A masked element's .item() is its fill value (0.0, ''), which would read
+    # as a real measurement; a masked cell has no value.
+    if type(value).__name__ == "MaskedConstant":
+        return None
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     item = getattr(value, "item", None)

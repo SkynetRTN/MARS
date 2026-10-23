@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-from astropy.table import Table
+from astropy.table import MaskedColumn, Table
 
 from algorithms.variable_star.folding import fold_with_error, validate_fold_work
 from algorithms.variable_star.lightcurve import VariableDataRow, error_mse, merge_sources_by_mjd, with_error_mse
@@ -208,7 +208,7 @@ def _rows_from_artifact(file: FileMetadata) -> list[VariableDataRow]:
             if row.error1 is None or row.error2 is None:
                 raise ValueError("Paired observations require both source uncertainties; re-ingest the source CSV.")
     # Re-derive cached errors, including pre-M2 artifacts with halved values.
-    # Missing combined errors still follow the existing stage failure contract.
+    # M3 folds mask missing combined errors; weighted spectra still reject them.
     return [
         replace(row, error_mse=error_mse(row.error1, row.error2))
         if row.error_mse is not None else row
@@ -333,23 +333,39 @@ def fold_variable_star_lightcurve(
             rows, variable_star, reference_star_magnitude, period=period,
             phase=phase, display_periods=display_periods,
         )
-        if any(not math.isfinite(value) for row in (*data, *errors) for value in row):
+        # M3 represents unavailable error bounds as None. Keep those masked,
+        # while M2 still rejects any nonfinite calculated coordinate or bound.
+        if any(value is not None and not math.isfinite(value) for row in (*data, *errors) for value in row):
             raise ValueError("Folded coordinates, magnitudes and error bounds must remain finite.")
     except FileNotFoundError as exc:
         return _error(file, "file_not_found", str(exc), VariableStarFoldedLightCurve)
     except (OSError, ValueError, IndexError) as exc:
         return _error(file, "invalid_input", str(exc), VariableStarFoldedLightCurve)
+    # A point whose row has no combined uncertainty folds with masked bounds.
+    unbounded = [row[1] is None for row in errors]
     table = Table({
         "phase": [row[0] for row in data], "magnitude": [row[1] for row in data],
-        "error_low": [row[1] for row in errors], "error_high": [row[2] for row in errors],
+        "error_low": MaskedColumn([row[1] or 0.0 for row in errors], mask=unbounded),
+        "error_high": MaskedColumn([row[2] or 0.0 for row in errors], mask=unbounded),
     })
     table["phase"].unit = "d"
     for name in ("magnitude", "error_low", "error_high"):
         table[name].unit = "mag"
     table.meta.update(period_unit="d", uncertainty_method=_UNCERTAINTY_METHOD)
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_folded", subdir=subdir)
+    unbounded_rows = sum(
+        row.jd is not None and row.source1 is not None and row.source2 is not None
+        and row.error_mse is None
+        for row in rows
+    )
+    warnings = [ToolWarning(
+        code="unbounded_points_folded",
+        message=f"{unbounded_rows} folded observation(s) have no combined uncertainty; "
+        "their error bounds are masked.",
+    )] if unbounded_rows else []
     return VariableStarFoldedLightCurve(
         file=file, artifact=artifact, period=period, phase=phase, display_periods=display_periods,
         rows_folded=len(data), preview=artifacts.preview_rows(table, PREVIEW_ROWS),
         period_unit="d", uncertainty_method=_UNCERTAINTY_METHOD,
+        warnings=warnings,
     )

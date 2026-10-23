@@ -5,12 +5,19 @@ observation_asset_processing/optical_data_processing/field_cal.py (701 lines).
 
 Copied verbatim. The maintained interface supplies WCS and catalog rows
 explicitly, while deterministic extraction and photometry are ordinary imports.
-No numerical expression, constant, or ordering has been changed.
+No numerical expression, constant, or ordering has been changed. The M3
+malformed-input guards, marked ``M3`` inline, do change outcomes: inputs that
+used to abort now solve or fail by name, unusable rows are left out, and a
+degenerate solve -- including upstream's single-star zero point with a NaN
+error -- is refused rather than returned (``docs/extraction.md``, Field
+Calibration §5b).
 """
 from __future__ import annotations
 
 from datetime import datetime
 import logging
+import math
+from numbers import Integral
 from typing import Iterable, Mapping
 
 import numpy as np
@@ -44,9 +51,21 @@ from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.source_extraction import get_source_radec, run_source_extraction
 from .schemas import CatalogSource
 
-__all__ = ["perform_field_calibration"]
+__all__ = ["DegenerateCalibrationError", "perform_field_calibration"]
 
 logger = logging.getLogger(__name__)
+
+
+class DegenerateCalibrationError(RuntimeError):
+    """The solve ran but its zero point or uncertainty is not usable.
+
+    M3 (PHOT-08): raised before any ``PHOT_*`` header keyword is written, so a
+    degenerate solve is never stored or returned as a calibration.
+    """
+
+    def __init__(self, message: str, *, num_stars: int):
+        super().__init__(message)
+        self.num_stars = num_stars
 
 def _normalize_catalog_sources(
     sources: Iterable[CatalogSource | Mapping[str, object]],
@@ -61,6 +80,16 @@ def _normalize_catalog_sources(
             data = dict(source)
         if data.get("file_id") is None:
             data["file_id"] = file_id
+        # M3: catalog backends assign provider values without validation, so
+        # SkyMapper (int32), SDSS (uint64), UCAC and PanSTARRS (int64) rows
+        # arrive with integer ids that ``CatalogSource.id: str`` rejects here.
+        # A masked integer column can arrive as float; NaN means no id, and
+        # _ensure_unique_source_ids assigns one.
+        source_id = data.get("id")
+        if isinstance(source_id, Integral) and not isinstance(source_id, bool):
+            data["id"] = str(int(source_id))
+        elif isinstance(source_id, float):
+            data["id"] = str(int(source_id)) if source_id.is_integer() else None
         normalized.append(CatalogSource(**data))
     return normalized
 
@@ -197,6 +226,7 @@ def _match_detected_sources(
     header,
     data: np.ndarray,
     source_match_tol: float | None,
+    matched_shapes: list | None = None,
 ) -> list[CatalogSource]:
     if not detected_sources:
         return catalog_sources
@@ -249,6 +279,7 @@ def _match_detected_sources(
     # For the pixel path they are additionally projected through the WCS.
     catalog_source_coord_for_file: dict[int | None, np.ndarray] = {}
     catalog_source_kdtree_for_file: dict[int | None, cKDTree | None] = {}
+    catalog_index_for_file: dict[int | None, np.ndarray] = {}
 
     # Reference point for the flat-sky projection used in angular mode.
     if use_angular:
@@ -261,6 +292,7 @@ def _match_detected_sources(
             catalog_source_kdtree_for_file[file_id] = None
             continue
         catalog_xy_data = []
+        catalog_pm_epochs = []
         for source in catalog_source_list:
             x = getattr(source, "x", None)
             if x is None:
@@ -286,10 +318,17 @@ def _match_detected_sources(
                 pm_pos_angle_sky = getattr(source, "pm_pos_angle_sky", 0) or 0
                 pm_pixel = getattr(source, "pm_pixel", 0) or 0
                 pm_pos_angle_pixel = getattr(source, "pm_pos_angle_pixel", 0) or 0
-            catalog_xy_data.append([x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel])
+            catalog_xy_data.append([x, y, ra, dec, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel])
+            catalog_pm_epochs.append(pm_epoch)
 
-        x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel = np.transpose(catalog_xy_data)
-        pm_epoch = np.asarray(pm_epoch, dtype=object)
+        # M3 (PHOT-04): was one np.transpose over rows that also held pm_epoch.
+        # A datetime among the floats made every column an object array, and
+        # np.isfinite then raised TypeError for any catalog carrying an epoch.
+        # The epochs now travel separately; the arithmetic below is unchanged.
+        x, y, ra, dec, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel = np.transpose(
+            np.asarray(catalog_xy_data, dtype=float)
+        )
+        pm_epoch = np.asarray(catalog_pm_epochs, dtype=object)
         have_radec = np.isfinite(ra) & np.isfinite(dec)
         if have_radec.any():
             if epoch is not None:
@@ -313,6 +352,10 @@ def _match_detected_sources(
                 x[have_radec], y[have_radec] = wcs.all_world2pix(
                     ra[have_radec], dec[have_radec], 1, quiet=True,
                 )
+        elif use_angular:
+            # M3 (PHOT-05): with no row positioned, cx/cy were never bound and
+            # the lookup below raised NameError.
+            cx = cy = np.full(len(catalog_source_list), np.nan)
 
         if not use_angular:
             if epoch is not None:
@@ -329,8 +372,22 @@ def _match_detected_sources(
         else:
             coords = np.column_stack([cx, cy])
 
+        # M3 (PHOT-05): a row with no usable position cannot be matched, and
+        # one NaN coordinate made cKDTree reject the whole catalog. Such rows
+        # are left out; ``catalog_index`` maps tree indices back to the list.
+        positioned = np.isfinite(coords).all(axis=1)
+        if not positioned.all():
+            # Warning, not info: in pixel mode a valid RA/Dec projecting to
+            # NaN points at the WCS, and the solve then runs on what is left.
+            logger.warning(
+                "Skipping %d of %d catalog sources with no usable match position%s",
+                int((~positioned).sum()), len(positioned),
+                "" if use_angular else " (in pixel mode, check the WCS projection)",
+            )
+        catalog_index_for_file[file_id] = np.flatnonzero(positioned)
+        coords = coords[positioned]
         catalog_source_coord_for_file[file_id] = coords
-        catalog_source_kdtree_for_file[file_id] = cKDTree(coords)
+        catalog_source_kdtree_for_file[file_id] = cKDTree(coords) if len(coords) else None
 
     # ---- build detected-source match coordinates --------------------------------
     detected_sources_for_file: dict[int | None, list[SourceExtractionData]] = {}
@@ -369,9 +426,9 @@ def _match_detected_sources(
         catalog_source_list = catalog_sources_for_file[file_id]
         det_coord = detected_source_coord_for_file[file_id][src_idx]
         i = tree.query(det_coord, distance_upper_bound=match_tol)[1]
-        if i >= len(catalog_source_list):
+        if i >= tree.n:
             continue
-        catalog_source = catalog_source_list[i]
+        catalog_source = catalog_source_list[catalog_index_for_file[file_id][i]]
         cat_coord = catalog_source_coord_for_file[file_id][i]
         detected_source_list = detected_sources_for_file[file_id]
         reverse_tree = detected_source_kdtree_for_file[file_id]
@@ -417,8 +474,19 @@ def _match_detected_sources(
                 source_map[attr] = val
 
         matched_sources.append(CatalogSource(**source_map))
+        if matched_shapes is not None:
+            # M3 (PHOT-11): CatalogSource has no FWHM fields, so the detected
+            # shape was lost here and adaptive photometry had none to scale.
+            # Kept aligned with matched_sources, index for index.
+            matched_shapes.append(
+                {attr: getattr(source, attr, None) for attr in ("fwhm_x", "fwhm_y", "theta")}
+            )
 
     if not matched_sources:
+        listed = sum(len(rows) for rows in catalog_sources_for_file.values())
+        positioned_total = sum(len(index) for index in catalog_index_for_file.values())
+        if listed and not positioned_total:
+            raise RuntimeError("No catalog source has a usable position to match against")
         raise RuntimeError("Could not match any detected sources to catalog sources")
 
     return matched_sources
@@ -449,6 +517,9 @@ def _collect_calibration_sources(
 
         ref_mag = getattr(catalog_source, "ref_mag", None)
         ref_err = getattr(catalog_source, "ref_mag_error", None)
+        if ref_mag is not None and not math.isfinite(ref_mag):
+            # M3: a non-finite supplied ref_mag is unusable, like an absent one.
+            ref_mag = ref_err = None
         if ref_mag is None:
             lookup = dict(catalog_filter_lookup or {})
             if custom_filter_lookup:
@@ -461,8 +532,13 @@ def _collect_calibration_sources(
                 custom_filter_lookup=lookup or None,
                 allow_preferred_band_fallback=allow_preferred_band_fallback,
             )
-        if ref_mag is None:
+        if ref_mag is None or not math.isfinite(ref_mag):
             continue
+        if ref_err is not None and not math.isfinite(ref_err):
+            # M3: calc_solution's `error or 0` keeps NaN (it is truthy), which
+            # turns every weight -- and the zero point -- into NaN. An unusable
+            # catalog error is treated as no catalog error.
+            ref_err = None
 
         source.ref_mag = ref_mag
         if ref_err is not None:
@@ -525,6 +601,7 @@ def perform_field_calibration(
             file_id=file_id,
         )
 
+    matched_shapes: list[dict] = []
     sources = _match_detected_sources(
         sources,
         detected_sources or [],
@@ -532,6 +609,7 @@ def perform_field_calibration(
         header=header,
         data=data,
         source_match_tol=settings.source_match_tol,
+        matched_shapes=matched_shapes,
     )
     logger.info("Catalog sources after detected-source matching: %d", len(sources))
     logger.info(
@@ -560,7 +638,9 @@ def perform_field_calibration(
             photometry_results.append(PhotometryData(**src_map))
     else:
         normalized_sources: list[SourceExtractionData] = []
-        for source in sources:
+        # matched_shapes is empty when no detections were matched (no-op path).
+        shapes = matched_shapes if len(matched_shapes) == len(sources) else [{}] * len(sources)
+        for source, shape in zip(sources, shapes):
             src_map = source.model_dump(
                 exclude_unset=True,
                 exclude={
@@ -576,6 +656,9 @@ def perform_field_calibration(
             )
             if src_map.get("file_id") is None:
                 src_map["file_id"] = file_id
+            # M3 (PHOT-11): restore the matched detection's FWHM. Read only by
+            # mode="auto"; aperture photometry ignores it.
+            src_map.update({attr: value for attr, value in shape.items() if value is not None})
             normalized_sources.append(SourceExtractionData(**src_map))
 
         # LEGACY AFTERGLOW PARITY — DO NOT "CLEAN UP".  Forcing apcorr_tol to 0
@@ -595,7 +678,14 @@ def perform_field_calibration(
             background=None,
             background_rms=None,
         )
-    photometry_results = [source for source in photometry_results if source.mag is not None]
+    # M3: a non-finite magnitude reached calc_solution and raised LinAlgError.
+    # An infinite mag_error survives calc_solution's `> 0` filter, gives a
+    # zero SNR, and turns the limiting magnitude (limmag5) into NaN.
+    photometry_results = [
+        source for source in photometry_results
+        if source.mag is not None and math.isfinite(source.mag)
+        and (source.mag_error is None or math.isfinite(source.mag_error))
+    ]
 
     if not photometry_results:
         raise RuntimeError("No catalog sources could be photometered")
@@ -651,6 +741,35 @@ def perform_field_calibration(
         rej_percent,
     )
 
+    # M3 (PHOT-08): a degenerate solve wrote no keywords (astropy rejected the
+    # NaN PHOT_M0), logged a warning and was returned as a calibration. A
+    # solve without a finite zero point and a finite, positive uncertainty is
+    # refused here, before the header is touched.
+    num_stars = len(calibration_sources)
+    # calc_solution reports rejection only as a percentage of its input.
+    survivors = int(round(num_stars * (100 - rej_percent) / 100)) if np.isfinite(rej_percent) else num_stars
+    if not np.isfinite(m0):
+        raise DegenerateCalibrationError(
+            f"The solve over {num_stars} calibration star(s) produced a non-finite zero point.",
+            num_stars=num_stars,
+        )
+    if m0_error is None or not np.isfinite(m0_error) or m0_error <= 0:
+        if survivors < 2:
+            reason = (
+                f"{survivors} of {num_stars} calibration stars survived outlier rejection"
+                if survivors != num_stars
+                else f"{num_stars} calibration star"
+            ) + "; at least two are needed to estimate its uncertainty"
+        else:
+            reason = (
+                f"over {survivors} calibration stars its uncertainty is {m0_error!r} "
+                "(identical residuals or no usable errors)"
+            )
+        raise DegenerateCalibrationError(
+            f"The zero point is not usable: {reason}.",
+            num_stars=survivors,
+        )
+
     # Write photometric zero-point to FITS header if accessible
     try:
         zero_point_offset = getattr(phot_settings, "zero_point_mag", 0) or 0
@@ -658,8 +777,7 @@ def perform_field_calibration(
             float(m0) + float(zero_point_offset),
             "Photometric zero point",
         )
-        if m0_error is not None and np.isfinite(m0_error):
-            header["PHOT_M0E"] = (float(m0_error), "Photometric zero point error")
+        header["PHOT_M0E"] = (float(m0_error), "Photometric zero point error")
         catalog_str = ", ".join(_catalogs_from_sources(calibration_sources)) or "unknown"
         header["PHOT_CAL"] = (catalog_str[:68], "Photometric calibration catalog")
     except Exception as exc:

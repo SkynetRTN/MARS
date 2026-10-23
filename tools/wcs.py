@@ -600,10 +600,24 @@ def solve_astrometry(
                 *configuration_warnings,
                 ToolWarning(
                     code="no_solution",
-                    message="The configured plate-solving backends returned no solution.",
+                    message="The configured plate-solving backends returned no solution."
+                    + (" ATLAS did not run: the frame has no pointing hint."
+                       if solve_result.metadata.atlas_failure_reason == "no_pointing_hint" else ""),
                 )
             ],
         )
+
+    if solver_failures:
+        # Solved, but a configured backend could not run or raised on the way.
+        # One warning per code: extend a configuration warning if there is one.
+        note = "Solved without a configured backend: " + "; ".join(solver_failures)
+        existing = next((w for w in configuration_warnings if w.code == "solver_backend_unavailable"), None)
+        configuration_warnings = [w for w in configuration_warnings if w is not existing] + [
+            ToolWarning(
+                code="solver_backend_unavailable",
+                message=f"{existing.message} {note}" if existing else note,
+            ),
+        ]
 
     if write_header:
         try:

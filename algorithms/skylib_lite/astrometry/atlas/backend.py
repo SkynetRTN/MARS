@@ -71,6 +71,10 @@ class AtlasBackend:
         config = replace(config, timeout_s=normalize_solver_timeout(config.timeout_s))
         if request.image_path is None:
             raise ValueError("image_path must be provided for Atlas backend")
+        # M3 (WCS-05): both paths search locally around the hint; without one
+        # float(None) raised TypeError below.
+        if request.ra_hours is None or request.dec_degs is None:
+            raise ValueError("Atlas backend requires a pointing hint (ra_hours and dec_degs)")
 
         catalog_roots = dict(config.catalog_roots) if config.catalog_roots else {}
 

@@ -59,10 +59,10 @@ The original logarithmic-period grid and float accumulation are retained,
 including its normal 2,001 rows for 2,000 public steps. The direct API still
 enforces 2,000 samples, 200,000 steps and 20,000,000 sample-grid work units.
 Unrepresentable weights, variation or coordinates are rejected. Stable
-centering no longer overflows merely when an exactly constant value is large;
-the direct constant-series result remains nonfinite. The public stage rejects
-constant series with `invalid_input` and no spectrum artifact. Broader direct
-helper failure contracts remain M3 work.
+centering no longer overflows merely when an exactly constant value is large.
+M3 PR #122 subsequently replaces the original direct constant-series nonfinite
+result with `ValueError`. The public stage continues to reject constants with
+`invalid_input` and no spectrum artifact; see the [M2/M3 integration record](m2-m3-integration.md).
 
 ## Differential standard errors and artifacts
 
@@ -100,7 +100,9 @@ cached combined errors from `error1` and `error2`. Thus older half-error
 light-curve artifacts do not silently retain narrow error bars. Paired data
 with a cached combined error but missing source-error components must be
 re-ingested; the old cache has no independently established convention.
-Missing or invalid combined errors retain the existing failure contract.
+After M3 integration, folds retain points with missing combined errors using
+masked bounds and an `unbounded_points_folded` warning. Weighted spectra still
+reject missing errors; invalid supplied errors remain rejected.
 Already saved spectra/folds are not rewritten: recompute them from source
 light curves to obtain corrected powers/error bars and explicit metadata.
 

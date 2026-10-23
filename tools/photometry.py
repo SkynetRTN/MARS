@@ -31,6 +31,7 @@ cluster worth an HR diagram.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -74,6 +75,47 @@ __all__ = [
 ]
 
 
+class UnsupportedFilterError(ValueError):
+    """No catalog the calibration would use can supply the image's filter."""
+
+
+def _check_filter_supported(image_filter, catalogs: list[str]) -> None:
+    """Raise :class:`UnsupportedFilterError` when every catalog is certain to
+    produce no reference magnitude for ``image_filter`` (CAT-06).
+
+    Without this the solve queried the catalog and then failed with "No
+    calibration sources matched catalog magnitudes", naming neither the filter
+    nor the catalog. The message names both, the missing band, and the
+    catalogs that can supply the filter.
+    """
+    from algorithms.catalogs import CATALOGS
+
+    from tools.catalogs import reference_band_unavailable, resolve_reference_band
+
+    # VSX lists variable stars -- the variability cross-check, never a
+    # calibration reference -- so it neither passes nor fails the check.
+    catalogs = [name for name in catalogs if name != "VSX"]
+    if not isinstance(image_filter, str) or not image_filter.strip() or not catalogs:
+        return
+    reasons = [reference_band_unavailable(name, image_filter) for name in catalogs]
+    if not all(reasons):
+        return
+    # Offer only catalogs with a real band or transform for the filter: not
+    # the preferred-band fallback, which would substitute another band, nor a
+    # '*' wildcard (UCAC's Open bandpass answers every filter), nor VSX.
+    alternatives = []
+    for name in CATALOGS:
+        if name == "VSX" or name in catalogs:
+            continue
+        resolution = resolve_reference_band(name, image_filter)
+        if resolution.supported and resolution.kind != "wildcard":
+            alternatives.append(name)
+    message = " ".join(reasons)
+    if alternatives:
+        message += f" Catalogs that can calibrate {image_filter.strip()!r}: {', '.join(alternatives)}."
+    raise UnsupportedFilterError(message)
+
+
 def _resolve_calibration_inputs(
     header,
     wcs,
@@ -99,6 +141,7 @@ def _resolve_calibration_inputs(
     if catalog_sources is None:
         if not selected_catalogs:
             raise ValueError(f"No calibration catalog supports filter {image_filter!r}")
+        _check_filter_supported(image_filter, selected_catalogs)
         catalog_sources = query_catalogs(
             selected_catalogs,
             wcs=wcs,
@@ -106,10 +149,20 @@ def _resolve_calibration_inputs(
             stop_on_success=True,
             image_filter=image_filter,
         )
-    elif not selected_catalogs:
-        selected_catalogs = sorted(
+    else:
+        row_catalogs = sorted(
             {name for name in (getattr(source, "catalog_name", None) for source in catalog_sources) if name}
         )
+        if not selected_catalogs:
+            selected_catalogs = row_catalogs
+        # A row that already carries ref_mag is used as given; only rows the
+        # solve must resolve a band for can make the filter unusable.
+        unresolved = [source for source in catalog_sources if getattr(source, "ref_mag", None) is None]
+        if unresolved:
+            unresolved_catalogs = sorted(
+                {name for name in (getattr(source, "catalog_name", None) for source in unresolved) if name}
+            )
+            _check_filter_supported(image_filter, unresolved_catalogs or selected_catalogs)
 
     if (
         variable_sources is None
@@ -292,6 +345,13 @@ def run_photometry_on_target(
     # mutually inconsistent by several magnitudes to anyone checking the math.
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
 
+    warnings = []
+    failure = getattr(zero_point, "failure", None)  # resolutions may be duck-typed
+    if getattr(zero_point, "failure_code", None) == "unusable_response":
+        warnings.append(ToolWarning(code="unusable_response", message=failure))
+    elif failure:
+        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
+
     return PhotometryRunResult(
         file=describe_file(fits_path),
         source_count=len(results),
@@ -302,6 +362,7 @@ def run_photometry_on_target(
         brightest=_source_summary(brightest),
         faintest=_source_summary(faintest),
         artifacts=artifacts,
+        warnings=warnings,
     )
 
 
@@ -447,7 +508,8 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
 
-    from algorithms.fieldcal.field_cal import perform_field_calibration
+    from algorithms.fieldcal.field_cal import DegenerateCalibrationError, perform_field_calibration
+    from algorithms.query.vizier import ProviderResponseError
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
 
     # The same settings classes the CLI field-cal path constructs -- the ones
@@ -512,6 +574,21 @@ def calibrate_zeropoint(
             catalog_sources=resolved_sources,
             variable_sources=variable_sources,
         )
+    except UnsupportedFilterError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="unsupported_filter", message=str(exc))],
+            warnings=warnings,
+        )
+    except DegenerateCalibrationError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="no_solution", message=str(exc))],
+            warnings=warnings,
+        )
+    except ProviderResponseError as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="unusable_response", message=str(exc))],
+            warnings=warnings,
+        )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
         return ZeropointComparison(
             errors=[ToolError(code="field_calibration_failed", message=str(exc))],
@@ -524,7 +601,7 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
     zero_point, _result = outcome
-    if zero_point is None:
+    if zero_point is None or not math.isfinite(zero_point):
         return ZeropointComparison(
             errors=[ToolError(code="no_solution", message="field calibration did not converge")],
             warnings=warnings,

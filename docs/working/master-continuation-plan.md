@@ -1,6 +1,6 @@
 # MARS release closure gate
 
-Updated 2026-10-22 against `main` at `15f5497`, with the first five M2 checkpoints
+Updated 2026-10-22 against `main` at `9544782` (M3 PR #122), with the first five M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
@@ -89,8 +89,10 @@ the subsequent work.
   Review found and verified constant-series and response-amplitude corrections;
   final review has no outstanding findings. Validation: Python 3.13.15,
   full offline suite **3,503 passed, 49 skipped**; compileall, schema goldens, generated-skill
-  consistency, repository shape and `git diff --check` pass. Broader direct
-  helper failures remain M3 work. Changes remain local, unmerged and unpublished.
+  consistency, repository shape and `git diff --check` pass. M3 subsequently
+  defines direct constant rejection and masked missing fold bounds; the
+  [integration record](../analysis/m2-m3-integration.md) checks coexistence with
+  M2's science. M2 changes remain local, unmerged and unpublished.
 - [x] **Cluster ages and membership.** Legacy HR helpers convert MWSC log-year
   ages to Myr within the retained 13.8 Gyr display window, keeping valid old
   clusters. FSR joins use exact IDs independent of source/result order and
@@ -164,31 +166,94 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
 
 ## M3: failed inputs and services must produce usable failures
 
-- [ ] **Catalog lookup failures.** SDSS named-object lookup still calls
+- [x] **Catalog lookup failures.** SDSS named-object lookup still calls
   `query_object`; M1 repaired only regions. APASS U references an unavailable
   band. SIMBAD's first initialization failure disables resolution for the
   process lifetime. Lookups must return data or explain the specific failure,
   and transient failure must have defined recovery.
-- [ ] **Malformed calibration inputs.** Confirm reported failures with mixed
+  *Closed:* SDSS objID lookup uses the bounded, quality-filtered SQL contract,
+  batched under SkyServer's 2,048-byte URL limit, and leaves non-objID names
+  out; APASS U returns `unsupported_filter` naming the missing `uprime` and
+  catalogs with a real U transform before any query; a failed SIMBAD probe is
+  retried after 30 s, and `resolve_target` and `search_casda` report an outage
+  as `provider_unavailable` (a missing astroquery as `dependency_missing`),
+  not `not_found`. Evidence: `tests/test_m3_catalog_lookup_failures.py`
+  (offline) and `tests/test_m3_catalog_lookup_live.py` (`network`; passed
+  2026-10-21 against live SkyServer, SIMBAD, VizieR APASS and CASDA with an
+  empty astroquery cache), `docs/extraction.md` Catalogs §5.7 and Query updates.
+- [x] **Malformed calibration inputs.** Confirm reported failures with mixed
   catalog row shapes/epochs, absent coordinates, missing FWHM in adaptive
   apertures and degenerate zero-point header writes. These cases must not
-  escape as exceptions or advertise a usable calibration.
-- [ ] **Direct light-curve helpers.** Missing errors can misalign variable
+  escape as exceptions or advertise a usable calibration. Reproduced live
+  2026-10-21: a U-band NGC 5128 calibration with default catalogs selects
+  SkyMapper, whose rows carry `numpy.int32` ids, and field calibration's
+  `CatalogSource` revalidation rejects them as `field_calibration_failed`.
+  *Closed:* all four reports and the live integer-id failure reproduced, then
+  fixed in field calibration: integer ids are coerced, epochs no longer abort
+  matching, positionless rows and non-finite magnitudes are left out (with
+  specific errors when nothing usable remains), solves without a finite zero
+  point and positive uncertainty raise `DegenerateCalibrationError` before any
+  header write (`no_solution` from both calibration tools), and `mode="auto"`
+  receives the detected FWHM. Refusing a single-star solve diverges from
+  upstream, which returns it with a NaN error. Evidence: `tests/test_m3_calibration_inputs.py`,
+  `tests/test_m3_calibration_inputs_live.py` (`network`, live SkyMapper and
+  UCAC), `docs/extraction.md` Field Calibration §5b. The live runs show
+  SkyMapper and UCAC B zero points 1.27 and 0.72 mag from APASS through the
+  preferred-band fallback and the UCAC wildcard; that is M2's catalog
+  magnitudes and filters item, not validated here.
+
+- [x] **Direct light-curve helpers.** Missing errors can misalign variable
   folds; all-null dates raise; constant weighted spectra retain NaNs; empty peak
   selection has an unfinished helper contract. Legacy histograms fail on
   singleton or tied data. Public spectrum guards already exist; remaining
   supported helper calls need defined results for these inputs.
-- [ ] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
+  *Closed:* each input reproduced, then given a defined result. Folds pair
+  every point with its own bounds (`None`, masked by the tool with an
+  `unbounded_points_folded` warning, when a row lacks a combined error) and
+  return `([], [])` when nothing folds. An undated baseline is `0.0`; constant
+  or non-finite weighted spectra raise `ValueError`, matching the pulsar
+  helpers. Peak selection ignores non-finite power. Singleton/tied histograms
+  return one bin, Sturges' rule or the value itself. Ordinary results are
+  consistent with M2's corrected scientific contracts. Evidence: `tests/test_m3_lightcurve_helpers.py`, the updated
+  pinned tests, and `docs/extraction.md` (Python M3 direct-helper contracts).
+- [x] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
   equinoxes such as `J2000`. Missing binaries, bad catalog roots and a full
   output disk must be distinguishable from a genuine no-solution result.
+  *Closed:* rechecked, and all three still reproduced. ATLAS without a hint
+  is skipped with a named reason instead of `TypeError`. `J2000`/`B1950`
+  equinoxes keep the hint (a J2000-only M15 frame now solves live).
+  `WcsSolveMetadata.solver_failures` records a missing `solve-field`, a bad
+  catalog root and a full disk on every path, labelled by backend, so only an
+  empty list without a WCS is `no_solution`. Evidence:
+  `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
+  `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
+  because it omits configured settings, which is M4's.
 - [ ] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
   need focused contract evidence. ADS `abs:`/`object:` grouping remains an
   unconfirmed workaround. Distinguish no matches from unusable responses.
-- [ ] **Pulsar controls.** Background subtraction and plot labels, background
+  *Progress 2026-10-21 (not closed):* every listed mapping and chain was
+  checked live and fixed where a populated response looked empty or escaped as
+  an exception. Unusable responses now raise `ProviderResponseError` /
+  `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
+  lost every id to a column rename, B1950-only radio catalogs (3C among them)
+  could never match, and cached SkyServer error pages made SDSS queries fail
+  until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
+  counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
+  grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
+- [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
+  *Closed:* stated in `docs/pulsar-tool-pipeline.md` §6b. Background
+  (`back_scale`, `subtract_background`) is public on `load_pulsar_lightcurve`
+  only, where it always applies. `sonify_pulsar` no longer offers it, since it
+  is ignored for the artifact the pipeline passes. Plot labels and sizes,
+  `cal`, sonify `phase`, `max_input_seconds` and `sample_rate` stay
+  Python-only, with reasons. The stage-2 description, prompt and skill now
+  say to retune `back_scale` by rerunning stage 1. Ignored settings warn
+  `background_settings_ignored`. Evidence: `tests/test_m3_pulsar_controls.py`
+  and regenerated schema goldens.
 
 Evidence: [query backends](../../algorithms/query/),
 [coverage and remaining gaps](../../tests/README.md),

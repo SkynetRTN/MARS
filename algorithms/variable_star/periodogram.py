@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from math import exp, isfinite, log, nan, pi
+from math import exp, isfinite, log, pi
 from numbers import Integral
 from typing import Sequence
 
@@ -95,7 +95,8 @@ def lomb_scargle_with_error(
 
     Finite, aligned inputs must fit the bounded sample/grid work budget.
     M2 corrects the weighted formula; the accumulating logarithmic-period grid
-    is preserved. Direct constant-series NaN remains an explicit M3 limitation.
+    is preserved. M3 rejects constant series and nonfinite trial powers with
+    ValueError rather than returning undefined spectra.
     """
     if len(times) != len(values) or len(times) != len(errors):
         raise ValueError("Dimension mismatch between time, value and uncertainty arrays.")
@@ -128,6 +129,8 @@ def lomb_scargle_with_error(
             raise ValueError("weighted variance is not representable.")
     except (OverflowError, ZeroDivisionError) as exc:
         raise ValueError("weighted normalization is not representable.") from exc
+    if variance == 0:
+        raise ValueError("A constant series has no variance; its periodogram is undefined.")
     root_weights = np.sqrt(weights)
     response = root_weights * residues
     with np.errstate(over="ignore", invalid="ignore"):
@@ -161,9 +164,12 @@ def lomb_scargle_with_error(
             # estimated resolution policy, not a certified error enclosure.
             cutoff = np.finfo(float).eps * (max(len(times), 3) + float(np.max(np.abs(angles))))
             projection = basis[:, singular_values > cutoff].T @ response
-            power = min(1., max(0., float(projection @ projection) / variance)) if variance else nan
+            power = float(projection @ projection) / variance
         except (OverflowError, np.linalg.LinAlgError) as exc:
             raise ValueError("weighted trial power is not representable.") from exc
+        if not isfinite(power):
+            raise ValueError(f"weighted trial power at period {period!r} is not finite.")
+        power = min(1., max(0., power))
         result.append((period, power))
         next_value = x_value + step
         if not isfinite(next_value) or next_value <= x_value:

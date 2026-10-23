@@ -163,7 +163,10 @@ def search_vizier(
     keywords = [category] if isinstance(category, str) else category
 
     vizier = Vizier(
-        columns=["**"],
+        # M3: VizieR's computed J2000 positions too. B1950-only catalogs (3C,
+        # 4C, ...) have no J2000 column of their own, and without these a
+        # populated catalog could never be cross-matched by position.
+        columns=["**", "_RAJ2000", "_DEJ2000"],
         row_limit=row_limit,
         catalog=catalog,
         keywords=keywords,

@@ -14,13 +14,14 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-__all__ = ["guess_radec_columns", "match_sources_to_catalog"]
+__all__ = ["UnreadablePositions", "guess_radec_columns", "match_sources_to_catalog"]
 
 #: Tried in order; the first pair present (case-insensitively) in the table wins.
 _RADEC_CANDIDATES = [
     ("RAJ2000", "DEJ2000"),
     ("RA_ICRS", "DE_ICRS"),
     ("_RAJ2000", "_DEJ2000"),
+    ("_RA.icrs", "_DE.icrs"),
     ("RAdeg", "DEdeg"),
     ("RA2000", "DEC2000"),
     ("RA", "DEC"),
@@ -65,12 +66,18 @@ def guess_radec_columns(table: pd.DataFrame) -> tuple[str, str] | None:
     return None
 
 
+class UnreadablePositions(ValueError):
+    """A populated catalog has no position columns the matcher can read (M3)."""
+
+
 def match_sources_to_catalog(
     sources_df: pd.DataFrame,
     catalog_df: pd.DataFrame,
     radius_arcsec: float,
     ra_col: str | None = None,
     dec_col: str | None = None,
+    *,
+    unreadable_raises: bool = False,
 ) -> list[dict]:
     """Nearest-catalog-neighbour within ``radius_arcsec`` for every row in
     ``sources_df`` (expects ``ra_deg``/``dec_deg`` columns).
@@ -83,24 +90,34 @@ def match_sources_to_catalog(
     Returns one entry per matched source (not per candidate), each carrying
     the full matched catalog row so the caller can read whatever
     flux/frequency/name columns that particular catalog happens to have.
+
+    ``[]`` means both "no source within the radius" and "no positions this
+    function can read". With ``unreadable_raises=True`` the second, for a
+    populated catalog, raises :class:`UnreadablePositions` instead (M3), so a
+    caller can report it rather than count it as a miss.
     """
     if sources_df.empty or catalog_df.empty:
+        return []
+
+    def unreadable(reason: str) -> list[dict]:
+        if unreadable_raises:
+            raise UnreadablePositions(reason)
         return []
 
     if ra_col is None or dec_col is None:
         guessed = guess_radec_columns(catalog_df)
         if guessed is None:
-            return []
+            return unreadable("no recognised RA/Dec column pair")
         ra_col, dec_col = guessed
 
     catalog_df = catalog_df.dropna(subset=[ra_col, dec_col]).reset_index(drop=True)
     if catalog_df.empty:
-        return []
+        return unreadable(f"every {ra_col}/{dec_col} value is missing")
 
     catalog_ra = _coerce_degrees(catalog_df[ra_col], is_ra=True)
     catalog_dec = _coerce_degrees(catalog_df[dec_col], is_ra=False)
     if catalog_ra is None or catalog_dec is None:
-        return []
+        return unreadable(f"{ra_col}/{dec_col} values could not be read as coordinates")
 
     ra0 = float(sources_df["ra_deg"].mean())
     dec0 = float(sources_df["dec_deg"].mean())

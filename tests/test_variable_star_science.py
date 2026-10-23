@@ -158,8 +158,8 @@ def test_legacy_combined_error_without_components_is_not_silently_trusted(tmp_pa
 
 @pytest.mark.parametrize("value", [14., 1e308])
 def test_exact_constants_have_no_resolved_variation_despite_weighted_mean_rounding(value):
-    samples = periodogram.lomb_scargle_with_error(range(5), [value] * 5, [.3] * 5, .1, 1., 10)
-    assert all(np.isnan(power) for _, power in samples)
+    with pytest.raises(ValueError, match="constant"):
+        periodogram.lomb_scargle_with_error(range(5), [value] * 5, [.3] * 5, .1, 1., 10)
 
 
 def test_public_constant_with_roundoff_prone_errors_is_rejected(tmp_path, artifact_dir):

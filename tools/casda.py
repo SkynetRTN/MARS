@@ -31,7 +31,7 @@ from tools import artifacts
 from tools import config
 from tools.config import CASDA_OPAL_USERNAME, PREVIEW_ROWS
 from tools.models import ToolResult, ToolWarning
-from tools.resolve import resolve_target_coords
+from tools.resolve import SimbadUnavailableError, provider_error, resolve_target_coords
 from tools.downloads import DownloadLimit, bounded_transfer, check_products, MAX_PRODUCTS
 
 __all__ = ["search_casda"]
@@ -90,7 +90,10 @@ def search_casda(
         )
 
     if target is not None and ra_deg is None:
-        resolved = resolve_target_coords(target)
+        try:
+            resolved = resolve_target_coords(target)
+        except SimbadUnavailableError as exc:
+            return provider_error(exc)
         if resolved is None:
             return ToolResult(status="not_found", count=0)
         ra_deg, dec_deg = resolved.ra_deg, resolved.dec_deg

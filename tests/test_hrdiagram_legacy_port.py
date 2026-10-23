@@ -25,7 +25,9 @@ def test_histogram_preserves_empty_fallback_and_sorted_percentile_indices():
     assert legacy.get_default_bin([]) == 10
     assert legacy.get_histogram_extremes([0, 1, 2, 3, 4], []) == {"min": -999, "max": 999}
     assert legacy.get_histogram_extremes(list(range(100)), [1]) == {"min": 1, "max": 99}
-    assert math.isnan(legacy.get_default_bin([1.0, 1.0, 1.0]))
+    # M3 (TS-18) replaced upstream's NaN here with one bin; the singleton and
+    # tied-quartile contracts are in test_m3_lightcurve_helpers.py.
+    assert legacy.get_default_bin([1.0, 1.0, 1.0]) == 1
 
 
 def test_plot_transform_preserves_off_by_one_break_and_strict_error_cut():

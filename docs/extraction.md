@@ -495,6 +495,57 @@ data installed.
   dependency loading and search configuration without claiming blind-triangle
   convergence; the tool retains astrometry.net as the blind solving route.
 
+#### 9. M3 setup and I/O failures (2026-10-21)
+
+Rechecked against current code first: the tool layer already reported a
+misconfigured backend as `solver_unavailable` and a backend that raised as
+`solver_failed` (M1), but each of these still reproduced:
+
+* **ATLAS without a pointing hint (WCS-05).** The backend's `float(None)` raised
+  `TypeError`, surfacing as `solver_failed: atlas: float() argument must be ...`.
+  ATLAS searches locally around the hint, so without one it is now skipped,
+  and the reason is recorded: "atlas: needs a pointing hint, and the FITS
+  header records none ...".
+* **Textual equinoxes (WCS-22).** `_frame_from_header` called
+  `float('J2000')`, and `solve_wcs` swallowed the error with a bare `pass`, so
+  an `OBJCTRA`/`OBJCTDEC` hint was lost and a bounded search was refused for
+  "no pointing hint". `_equinox_year` now reads numbers, numeric strings and
+  `J`/`B`-prefixed years. A prefix decides FK5/FK4; a bare year keeps
+  upstream's 1980 cut, and an unreadable value falls back to ICRS. The swallow
+  now logs a warning. Live: with the 4200-series indexes, the M15 frame whose
+  only pointing is `OBJCTRA`/`OBJCTDEC` with `EQUINOX='J2000'` solves in ~3 s
+  under the P6 bounds.
+* **Missing binaries, bad catalog roots, full disks (WCS-23).** On a direct
+  `solve_wcs` call these were visible only through the optional
+  `solver_failures` list, and a configured astrometry.net whose `solve-field`
+  had gone was a silent miss. `WcsSolveMetadata.solver_failures` now carries
+  every `"backend: reason"` on every return path. A missing `solve-field` is
+  recorded. ATLAS's attempt is recorded before it writes its input image, so
+  a full disk there reads "atlas: could not write its input image to ...:
+  [Errno 28] No space left on device" instead of "solver: ...". A solve that
+  succeeded without a failed backend now carries a `solver_backend_unavailable`
+  warning from the tool.
+
+* **Review follow-ups.** Timeouts are recorded too (astrometry.net's raised
+  `SolveFieldTimeout`, ATLAS's returned `failure_reason="timeout"`): a cut-short
+  search is not a miss. When astrometry.net searched and missed, an ATLAS
+  hint-skip is a note on the `no_solution` warning, not a solver failure.
+  Entries from a caller's reused list are not reported as this call's.
+  `AtlasBackend.solve` itself rejects a missing hint with `ValueError`. The
+  skip message names the missing coordinate and shares one keyword list with
+  `SearchRadiusWithoutHint`. A tool warning merges into an existing
+  `solver_backend_unavailable` rather than duplicating the code.
+* **Frame selection diverges from upstream in one place, deliberately.** An
+  explicit `RADESYS` is honoured before the equinox year, so
+  `RADESYS='FK4', EQUINOX=2000` is FK4 (upstream's branch order made it FK5),
+  and a `J`/`B` prefix keeps its epoch under either `RADESYS`. Non-finite
+  numeric equinoxes fall back to ICRS; `EQUINOX=0` keeps upstream's FK4 at B0.
+
+An empty `solver_failures` with no WCS is therefore a genuine miss, and the tool
+keeps `no_solution` for exactly that case. Tests:
+`tests/test_m3_wcs_failures.py` (stubbed backends); the real-solver runs above
+and the `solver_data` tests were also run with the operator data configured.
+
 ## Photometry
 
 _Former source: `algorithms/photometry/EXTRACTION.md`._
@@ -1188,6 +1239,64 @@ Tests: `tests/test_fieldcal_expression_limits.py`, existing
 `tests/test_fieldcal_ref_mag.py` and recorded calibration/query parity checks.
 Delivery scope and validation counts live in the master continuation plan.
 
+#### 5b. M3 malformed-input guards (2026-10-21)
+
+Each of these reproduced against current code before the change. Solves over
+ordinary inputs are unchanged: the recorded parity and replay tests pass as
+before. They are not all crash fixes, though. Unusable rows are now left out
+rather than aborting the solve, and one change refuses a result upstream
+returned: a single-star solve, which upstream reports as a zero point with a
+NaN error (below).
+
+* **Integer row ids.** Catalog backends assign provider values without
+  validation, so SkyMapper (`int32`), SDSS (`uint64`), UCAC and PanSTARRS
+  (`int64`) rows reached `_normalize_catalog_sources` with integer ids that
+  `CatalogSource.id: str` rejected, and every live calibration against those
+  catalogs failed. Integral ids are converted to strings there, as are
+  integer-valued floats from a masked id column; a NaN id becomes `None` and is
+  assigned one. The backends still emit raw provider types; consistent row
+  types are part of the separate provider-response item.
+* **Proper-motion epochs (PHOT-04).** `_match_detected_sources` transposed rows
+  that held `pm_epoch` alongside the floats, so one `datetime` made every
+  column an object array and `np.isfinite` raised `TypeError`. Epochs now
+  travel in their own array. The proper-motion arithmetic is unchanged; it
+  had never run, and a synthetic test now checks it moves a star onto its
+  detection at the frame epoch.
+* **Absent coordinates (PHOT-05).** One row without a finite position made
+  `cKDTree` reject the whole catalog; with none, `cx` was unbound. Rows with no
+  usable match coordinates are left out of the tree, with a warning naming the
+  count (in pixel mode, a valid RA/Dec projecting to NaN points at the WCS),
+  and a catalog with no positioned row fails with "No catalog source has a
+  usable position".
+* **Non-finite magnitudes and errors.** A NaN or infinite measured magnitude
+  reached `calc_solution`, which raised `LinAlgError`; such measurements are
+  dropped first. An infinite `mag_error` (only past an open SNR window) made
+  `limmag5` NaN and is dropped too. A non-finite `ref_mag` is treated as
+  absent, so the row's own bands are used, and a non-finite `ref_mag_error`
+  as no catalog error: `calc_solution`'s `error or 0` keeps NaN, which would
+  make every weight NaN. Supplied rows mostly arrive cleaned already, since
+  `model_dump` turns NaN/inf into `None`; the guards cover the band resolver
+  and direct callers.
+* **Degenerate solves (PHOT-08).** A NaN zero point made astropy reject
+  `PHOT_M0`; the warning was logged and the NaN returned as a calibration. A
+  single-star solve returned a zero point with a NaN error, and identical
+  residuals an error of 0. A solve without a finite zero point and a finite,
+  positive uncertainty now raises `DegenerateCalibrationError` before any
+  `PHOT_*` keyword is written, naming how many stars survived outlier
+  rejection; `calibrate_zeropoint` and `replay_field_calibration` both report
+  it as `no_solution`. **This is a deliberate divergence on input upstream
+  accepts:** a single surviving star yields a zero point with no estimable
+  uncertainty, which MARS no longer stores or reports as a calibration.
+* **Adaptive apertures (PHOT-11).** `CatalogSource` has no FWHM fields, so
+  matching dropped the detection's shape and `mode="auto"` always raised for
+  want of a centroid radius. The matcher now returns each match's
+  `fwhm_x`/`fwhm_y`/`theta` alongside it, index for index, and they are
+  restored for photometry; aperture mode never reads them. The registered
+  tools use aperture mode, so this is a Python API repair.
+
+Tests: `tests/test_m3_calibration_inputs.py`, and live against SkyMapper and
+UCAC in `tests/test_m3_calibration_inputs_live.py`.
+
 ---
 
 #### 6. Catalog-backend code — now extracted
@@ -1417,6 +1526,27 @@ no-compatible-catalog selection fallback is retained; reference resolution
 still rejects the unsafe pairing. This deliberately supersedes V/v token
 preservation assertions, tested in `test_m1_science_safeguards.py`.
 
+##### 5.7 CAT-06 APASS U is reported, not attempted (2026-10-21)
+
+APASS's `U` transform (`B + 0.78*(uprime - gprime) - 0.88`) needs `uprime`,
+which APASS does not carry, so a U-band calibration against APASS matched every
+star and then failed with "No calibration sources matched catalog magnitudes",
+naming neither filter nor catalog. The declaration is unchanged in both
+registries. Instead `tools.catalogs.reference_band_unavailable` reports the
+failures that are certain under a default solve -- an explicit transform
+needing a band the catalog lacks, or a pairing resolution refuses (SkyMapper
+`V`, §5.6) -- and the calibration tools check it before querying (or, for
+supplied rows that still need a band resolved, before solving; rows
+carrying `ref_mag` are used as given, and an undeclared catalog or VSX is never
+grounds to refuse). `calibrate_zeropoint` returns
+`unsupported_filter`, naming the filter, the catalog, the missing band and the
+catalogs with a real band or transform for the filter (not the fallback or a
+`*` wildcard); `resolve_reference_band` warns with the
+missing band. Filters with no transform at all are not rejected: the solve's
+preferred-band fallback still applies to them. Tested in
+`test_m3_catalog_lookup_failures.py`; the live APASS band set is checked in
+`test_m3_catalog_lookup_live.py`.
+
 #### 6. Dependencies
 
 `pydantic` v2 only. Deliberately no `astroquery`, no `astropy` except
@@ -1446,7 +1576,10 @@ default suite, over **real VizieR responses** — recorded once and shipped as
 as astropy tables with the dtypes astroquery 0.4.11 returned. The apostrophe
 columns (`g'mag`, `e_g'mag`, …) arrive spelled with the apostrophe from that
 astroquery version, and the `recno` column the APASS declaration requests is
-not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only.
+not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only. *Update 2026-10-21 (M3):* every catalog
+mapping, Landolt and USNO included, now has a live contract test
+(`tests/test_m3_provider_responses_live.py`); the live Landolt run found the
+crash recorded in Query §5.12.
 
 ## Query
 
@@ -1549,6 +1682,20 @@ The availability probe also moved: upstream ran `add_votable_fields("otype")` at
 import time, so importing the module did network-adjacent work. It is now lazy
 and cached on first use.
 
+*Update 2026-10-21 (M3, CAT-22):* caching a failed probe for the process
+latched resolution off after one transient error. Success is still cached; a
+failure is remembered for `RETRY_AFTER_S` (30 s), so a lasting outage is not
+re-probed and re-logged on every call, and the first lookup after that window
+probes again. An astroquery that cannot be imported is remembered for good,
+and its `SimbadUnavailableError` has `retryable=False`.
+`resolve_simbad` keeps the extracted never-raise default, but
+`resolve_simbad(name, strict=True)` raises `SimbadUnavailableError` for an
+initialization or query failure, so an empty list means only that SIMBAD
+answered without a usable match. `tools.resolve` (and so `resolve_target` and
+`search_casda`'s name path) is strict: an outage is `provider_unavailable`,
+never `not_found`, and a missing astroquery is `dependency_missing`. Tested in `test_m3_catalog_lookup_failures.py`, and live in
+`test_m3_catalog_lookup_live.py`.
+
 ##### 4.6 `AfterglowError` → `UnknownCatalogError(ValueError)`
 
 `afterglow_core/errors/catalog.py` defined `UnknownCatalogError` as an
@@ -1600,7 +1747,10 @@ the generated name is never parsed. Preserved.
 
 `table_to_sources` appends a source only `if source.mags`. A source MARS cannot
 photometer is not useful, and field calibration depends on the filtering.
-`len(table)` and `len(sources)` differ routinely.
+`len(table)` and `len(sources)` differ routinely. *M3:* a response where
+*every* row drops is now an unusable response (§5.12), and a row without a
+finite position is dropped the same way. Rows that all drop give `[]` with a
+logged warning: a sparse or faint cone, not a broken provider (§5.12).
 
 ##### 5.5 A magnitude of 99 or more means "not measured"
 
@@ -1670,13 +1820,115 @@ building the quality-filtered SQL explicitly and using the SDK's supported
 `query_sql` endpoint/parser. Offline tests exercise native request construction
 and CSV/error parsing with stub responses, not a live SkyServer. The inherited
 native `MARSSDSS.query_region` interface remains unsupported; backend code must
-not return to it. Named-object queries (CAT-18) remain a separate broken path
-and must reuse the bounded contract when repaired.
+not return to it.
+
+*Update 2026-10-21 (M3, CAT-18):* named-object queries are repaired.
+`query_objects` called `sdss.query_object`, which `SDSSClass` does not have, so
+every call raised `AttributeError`. It now sends one bounded SQL request through
+`query_sql` with `s.objID IN (...)` and the same `Star`/quality/clean
+predicates as a region. Names are positive integer objIDs (the `id` the
+declaration reports), at most 5,000 per call, and only parsed integers reach
+the SQL. Like VizieR's, a name with no qualifying row -- or that is not an
+objID, such as another catalog's ID in a multi-catalog `source_ids` lookup --
+is absent from the result rather than aborting it. `query_sql` sends a GET
+request and SkyServer answers 404 past 2,048 bytes of query string (measured
+live: 75 objIDs pass, 80 fail), so IDs are batched to stay under
+`MAX_SDSS_QUERY_STRING` (1,900). A live
+round trip (region row -> objID lookup) is in `test_m3_catalog_lookup_live.py`.
 
 Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
 mapping remain preserved; ignored constraints (§5.8) and public schemas are
 unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
 regressions.
+
+##### 5.12 M3 provider-response contracts (2026-10-21)
+
+CAT-20: `table_to_sources` swallowed every per-row mapping failure, so a renamed
+or missing column turned a populated response into an empty one -- read as a
+field with no stars. It now checks the response before mapping and raises
+`ProviderResponseError` (a `ValueError`) for an unusable one. An empty response
+is still `[]`.
+
+* Coordinate columns and at least one declared band are required; the error
+  names the missing column and what the provider returned. An absent id column
+  is tolerated, since live APASS never returns the `recno` it requests, and
+  field calibration assigns ids.
+* Plain-column mappings and band columns also try `_`-prefixed and
+  unprefixed spellings, as apostrophes already were (`_row_value` tries the
+  same). A column used inside an expression must match exactly, because the
+  expression is evaluated against the real names. **Live finding:** current astroquery returns
+  2MASS's `2MASS` column, not the `_2MASS` the declaration maps, so every 2MASS
+  id was lost.
+* Rows that are masked, non-finite or >= 99 in every band, or have no finite
+  position, are dropped. If every row drops the result is `[]` with a logged
+  warning, since the columns were present: a sparse or faint cone is not a
+  broken provider. **Live:** about 1 in 74 Tycho-2 rows has a masked mean
+  position (no proper-motion solution), and is dropped rather than emitted
+  with a NaN position. Mapping those stars from Tycho-2's observed positions would be a
+  scientific change; it is not made here.
+* **Landolt crashed on every live query.** Its transform (Catalogs) read errors
+  with `getattr(mag, 'error', 0)`, but MARS's `Mag.error` defaults to `None`.
+  A zero catalog error (`e_R-I = 0.0000` occurs live) therefore raised
+  `None ** 2`. A colour of exactly 0, which the row mapper drops (CAT-23),
+  raised `KeyError`. Unset errors now read as 0, the upstream intent, and only
+  the bands a missing colour feeds are left underived. The preserved
+  U-error-from-V_R bug is kept.
+* **SkyServer error pages were cached as results.** astroquery caches whatever
+  SkyServer answers, including HTML 404 and "Skyserver Error" pages, so one
+  transient error made the same SDSS query fail at parse time until the entry
+  expired. This was found live in the development host's own cache.
+  `_query_sql` inspects the raw reply. An HTML page read from the cache is
+  evicted (the exact entry, via astroquery's `_last_query`) and refetched with
+  caching on, so a good reply repairs the cache. A page that persists is a
+  service failure, raised as `RemoteServiceError` (retryable), as is a refusal.
+  Any other reply that will not parse is `ProviderResponseError`, and a failed
+  reply is never left in the cache. Network errors are not retried.
+* The runner's ID, coordinate and `query_catalogs_for_image` loops skip a
+  catalog whose response is unusable and try the next, so one catalog cannot
+  abort a fallback chain. Only when no catalog yields sources is the unusable
+  response raised, naming each catalog.
+* `calibrate_zeropoint` reports `ProviderResponseError` as the new tool code
+  `unusable_response`, which other tools share (below). `run_photometry_on_target`
+  used to print a failed field calibration to stderr only; it now carries it
+  as an `unusable_response` or `field_calibration_failed` warning beside the
+  instrumental fallback.
+
+Beyond the VizieR mapper, each chain the M3 item names was checked live, and
+fixed where a populated response could look empty or escape as an exception:
+
+* **Radio VizieR** (`tools.vizier`, `tools.radio_sources`): 17 of 40 radio
+  catalogs around 3C 48 had only B1950 positions (`RA1950`/`DE1950`),
+  including the 3C catalog itself, so they could never cross-match and read as
+  "no match". `search_vizier` now also requests VizieR's computed
+  `_RAJ2000`/`_DEJ2000` (all 138 catalogs then carry them), the matcher also
+  reads `_RA.icrs`/`_DE.icrs`, and a catalog whose positions still cannot be
+  read is named in a `catalog_positions_unreadable` warning:
+  `match_sources_to_catalog(..., unreadable_raises=True)` raises
+  `UnreadablePositions` in one pass, rather than returning the `[]` that also
+  means "no match". The name columns gain `2MASS`.
+* **NED photometry:** a renamed `Frequency`/`Flux Density` column used to
+  escape `analyze_source_spectrum` as `KeyError`. It is now
+  `unusable_response`.
+* **Gaia DR3 and Cantat-Gaudin & Anders 2020** (`tools.hr_diagram`): the columns
+  each step reads are checked (`_GAIA_COLUMNS`, `_LITERATURE_COLUMNS`). A
+  renamed one escaped `crossmatch_gaia_by_position` as `KeyError`; a masked or
+  NaN age, extinction, distance modulus or distance flowed on into the fit.
+  Both are now `unusable_response`. A non-finite parallax or proper motion
+  does not refuse the fit. A non-finite cluster position refuses only the
+  Gaia fetch around it. All three tools share `ProviderResponseError`.
+* **SIMBAD** (`algorithms.query.simbad`): columns are read case-insensitively,
+  since astroquery before 0.4.8 returned `MAIN_ID`/`RA`/`DEC`/`OTYPE`. A
+  response missing one raises `SimbadResponseError` under `strict=True`
+  (`unusable_response` from `resolve_target`). `if not ra` no longer skips an
+  object at RA 0.
+* **ADS `abs:`/`object:` grouping** remains unconfirmed. No ADS key was
+  available. The grouped query string is pinned offline, and a live test runs
+  when `ADS_DEV_KEY` is set.
+
+Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
+responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
+catalog mapping, Landolt UBVRI, 2MASS ids, SIMBAD, Gaia/literature, radio
+positions with 3C 48 matched in the 3C catalog, NED, and ADS when keyed).
 
 #### 6. External dependencies
 
@@ -2729,9 +2981,11 @@ Neither extraction is complete without the other:
 
 #### 9. Preserved quirks — suspected bugs left intact
 
-Per the extraction contract, nothing here was fixed. Each item is preserved
-verbatim and flagged in-file; this list exists so the behaviour is not mistaken
-for something the extraction introduced.
+Per the extraction contract, nothing here was fixed in the extraction. Each item
+is preserved verbatim and flagged in-file; this list exists so the behaviour is
+not mistaken for something the extraction introduced. *Update 2026-10-21 (M3):*
+items 1 and 2 are corrected in the Python port (`fold_with_error`); see Python
+M3 direct-helper contracts below. The TypeScript behaviour is as described.
 
 1. **Misaligned parallel filters in the variable period fold** — *most likely to
    bite.* `getPeriodFoldingChartDataWithError`
@@ -2851,8 +3105,9 @@ photometric rewrite. Accepted inputs keep repeated subtraction (exact multiples
 still map to the period, not zero), the negative-period default-baseline
 sentinel, the zero-period empty result, phase wrapping, two-period duplication
 and descending sorting. The distinct empty-data and missing-error alignment
-failures in §9 remain pinned; TS-04 and weighted-spectrum TS-03/09/17 are not
-closed by this guard. `tests/test_variable_star_fold_limits.py` reproduces six
+failures in §9 were pinned by this guard and are replaced by the M3 helper
+contracts (Python M3 direct-helper contracts, below); weighted-spectrum
+TS-03/09 are not closed by it. `tests/test_variable_star_fold_limits.py` reproduces six
 stalled direct calls with 5 s kill/reap-bounded subprocesses and checks aggregate
 pre-loop/pre-allocation limits, finite/overflowed settings, public structured
 errors and the preserved sentinel/exact-multiple behavior. Ordinary algorithm
@@ -3555,13 +3810,14 @@ not a replacement for its weighted Lomb--Scargle formula:
 - The public periodogram requires nonempty finite output; constant/degenerate
   spectra return `invalid_input` and no artifact. This is a deliberate
   **public-result acceptance divergence** (TS-17 containment), not a direct
-  formula correction. The direct constant-series NaN parity remains pinned.
+  formula correction. The direct constant-series NaN parity was pinned here;
+  M3 replaced it with a `ValueError` (next subsection).
 
 Accepted finite fixtures keep the logarithmic-period/linear-counter grid,
 normal 2,001-row floating-drift output at 2,000 steps, weighted numerator,
 unweighted denominator/variance and upstream differential-error MSE. TS-09
-(weighted normalization), TS-14 (uncertainty convention), TS-04 (fold alignment)
-and the remaining direct-helper TS-16/17 contracts require separate review.
+(weighted normalization) and TS-14 (uncertainty convention) require separate
+review; TS-04 and the direct-helper TS-16/17 contracts are settled by M3.
 Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
 `tests/test_variable_star_weighted_contract.py`, existing
 `tests/test_variable_star_algorithms.py` and `tests/test_variable_star_tool.py`.
@@ -3583,9 +3839,11 @@ errors, with a fixed reference magnitude. The `error_mse` name remains, but
 the halving is removed. Public stages rederive old cached combined values from
 component errors and require re-ingestion when paired cached values lack
 components. Days/magnitudes and normalization/uncertainty-method metadata now
-accompany new artifacts/results. Existing missing-error failures and direct
-constant-series nonfinite behavior remain M3 work; public constants are
-rejected. No covariance model or detection-probability claim is added.
+accompany new artifacts/results. M3 PR #122 subsequently defines missing-error
+fold bounds as masked values with a warning, and direct constant spectra raise
+`ValueError`; public constants remain rejected. Their integration preserves M2
+powers, quadrature and units. No covariance model or detection-probability claim
+is added; see the [integration record](analysis/m2-m3-integration.md).
 
 The 2026-10-22 review follow-up additionally scales response offsets before
 forming squared energies. Standard powers then remain invariant for tiny and
@@ -3632,3 +3890,25 @@ intrinsic-dispersion inference or luminosity weighting. Protected mass and
 radius conversion arithmetic remains intact and has independent Astropy unit
 checks. These legacy APIs have no registered-tool callers; the newer HR fitter
 is unchanged. See the [derivation and acceptance record](analysis/legacy-coordinates-extinction-mass.md).
+#### Python M3 direct-helper contracts (2026-10-21)
+
+The registered tools already contained most of these inputs; the helpers
+themselves raised, returned NaN or misaligned. Each now has a defined result,
+marked `M3` at its site. Ordinary inputs are unchanged.
+
+| Helper | Input | Upstream / previous port | Now |
+|---|---|---|---|
+| `variable_star.folding.fold_with_error` (TS-04) | a paired row without `error_mse` | values and bounds filtered and sorted separately, paired by index: later bounds shifted, then `IndexError`; equal JDs could swap bounds | each point keeps its own row's bounds, `(x, None, None)` without one; the tool masks them and warns `unbounded_points_folded` |
+| `fold_with_error` | nothing foldable | `IndexError` on `data[0]` | `([], [])` |
+| `variable_star.lightcurve.jd_range` (TS-31) | no dated row | `-Infinity`; port `ValueError` from `max()` | `0.0`, so a default-period fold is empty |
+| `variable_star.periodogram.lomb_scargle_with_error` (TS-17) | constant series; any non-finite trial power | all-NaN spectrum (`inf` through `variable_periodogram`) | `ValueError`, as the pulsar periodogram already did (PUL-03) |
+| `pulsar.periodogram.find_global_max` (TS-16) | NaN or infinite powers; mismatched arrays | a NaN first poisons the result | non-finite powers are not candidates; none finite is `(None, None)`; mismatched lengths `ValueError`; ties still keep the earliest |
+| `tools.pulsar._top_peaks` (TS-16) | NaN powers | NaN ranked first | skipped |
+| `hrdiagram_py.legacy.get_default_bin` (TS-18) | one value or no spread; tied quartiles | NaN; Infinity | 1; Sturges' `ceil(log2 n) + 1` where Freedman-Diaconis is undefined |
+| `hrdiagram_py.legacy.get_histogram_extremes` (TS-28) | one value; no data | `undefined` minimum; port `IndexError` | that value for both; the empty-selection sentinel |
+
+The histogram index clamp only changes the one-value case. From two values up
+the original indices are already in range, and a test checks that.
+Tests: `tests/test_m3_lightcurve_helpers.py`; the pinned upstream failures in
+`test_variable_star_algorithms.py` and `test_hrdiagram_legacy_port.py` now
+state these contracts.
