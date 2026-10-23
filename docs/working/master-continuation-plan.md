@@ -59,16 +59,22 @@ the subsequent work.
   and omit unrepresentable levels with a warning. Earlier Gaussian artifacts
   without the residual-statistic marker also plot as uncalibrated; see the
   [review correction](../analysis/pulsar-candidates-confidence.md#review-follow-up-endpoint-probability-correction).
-  Neither the bound nor
+  Exact constants, including fractional values whose rounded means fabricate
+  positive variance, fail before power/significance evaluation; public results
+  return `invalid_input` without a spectrum or noise bound. One-ULP variation
+  remains accepted. Neither the bound nor
   empirical fold SNR is a pulsar/correct-period probability. Correlated or
   filtered radio noise, RFI and repeated retuning remain outside that model.
   Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
   [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
-  [20 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
+  [34 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
   and actual rendered threshold checks in both modes. All five scans complete;
   only B0329 matches its reference at the revised defaults. Frozen historical
   benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
-  Validation: Python 3.13.15, full offline suite **3,456 passed, 49 skipped**;
+  Latest review follow-up: exact-constant regressions passed after eight observed
+  failures; independent review found no remaining issues and verified 44
+  nonconstant controls bit-for-bit against pre-fix results. Validation:
+  Python 3.13.15, full offline suite **3,812 passed, 75 skipped**;
   compileall, schema goldens, generated-skill consistency, repository shape and
   `git diff --check` pass. The changes remain local, unmerged and unpublished.
 - [x] **Variable-star powers and errors.** Weighted floating-mean least squares

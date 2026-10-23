@@ -212,3 +212,36 @@ suite on Python 3.13.15 with locked dependencies and `[mcp]`: **3,456 passed,
 generated-skill consistency, repository shape and `git diff --check` also pass.
 The first two M2 checkpoints are closed locally on `feature/m2`; the remaining
 M2 gates are still open, and these changes are unmerged and unpublished.
+
+## Review follow-up: exact constant input rejection (2026-10-22)
+
+The branch review reproduced an invalid noise bound for twenty identical
+`0.1` flux values at `0.01 s` intervals. A one-trial search over `1–1.01`
+(seconds in period mode, hertz in frequency mode) returned
+`2.044764373105442e-21` in both modes, without a resolution warning.
+Subtracting the rounded mean produced an artificial constant residual;
+normalizing it before the fit turned rounding error into an apparent signal.
+The inherited power path also suffered from the rounded variance, so checking
+that variance was positive did not establish that the observations varied.
+
+The shared Lomb–Scargle entry now checks exact equality before calculating
+the mean or variance. Constants raise `ValueError` for direct callers and
+become `invalid_input` through the public tool. No period, power, false-alarm
+bound, thresholds or spectrum artifact is published. This uses no numerical
+tolerance and leaves nonconstant power/residual arithmetic unchanged. A
+one-ULP variation remains accepted. Previously generated spectra for constant
+data must be discarded and recomputed from their light curves.
+
+Fourteen new cases cover both modes, zero, positive/negative fractions, large
+constants, direct APIs, public errors, artifact absence and one-ULP controls.
+Before the fix, eight regressions failed and six controls passed; afterward,
+the six-file pulsar regression set passed **170 tests**. Follow-up code review
+has no remaining findings. Its independent checks rejected 60 constant inputs
+across both modes, including mixed signed zeros, and 44 nonconstant controls
+retained bit-identical grids, powers, residuals, bounds and metadata compared
+with pre-fix `41f6a43`. Those controls include one-ULP perturbations and
+`1e-150`/`1e150` amplitudes. Final Python 3.13.15 full offline validation:
+**3,812 passed, 75 skipped**, with 219 warnings unchanged from the pre-fix
+suite. Compilation, schema goldens, generated-skill consistency, repository
+shape and whitespace checks pass. Live-provider, native-Windows and external
+solver-data checks retain their separate gates.

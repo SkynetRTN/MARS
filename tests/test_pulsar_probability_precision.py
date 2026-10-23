@@ -10,6 +10,57 @@ from algorithms.pulsar import periodogram, significance
 from tools import pulsar
 
 
+@pytest.mark.parametrize("freq_mode", [False, True])
+@pytest.mark.parametrize("value", [0.0, 0.1, -0.1, 1e300])
+def test_public_constant_flux_cannot_publish_a_period_or_false_alarm_bound(
+    tmp_path, artifact_dir, freq_mode, value,
+):
+    path = tmp_path / "constant.ecsv"
+    Table({"time_s": np.arange(20) * 0.01, "source1": np.full(20, value)},
+          meta={"flavour": "standard"}).write(path, format="ascii.ecsv")
+    existing_files = set(artifact_dir.rglob("*"))
+
+    result = pulsar.compute_pulsar_periodogram(
+        path, start=1.0, stop=1.01, steps=1, freq_mode=freq_mode,
+    )
+
+    assert [error.code for error in result.errors] == ["invalid_input"]
+    assert result.artifact is None
+    assert result.peak_period_s is None
+    assert result.peak_power is None
+    assert result.false_alarm_probability_upper_bound is None
+    assert result.false_alarm_thresholds == {}
+    assert set(artifact_dir.rglob("*")) == existing_files
+
+
+@pytest.mark.parametrize("freq_mode", [False, True])
+@pytest.mark.parametrize("algorithm", [periodogram.lomb_scargle, periodogram.compute_periodogram],
+                         ids=["powers", "driver"])
+def test_direct_periodogram_rejects_fractional_constant_flux(algorithm, freq_mode):
+    # np.var(full(20, 0.1)) is spuriously positive: exact equality of the
+    # observations, rather than rounded mean/variance arithmetic, decides this.
+    with pytest.raises(ValueError, match="constant"):
+        algorithm(np.arange(20) * 0.01, np.full(20, 0.1),
+                  start=1.0, stop=1.01, steps=1, freq_mode=freq_mode)
+
+
+@pytest.mark.parametrize("freq_mode", [False, True])
+def test_one_ulp_flux_variation_is_not_rejected_as_constant(tmp_path, artifact_dir, freq_mode):
+    values = np.full(20, 0.1)
+    values[::2] = np.nextafter(0.1, np.inf)
+    path = tmp_path / "small-variation.ecsv"
+    Table({"time_s": np.arange(20) * 0.01, "source1": values},
+          meta={"flavour": "standard"}).write(path, format="ascii.ecsv")
+
+    result = pulsar.compute_pulsar_periodogram(
+        path, start=1.0, stop=1.01, steps=1, freq_mode=freq_mode,
+    )
+
+    assert result.errors == []
+    assert result.artifact is not None
+    assert result.peak_power is not None and np.isfinite(result.peak_power)
+
+
 def _quadrature(exponent):
     times = np.arange(4) * 0.25
     delta = 2.0**-exponent

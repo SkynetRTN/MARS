@@ -205,6 +205,11 @@ def lomb_scargle(
     if not math.isfinite(step) or step <= 0 or start + step == start:
         raise ValueError("periodogram grid increment cannot make finite progress")
 
+    # A rounded mean can give identical fractional values a positive variance.
+    # Reject exact constants before that error can become spectral significance.
+    if np.all(ys == ys[0]):
+        raise ValueError("flux is constant; a periodogram requires variation")
+
     h_residue = ys - ys.mean()
     # ArrMath.var is the population variance (divides by N).
     with np.errstate(over="ignore", invalid="ignore"):

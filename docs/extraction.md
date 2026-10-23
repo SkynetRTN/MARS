@@ -3462,6 +3462,14 @@ pre-fix Gaussian levels are uncalibrated when plotted. The precision policy
 is numerical error handling, not a certified forward-error enclosure; see
 the acceptance record and `test_pulsar_probability_precision.py`.
 
+The exact-constant review follow-up rejects identical flux observations before
+mean/variance arithmetic. Fractional constants such as twenty `0.1` values can
+otherwise acquire a rounding-only residual and spurious calibrated significance.
+Both direct entry points raise `ValueError`; the public tool returns
+`invalid_input` with no spectrum artifact, candidate or false-alarm bound.
+The equality check uses no tolerance and retains representable nonzero
+variation; ordinary nonconstant arithmetic and the trial grid are unchanged.
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in
