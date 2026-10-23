@@ -10,6 +10,7 @@ contracts against the services.
 
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
@@ -418,16 +419,170 @@ def test_calibration_reports_an_unusable_catalog_response(monkeypatch):
     assert "RAJ2000" in result.errors[0].message
 
 
-# --- ADS: the abs:/object: grouping is pinned (live check needs a key) --------
+# --- ADS: object: is translated by the objects service before searching -------
 
 
 def test_ads_fielded_clauses_are_each_grouped():
     from tools.ads import _build_query
 
     query = _build_query(None, None, False, None, "pulsar timing", None, None, "PSR B1937+21", None)
-    # The workaround: each clause parenthesized before AND. Whether ADS needs it
-    # is confirmed only by test_m3_provider_responses_live (needs ADS_DEV_KEY).
     assert query == '(abs:"pulsar timing") AND (object:"PSR B1937+21")'
+
+
+_TRANSLATED = '(abs:"pulsar timing") AND (((=abs:"PSR B1937+21" OR simbid:"2789895") database:astronomy))'
+
+
+@pytest.fixture
+def ads_service(monkeypatch):
+    """Stand in for ADS's objects service and search, recording each call.
+
+    Shaped after the live 2026-10-22 responses: search rejects ``object:`` as
+    ``undefined field object``; ``POST /v1/objects/query`` rewrites it.
+    """
+    from astroquery.nasa_ads import ADSClass
+    from requests import Response
+
+    import tools.ads as ads
+
+    calls = {"objects": [], "search": []}
+    service = {"status": 200, "body": {"query": _TRANSLATED}}
+
+    def request(self, method, url, **kwargs):
+        calls["objects"].append((method, url, kwargs.get("json"), kwargs.get("headers")))
+        response = Response()
+        response.status_code, response.encoding = service["status"], "utf-8"
+        response._content = json.dumps(service["body"]).encode()
+        return response
+
+    def query_simple(query_string, **kwargs):
+        calls["search"].append(query_string)
+        return Table({"bibcode": ["2020ApJ...1..1A"], "title": [["A paper"]]})
+
+    monkeypatch.setattr(ADSClass, "_request", request)
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    monkeypatch.setattr(ads.ADS, "TOKEN", "token")
+    return calls, service
+
+
+@pytest.mark.parametrize("call", [
+    lambda ads: ads.search_ads(abstract="pulsar timing", object_name="PSR B1937+21"),
+    lambda ads: ads.build_literature_review(abstract="pulsar timing", object_name="PSR B1937+21"),
+])
+def test_ads_object_name_is_translated_before_searching(ads_service, call):
+    import tools.ads as ads
+
+    calls, _ = ads_service
+    result = call(ads)
+    assert result.status == "ok", result.errors
+    method, url, payload, headers = calls["objects"][0]
+    assert (method, url) == ("POST", "https://api.adsabs.harvard.edu/v1/objects/query")
+    assert payload == {"query": ['(abs:"pulsar timing") AND (object:"PSR B1937+21")']}
+    assert headers == {"Authorization": "Bearer token"}
+    assert calls["search"] == [_TRANSLATED]
+
+
+def test_ads_raw_query_with_object_is_translated_too(ads_service):
+    from tools.ads import search_ads
+
+    calls, _ = ads_service
+    assert search_ads('object:"M31" year:2020').status == "ok"
+    assert calls["objects"][0][2] == {"query": ['(object:"M31" year:2020)']}
+
+
+def test_ads_query_without_object_skips_the_objects_service(ads_service):
+    from tools.ads import get_citing_papers, search_ads
+
+    calls, _ = ads_service
+    assert search_ads(abstract="pulsar timing").status == "ok"
+    assert get_citing_papers("1982Natur.300..615B").status == "ok"
+    assert calls["objects"] == []
+    assert calls["search"] == ['(abs:"pulsar timing")', "citations(bibcode:1982Natur.300..615B)"]
+
+
+@pytest.mark.parametrize("query", ['title:"object: a study"', 'abs:"compact object: review"'])
+def test_ads_object_inside_a_quoted_phrase_is_not_translated(ads_service, query):
+    from tools.ads import search_ads
+
+    # Live, the objects service refuses these ("No identifiers/objects
+    # found"), while the search answers them untranslated.
+    calls, _ = ads_service
+    assert search_ads(query).status == "ok"
+    assert calls["objects"] == []
+    assert calls["search"] == [f"({query})"]
+
+
+def test_ads_object_name_with_a_double_quote_is_refused(ads_service):
+    from tools.ads import build_literature_review, search_ads
+
+    # Live, the objects service splits the name at an escaped quote and
+    # returns a query the search rejects.
+    calls, _ = ads_service
+    for result in (search_ads(object_name='Foo "bar"'), build_literature_review(object_name='Foo "bar"')):
+        assert [e.code for e in result.errors] == ["invalid_input"]
+    assert calls["objects"] == [] and calls["search"] == []
+
+
+def test_ads_pages_with_differently_shaped_columns_stack(monkeypatch, ads_service):
+    import tools.ads as ads
+    from astropy.table import Table as AstropyTable
+
+    # Live 2026-10-22 (M31, year 2020, 120 rows): a field present in every row
+    # of a page is a 2-D str column; one missing from some row (astroquery
+    # fills [None]) is 1-D object. vstack refused the mix and the exception
+    # escaped the tool.
+    def query_simple(query_string, **kwargs):
+        start, rows = ads.ADS.NSTART, ads.ADS.NROWS
+        count = min(rows, 120 - start)
+        page = [[f"L{start + i}"] if start == 0 else ([None] if i % 2 else [f"{start + i}"])
+                for i in range(count)]
+        return AstropyTable({
+            "bibcode": [[f"2020b{start + i}"] for i in range(count)],
+            "page": page,
+            "author": [["A, B"] * (1 + i % 2) for i in range(count)],
+        })
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = ads.search_ads(object_name="M31", max_results=120)
+    assert result.status == "ok", result.errors
+    assert result.count == 120
+    table = AstropyTable.read(result.artifact.path)
+    assert len({ads.flatten_value(cell) for cell in table["bibcode"]}) == 120
+    assert ads.flatten_value(table["page"][0]) == "L0"
+    assert ads.flatten_value(table["page"][51]) is None
+
+
+@pytest.mark.parametrize("status, body, code", [
+    (503, {"message": "down"}, "provider_unavailable"),
+    (500, {"message": "Internal Server Error"}, "provider_unavailable"),
+    (200, {"Error": "Unable to get results!", "Error Info": "SIMBAD returned status 500"},
+     "provider_unavailable"),
+    # Live reply to an object: clause the service cannot parse (object:"").
+    (200, {"Error": "Unable to get results!",
+           "Error Info": "No identifiers/objects found in Solr object query"}, "invalid_input"),
+    (200, {"unexpected": 1}, "unusable_response"),
+    (200, {"query": ""}, "unusable_response"),
+])
+def test_ads_failed_object_translation_never_searches(ads_service, status, body, code):
+    from tools.ads import search_ads
+
+    calls, service = ads_service
+    service.update(status=status, body=body)
+    result = search_ads(object_name="PSR B1937+21")
+    assert result.status == "error"
+    assert [e.code for e in result.errors] == [code]
+    assert calls["search"] == []
+
+
+def test_ads_object_translation_without_a_token_is_dependency_missing(monkeypatch, ads_service):
+    import tools.ads as ads
+
+    calls, _ = ads_service
+    monkeypatch.setattr(ads.ADS, "TOKEN", None)
+    monkeypatch.delenv("ADS_DEV_KEY", raising=False)
+    monkeypatch.setenv("HOME", "/nonexistent")
+    result = ads.search_ads(object_name="M31")
+    assert [e.code for e in result.errors] == ["dependency_missing"]
+    assert calls["objects"] == [] and calls["search"] == []
 
 
 # --- SDSS: a cached SkyServer error page is not a permanent failure -----------

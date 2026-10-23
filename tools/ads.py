@@ -42,9 +42,11 @@ in the ``ADS_DEV_KEY`` environment variable before relying on this module.
 
 from __future__ import annotations
 
+import re
 from typing import Optional, Union
 
-from astropy.table import Table, vstack
+import numpy as np
+from astropy.table import Column, Table, vstack
 from astroquery.nasa_ads import ADS
 
 from algorithms.catalogs.ads import (
@@ -70,6 +72,31 @@ __all__ = [
 _MAX_RESULTS_CEILING = 500
 _PAGE_SIZE = 50
 
+#: ADS's query-translation endpoint for ``object:``; see ``_translate_objects``.
+_OBJECTS_PATH = "/v1/objects/query"
+_OBJECT_CLAUSE = re.compile(r"\bobject:")
+#: A quoted phrase, so ``title:"object: a study"`` is not taken for a clause.
+_QUOTED_PHRASE = re.compile(r'"(?:\\.|[^"\\])*"')
+#: The objects service's reply to a query with no ``object:`` clause it can
+#: parse (live: ``object:""``, or a quoted phrase containing ``object:``).
+_NO_OBJECTS_FOUND = "No identifiers/objects found"
+
+
+def _invalid_input(message: str) -> ToolResult:
+    return ToolResult(status="error", errors=[{"code": "invalid_input", "message": message}])
+
+
+def _object_name_error(object_name: Optional[str]) -> Optional[ToolResult]:
+    """Refuse an ``object_name`` the objects service cannot translate.
+
+    Confirmed live (2026-10-22): the service splits a name at an escaped
+    double quote and returns a query the search rejects. No object name needs
+    one.
+    """
+    if object_name and '"' in object_name:
+        return _invalid_input("object_name must not contain a double quote (\")")
+    return None
+
 
 def _quote(value: str) -> str:
     return value.replace('"', '\\"')
@@ -91,14 +118,12 @@ def _build_query(
     Returns ``None`` if nothing was given -- an empty/bare query would be
     exactly the unfielded search ADS's own docs warn against.
 
-    Each clause is parenthesized before joining with AND -- confirmed live
-    that combining ``abs:"..."`` with ``object:"..."`` via plain AND caused
-    ADS's parser to reject the query with a 400 error, not yet root-caused
-    (``object:`` is documented as a special SIMBAD/NED-tagged lookup, not a
-    plain text match, unlike every other field here). Explicit grouping is
-    standard practice for combining Solr-style fielded clauses and is a
-    precaution, not a confirmed fix -- it has not been verified against the
-    real API (no ADS_DEV_KEY was available while building this).
+    Each clause is parenthesized before joining with AND, standard practice
+    for combining Solr-style fielded clauses. The 400 that combining
+    ``abs:"..."`` with ``object:"..."`` once produced was not a grouping
+    problem: confirmed live (2026-10-22) that the search endpoint rejects
+    ``object:`` in every form, grouped or not, so ``_paged_query`` translates
+    it first (``_translate_objects``).
     """
     clauses: list[str] = []
     if query:
@@ -159,6 +184,71 @@ def _missing_token_result() -> ToolResult:
     )
 
 
+def _translate_objects(query_string: str) -> tuple[Optional[str], Optional[ToolResult]]:
+    """Rewrite ``object:`` clauses through ADS's objects service.
+
+    Confirmed live (2026-10-22): ``/v1/search/query`` rejects ``object:`` in
+    every form, alone or grouped, with ``undefined field object``. The ADS UI
+    first sends the whole query to ``POST /v1/objects/query``, which returns it
+    with each ``object:`` clause expanded to ``=abs:``/``simbid:``/``nedid:``
+    clauses the search does accept; astroquery has no method for that
+    endpoint. A query with no ``object:`` clause outside a quoted phrase is
+    returned unchanged without a call. Translation also adds
+    ``database:astronomy``, as the ADS UI's object search does.
+
+    Returns ``(translated, None)`` or ``(None, error_result)``, like
+    ``_paged_query``. The service answers 200 with an ``Error`` key when it
+    cannot translate; "No identifiers/objects found" is a clause it cannot
+    parse (``invalid_input``), and any other ``Error`` is the service failing.
+    A name SIMBAD/NED cannot resolve is not an error: it translates to
+    ``simbid:"0"``/``nedid:"0"`` and searches only ``=abs:``. A reply with no
+    query in it is one MARS cannot read.
+    """
+    if not _OBJECT_CLAUSE.search(_QUOTED_PHRASE.sub('""', query_string)):
+        return query_string, None
+    try:
+        token = ADS._get_token()
+    except RuntimeError:
+        return None, _missing_token_result()
+    try:
+        response = ADS._request(
+            "POST", ADS.SERVER + _OBJECTS_PATH, json={"query": [query_string]},
+            headers={"Authorization": "Bearer " + token},
+            timeout=ADS.TIMEOUT, cache=False,
+        )
+        response.raise_for_status()
+        body = response.json()
+    except Exception as exc:
+        return None, ToolResult(
+            status="error",
+            errors=[{"code": "provider_unavailable", "message": _describe_error(exc)}],
+        )
+
+    translated = body.get("query") if isinstance(body, dict) else None
+    if isinstance(translated, str) and translated.strip():
+        return translated, None
+    if isinstance(body, dict) and _NO_OBJECTS_FOUND in str(body.get("Error Info", "")):
+        return None, _invalid_input(
+            f"ADS found no object: clause it could translate in {query_string!r} -- "
+            "give object: a name, e.g. object:\"M31\""
+        )
+    if isinstance(body, dict) and "Error" in body:
+        return None, ToolResult(
+            status="error",
+            errors=[{
+                "code": "provider_unavailable",
+                "message": f"ADS objects service could not translate object: -- {body}",
+            }],
+        )
+    return None, ToolResult(
+        status="error",
+        errors=[{
+            "code": "unusable_response",
+            "message": f"ADS objects service returned no translated query: {str(body)[:500]}",
+        }],
+    )
+
+
 def _paged_query(
     query_string: str, sort: str, max_results: int
 ) -> tuple[Optional[Table], Optional[ToolResult]]:
@@ -166,8 +256,13 @@ def _paged_query(
 
     Returns ``(table, None)`` on success (``table`` may be a single page or a
     stacked multi-page table) or ``(None, error_result)`` -- exactly one is
-    not ``None``, so a caller checks ``error`` first.
+    not ``None``, so a caller checks ``error`` first. ``object:`` clauses are
+    translated first (``_translate_objects``).
     """
+    query_string, error = _translate_objects(query_string)
+    if error is not None:
+        return None, error
+
     ADS.ADS_FIELDS = ADS_REVIEW_FIELDS
     ADS.SORT = sort
 
@@ -208,8 +303,30 @@ def _paged_query(
     if not pages:
         return None, ToolResult(status="not_found", count=0)
 
-    table = pages[0] if len(pages) == 1 else vstack(pages)
-    return table, None
+    return _stack_pages(pages), None
+
+
+def _stack_pages(pages: list[Table]) -> Table:
+    """Stack result pages whose columns astropy typed differently.
+
+    astroquery builds each page's columns from per-row lists, so one page's
+    field can be a 2-D ``str`` column (every row held a one-element list) and
+    the next a 1-D ``object`` column (some row lacked the field and got
+    ``[None]``). Confirmed live (2026-10-22): ``vstack`` refuses the mix. A
+    column whose dtype kind or cell shape differs between pages (string widths
+    alone stack fine) is rebuilt as 1-D ``object`` cells holding each row's
+    list, which ``flatten_value`` and the ECSV writer already handle.
+    """
+    if len(pages) == 1:
+        return pages[0]
+    for name in pages[0].colnames:
+        if len({(page[name].dtype.kind, page[name].shape[1:]) for page in pages}) > 1:
+            for page in pages:
+                cells = np.empty(len(page), dtype=object)
+                for i, cell in enumerate(page[name]):
+                    cells[i] = cell.tolist() if hasattr(cell, "tolist") else cell
+                page.replace_column(name, Column(cells, name=name))
+    return vstack(pages)
 
 
 def _flatten_rows(table: Table) -> list[dict]:
@@ -253,6 +370,9 @@ def search_ads(
     (second-order operators, proximity search, wildcards) -- combined with
     the others via AND if both are given. At least one parameter is required.
     """
+    refused = _object_name_error(object_name)
+    if refused is not None:
+        return refused
     query_string = _build_query(
         query, author, first_author_only, title, abstract, year, bibcode,
         object_name, doctype,
@@ -358,6 +478,9 @@ def build_literature_review(
     (Markdown, one numbered entry per paper with its citation and abstract)
     and the underlying data table.
     """
+    refused = _object_name_error(object_name)
+    if refused is not None:
+        return refused
     query_string = _build_query(
         query, author, first_author_only, title, abstract, year, None,
         object_name, doctype,

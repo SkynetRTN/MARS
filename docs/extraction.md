@@ -1921,14 +1921,41 @@ fixed where a populated response could look empty or escape as an exception:
   response missing one raises `SimbadResponseError` under `strict=True`
   (`unusable_response` from `resolve_target`). `if not ra` no longer skips an
   object at RA 0.
-* **ADS `abs:`/`object:` grouping** remains unconfirmed. No ADS key was
-  available. The grouped query string is pinned offline, and a live test runs
-  when `ADS_DEV_KEY` is set.
+* **ADS `object:` never searched.** Live with a key (2026-10-22),
+  `/v1/search/query` rejected `object:` in every form, alone or grouped, as
+  `undefined field object`, so `object_name` failed on `search_ads` and
+  `build_literature_review`; the clause grouping was never the cause. The ADS
+  UI translates `object:` through `POST /v1/objects/query` into
+  `=abs:`/`simbid:`/`nedid:` clauses, and `tools.ads` now does the same before
+  searching, for any query containing `object:` (a raw `query=` included). A
+  failed translation never reaches the search. The service answers 200 with
+  an `Error` key when it cannot translate: "No identifiers/objects found" (an
+  empty or unparseable clause) is `invalid_input`, any other `Error` or HTTP
+  failure `provider_unavailable`, and a reply with no query
+  `unusable_response`. `object:` inside a quoted phrase
+  (`title:"object: a study"`) is not translated, since the service refuses
+  it and the search answers it as is. An `object_name` containing `"` is
+  `invalid_input`: the service splits the name there and returns a query the
+  search rejects. Translation adds `database:astronomy`, as the ADS UI's
+  object search does, and a name SIMBAD/NED cannot resolve searches only
+  `=abs:` (`simbid:"0"`/`nedid:"0"`). Live: 564 papers for the test query, an
+  unknown object `not_found`. **Not fixed (ADS):** an unquoted name inside
+  `topn(...)` in a raw `query=` translates with the comma attached and
+  returns nothing (`topn(5, object:"M31", ...)` works), and a 400-character
+  name is a 500 from the service.
+* **ADS results past the first page crashed the tool.** astroquery types each
+  page's columns from that page alone: a field in every row is a 2-D `str`
+  column, one missing from some row a 1-D `object` column holding `[None]`.
+  `vstack` refused the mix (live: `page`, M31 in 2020, 120 rows), and the
+  `TableMergeError` escaped every ADS tool asking for more than 50 rows.
+  `_stack_pages` rebuilds a column whose dtype kind or cell shape differs
+  between pages as 1-D `object` cells. ADS moves to SciX on 2026-11-16, and
+  the live tests need a rerun after it.
 
 Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
 responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
 catalog mapping, Landolt UBVRI, 2MASS ids, SIMBAD, Gaia/literature, radio
-positions with 3C 48 matched in the 3C catalog, NED, and ADS when keyed).
+positions with 3C 48 matched in the 3C catalog, NED, and ADS `object:` searches when keyed).
 
 #### 6. External dependencies
 

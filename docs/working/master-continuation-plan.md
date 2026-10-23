@@ -153,8 +153,27 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   lost every id to a column rename, B1950-only radio catalogs (3C among them)
   could never match, and cached SkyServer error pages made SDSS queries fail
   until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
-  counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
-  grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
+  counterpart, `docs/extraction.md` Query §5.12. **Open, tied to the SciX
+  transition:** ADS moves to Science Explorer (SciX) on 2026-11-16. The ADS
+  team states that the API, accounts and tokens carry over, and on 2026-10-22
+  `api.adsabs.harvard.edu` and `api.scixplorer.org` returned the same
+  unauthenticated response; neither shows behavior after the cutover, so a run
+  before it cannot close this. `astroquery.nasa_ads` 0.4.11 fixes its host at
+  `api.adsabs.harvard.edu` when imported, and `requests` drops the token on a
+  cross-host redirect, so a redirect to SciX would read as a missing token.
+  The live run on 2026-10-22, with a token, failed for a different reason:
+  `/v1/search/query` rejects `object:` in every form, alone or grouped, as
+  `undefined field object`, so `object_name` fails on `search_ads` and
+  `build_literature_review` and grouping was never the cause. `POST
+  /v1/objects/query` translates it into `=abs:`/`simbid:`/`nedid:` clauses,
+  and the translated query succeeds (564 papers; an unknown object returns
+  none). Citation, reference and fielded searches pass live, and the token
+  also answers on `api.scixplorer.org`. `tools.ads` now translates `object:`
+  before searching; a live stress run also found, and the branch fixes, a
+  crash on any ADS result past the first page. The three live ADS tests pass
+  (`docs/extraction.md` Query §5.12). After 2026-11-16, rerun them and record which API host answers. The token and search-syntax links given to users must
+  name SciX. If the ADS API no longer serves MARS, record a maintainer
+  decision to port, caveat or withdraw the four literature tools.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
