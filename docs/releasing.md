@@ -35,8 +35,6 @@ with the build artifact, installed and self-tested.
    - checks the tag against the version;
    - rebuilds `data/optical/` and fails unless it matches `tools/mcp/bundles.json`;
    - builds the wheel and the sdist, and writes `SHA256SUMS`;
-   - validates and packs the Claude Desktop extension into `mars.mcpb` with
-     `@anthropic-ai/mcpb` 2.1.2, and adds it to `SHA256SUMS`;
    - fails unless the wheel carries the scans, periods, zero-point reference,
      variable-star sample, Afterglow fixtures, skill and bundle manifest;
    - classifies the version with `packaging.version`, so every PEP 440
@@ -46,7 +44,14 @@ with the build artifact, installed and self-tested.
    installs the wheel with `[mcp]` and runs
    `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
-3. **verify the extension** unpacks `mars.mcpb` on macOS (Apple Silicon) and
+3. **pack the extension** zips `installers/claude-desktop/` into
+   `mars.mcpb` with `.github/scripts/pack_extension.py`, standard library
+   only, honouring `.mcpbignore` as `mcpb pack` does. **validate the
+   extension manifest** runs `@anthropic-ai/mcpb` 2.1.2's `validate` in a
+   job of its own. npx resolves mcpb's dependency tree unlocked, so npm code
+   never produces the file users install and nothing that job writes reaches
+   another job.
+   **verify the extension** unpacks `mars.mcpb` on macOS (Apple Silicon) and
    x64 Windows, the platforms it supports, and runs the manifest's own command
    with an empty uv cache and only uv-managed Pythons, as a first launch in
    Claude Desktop would, through `mars-mcp self-test`. The extension installs
@@ -60,9 +65,10 @@ with the build artifact, installed and self-tested.
 5. **verify-data** installs the wheel without a checkout, fetches both
    optional bundles, rehashes their extracted trees, and runs
    `mars-mcp self-test --with-data` through stdio and the local grid loader.
-6. **publish** creates the GitHub release with the wheel, the sdist,
-   `mars.mcpb` and `SHA256SUMS`, only after **verify**, **verify the
-   extension**, **data** and **verify-data** pass. It is
+6. **publish** adds `mars.mcpb` to `SHA256SUMS` and creates the GitHub
+   release with the wheel, the sdist, `mars.mcpb` and `SHA256SUMS`, only
+   after **verify**, both extension checks, **data** and **verify-data**
+   pass. It is
    the only job with write permission to the repository, and only on a tag.
 7. **publish to TestPyPI** runs in parallel with **publish**, uploading the
    wheel and the sdist to TestPyPI after the same build and verification jobs
@@ -94,9 +100,10 @@ manifest bytes and advertised digest were compared on 2026-10-07; the manifest
 includes Linux amd64/arm64. CI and release metadata checks both use exact
 **Twine 6.2.0**, verified against its PyPI metadata (Python >=3.9). Regression
 tests prevent either pin drifting to a tag or a major-only version.
-The release build packs the extension with exact **`@anthropic-ai/mcpb`
-2.1.2** (npm integrity `sha512-goRbBC8ySo7SWb7tRzr+tL6FxDc4JPTRCdgfD2omba7freofvjq5rom1lBnYHZHo6Mizs1jAHJeN53aZbDoy8A==`,
-checked 2026-10-23), held by a test.
+The release validates the extension's manifest with exact
+**`@anthropic-ai/mcpb` 2.1.2** (npm integrity `sha512-goRbBC8ySo7SWb7tRzr+tL6FxDc4JPTRCdgfD2omba7freofvjq5rom1lBnYHZHo6Mizs1jAHJeN53aZbDoy8A==`,
+checked 2026-10-23), held by a test, as is the rule that npm never packs
+the file.
 The workflow-safety job also pins actionlint **1.7.12** to its byte-verified
 registry manifest digest, checked on the same date.
 

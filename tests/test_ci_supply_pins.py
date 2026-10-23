@@ -26,8 +26,18 @@ def test_actionlint_uses_its_verified_immutable_digest():
     assert "rhysd/actionlint:" not in text
 
 
-def test_release_packs_the_extension_with_one_exact_mcpb():
+def test_release_validates_the_extension_with_one_exact_mcpb():
     path = Path(__file__).resolve().parents[1] / ".github/workflows/release.yml"
     text = path.read_text()
-    assert re.findall(r"@anthropic-ai/mcpb@(\S+)", text) == ["2.1.2", "2.1.2"]
+    assert re.findall(r"@anthropic-ai/mcpb@(\S+)", text) == ["2.1.2"]
     assert re.findall(r"@anthropic-ai/mcpb(?!@)", text) == []
+
+
+def test_release_never_packs_with_npm():
+    """npx resolves mcpb's dependency tree unlocked: it may validate, never
+    produce the bytes users install (.github/scripts/pack_extension.py)."""
+
+    path = Path(__file__).resolve().parents[1] / ".github/workflows/release.yml"
+    text = path.read_text()
+    assert "mcpb@2.1.2 pack" not in text
+    assert "pack_extension.py installers/claude-desktop extension/mars.mcpb" in text

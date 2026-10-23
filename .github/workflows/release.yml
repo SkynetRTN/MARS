@@ -77,16 +77,6 @@ jobs:
       - name: Check what the wheel carries
         run: python .github/scripts/check_dist.py dist/*.whl
 
-      # The Claude Desktop extension (installers/claude-desktop/). It names no
-      # MARS release, so one file serves every release; attaching it saves
-      # users building it. Kept out of dist/, which goes to the indexes.
-      - name: Validate and pack the Claude Desktop extension
-        run: |
-          mkdir extension
-          npx --yes @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
-          npx --yes @anthropic-ai/mcpb@2.1.2 pack installers/claude-desktop extension/mars.mcpb
-          (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
-
       # PEP 440 decides what a pre-release is, not a pattern: 0.1.0rc1, 1.0b2,
       # 2.0.dev3 and their other spellings are all pre-releases.
       - name: Classify the version
@@ -103,11 +93,48 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The Claude Desktop extension (installers/claude-desktop/). It names no
+  # MARS release, so one file serves every release; attaching it saves users
+  # building it. Packed by a standard-library script in its own job, apart
+  # from dist/: `mcpb pack` would run npm's unlocked dependency tree on the
+  # bytes users install.
+  extension:
+    name: pack the extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/pack_extension.py
+            installers/claude-desktop/
+          sparse-checkout-cone-mode: false
+
+      - name: Pack mars.mcpb
+        run: |
+          mkdir extension
+          python3 .github/scripts/pack_extension.py installers/claude-desktop extension/mars.mcpb
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: extension
           path: extension/
           if-no-files-found: error
+
+  # mcpb's own manifest check. npx resolves mcpb's dependencies unlocked, so
+  # this job only reads the manifest: nothing it writes reaches another job.
+  validate-extension:
+    name: validate the extension manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: installers/claude-desktop/
+          sparse-checkout-cone-mode: false
+
+      - name: Validate with mcpb
+        run: npx --yes @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
 
   # The packed extension, run as Claude Desktop runs it, on the two platforms
   # it supports (installers/claude-desktop/README.md, Platforms). It installs
@@ -116,7 +143,7 @@ jobs:
   # app: a real Claude Desktop install stays a manual check (M4).
   verify-extension:
     name: verify the extension (${{ matrix.os }})
-    needs: build
+    needs: [build, extension]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -270,7 +297,7 @@ jobs:
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [build, verify, verify-extension, data, verify-data]
+    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -296,6 +323,7 @@ jobs:
           # else is a release. The build job classified the version with
           # packaging.version. docs/releasing.md.
           if [ "$PRERELEASE" = "true" ]; then flag=--prerelease; else flag=--latest; fi
+          (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
           gh release create "$TAG" dist/*.whl dist/*.tar.gz extension/mars.mcpb dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
             --notes "Install and register: docs/installing.md. Claude Desktop (Apple Silicon Mac, x64 Windows): double-click \`mars.mcpb\`; it is unsigned and runs the newest MARS release. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
@@ -306,7 +334,7 @@ jobs:
   publish-testpypi:
     name: publish to TestPyPI
     if: github.event_name == 'push'
-    needs: [build, verify, verify-extension, data, verify-data]
+    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     environment:
       name: testpypi
