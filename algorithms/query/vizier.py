@@ -44,6 +44,7 @@ from algorithms.catalogs.schemas import CatalogSource, Mag
 
 from .cache import install_cache_error_suppression
 from .config import settings
+from .coverage import note_row_limit
 
 __all__ = ["ProviderResponseError", "VizierCatalog", "build_custom_vizier_catalog"]
 
@@ -365,7 +366,12 @@ class VizierCatalog(Catalog):
             **region,
         )
         if resp:
-            return self.table_to_sources(resp[0])
+            rows = resp[0]
+            effective_limit = getattr(viz, "ROW_LIMIT", limit)
+            note_row_limit(self.name, len(rows), effective_limit, sort=self.sort)
+            if effective_limit is not None and effective_limit > 0:
+                rows = rows[:effective_limit]
+            return self.table_to_sources(rows)
         return []
 
     def query_box(
@@ -404,9 +410,8 @@ class VizierCatalog(Catalog):
     ) -> TList[CatalogSource]:
         """Return catalog objects within a circular region."""
         if self.cache:
-            ra_hours, dec_degs, (radius_arcmins,) = _round_for_cache(
-                ra_hours, dec_degs, radius_arcmins
-            )
+            ra_hours, dec_degs, radius_arcmins = _round_cone_for_cache(
+                ra_hours, dec_degs, radius_arcmins)
         return self.query_region(
             ra_hours, dec_degs, constraints, limit, radius=radius_arcmins * arcmin
         )
@@ -498,6 +503,15 @@ def _round_for_cache(ra_hours: float, dec_degs: float, *sizes):
         numpy.ceil(size * 5) / 5 if size is not None else None for size in sizes
     )
     return ra_hours, dec_degs, rounded
+
+
+def _round_cone_for_cache(ra_hours: float, dec_degs: float, radius_arcmins: float):
+    """Round a cone while enclosing its original, unrounded region (CAT-17)."""
+    ra, dec, (radius,) = _round_for_cache(ra_hours, dec_degs, radius_arcmins)
+    shift = SkyCoord(ra_hours * 15, dec_degs, unit=deg).separation(
+        SkyCoord(ra * 15, dec, unit=deg)).arcmin
+    radius = max(radius, numpy.ceil((radius_arcmins + shift) * 5) / 5)
+    return ra, dec, radius
 
 
 def build_custom_vizier_catalog(spec: TDict) -> type:

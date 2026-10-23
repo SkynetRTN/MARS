@@ -80,7 +80,7 @@ def test_a_normal_solve_reports_a_zero_point_and_its_error():
 
 def test_a_calc_solution_domain_error_returns_an_error_not_a_crash():
     with patch(
-        "tools.calibration.calc_solution",
+        "tools.calibration._calc_solution_with_mask",
         side_effect=ValueError("math domain error"),
     ):
         result = solve_zeropoint_from_measurements(MEASUREMENTS, CATALOG_SOURCES)
@@ -94,7 +94,7 @@ def test_result_reports_an_absolute_zero_point_under_an_unambiguous_name():
     rows = _calibration_rows()
     solution = solve_zeropoint_from_measurements(rows, [])
 
-    assert solution.source_count == 35
+    assert solution.source_count == 29
     assert solution.errors == []
     expected, _ = scientific_solution(rows)
     assert solution.zero_point == pytest.approx(expected[0], rel=0, abs=1e-7)

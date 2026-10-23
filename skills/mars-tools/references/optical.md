@@ -99,6 +99,15 @@ a correction instead; never compare the two without adding Afterglow's base.
   and a check of any computed zero point against them. M2's corrected scatter
   and rejection can change the fit even when the selected identities match.
 
+Successful fits report surviving stars, excluding rejected candidates. Their
+`calibration_sufficiency_unverified` warning means that a finite fit/error does
+not establish enough stars, spatial/colour coverage or calibration beyond the
+reference magnitude range. Report that limit. `catalog_rows_capped` means
+coverage may be incomplete and brightness-biased; `catalog_fallback_not_exhausted`
+names alternatives left unqueried after the first nonempty catalog. A
+`catalog_query_incomplete` or `catalog_coverage_unverified` warning must accompany
+any conclusion about the field's reference coverage.
+
 > Authority: `tools/registry.py`, the `calibrate_zeropoint`,
 > `replay_field_calibration` and `compare_zeropoint_to_reference`
 > descriptions.

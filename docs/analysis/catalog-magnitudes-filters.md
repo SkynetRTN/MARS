@@ -3,7 +3,7 @@
 Recorded 2026-10-23 on `feature/m2`. The maintainer requested production Skynet
 filter selection with all existing numerical transforms, especially H-alpha,
 preserved. This is a routing and band-identity correction, not a replacement
-photometric transformation model. Catalog coverage/sufficiency remains a separate
+photometric transformation model. Catalog coverage/sufficiency is a separate
 checkpoint.
 
 ## Production comparison and preserved arithmetic
@@ -156,8 +156,10 @@ and the unchanged narrowband aliases. Across the concluding VizieR and SDSS
 runs, all **ten calibration catalogs** passed **3,355 native/transformed value
 checks over 317 mapped stars**, plus the two M3 identifier checks. The earlier
 connection timeouts remain recorded above; none was hidden as a skipped test.
-The catalog-magnitudes-and-filters checkpoint is closed. Coverage/sufficiency,
-remaining warning/benchmark work and live ADS grouping validation stay open.
+The catalog-magnitudes-and-filters checkpoint is closed. The subsequent
+[coverage/sufficiency checkpoint](catalog-coverage-sufficiency.md) addresses
+selection limits. Remaining warning/benchmark work and live ADS grouping
+validation stay open.
 
 
 ## Review of the committed checkpoint

@@ -36,7 +36,8 @@ measurements. Without supplied errors, the fit uses the mean and empirical
 scatter; the rejection scale uses the sample standard deviation. Classical
 Chauvenet has limited rejection power in very small unweighted samples. A
 minimum of two permits fitting; it does not establish calibration sufficiency.
-That remains a separate M2 gate.
+The subsequent [coverage/sufficiency gate](catalog-coverage-sufficiency.md)
+discloses that limit and reports actual solver survivors for public fits.
 
 The returned zero-point error remains the empirical weighted-mean sandwich
 estimator, evaluated on residuals to remove a cancellation crash. It is not
@@ -108,6 +109,7 @@ descriptions; input schemas and public arguments did not change.
 
 Final Python 3.13.15 offline validation passed **3,834 tests, with 75 skips and
 216 warnings**. Compilation, schema goldens, generated-guidance consistency,
-repository shape and whitespace checks passed. All seven completed M2
-checkpoints remain local to `feature/m2`; catalog magnitudes/filters, coverage/
-sufficiency and warnings/benchmark claims remain open in the master plan.
+repository shape and whitespace checks passed. This was the seventh M2
+checkpoint on `feature/m2`. Subsequent [magnitude/filter](catalog-magnitudes-filters.md)
+and [coverage/sufficiency](catalog-coverage-sufficiency.md) checkpoints now
+record their own acceptance; warnings/benchmark claims remain open in the master plan.

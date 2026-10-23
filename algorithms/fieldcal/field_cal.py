@@ -762,8 +762,7 @@ def perform_field_calibration(
     # solve without a finite zero point and a finite, positive uncertainty is
     # refused here, before the header is touched.
     num_stars = len(calibration_sources)
-    # calc_solution reports rejection only as a percentage of its input.
-    survivors = int(round(num_stars * (100 - rej_percent) / 100)) if np.isfinite(rej_percent) else num_stars
+    survivors = int(np.count_nonzero(survivor_mask))
     if not np.isfinite(m0):
         raise DegenerateCalibrationError(
             f"The solve over {num_stars} calibration star(s) produced a non-finite zero point.",
@@ -813,4 +812,5 @@ def perform_field_calibration(
         for source, survived in zip(result.phot_results, survivor_mask)
         if survived and source.id in reference_routes
     }
+    result._num_calibration_stars = survivors
     return result.zero_point_corr, result

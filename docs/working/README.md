@@ -10,6 +10,7 @@ original findings; implementation choices belong in subsequent work.
 | Plan | Status |
 | --- | --- |
 | [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-20 against `main` at `a6785aa`. M0/M1 closed; M1 merged and unreleased. M2 must be reassessed without PR #120. Remaining gates describe failures, missing evidence and final release checks. Browser hosting remains deferred. |
+| [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | M2 checkpoint complete locally on `feature/m2`; [acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md). |
 
 ## Landed
 

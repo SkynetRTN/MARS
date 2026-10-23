@@ -172,8 +172,12 @@ def _resolve_calibration_inputs(
     ):
         try:
             variable_sources = query_catalogs(["VSX"], wcs=wcs, skip_failed=True)
-        except Exception:
+        except Exception as exc:
             variable_sources = None
+            from algorithms.query.coverage import note_query_issue
+
+            note_query_issue("catalog_query_incomplete",
+                             f"VSX variable-star cross-check failed: {exc}. Known variables may remain.")
     return list(catalog_sources), variable_sources, selected_catalogs
 
 
@@ -345,13 +349,17 @@ def run_photometry_on_target(
     # mutually inconsistent by several magnitudes to anyone checking the math.
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
 
-    warnings = []
+    warnings = list(getattr(zero_point, "warnings", []) or [])
     if zero_point.verified:
-        from tools.catalogs import calibration_reference_warnings
+        from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
 
         warnings.extend(calibration_reference_warnings(
             getattr(zero_point, "calibration_sources", None),
             getattr(zero_point, "reference_routes", None),
+        ))
+        warnings.extend(calibration_sample_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            (zero_point.diagnostics or {}).get("num_calibration_stars"),
         ))
         if zero_point_model is not None:
             zero_point_model.warnings.extend(warnings)
@@ -566,14 +574,21 @@ def calibrate_zeropoint(
             catalog_sources = clip_sources_to_wcs(catalog_sources, [wcs])
             if variable_sources is not None:
                 variable_sources = clip_sources_to_wcs(variable_sources, [wcs])
-        resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
-            header,
-            wcs,
-            catalog_sources=catalog_sources,
-            catalogs=selected_catalogs,
-            variable_check_tol=field_cal_settings.variable_check_tol,
-            variable_sources=variable_sources,
-        )
+        from algorithms.query.coverage import collect_query_notices
+        from tools.catalogs import catalog_query_warnings
+
+        with collect_query_notices() as notices:
+            try:
+                resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
+                    header,
+                    wcs,
+                    catalog_sources=catalog_sources,
+                    catalogs=selected_catalogs,
+                    variable_check_tol=field_cal_settings.variable_check_tol,
+                    variable_sources=variable_sources,
+                )
+            finally:
+                warnings.extend(catalog_query_warnings(notices))
         outcome = perform_field_calibration(
             header.copy(),
             data,
@@ -618,10 +633,13 @@ def calibrate_zeropoint(
         )
     zero_point = float(zero_point)
 
-    from tools.catalogs import calibration_reference_warnings
+    from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
 
     warnings.extend(calibration_reference_warnings(
         getattr(_result, "phot_results", None), getattr(_result, "_reference_routes", None),
+    ))
+    warnings.extend(calibration_sample_warnings(
+        getattr(_result, "phot_results", None), getattr(_result, "_num_calibration_stars", None),
     ))
 
     if compare_to is not None:

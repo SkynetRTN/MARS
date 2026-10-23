@@ -206,6 +206,8 @@ class ZeropointSolution(MARSToolModel):
     zero_point_slop: float | None = None
     limmag5: float | None = None
     rej_percent: float | None = None
+    #: Surviving stars for a completed fit, excluding rejected candidates.
+    #: A numerical failure before fitting reports the candidate count instead.
     source_count: int = 0
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)

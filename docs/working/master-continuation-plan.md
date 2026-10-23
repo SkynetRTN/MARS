@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first eight M2 checkpoints
+Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first nine M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the first eight checkpoints
+M2 remains open after the first nine checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -197,13 +197,28 @@ the subsequent work.
   comparisons across 317 stars**; all ten catalogs and both M3 identifier
   checks passed again during follow-up review. Compilation, schema goldens, generated
   guidance, repository shape and whitespace checks pass. Changes remain local
-  to `feature/m2`; coverage/sufficiency and the separate retained-defect
-  warnings/benchmark gate remain open.
-- [ ] **Catalog coverage and sufficiency.** Polar footprints can omit stars;
-  brightness-limited responses and stopping at the first nonempty catalog can
-  leave a biased or insufficient calibration sample. SkyMapper also changes
-  caller constraints. Results must disclose incomplete coverage and inadequate
-  calibration, and one query must not change later queries.
+  to `feature/m2`; the following checkpoint addresses coverage/sufficiency,
+  and the separate retained-defect warnings/benchmark gate remains open.
+- [x] **Catalog coverage and sufficiency.** Both WCS runner entry points use
+  enclosing cones and detector clipping, including RA seams, pole-crossing
+  fields, anisotropic scales and off-detector CRPIX. Explicit polar boxes keep
+  a conservative full-RA declination band instead of dropping stars or failing
+  on NaN. Cached cones compensate for their rounded centre. Distorted/non-TAN
+  footprints, including internally normalized TPV, use sampled boundaries and
+  disclose unverified coverage. SkyMapper copies constraints before defaults.
+  Raw VizieR/SDSS limits are disclosed before mapping/clipping hides the cap,
+  including brightness bias and the SDK default limit. First-nonempty fallback
+  names unqueried alternatives; skipped queries and failed variable-star
+  checks remain visible. All registered fits disclose unverified sufficiency
+  and report actual solver survivors, not rejected candidates. Direct
+  degenerate fits share M3's no-solution policy. Numerical transforms and solver
+  arithmetic remain unchanged. Evidence: [acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md),
+  45 new offline cases, 613 focused passes, review findings fixed with
+  failing-then-passing regressions, and **3,979 passed, 88 skipped** in the full
+  suite. All **15 live checks** pass, including near-pole/ordinary detector
+  queries, a capped response and 3,355 matching magnitude/filter values across
+  317 stars in ten catalogs. Compilation, schema goldens, generated guidance,
+  repository shape and whitespace checks pass. Changes remain local to `feature/m2`.
 - [ ] **Warnings and benchmark claims.** Reachable retained numerical bugs
   are not consistently disclosed in tool results. The answer grader can accept
   invented author attribution when numbers are sourced. Users need relevant

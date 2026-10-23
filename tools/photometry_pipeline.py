@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -30,6 +30,7 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
 from algorithms.photometry.photometry import PhotometrySettings, run_photometry
 from algorithms.photometry.schemas import SourceExtractionSettings
 from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
+from tools.models import ToolWarning
 
 
 @dataclass
@@ -58,6 +59,7 @@ class ZeroPointResolution:
     failure: str | None = None
     failure_code: str | None = None
     reference_routes: dict[str, tuple[str, str | None]] | None = None
+    warnings: list[ToolWarning] = field(default_factory=list)
 
 
 #: compute_field_cal_zero_point's message prefix for an unusable catalog
@@ -156,8 +158,9 @@ def compute_field_cal_zero_point(
         "zero_point_error_mag": result.zero_point_error_mag,
         "zero_point_slop": result.zero_point_slop,
         "rejection_percent": result.rej_percent,
-        "num_calibration_stars": len(result.phot_results),
-        "catalogs_queried": ", ".join(selected_catalogs),
+        "num_calibration_stars": result._num_calibration_stars,
+        "num_calibration_candidates": len(result.phot_results),
+        "catalogs_requested": ", ".join(selected_catalogs),
     }
     return float(zero_point_mag), diagnostics, None, result
 
@@ -323,9 +326,14 @@ def select_zero_point_mag(
         return ZeroPointResolution(header_zero_point, "header", verified=False)
 
     if use_field_cal and data is not None:
-        zero_point_mag, diagnostics, error, field_cal_result = compute_field_cal_zero_point(
-            header, data, catalogs=catalogs
-        )
+        from algorithms.query.coverage import collect_query_notices
+        from tools.catalogs import catalog_query_warnings
+
+        with collect_query_notices() as notices:
+            zero_point_mag, diagnostics, error, field_cal_result = compute_field_cal_zero_point(
+                header, data, catalogs=catalogs
+            )
+        warnings = catalog_query_warnings(notices)
         if zero_point_mag is not None:
             return ZeroPointResolution(
                 zero_point_mag,
@@ -334,11 +342,13 @@ def select_zero_point_mag(
                 diagnostics=diagnostics,
                 calibration_sources=field_cal_result.phot_results if field_cal_result else None,
                 reference_routes=getattr(field_cal_result, "_reference_routes", None),
+                warnings=warnings,
             )
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
         # M3: the reason used to reach only stderr; the tool now reports it.
         code = "unusable_response" if str(error).startswith(UNUSABLE_RESPONSE_PREFIX) else "field_calibration_failed"
-        return ZeroPointResolution(None, "none", verified=False, failure=error, failure_code=code)
+        return ZeroPointResolution(None, "none", verified=False, failure=error, failure_code=code,
+                                   warnings=warnings)
 
     return ZeroPointResolution(None, "none", verified=False)
 

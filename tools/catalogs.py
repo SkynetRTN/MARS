@@ -236,6 +236,37 @@ def calibration_reference_warnings(
     return warnings
 
 
+def calibration_sample_warnings(sources, surviving: int | None) -> list[ToolWarning]:
+    """A fit and empirical uncertainty do not validate calibration sufficiency."""
+    candidates = len(sources or [])
+    sample = (f"{surviving} of {candidates} candidate star(s) survived the fit. "
+              if surviving is not None else f"The fit had {candidates} candidate star(s); survivor count is unavailable. ")
+    return [ToolWarning(
+        code="calibration_sufficiency_unverified",
+        message=sample + "A finite zero point and empirical fit error do not establish a "
+                "sufficient calibration sample. Completeness, spatial/colour coverage, "
+                "magnitude-range extrapolation and catalog systematics have not been validated.",
+    )]
+
+
+def catalog_query_warnings(notices) -> list[ToolWarning]:
+    """Translate the closed query-notice vocabulary at the tool boundary."""
+    warnings = []
+    for notice in notices:
+        match notice.code:
+            case "catalog_rows_capped":
+                warnings.append(ToolWarning(code="catalog_rows_capped", message=notice.message))
+            case "catalog_coverage_unverified":
+                warnings.append(ToolWarning(code="catalog_coverage_unverified", message=notice.message))
+            case "catalog_fallback_not_exhausted":
+                warnings.append(ToolWarning(code="catalog_fallback_not_exhausted", message=notice.message))
+            case "catalog_query_incomplete":
+                warnings.append(ToolWarning(code="catalog_query_incomplete", message=notice.message))
+            case _:
+                raise ValueError(f"Unknown catalog query notice: {notice.code}")
+    return warnings
+
+
 def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceBandResolution:
     """Resolve the catalog band or expression MARS would use for an image filter."""
 

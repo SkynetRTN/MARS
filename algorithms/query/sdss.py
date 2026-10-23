@@ -35,7 +35,8 @@ from astroquery.sdss import SDSSClass
 
 from algorithms.catalogs.schemas import CatalogSource
 
-from .vizier import ProviderResponseError, VizierCatalog, _round_for_cache
+from .vizier import ProviderResponseError, VizierCatalog, _round_for_cache, _round_cone_for_cache
+from .coverage import note_row_limit
 
 __all__ = ["MARSSDSS", "SDSSQueryBackend"]
 
@@ -286,9 +287,9 @@ class MARSSDSS(SDSSClass):
                 where = f's.dec >= {dec_min}'
             else:
                 ratio = np.sin(np.deg2rad(width/2)) / np.cos(np.deg2rad(dec))
-                if not math.isfinite(ratio) or abs(ratio) > 1:
-                    raise ValueError("SDSS box has no finite RA span under the preserved geometry.")
-                w = np.rad2deg(np.arcsin(ratio))
+                if not math.isfinite(ratio):
+                    raise ValueError("SDSS box has no finite RA span.")
+                w = 180 if abs(ratio) >= 1 or width >= 360 else np.rad2deg(np.arcsin(ratio))
                 ra_min, ra_max = ra - w, ra + w
                 if ra_max >= ra_min + 360:
                     # RA spans the whole 360deg range
@@ -428,9 +429,8 @@ class SDSSQueryBackend(VizierCatalog):
         _row_limit(limit, self.row_limit)
         _finite_region_inputs(ra_hours, dec_degs, radius_arcmins)
         if self.cache:
-            ra_hours, dec_degs, (radius_arcmins,) = _round_for_cache(
-                ra_hours, dec_degs, radius_arcmins
-            )
+            ra_hours, dec_degs, radius_arcmins = _round_cone_for_cache(
+                ra_hours, dec_degs, radius_arcmins)
 
         return self._query_sql_region(
             ra_hours, dec_degs, radius_arcmins * arcmin, limit,
@@ -449,4 +449,5 @@ class SDSSQueryBackend(VizierCatalog):
         rows = _query_sql(client, payload["cmd"], self.data_release, self.cache)
         if rows is None:
             return []
+        note_row_limit(self.name, len(rows), limit)
         return self.table_to_sources(rows[:limit])

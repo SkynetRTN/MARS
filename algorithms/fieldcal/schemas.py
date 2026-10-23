@@ -249,4 +249,5 @@ class FieldCalResult(MARSBaseModel):
     # Actual resolver provenance, keyed by source ID. Kept internal so the
     # extracted public result shape and serialized per-star rows stay stable.
     _reference_routes: Dict[str, tuple[str, str | None]] = PrivateAttr(default_factory=dict)
+    _num_calibration_stars: int | None = PrivateAttr(default=None)
 # (Ports legacy FieldCalResult fields.)  # :contentReference[oaicite:5]{index=5}

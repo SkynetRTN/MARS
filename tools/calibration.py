@@ -8,7 +8,7 @@ from typing import Any
 
 from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 from algorithms.fieldcal.schemas import CatalogSource, Mag, PhotometryData
-from algorithms.fieldcal.solution import calc_solution
+from algorithms.fieldcal.solution import _calc_solution_with_mask
 from tools.models import ToolError, ToolWarning, ZeropointSolution
 
 
@@ -114,7 +114,8 @@ def solve_zeropoint_from_measurements(
         )
 
     try:
-        m0, m0_error, slop, limmag, rej_percent = calc_solution(usable_sources)
+        solution, survivor_mask = _calc_solution_with_mask(usable_sources)
+        m0, m0_error, slop, limmag, rej_percent = solution
     except ValueError as exc:
         # Invalid measurement variances or an unusable numerical fit must
         # return a structured failure. M2 removes the old zero-scatter
@@ -124,12 +125,23 @@ def solve_zeropoint_from_measurements(
             warnings=warnings,
             errors=[ToolError(code="numerical_error", message=str(exc))],
         )
+    from tools.catalogs import calibration_sample_warnings
+
+    surviving = int(sum(survivor_mask))
+    warnings.extend(calibration_sample_warnings(usable_sources, surviving))
+    if _finite(m0) is None or _finite(m0_error) is None or m0_error <= 0:
+        return ZeropointSolution(
+            source_count=surviving, warnings=warnings,
+            errors=[ToolError(code="no_solution", message=
+                f"The fit over {surviving} surviving star(s) has no finite zero point "
+                "and positive finite uncertainty; it cannot establish a calibration.")],
+        )
     return ZeropointSolution(
         zero_point=_finite(m0),
         zero_point_error_mag=_finite(m0_error),
         zero_point_slop=_finite(slop),
         limmag5=_finite(limmag),
         rej_percent=_finite(rej_percent),
-        source_count=len(usable_sources),
+        source_count=surviving,
         warnings=warnings,
     )

@@ -1083,13 +1083,18 @@ def replay_field_calibration(
             )
         )
 
+    from tools.catalogs import calibration_sample_warnings
+
+    sample_warnings = calibration_sample_warnings(result.phot_results, result._num_calibration_stars)
+    warnings.extend(sample_warnings)
     solution = ZeropointSolution(
         zero_point=_f(zero_point),
         zero_point_error_mag=_f(result.zero_point_error_mag),
         zero_point_slop=_f(result.zero_point_slop),
         limmag5=_f(result.limmag5),
         rej_percent=_f(result.rej_percent),
-        source_count=len(result.phot_results),
+        source_count=result._num_calibration_stars,
+        warnings=sample_warnings,
     )
     comparison = _compare_to_reference(float(zero_point), reference)
 

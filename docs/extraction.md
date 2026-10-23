@@ -1338,7 +1338,20 @@ claiming old bitwise parity. M3's degenerate-solve/header safeguards remain.
 
 See [acceptance, derivation and limits](analysis/photometric-calibration.md).
 PHOT-06 downsampled saturation counts, other aperture/background defects,
-catalog completeness and calibration sufficiency remain separate open work.
+catalog completeness and calibration sufficiency are addressed by the following
+disclosure contract; the retained numerical defects remain separate open work.
+
+#### 5d. M2 catalog coverage and sample disclosure (2026-10-23)
+
+Successful public fits report actual solver survivors, independent of private
+reference-provenance keys. All registered fits carry a sample-sufficiency
+warning: finite empirical fit uncertainty does not establish spatial/colour
+coverage, an unbiased sample or magnitude-range validity. Direct measurement
+fits now share M3's refusal of non-finite or nonpositive fit uncertainty.
+Pixel calibrations also carry operation-scoped notices for capped responses,
+unqueried fallback catalogs, unavailable queries and unverified distorted-WCS
+coverage, including on failure returns. No magnitude transform or fitting
+equation changes. See [acceptance and retained limits](analysis/catalog-coverage-sufficiency.md).
 
 ---
 
@@ -1776,7 +1789,9 @@ With the cache enabled, `query_box` and `query_circ` snap the region centre to
 cache entry. This means a cached query returns rows for a slightly larger,
 grid-aligned region than asked for. The WCS path clips afterwards; a caller
 using `query_circ` directly does not. Turning the cache off changes results near
-a field edge.
+a field edge. M2 now grows rounded cones by the spherical displacement of
+their centre before rounding the radius upward; moving the centre cannot cut
+away the original cone's edge. Explicit boxes retain their legacy rounding.
 
 ##### 5.2 `_derive_columns` requests columns named `int` and `float`
 
@@ -1811,11 +1826,13 @@ In WCS mode, a failing catalog is skipped only while another remains to try. The
 last one always raises — otherwise a total provider outage would be
 indistinguishable from an empty field.
 
-##### 5.7 `SkyMapperQueryBackend.query_region` mutates the caller's dict
+##### 5.7 M2 isolates SkyMapper constraints (CAT-08, 2026-10-23)
 
-It calls `constraints.setdefault('flags', '0')` on the dict it was handed. A
-caller reusing one dict across catalogs finds `flags` added after querying
-SkyMapper. Upstream did the same; MARS's runner passes a fresh dict per call.
+Upstream calls `constraints.setdefault('flags', '0')` on the caller's dict.
+The original extraction record incorrectly claimed the runner supplied a
+fresh dictionary. M2 copies constraints in the backend before applying the
+same default. Explicit flags are preserved, caller dictionaries stay intact,
+and SkyMapper's quality rule cannot leak into later catalog queries.
 
 ##### 5.8 SDSS ignores `constraints`
 
@@ -1832,13 +1849,22 @@ field separately. The reason was never recorded. MARS keeps it as a working,
 tested function that nothing calls. Enabling it is a behaviour change needing its
 own validation.
 
-##### 5.10 Two footprint implementations, both kept
+##### 5.10 M2 enclosing-cone WCS queries (2026-10-23)
 
-`boxes_from_wcs` projects the four corners with `CRVAL` moved to (0,0), which
-handles rotation and the cos(dec) narrowing. `image_boxes_from_wcs` multiplies
-pixel scale by axis length, which is blind to both but works without
-`array_shape`. Upstream had both; they return different widths for the same WCS
-(verified: 1.02297° vs 1.02400° on a 1024² TAN field). Prefer the former.
+The two historical box helpers remain callable for extraction comparisons.
+Their limitations include off-detector CRPIX failures, the image helper's
+transposed anisotropic scales and rotation, and polar undercoverage. Both live
+WCS runner entry points now query enclosing spherical cones and clip to the
+detector. Undistorted TAN fields use the four outer detector vertices; a cap
+smaller than a hemisphere containing those vertices contains the gnomonic
+rectangle. RA seams, poles, rotation and off-detector CRPIX need no split.
+Other projections and distorted fields use sampled boundaries with an explicit
+`catalog_coverage_unverified` notice. Effective serialized CTYPE identifies TPV
+distortions that wcslib internally reports as TAN with `has_distortion=False`.
+Sampling does not prove completeness. Provider row caps still apply, so a
+larger query region can encounter a cap sooner. CAT-11 explicit-box clipping
+and SQL use the conservative full-RA declination band when no finite tangent
+meridian exists, instead of returning nothing or rejecting the polar request.
 
 ##### 5.11 First-party SDSS acceptance/transport contract (2026-10-06)
 
@@ -1848,7 +1874,7 @@ accept only integer limits in 1–5,000 and slice returned tables before source
 mapping even if a provider ignores `TOP`. This bounds mapped rows, not HTTP
 response bytes, SDK parsing memory or the whole-call deadline (MCP-01). Without
 an ordering/completeness contract, the subset is not a full or unbiased catalog
-sample; CAT-19 remains separate.
+sample; M2 discloses CAT-19 as described in §5.13.
 
 CAT-27 bounds projections to 1–64 literal ASCII SQL identifiers, each at most
 64 characters. Expressions, comments, qualified names and missing projections
@@ -1857,9 +1883,8 @@ or unbounded fallback. Shipped SDSS fields were already trusted. The custom
 metadata/native Python payload boundary is now guarded; no registered tool
 exposes arbitrary projection fields, and this is not evidence of an MCP SQL
 injection exploit. Non-finite/non-positive dimensions and cache-rounding
-overflow are rejected before work; an unrepresentable polar RA span raises
-rather than sending `NaN` SQL. That guard does not correct CAT-11's preserved
-box geometry.
+overflow are rejected before work. M2 now handles CAT-11's polar RA-span
+singularity with a conservative full-RA declination band, never `NaN` SQL.
 
 The pinned `astroquery==0.4.11` cone path passes a coordinate list into the old
 scalar `_args_to_payload` seam and expects a cross-ID rather than SQL payload;
@@ -1885,10 +1910,10 @@ live: 75 objIDs pass, 80 fail), so IDs are batched to stay under
 `MAX_SDSS_QUERY_STRING` (1,900). A live
 round trip (region row -> objID lookup) is in `test_m3_catalog_lookup_live.py`.
 
-Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
-mapping remain preserved; ignored constraints (§5.8) and public schemas are
-unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
-regressions.
+Quality predicates, row mapping, ignored constraints (§5.8) and public schemas
+remain unchanged. M2's deliberate cone-rounding and polar-box repairs are
+recorded in §5.1 and §5.10. See `tests/test_sdss_query_limits.py` for the
+acceptance and transport regressions.
 
 ##### 5.12 M3 provider-response contracts (2026-10-21)
 
@@ -1978,6 +2003,24 @@ Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
 responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
 catalog mapping, Landolt UBVRI, 2MASS ids, SIMBAD, Gaia/literature, radio
 positions with 3C 48 matched in the 3C catalog, NED, and ADS when keyed).
+
+##### 5.13 M2 bounded-response and fallback notices (2026-10-23)
+
+CAT-19: a raw VizieR/SDSS response reaching the effective row cap emits
+`catalog_rows_capped` before mapping, slicing or detector clipping. VizieR's
+implicit SDK limit is included. A cap may omit stars; magnitude ordering can
+bias the subset toward bright/saturated sources. This is a possible-incompleteness
+notice, not proof that an extra row exists. Limits and ordering are retained.
+
+CAT-30: priority fallback still stops at the first nonempty catalog, but names
+remaining alternatives under `catalog_fallback_not_exhausted`. A raw-row
+threshold cannot establish the number or quality of fit survivors. Failed
+queries that are skipped, and unavailable variable-star cross-checks, carry
+`catalog_query_incomplete`. Operation-scoped collectors preserve these notices
+in successful and failed photometry tool results without changing low-level
+list return types or attaching last-query state to shared backends. The public
+fit sample contract is in Field Calibration §5d; full evidence and retained
+limits are in [catalog coverage and sufficiency](analysis/catalog-coverage-sufficiency.md).
 
 #### 6. External dependencies
 

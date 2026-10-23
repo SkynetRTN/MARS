@@ -294,7 +294,7 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     reference = load_zeropoint_reference("ngc5128_b_002")
     expected, _ = scientific_solution(replay.matches)
     assert replay.solution.zero_point == pytest.approx(expected[0], abs=1e-7)
-    assert replay.solution.source_count == RECORDED_NUM_MATCHED
+    assert replay.solution.source_count == 29
     assert replay.solution.rej_percent == pytest.approx(expected[4], abs=1e-12)
     assert replay.comparison.delta_vs_skynet == replay.solution.zero_point - reference.skynet_zero_point
     assert replay.comparison.within_tolerance is False
@@ -322,7 +322,7 @@ def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
     replay = replay_field_calibration("ngc5128_b_002", tmp_path)
     assert replay.errors == []
     assert (replay.num_variable_rows, replay.num_variable_sources) == (0, 0)
-    assert [w.code for w in replay.warnings] == ["variable_sources_not_recorded"]
+    assert [w.code for w in replay.warnings] == ["variable_sources_not_recorded", "calibration_sufficiency_unverified"]
     assert "No recorded VSX response" in replay.warnings[0].message
     assert replay.num_matched == 36
     assert replay.selection_matches_recorded is False
