@@ -1166,7 +1166,7 @@ directory, persisting run state, or aggregating CSV output.
 
 ---
 
-#### 5. Deliberate parity behaviours preserved (do not "fix")
+#### 5. Extraction-time parity behaviours and later corrections
 
 1. **`apcorr_tol` forced to 0** — `field_cal.py:612` (`:645` here):
    `phot_settings.model_copy(update={"apcorr_tol": 0.0})`. This is what disables
@@ -1181,7 +1181,8 @@ directory, persisting run state, or aggregating CSV output.
 2. **`strict_filter_parity` / `allow_preferred_band_fallback`** — the
    preferred-band fallback (`V`, `r'`, `g'`, `B`, `i'`, then any band) is a
    *non-legacy* Skynet behaviour. Legacy Afterglow skips such a source. The gate
-   and both docstrings explaining it are verbatim.
+   is retained. M2 prevents known unsupported passbands from taking it; see
+   [catalog acceptance](analysis/catalog-magnitudes-filters.md).
 
 3. **Direct-band-before-`filter_lookup` precedence** in
    `resolve_ref_mag_for_filter` — legacy Afterglow `field_cal_job.py` ordering,
@@ -1192,20 +1193,14 @@ directory, persisting run state, or aggregating CSV output.
    `(None, None)` without trying the `"*"` wildcard. Looks like a missed
    fallback; it is the legacy ordering. Preserved.
 
-5. **Two divergent catalog registries** — `algorithms.catalogs.CATALOGS` (11
-   catalogs) and `algorithms.catalogs.CATALOG_OPTIONS` (APASS + PanSTARRS). Both
-   now live in `algorithms/catalogs/`; see the Catalogs section of this document
-   §4. They are *not*
-   duplicates and merging them would change numbers. `CATALOG_OPTIONS` carries
-   `H_alpha` / `H_beta` aliases that `CATALOGS['APASS']` lacks; `CATALOGS`
-   carries `Open`/`Clear`/`Lum` → `V` and the curriculum filter names that
-   `CATALOG_OPTIONS` lacks. `resolve_ref_mag_for_filter` starts from
-   `CATALOG_OPTIONS` and overlays the caller's lookup. Demonstrated live:
-   for an APASS source, `H_alpha` resolves to `rprime` (via `CATALOG_OPTIONS`)
-   while `Halpha` resolves to the Lupton R colour expression (via `CATALOGS`) —
-   **different reference magnitudes for two spellings of the same filter.**
-   Preserved verbatim; flagged here as a genuine latent oddity someone should
-   decide about deliberately.
+5. **Historical registry split** — the extraction retained `CATALOGS` (11
+   catalogs) and `CATALOG_OPTIONS` (APASS + PanSTARRS), and resolution originally
+   read the latter before applying a caller map. M2 intentionally replaces that
+   runtime split with `catalogs.filters.catalog_filter_lookup` over `CATALOGS`.
+   `CATALOG_OPTIONS` remains a historical compatibility export. APASS Halpha
+   retains the production Lupton R expression; H_alpha now normalizes to the
+   same route. No transformation coefficients changed. See
+   [scope, native band labels and live evidence](analysis/catalog-magnitudes-filters.md).
 
 6. **Two divergent `Catalog.__init__` merge semantics** — preserved, and now
    documented in the Catalogs section of this document, §5.4.
@@ -1501,25 +1496,22 @@ were changed. Behaviour was not.
 | `"""Afterglow Core: …"""` headers | `"""MARS: …"""` | all eleven plugins |
 | `# n_max to Skynet filter names` | `# VSX n_max band code -> MARS band name` | `vsx_catalog.py` |
 
-Numeric content — every colour transform, coefficient, band table, row limit and
-VizieR ID — is untouched.
+At extraction time, colour transforms, coefficients, band tables, row limits
+and VizieR IDs were untouched. M2 preserves numerical transformations but
+corrects native band labels and routing; see
+[catalog acceptance](analysis/catalog-magnitudes-filters.md).
 
-#### 4. The two registries are not redundant
+#### 4. Historical secondary registry and current routing
 
-`CATALOGS` (11 catalogs) and `CATALOG_OPTIONS` (APASS + PanSTARRS) both exist
-upstream and both are read during calibration:
-
-* `CATALOGS` drives filter-aware catalog selection and querying.
-* `CATALOG_OPTIONS` is read only by `fieldcal.ref_mag.resolve_ref_mag_for_filter`.
-
-They disagree, and the disagreement changes results. `CATALOG_OPTIONS['APASS']`
-carries `H_alpha` and `H_beta` narrowband aliases that `CATALOGS['APASS']` does
-not; `CATALOGS['APASS']` carries the `_OCL_TO_V` Open/Clear/Lum mappings that
-`CATALOG_OPTIONS['APASS']` does not. Merging them would silently change which
-reference band a narrowband or unfiltered image calibrates against.
-
-Verified: `resolve_ref_mag_for_filter(image_filter="H_alpha", catalog_name="APASS")`
-resolves to rprime — via `CATALOG_OPTIONS` only.
+The extraction retained both upstream registries: eleven-catalog `CATALOGS`
+for selection/querying and APASS/PanSTARRS `CATALOG_OPTIONS` for numeric
+resolution. Their H-alpha and unfiltered differences were historical behavior,
+not two equally authoritative photometric policies. M2 retains the secondary
+export as provenance while selection, resolution and tool descriptions read
+one canonical effective map. APASS Halpha/H_alpha use the unchanged production
+Lupton R expression. Pan-STARRS retains its prior narrowband aliases. See
+[catalog magnitudes and filters](analysis/catalog-magnitudes-filters.md) for
+native-system names, intentional routing changes and live numerical checks.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
 
@@ -1614,9 +1606,13 @@ Offline, against synthetic astropy tables — no live provider calls:
 * APASS row mapping, the 99-magnitude null convention, and the
   drop-rows-with-no-magnitudes rule.
 * Registry filter-lookup overlays survive backend binding.
-* The §4 two-registry distinction, through `resolve_ref_mag_for_filter`.
+* The §4 historical export and current shared runtime map, through
+  `resolve_ref_mag_for_filter`.
 
-Not verified: any live VizieR or SkyServer response. See the Query section of this document, §6.
+At original extraction, no live VizieR or SkyServer response was verified.
+Later M3 checks and the M2
+[catalog value acceptance](analysis/catalog-magnitudes-filters.md) record the
+subsequent live evidence and remaining service limits. See also Query §6.
 
 *Update 2026-09-13 (P7):* the APASS and VSX mappings now also run, in the
 default suite, over **real VizieR responses** — recorded once and shipped as

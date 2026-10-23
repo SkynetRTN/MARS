@@ -29,7 +29,7 @@ FIELDS = {
     "UCAC": (*NGC5128, 3.0, {"Open"}),
     "2MASS": (*NGC5128, 2.0, {"J", "H", "K"}),
     "USNO": (*NGC5128, 2.0, set()),
-    "Tycho": (*NGC5128, 30.0, {"B", "V"}),
+    "Tycho": (*NGC5128, 30.0, {"BT", "VT"}),
     "SDSS": (*STRIPE82, 2.0, {"u", "g", "r", "i", "z"}),
     "PanSTARRS": (*STRIPE82, 2.0, set()),
     "Landolt": (6.8667, -0.33, 30.0, {"V"}),      # SA 98

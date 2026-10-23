@@ -156,12 +156,9 @@ def _image_filter_from_header(header) -> str | None:
 
 
 def _catalog_filter_lookup(catalog_name: str | None) -> dict[str, str]:
-    if not catalog_name:
-        return {}
-    catalog = CATALOGS.get(catalog_name)
-    if catalog is None:
-        return {}
-    return getattr(catalog, "filter_lookup", {}) or {}
+    from algorithms.catalogs.filters import catalog_filter_lookup
+
+    return catalog_filter_lookup(catalog_name)
 
 
 def _catalog_filter_lookup_map(
@@ -505,6 +502,7 @@ def _collect_calibration_sources(
     custom_filter_lookup: dict[str, dict[str, str]] | None,
     allow_preferred_band_fallback: bool = True,
 ) -> list[PhotometryData]:
+    from algorithms.catalogs.filters import catalog_filter_lookup as filter_lookup_for
     sources: list[PhotometryData] = []
     catalogs_by_id = {source.id: source for source in catalog_sources if source.id is not None}
     inferred_catalog_name = None
@@ -526,15 +524,17 @@ def _collect_calibration_sources(
             # M3: a non-finite supplied ref_mag is unusable, like an absent one.
             ref_mag = ref_err = None
         if ref_mag is None:
-            lookup = dict(catalog_filter_lookup or {})
-            if custom_filter_lookup:
-                for custom_catalog_name, filters in custom_filter_lookup.items():
-                    lookup.setdefault(custom_catalog_name, {}).update(filters)
+            # Apply metadata and custom maps separately so custom entries win
+            # across both identities, with source-name priority independent of
+            # dictionary order. The helper copies all maps before overlaying.
+            lookup = filter_lookup_for(
+                catalog_name, custom_filter_lookup, base_filter_lookup=catalog_filter_lookup,
+            )
             ref_mag, ref_err = resolve_ref_mag_for_filter(
                 image_filter=getattr(source, "filter", None),
                 catalog_name=catalog_name,
                 cs_mags=catalog_source.mags,
-                custom_filter_lookup=lookup or None,
+                custom_filter_lookup={catalog_name: lookup} if catalog_name else None,
                 allow_preferred_band_fallback=allow_preferred_band_fallback,
             )
         if ref_mag is None or not math.isfinite(ref_mag):

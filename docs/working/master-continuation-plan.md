@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first seven M2 checkpoints
+Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first eight M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the first seven checkpoints
+M2 remains open after the first eight checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -173,12 +173,26 @@ the subsequent work.
   pass. PHOT-06 downsampled saturation counts, calibration sufficiency and
   retained numerical limitations remain open in their separate gates.
   Changes remain local to `feature/m2`.
-- [ ] **Catalog magnitudes and filters.** Photographic B/R and Tycho BT/VT
-  are offered under standard band names; UCAC's Open magnitude can satisfy
-  every filter; catalog-name mismatches prevent some transform lookups.
-  Catalog selection and magnitude calculation disagree on H-alpha values.
-  Establish the supported bands and validity of J-K, APASS I and SkyMapper
-  conversions and narrowband zero points.
+- [x] **Catalog magnitudes and filters.** Implementation is complete and reviewed
+  on `feature/m2`: selection, numeric resolution and tool reports use one
+  production-aligned map; photographic/associated optical and Tycho bands keep
+  distinct names; UCAC Open cannot satisfy arbitrary filters. Source-name
+  aliases and spelling/case handling agree across entry points, finite zeros
+  survive, and results disclose retained approximations and relative narrowband
+  references. All 65 numerical catalog expressions, including APASS H-alpha's
+  production Lupton R expression, are unchanged by explicit maintainer request.
+  Evidence: [acceptance, supported bands and retained limits](../analysis/catalog-magnitudes-filters.md),
+  82 new offline cases, 135 production magnitude/error pairs and 45 selection
+  lists, and concluding review with no outstanding actionable findings. The
+  full offline suite passes **3,916 tests, 85 skipped**. Fresh VizieR checks
+  pass 2,688 values across 294 stars in nine calibration catalogs, plus two M3
+  identifier checks. After earlier connection timeouts, the concluding fresh
+  SDSS retry passes **667 values across 23 stars**, including its unchanged
+  narrowband aliases. Together the ten calibration catalogs pass **3,355 value
+  comparisons across 317 stars**. Compilation, schema goldens, generated
+  guidance, repository shape and whitespace checks pass. Changes remain local
+  to `feature/m2`; coverage/sufficiency and the separate retained-defect
+  warnings/benchmark gate remain open.
 - [ ] **Catalog coverage and sufficiency.** Polar footprints can omit stars;
   brightness-limited responses and stopping at the first nonempty catalog can
   leave a biased or insufficient calibration sample. SkyMapper also changes

@@ -16,6 +16,7 @@ scientific fit and report their differences from these historical references.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -274,9 +275,16 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     used = _recorded_used_rows()
     assert [m.detected_id for m in replay.matches] == [r["id"] for r in used]
     assert [m.ref_mag for m in replay.matches] == [float(r["local_ref_mag"]) for r in used]
-    assert [m.ref_mag_error for m in replay.matches] == [
-        float(r["local_ref_mag_error"]) if r["local_ref_mag_error"] else None for r in used
-    ]
+    # The historical CSV left three zero uncertainties blank. M2 preserves
+    # those measured zeroes: compare with the independent raw response, whose
+    # stored columns retain the distinction between 0.0 and missing.
+    payload = json.loads(Path(load_catalog_response("ngc5128_b_002").path).read_text())
+    columns = [column["name"] for column in payload["columns"]]
+    for match in replay.matches:
+        raw = next(row for row in payload["rows"]
+                   if abs(row[columns.index("RAJ2000")] - match.catalog_ra_deg) < 1e-10
+                   and abs(row[columns.index("DEJ2000")] - match.catalog_dec_deg) < 1e-10)
+        assert match.ref_mag_error == raw[columns.index("e_Bmag")]
     assert [m.mag for m in replay.matches] == [float(r["mag"]) for r in used]
     assert all(0.0 <= m.separation_arcsec < 3.06 for m in replay.matches)
     assert len({m.catalog_index for m in replay.matches}) == RECORDED_NUM_MATCHED

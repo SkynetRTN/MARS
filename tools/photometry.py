@@ -346,6 +346,12 @@ def run_photometry_on_target(
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
 
     warnings = []
+    if zero_point.verified:
+        from tools.catalogs import calibration_reference_warnings
+
+        warnings.extend(calibration_reference_warnings(getattr(zero_point, "calibration_sources", None)))
+        if zero_point_model is not None:
+            zero_point_model.warnings.extend(warnings)
     failure = getattr(zero_point, "failure", None)  # resolutions may be duck-typed
     if getattr(zero_point, "failure_code", None) == "unusable_response":
         warnings.append(ToolWarning(code="unusable_response", message=failure))
@@ -608,6 +614,10 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
     zero_point = float(zero_point)
+
+    from tools.catalogs import calibration_reference_warnings
+
+    warnings.extend(calibration_reference_warnings(getattr(_result, "phot_results", None)))
 
     if compare_to is not None:
         # The solve above measures on MARS's own instrumental scale, whose

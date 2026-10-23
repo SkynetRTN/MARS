@@ -158,7 +158,9 @@ def test_all_declared_reference_registry_polynomials_keep_exact_arithmetic():
              "B": 15.2, "V": 14.6, "uprime": 15.5, "gprime": 14.9,
              "rprime": 14.4, "iprime": 14.25}
     checked = 0
-    for catalog in ref_mag.CATALOG_OPTIONS.values():
+    from algorithms.catalogs import CATALOG_OPTIONS
+
+    for catalog in CATALOG_OPTIONS.values():
         for expression in catalog.filter_lookup.values():
             if not any(op in expression for op in "+-*/"):
                 continue

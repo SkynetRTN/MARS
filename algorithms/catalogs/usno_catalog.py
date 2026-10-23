@@ -28,7 +28,7 @@ class USNOB1Catalog(Catalog):
     vizier_catalog = 'I/284'
     row_limit = 5000
     mags = {
-        'B': ['Bmag'], 'R': ['Rmag'], 'B1': ['B1mag'], 'B2': ['B2mag'], 'R1': ['R1mag'],
+        'Bphot': ['Bmag'], 'Rphot': ['Rmag'], 'B1': ['B1mag'], 'B2': ['B2mag'], 'R1': ['R1mag'],
         'R2': ['R2mag'],
     }
     col_mapping = {
@@ -38,14 +38,14 @@ class USNOB1Catalog(Catalog):
 
     # Photometric transform, preserved verbatim. ``super().table_to_sources``
     # resolves to the bound VizieR row mapper in ``query/vizier.py``; this
-    # method then synthesizes standard B and R by averaging the two survey
+    # method then synthesizes photographic Bphot and Rphot by averaging the two survey
     # epochs, falling back to whichever single epoch is present.
     def table_to_sources(self, table: Union[list, Table]) \
             -> TList[CatalogSource]:
         """
         Return a list of CatalogSource objects from an Astropy table
 
-        Adds the standard B and R magnitudes based on B1, B2 and R1, R2.
+        Adds Bphot and Rphot from B1/B2 and R1/R2, retaining the epoch average.
 
         :param table: table of sources returned by astroquery
 
@@ -58,13 +58,13 @@ class USNOB1Catalog(Catalog):
             for m in ('B', 'R'):
                 m1, m2 = m + '1', m + '2'
                 try:
-                    mags[m] = Mag(value=(mags[m1].value + mags[m2].value)/2)
+                    mags[m + 'phot'] = Mag(value=(mags[m1].value + mags[m2].value)/2)
                 except (KeyError, ValueError):
                     try:
-                        mags[m] = mags[m1]
+                        mags[m + 'phot'] = mags[m1]
                     except KeyError:
                         try:
-                            mags[m] = mags[m2]
+                            mags[m + 'phot'] = mags[m2]
                         except KeyError:
                             pass
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from algorithms.catalogs import CATALOG_OPTIONS, CATALOGS
-from algorithms.catalogs.filters import filter_token_candidates
+from algorithms.catalogs import CATALOGS
+from algorithms.catalogs.filters import (
+    catalog_filter_lookup, catalog_key, filter_token_candidates, reference_routes,
+)
 from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 from tools.models import CatalogSummary, ReferenceBandResolution, ToolError, ToolWarning
 
@@ -26,18 +28,11 @@ def _expression_deps(expr: str) -> set[str]:
 
 
 def _effective_catalog(name: str):
-    return CATALOG_OPTIONS.get(name) or CATALOGS.get(name)
+    return CATALOGS.get(catalog_key(name))
 
 
 def _effective_lookup(name: str) -> dict[str, str]:
-    lookup: dict[str, str] = {}
-    catalog = CATALOGS.get(name)
-    if catalog is not None:
-        lookup.update(getattr(catalog, "filter_lookup", {}) or {})
-    option = CATALOG_OPTIONS.get(name)
-    if option is not None:
-        lookup.update(getattr(option, "filter_lookup", {}) or {})
-    return lookup
+    return catalog_filter_lookup(name)
 
 
 def _resolve_target(
@@ -168,6 +163,62 @@ def list_photometric_catalogs() -> list[CatalogSummary]:
     return summaries
 
 
+def reference_band_warnings(catalog: str | None, image_filter: str | None) -> list[ToolWarning]:
+    """Disclose retained transform limitations without changing their numbers."""
+    key = catalog_key(catalog)
+    tokens = set(filter_token_candidates(image_filter or ""))
+    folded = {token.casefold() for token in tokens}
+    warnings: list[ToolWarning] = []
+    if key == "UCAC" and "open" in folded:
+        warnings.append(ToolWarning(
+            code="nonstandard_passband",
+            message="UCAC Open is the native UCAC model magnitude (approximately 579-642 nm). "
+            "It does not establish Johnson V photometry or match every instrument's clear response.",
+        ))
+    if folded & {"halpha", "hbeta", "oiii", "sii"}:
+        warnings.append(ToolWarning(
+            code="broadband_reference",
+            message=f"{catalog}: filter {image_filter!r} uses a broadband stellar reference. "
+            "This is a relative zero point, not an absolute narrowband magnitude or emission-line flux calibration.",
+        ))
+    if key == "2MASS" and tokens & {"B", "V", "R", "I"}:
+        warnings.append(ToolWarning(
+            code="approximate_transform",
+            message="The retained 2MASS J-K optical conversion is a stellar approximation. "
+            "Its validity for this source is not established; values are not range-clipped, "
+            "and propagated measurement errors exclude transformation scatter.",
+        ))
+    if key == "APASS" and "I" in tokens:
+        warnings.append(ToolWarning(
+            code="approximate_transform",
+            message="APASS I uses the retained r'-i' stellar-locus approximation, "
+            "not a measured I magnitude or the published i-z relation. "
+            "Propagated measurement errors exclude transformation scatter.",
+        ))
+    if key == "SkyMapper" and tokens & {"uprime", "gprime", "rprime", "iprime", "zprime"}:
+        warnings.append(ToolWarning(
+            code="approximate_transform",
+            message="The retained SkyMapper prime-band offsets are for an F5V spectrum. "
+            "They are not general stellar colour transformations; propagated measurement errors exclude this systematic.",
+        ))
+    return warnings
+
+
+def calibration_reference_warnings(sources) -> list[ToolWarning]:
+    """Carry each used catalog/filter limitation into a completed calibration."""
+    warnings: list[ToolWarning] = []
+    seen: set[tuple[str, str]] = set()
+    for source in sources or []:
+        for warning in reference_band_warnings(
+            getattr(source, "catalog_name", None), getattr(source, "filter", None),
+        ):
+            signature = (warning.code, warning.message)
+            if signature not in seen:
+                seen.add(signature)
+                warnings.append(warning)
+    return warnings
+
+
 def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceBandResolution:
     """Resolve the catalog band or expression MARS would use for an image filter."""
 
@@ -196,7 +247,6 @@ def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceB
 
     catalog_mags = set((getattr(declaration, "mags", {}) or {}).keys())
     lookup = _effective_lookup(catalog_name)
-    wildcard_target = lookup.get("*")
     reference_resolves = _reference_resolves(
         catalog_name=catalog_name,
         image_filter=normalized_filter,
@@ -204,45 +254,28 @@ def resolve_reference_band(catalog: str, image_filter: str | None) -> ReferenceB
         lookup=lookup,
     )
 
-    for token in _filter_token_candidates(normalized_filter):
-        if token in catalog_mags:
-            return ReferenceBandResolution(
-                catalog=catalog_name,
-                image_filter=normalized_filter,
-                supported=reference_resolves,
-                reference=token,
-                kind="direct_band",
-            )
-
-        target = lookup.get(token)
-        if target:
-            supported, reference, kind = _resolve_target(target, catalog_mags, lookup)
-            missing = _missing_bands(target, catalog_mags, lookup)
-            if missing:
-                warnings.append(
-                    ToolWarning(
-                        code="unsupported_filter",
-                        message=f"{catalog_name}'s transform for filter {normalized_filter!r} "
-                        f"needs {', '.join(missing)}, which {catalog_name} does not carry.",
-                    )
-                )
-            return ReferenceBandResolution(
-                catalog=catalog_name,
-                image_filter=normalized_filter,
-                supported=supported and reference_resolves,
-                reference=reference,
-                kind=kind if reference_resolves else "unresolved",
-                warnings=warnings,
-            )
-
-    if wildcard_target:
-        supported, reference, kind = _resolve_target(wildcard_target, catalog_mags, lookup)
+    for target, route_kind in reference_routes(normalized_filter, catalog_mags, lookup):
+        supported, reference, kind = _resolve_target(target, catalog_mags, lookup)
+        missing = _missing_bands(target, catalog_mags, lookup)
+        if missing:
+            warnings.append(ToolWarning(
+                code="unsupported_filter",
+                message=f"{catalog_name}'s transform for filter {normalized_filter!r} "
+                f"needs {', '.join(missing)}, which {catalog_name} does not carry.",
+            ))
+        if route_kind == "direct_band":
+            kind = "direct_band"
+        elif route_kind == "wildcard" and supported:
+            kind = "wildcard"
+        if supported and reference_resolves:
+            warnings.extend(reference_band_warnings(catalog_name, normalized_filter))
         return ReferenceBandResolution(
             catalog=catalog_name,
             image_filter=normalized_filter,
             supported=supported and reference_resolves,
             reference=reference,
-            kind="wildcard" if supported and reference_resolves else kind,
+            kind=kind if reference_resolves else "unresolved",
+            warnings=warnings,
         )
 
     warnings.append(

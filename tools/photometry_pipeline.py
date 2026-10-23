@@ -714,6 +714,11 @@ def magnitude_label_for(zero_point: ZeroPointResolution) -> str:
     if zero_point.value is None:
         return "instrumental magnitude"
     if zero_point.verified:
+        from tools.catalogs import calibration_reference_warnings
+
+        warnings = calibration_reference_warnings(getattr(zero_point, "calibration_sources", None))
+        if any(warning.code == "broadband_reference" for warning in warnings):
+            return "relative magnitude (broadband reference)"
         return "calibrated magnitude"
     return "magnitude (unverified zero point applied)"
 

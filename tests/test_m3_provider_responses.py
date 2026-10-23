@@ -162,12 +162,12 @@ def test_landolt_keeps_the_preserved_u_error_bug():
     assert first.mags["U"].error == pytest.approx(expected)
 
 
-def test_landolt_omits_only_the_bands_a_zero_colour_leaves_underivable():
-    # The row mapper drops a colour of exactly 0.000 (CAT-23), which used to
-    # raise KeyError for the whole response.
+def test_landolt_derives_bands_from_a_finite_zero_colour():
+    # M2 retains finite zero colours (CAT-23); they remain valid inputs.
     sources = CATALOGS["Landolt"].table_to_sources(_landolt(**{"B-V": [0.0, 0.62]}))
     assert len(sources) == 2
-    assert "B" not in sources[0].mags and "U" not in sources[0].mags
+    assert sources[0].mags["B"].value == 13.089
+    assert sources[0].mags["U"].value == pytest.approx(14.289)
     assert {"V", "R", "I"} <= set(sources[0].mags)
     assert {"U", "B", "V", "R", "I"} <= set(sources[1].mags)
 

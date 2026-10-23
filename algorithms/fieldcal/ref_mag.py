@@ -4,12 +4,10 @@ EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/utils.py
 lines 605-799 (``_SAFE_NAMES``, ``_ALLOWED_TOKENS``, ``_get_catalog_filter_lookup``,
 ``_safe_eval_expr``, ``_resolve_filter_lookup_candidate``,
 ``_ref_mag_filter_token_candidates``, ``resolve_ref_mag_for_filter``).
-PHOT-15 adds first-party bounded arithmetic evaluation and literal band matching;
-accepted transforms and the resolution/propagation order remain unchanged.
-
-The legacy-Afterglow-parity notes in the docstrings and the gated
-``allow_preferred_band_fallback`` behaviour are preserved exactly — they are the
-documented numeric-parity contract with the previous system.
+PHOT-15 adds bounded arithmetic evaluation and literal band matching. M2 uses
+production's exact-band-before-explicit-map precedence and a shared metadata
+map, retaining every numerical transform and the existing derivative propagation.
+Known passbands never take an unrelated preferred-band fallback.
 """
 from __future__ import annotations
 
@@ -18,8 +16,10 @@ import math
 import operator
 import re
 
-from algorithms.catalogs import CATALOG_OPTIONS
-from algorithms.catalogs.filters import filter_token_candidates
+from algorithms.catalogs.filters import (
+    catalog_filter_lookup, filter_token_candidates, preferred_fallback_allowed,
+    reference_routes,
+)
 from .schemas import Mag  # noqa: F401  (referenced by the type annotation below)
 
 __all__ = ["resolve_ref_mag_for_filter"]
@@ -117,13 +117,7 @@ def _evaluate_expression(node: ast.AST, namespace: dict) -> int | float:
 
 
 def _get_catalog_filter_lookup(catalog_name: str | None) -> dict[str, str]:
-    if not catalog_name:
-        return {}
-
-    catalog = CATALOG_OPTIONS.get(catalog_name)
-    if catalog is None:
-        return {}
-    return catalog.filter_lookup
+    return catalog_filter_lookup(catalog_name)
 
 def _safe_eval_expr(expr: str, bands: dict[str, float]) -> float | None:
     """Return a finite bounded arithmetic result or the legacy unresolved None."""
@@ -227,24 +221,15 @@ def resolve_ref_mag_for_filter(
     Resolve the catalog reference magnitude for the given FITS FILTER using
     per-catalog mapping rules and (optionally) propagate error for expressions.
 
-    Resolution order mirrors legacy Afterglow field calibration
-    (``field_cal_job.py``):
+    Order follows production Skynet and legacy Afterglow: an exact band wins,
+    then an explicit band/alias/colour mapping, then compatible case variants,
+    then a caller's wildcard. Single-letter case distinguishes real passbands.
+    All callers share the metadata and spelling rules in ``catalogs.filters``.
 
-      1. Direct catalog band whose key matches the image filter name
-         (legacy: ``catalog_source.mags[flt]``). This takes precedence over the
-         per-catalog ``filter_lookup`` so that a ``B`` image calibrates against
-         the catalog ``B`` magnitude rather than an unrelated band.
-      2. A ``filter_lookup`` entry (or ``"*"`` wildcard) that resolves to a
-         direct band or another lookup alias.
-      3. A ``filter_lookup`` entry that is a colour-mapping expression.
-
-    ``allow_preferred_band_fallback`` controls a *non-legacy* Skynet behavior:
-    when ``True`` (default), an unresolved filter falls back to a preferred band
-    (``V``, ``r'``, ``g'``, ``B``, ``i'``, then any available band). Legacy
-    Afterglow has no such fallback — it skips the source. Strict legacy-parity
-    callers (field calibration parity mode, the Afterglow ZP diagnostic) pass
-    ``False`` so an unresolved filter returns ``(None, None)`` instead of
-    silently substituting a wrong reference band.
+    ``allow_preferred_band_fallback`` retains the non-legacy preferred order
+    (V, rprime, gprime, B, iprime, then any band) for blank/unknown labels.
+    It never substitutes for a known unsupported passband, or for a UCAC,
+    Tycho or USNO native band. False disables that compatibility fallback.
     """
     if not cs_mags or len(cs_mags) > MAX_EXPRESSION_BANDS:
         return None, None
@@ -262,27 +247,29 @@ def resolve_ref_mag_for_filter(
             except Exception:
                 band_vals[k] = (None, None)
 
+    # Missing/nonfinite values cannot be direct references or poison an
+    # expression over other, usable bands. Preserve finite magnitude/error zero.
+    for band, (value, error) in band_vals.items():
+        try:
+            value = float(value) if value is not None else None
+            if value is not None and not math.isfinite(value):
+                value = None
+        except (TypeError, ValueError, OverflowError):
+            value = None
+        try:
+            error = float(error) if error is not None else None
+            if error is not None and (not math.isfinite(error) or error < 0):
+                error = None
+        except (TypeError, ValueError, OverflowError):
+            error = None
+        band_vals[band] = value, error
+
     f = (image_filter or "").strip()
 
-    # 1. Direct catalog band matching the image filter name (legacy parity).
-    if f:
-        for token in _ref_mag_filter_token_candidates(f):
-            v, e = band_vals.get(token, (None, None))
-            if v is not None:
-                return float(v), (float(e) if e is not None else None)
-
-    lookup = _get_catalog_filter_lookup(catalog_name)
-    if custom_filter_lookup and catalog_name:
-        lookup = {**lookup, **custom_filter_lookup.get(catalog_name, {})}
-
-    # 2-3. Explicit filter lookup resolving to a direct band, another lookup
-    #      alias, or a colour-mapping expression.
-    explicit_lookup_seen = False
-    for token in _ref_mag_filter_token_candidates(f):
-        candidate = lookup.get(token)
-        if not candidate:
-            continue
-        explicit_lookup_seen = True
+    lookup = catalog_filter_lookup(catalog_name, custom_filter_lookup)
+    available = {band for band, (value, _) in band_vals.items() if value is not None}
+    routes = reference_routes(f, available, lookup)
+    for candidate, _kind in routes:
         v, e = _resolve_filter_lookup_candidate(
             candidate,
             band_vals,
@@ -291,29 +278,12 @@ def resolve_ref_mag_for_filter(
         )
         if v is not None:
             return v, e
-    if explicit_lookup_seen:
-        return None, None
-
-    # Wildcard default like legacy; only use it when no explicit token matched.
-    candidate = lookup.get("*")
-    if candidate:
-        v, e = _resolve_filter_lookup_candidate(
-            candidate,
-            band_vals,
-            lookup,
-            propagate_error=propagate_error,
-        )
-        if v is not None:
-            return v, e
-
-    # CAT-01: without an explicit transform, SkyMapper has no Johnson V.
-    # Do not reintroduce the band substitution through the permissive fallback.
-    if catalog_name == "SkyMapper" and f == "V":
+    if any(kind == "lookup" for _, kind in routes):
         return None, None
 
     # 4. Preferred-band fallback (NON-legacy; gated). Legacy Afterglow skips a
     #    source whose filter resolves to no direct band or mapping expression.
-    if allow_preferred_band_fallback:
+    if allow_preferred_band_fallback and preferred_fallback_allowed(catalog_name, f):
         for pref in ("V", "rprime", "gprime", "B", "iprime"):
             v, e = band_vals.get(pref, (None, None))
             if v is not None:

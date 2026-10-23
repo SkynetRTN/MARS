@@ -234,12 +234,12 @@ class VizierCatalog(Catalog):
                         continue
                     try:
                         val = _row_value(row, mag_col)
-                        if val and val < 99:
-                            m = Mag(value=val)
+                        if val is not None and numpy.isfinite(val) and val < 99:
+                            m = Mag(value=float(val))
                             try:
                                 err = _row_value(row, mag_err_col)
-                                if err:
-                                    m.error = err
+                                if err is not None and numpy.isfinite(err) and err >= 0:
+                                    m.error = float(err)
                             except Exception:
                                 # Band present, uncertainty absent.
                                 pass

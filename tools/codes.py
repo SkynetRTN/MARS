@@ -90,10 +90,12 @@ TOOL_ERROR_CODES: dict[str, str] = {
 #: because a fold at a wrong period returns a flat profile rather than an error.
 TOOL_WARNING_CODES: dict[str, str] = {
     "afterglow_base_convention": "The zero point matches Afterglow's base-20 correction, not an absolute magnitude.",
+    "approximate_transform": "A retained stellar magnitude conversion has source-dependent systematics not included in its propagated measurement error.",
     "back_scale_too_narrow": "The background window is too narrow for the sample spacing; the running median degenerates.",
     "background_not_subtracted": "No baseline subtraction, so the receiver's drifting continuum dominates long periods.",
     "background_settings_ignored": "back_scale/subtract_background were passed with a stage-1 pulsar artifact; they apply only when a raw scan is ingested.",
     "blank_filter": "No image filter was supplied, so no reference band could be matched to one.",
+    "broadband_reference": "A narrowband image uses a broadband stellar relative zero point, not an absolute narrowband magnitude or line-flux calibration.",
     "bundle_not_installed": "An optional data bundle this tool reads is not installed; `mars-mcp fetch-data` fetches it.",
     "catalog_match_rate": "How many detected sources matched at least one catalog, and within what radius.",
     "catalog_positions_unreadable": "Some returned catalogs had rows but no position columns the tool can read, so they were not cross-matched.",
@@ -125,6 +127,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "no_products_for_observations": "The observations are real but carry no data products.",
     "no_products_matched": "No product matched the given filters, so nothing was downloaded.",
     "no_solution": "The configured plate-solving backends returned no solution.",
+    "nonstandard_passband": "The catalog's native model bandpass does not establish a standard-band or universal instrument-clear calibration.",
     "observations_capped": "More observations matched than products were fetched for; the cap is adjustable.",
     "false_alarm_model_assumptions": "A false-alarm bound assumes iid Gaussian noise and a fixed trial grid; correlated noise, RFI and retuning are not calibrated.",
     "false_alarm_unavailable": "Too few samples for a finite-sample Gaussian false-alarm bound; no level is reported.",
