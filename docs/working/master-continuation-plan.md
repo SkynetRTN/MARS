@@ -172,9 +172,13 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   before searching; live stress runs also found, and the branch fixes, a
   crash on any ADS result past the first page, and sorts, years and doctypes
   ADS silently ignores, now `invalid_input`. The three live ADS tests pass
-  (`docs/extraction.md` Query §5.12). After 2026-11-16, rerun them and record which API host answers. The token and search-syntax links given to users must
-  name SciX. If the ADS API no longer serves MARS, record a maintainer
-  decision to port, caveat or withdraw the four literature tools.
+  (`docs/extraction.md` Query §5.12). **Remaining, after 2026-11-16:** rerun
+  them and record which API host answers. The token and search-syntax links
+  given to users must name SciX; they still name ADS, whose links SciX will
+  redirect, because on 2026-10-22 SciX served only an empty script shell to
+  non-browser clients and its help-page URLs could not be confirmed. If the
+  ADS API no longer serves MARS, record a maintainer decision to port, caveat
+  or withdraw the four literature tools.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
