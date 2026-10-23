@@ -299,29 +299,18 @@ def test_the_maxim_fallback_handles_comma_decimal_separators():
     assert dec == pytest.approx(41.2687, abs=1e-3)
 
 
-@pytest.mark.parametrize("dec_string", ["-51:22:28.1", "-00:30:00.0", "-01:00:00.0"])
-def test_southern_declinations_collapse_to_zero_in_the_fallback(dec_string):
-    """PRESERVED DEFECT: the sign factor is ``(1 - startswith('-'))``.
-
-    For a southern declination that evaluates to ``1 - True`` = ``0``, so the
-    magnitude is multiplied by zero and the field centre is reported as sitting
-    on the celestial equator. The correct factor — used in
-    ``algorithms/catalogs/landolt_catalog.py``'s column mapping, which does the
-    same job — is ``(1 - 2*startswith('-'))``.
-
-    Byte-identical to ``skynet packages/py/skylib/skylib/util/fits.py``, so this
-    is upstream's bug, preserved rather than introduced.
-
-    Only reachable for an **unsolved** southern frame: a header with a WCS never
-    enters this branch. Roughly half the fixture set is southern, but all of
-    those are solved, so nothing in this repository trips it today.
-    """
+@pytest.mark.parametrize("dec_string,expected", [
+    ("-51:22:28.1", -51 - 22 / 60 - 28.1 / 3600),
+    ("-00:30:00.0", -0.5), ("-01:00:00.0", -1),
+])
+def test_southern_declinations_keep_their_sign_in_the_fallback(dec_string, expected):
+    """M2 intentionally corrects WCS-27, including negative-zero degrees."""
     header = Header({
         "NAXIS1": 1056, "NAXIS2": 1027,
         "RA": "21:29:58.3", "DEC": dec_string, "SECPIX": 0.59,
     })
     _, dec, _, _, _, _ = get_fits_fov(header)
-    assert dec == 0.0
+    assert dec == pytest.approx(expected, abs=1e-12)
 
 
 def test_northern_declinations_are_unaffected():

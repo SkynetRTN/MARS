@@ -1,13 +1,13 @@
 # MARS release closure gate
 
-Updated 2026-10-22 against `main` at `9544782` (M3 PR #122), with the first five M2 checkpoints
+Updated 2026-10-22 against `main` at `9544782` (M3 PR #122), with the first six M2 checkpoints
 closed on the single working branch `feature/m2`. Keep the remaining M2
 work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the first five checkpoints
+M2 remains open after the first six checkpoints
 below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -131,11 +131,24 @@ the subsequent work.
   **3,565 passed, 49 skipped**. Compileall, schema goldens, generated-skill
   consistency, repository shape and `git diff --check` pass. Changes remain
   local, unmerged and unpublished.
-- [ ] **Accepted sky positions and reference stars.** Without a scale hint,
-  the WCS position check can admit a distant solution. After an ATLAS solve,
-  reference stars are queried around the original hint rather than the solved
-  field. The southern-declination fallback returns zero. Accepted positions
-  and reference-star coverage must describe the actual image.
+- [x] **Accepted sky positions and reference stars.** Missing-scale position
+  checks now derive image size from the solved WCS, preserving the one-degree
+  floor and three-diagonal tolerance. Header-WCS hints and candidate centres
+  use ICRS; nonfinite/singular geometry is rejected before header write-back.
+  ATLAS references use the solved centre and a padded, sampled outer-pixel
+  footprint, including rotation, shear, offset CRPIX and SIP edge curvature.
+  RA seams and pole-crossing follow-ups retain coverage with bounded queries;
+  oversized footprints fail before catalog initialization. Southern no-WCS
+  fallback coordinates retain their sign, including `-00` degrees. Evidence:
+  [acceptance record and scope limits](../analysis/accepted-sky-positions.md),
+  [19 pipeline cases](../../tests/test_wcs_accepted_positions.py), signed
+  fallback regressions, independent analytical TAN/cap checks and fresh review
+  with no outstanding findings. M3 PR #122 was integrated and validated in
+  `160b3e4` before this work. Final Python 3.13.15 offline suite:
+  **3,798 passed, 75 skipped**. Compilation, schema goldens, generated-skill
+  consistency, repository shape and whitespace checks pass. Native convergence,
+  sampled-distortion limits and catalog completeness retain their separately
+  documented evidence gates. Changes remain local to `feature/m2`.
 - [ ] **Photometric calibration.** Outlier rejection does not run for ten
   or fewer calibration stars; brightness trimming can retain saturated stars
   and mishandle magnitude zero. The fit reports extra scatter even when

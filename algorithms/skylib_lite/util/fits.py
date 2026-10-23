@@ -189,7 +189,7 @@ def get_fits_fov(hdr: Header) \
                 d, m, s = hdr[name].split(':')
                 dec0 = (abs(int(d)) + int(m)/60 +
                         float(s.replace(',', '.'))/3600) * \
-                       (1 - d.strip().startswith('-'))
+                       (1 - 2*d.strip().startswith('-'))  # M2: retain southern/negative-zero signs
             except (KeyError, ValueError):
                 pass
             else:

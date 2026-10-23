@@ -342,10 +342,10 @@ footprint contract: the padded half-diagonal must fit `catalog_max_radius_deg`
 `catalog_pad_frac` is constructible in [0, 2]. Blind and oriented requests and
 the reference-source follow-up reject oversized footprints before catalog
 initialization, rather than clipping the radius and silently omitting stars.
-The follow-up still uses the legacy maximum scale, not the solved scale
-(WCS-14); a broad legacy requery can therefore explicitly fail an otherwise
-viable solve. This is a deliberate operational acceptance restriction, not a
-scientific correction to the follow-up footprint.
+At this checkpoint the follow-up still used the legacy maximum scale, not the
+solved scale (WCS-14), so a broad requery could explicitly fail an otherwise
+viable solve. M2's subsequent scientific correction uses the solved footprint
+while preserving the operational restriction; see §5.10.
 
 UCAC queries retain coordinate conversion, order and thinning, but process
 16,384-record chunks and reject more than 2,000,000 examined candidates or
@@ -366,6 +366,32 @@ Known hints can narrow it; `test_wcs_solution.py` and `test_wcs_solve_tool.py`
 preserve both modes. Safety comes from finite attempts, pre-load catalog/work
 guards and MCP whole-call isolation, not a claim that blind searching is cheap.
 A valid explicit blind solve can exhaust its operational budget and fail.
+
+##### 5.10 M2 accepted positions and reference coverage (2026-10-22)
+
+After integration of M3 PR #122, WCS-03/14/27 intentionally diverge from the
+extraction. A missing scale prior no longer turns the broad search maximum
+into an acceptance scale: candidate WCS geometry supplies the image size.
+The existing one-degree floor and three-diagonal pointing allowance remain;
+blind inputs still have no pointing prior to compare. Stored and transformed
+nonfinite WCS geometry, including singular solutions, is rejected before
+header write-back.
+
+ATLAS follow-up references use the solved ICRS centre and sampled outer-pixel
+boundary, with existing padding and pre-load radius limits. Rotation, shear,
+off-centre CRPIX and SIP edge curvature affect that estimate. A spherical-cap
+box handles the seam and poles; polar split queries share the returned-row
+budget and deduplicate meridian positions. Per-query candidate/zone/index
+budgets remain. This does not establish catalog completeness or validate the
+native UCAC layout. The MaxIm no-WCS fallback now retains southern signs,
+including `-00` degrees; its return shape and units are unchanged.
+
+The [acceptance record](analysis/accepted-sky-positions.md) documents the
+sampled-footprint approximation and remaining catalog/solver evidence gates.
+`tests/test_wcs_accepted_positions.py` exercises real Astropy transformations
+and pipeline/header behavior with native backends and catalog I/O replaced;
+`tests/test_skylib_fits.py` pins the signed fallback correction. M3's no-hint
+ATLAS skip, textual frame hints and named backend failure paths remain covered.
 
 #### 6. External dependencies
 

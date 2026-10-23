@@ -87,11 +87,17 @@ def test_nonfinite_query_is_rejected(catalog):
 
 def test_followup_footprint_is_checked_before_catalog_initialization(monkeypatch):
     from algorithms.wcs import wcs
+    from astropy.wcs import WCS
+    solution = WCS(naxis=2)
+    solution.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    solution.wcs.crval = [180, 0]
+    solution.wcs.crpix = [2048.5, 2048.5]
+    solution.wcs.cdelt = [-60 / 3600, 60 / 3600]
     monkeypatch.setattr(wcs, "get_catalog_spec", lambda *a: pytest.fail("catalog loaded"))
     with pytest.raises(ValueError, match="footprint"):
         wcs._load_atlas_catalog_sources(
-            AtlasConfig(), ra0_deg=180, dec0_deg=0, width=4096,
-            height=4096, max_scale=60, file_id=None)
+            AtlasConfig(), wcs_obj=solution, width=4096,
+            height=4096, file_id=None)
 
 
 @pytest.mark.parametrize("line", ["-1 1 451 1\n", "0 4000001 451 1\n", "x" * 257])
