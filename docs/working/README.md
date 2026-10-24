@@ -10,7 +10,7 @@ original findings; implementation choices belong in subsequent work.
 | Plan | Status |
 | --- | --- |
 | [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-20 against `main` at `a6785aa`. M0/M1 closed; M1 merged and unreleased. M2 must be reassessed without PR #120. Remaining gates describe failures, missing evidence and final release checks. Browser hosting remains deferred. |
-| [desktop-acceptance.md](desktop-acceptance.md) | Started 2026-10-23 for M4's real desktop use. Step-by-step install and test guide for Mac, Windows and Fedora; Linux preflight passed; awaiting runs in the real Claude and ChatGPT desktop apps. |
+| [desktop-acceptance.md](desktop-acceptance.md) | Completed 2026-10-23 for M4's real desktop use. Install and test guide for the Claude and ChatGPT desktop apps; verified on Mac, Windows and Linux (Codex on the Mac accepted untested, Issue #51667). To be archived into per-platform install guides. |
 
 ## Landed
 

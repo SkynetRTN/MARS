@@ -185,17 +185,25 @@ Evidence: [query backends](../../algorithms/query/),
 
 ## M4: supported installations and real solver runs must work
 
-- [ ] **Real desktop use.** Installer and Fedora app-server checks do not
+- [x] **Real desktop use.** Installer and Fedora app-server checks do not
   establish use in the actual Claude and ChatGPT desktop apps. Record supported
   OS/app versions and demonstrate registration, calls, instructions, approvals
   and media. Missing macOS/Windows and other advertised-host evidence must
   remain explicit.
-  *In progress:* the procedure and record are
-  [desktop-acceptance.md](desktop-acceptance.md): Claude Desktop on an Apple
-  Silicon Mac and x64 Windows, and the ChatGPT app's Codex threads on those
-  and Fedora 44 Workstation, against rc6 by maintainer decision. The
-  extension's launch command passed a cold `self-test` against rc6 on Linux
-  (2026-10-23); no real app has run yet.
+  *Done 2026-10-23,* by the maintainer, following
+  [desktop-acceptance.md](desktop-acceptance.md): Claude Desktop with the
+  `.mcpb` verified on an Apple Silicon Mac and x64 Windows, and Codex in the
+  ChatGPT app on x64 Windows and Linux (Fedora Workstation). Claude Desktop
+  on Linux is closed (no build). Codex on the Mac is accepted untested: the
+  maintainer's macOS VM blocks Codex messages by workspace settings (Issue
+  #51667), and the route is the Unix one verified on Fedora; test it on a
+  physical Mac when one is available.
+- [ ] **Desktop install guides.** Once real desktop use is verified, archive
+  [desktop-acceptance.md](desktop-acceptance.md) and fold its Claude Desktop
+  and Codex install steps into per-platform guides under `../installing/`:
+  Windows (x64), macOS (Apple Silicon) and Linux (ARM), with the verified OS
+  and app versions. Update every link to `../installing.md` and the archived
+  guide.
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
