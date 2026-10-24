@@ -231,6 +231,16 @@ def test_every_hard_answer_check_loads_with_one(tmp_path, kind):
     assert task.answer[kind][0]["because"] == "it matters"
 
 
+@pytest.mark.parametrize("check, error", [
+    ("{}", "because"),
+    ('{because: authors must be sourced, pattern: anything}', "unknown key"),
+])
+def test_attribution_check_rejects_missing_rationale_or_custom_patterns(tmp_path, check, error):
+    body = BARE + f"expect:\n  answer:\n    must_source_attribution:\n      - {check}\n"
+    with pytest.raises(TaskError, match=error):
+        load_task(write(tmp_path, body))
+
+
 def test_a_because_survives_as_one_line_for_the_report(tmp_path):
     body = (
         BARE

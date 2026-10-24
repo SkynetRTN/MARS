@@ -76,6 +76,7 @@ _ANSWER_KEYS = frozenset(
         "must_label",
         "must_state_uncertainty",
         "must_source_value",
+        "must_source_attribution",
     }
 )
 _PROTOCOL_KEYS = frozenset({"null_argument_fidelity"})
@@ -89,6 +90,7 @@ HARD_ANSWER_CHECKS: tuple[str, ...] = (
     "must_label",
     "must_state_uncertainty",
     "must_source_value",
+    "must_source_attribution",
     "conditional",
 )
 
@@ -518,6 +520,9 @@ def _load_answer(
     ]
 
     for key in HARD_ANSWER_CHECKS:
+        # Preserve pre-attribution key digests for tasks that did not opt in.
+        if key == "must_source_attribution" and not answer.get(key):
+            continue
         loaded[key] = [
             _load_hard_check(key, item, file, index)
             for index, item in enumerate(answer.get(key) or [])
@@ -600,6 +605,7 @@ _HARD_CHECK_KEYS: Mapping[str, frozenset[str]] = {
         {"field", "must_match", "must_not_match", "because"}
     ),
     "must_source_value": frozenset({"pattern", "because"}),
+    "must_source_attribution": frozenset({"because"}),
     "conditional": frozenset(
         {"when_not_called", "when_called", "when_no_result",
          "answer_must_not_match", "answer_must_match", "because"}
@@ -612,6 +618,7 @@ _HARD_CHECK_REQUIRED: Mapping[str, tuple[str, ...]] = {
     "must_label": ("value_pattern", "near"),
     "must_state_uncertainty": ("field",),
     "must_source_value": ("pattern",),
+    "must_source_attribution": (),
     "conditional": (),
 }
 

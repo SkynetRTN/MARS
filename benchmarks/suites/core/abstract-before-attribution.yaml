@@ -29,6 +29,11 @@ expect:
   trajectory:
     must_call: [get_paper_abstract]
   answer:
+    must_source_attribution:
+      - because: >
+          A sourced decline rate does not establish the author of its paper.
+          Author/year citations must match returned bibliographic metadata
+          for the cited paper, or be explicitly labelled as unverified background.
     conditional:
       - when_not_called: [get_paper_abstract, search_ads, build_literature_review]
         answer_must_not_match: "\\d+(?:\\.\\d+)?\\s*%\\s*/\\s*yr"

@@ -178,6 +178,10 @@ def reference_band_warnings(
     tokens = set(filter_token_candidates(image_filter or ""))
     folded = {token.casefold() for token in tokens}
     warnings: list[ToolWarning] = []
+    if key == "Landolt" and "U" in _expression_deps(reference):
+        warnings.append(ToolWarning(code="retained_catalog_uncertainty", message=
+            "Landolt's retained synthesized U error uses the V_R colour error instead of "
+            "U_B. Reported U uncertainties and any fit weights using them can be incorrect."))
     if key == "UCAC" and reference == "Open":
         warnings.append(ToolWarning(
             code="nonstandard_passband",

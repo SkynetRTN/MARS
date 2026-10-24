@@ -49,6 +49,8 @@ For the preservation tests, three conventions apply:
 | `test_catalog_filter_review.py` | Follow-up catalog review: equivalent alias overrides, actual reference provenance, supplied/native magnitude warnings, public photometry labels and exact rejection-mask disclosures |
 | `test_catalog_coverage.py` | M2 polar boxes/SQL, enclosing-cone detector grids, TPV curvature, cache displacement, isolated constraints, raw caps, first-nonempty fallback and nested/concurrent notice collection |
 | `test_calibration_coverage.py` | M2 coverage notices through successful and failed public calibration, real raw-table query mapping, supplied references, direct/replay sufficiency and exact survivor counts |
+| `test_numerical_warnings.py` | M2 retained numerical branches, unchanged placeholders, near-flat limiting magnitudes, conditional Landolt uncertainty and warning retention through public success/failure paths |
+| `test_bench_attribution.py` | M2 metadata-grounded author/year attribution, bibcode association, explicit disclosure scope and adversarial false-pass cases; report coverage and corpus integration are in the existing bench test files |
 | `test_catalog_coverage_live.py` | `network`-marked: actual near-pole and southern WCS footprints plus a capped 2MASS response; no catalog downloads committed |
 | `test_catalog_magnitudes_filters_live.py` | `network`-marked: fresh queries for ten calibration catalogs, raw native values and independent transformed values; mandatory per-catalog filters prevent silent loss of transform coverage |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |

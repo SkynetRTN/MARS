@@ -1,8 +1,15 @@
 # Benchmark Results — MARS's Tool Surface
 
-**What this measures.** For each prompt, three things: did the model reach a
-correct answer, were its tool calls and reasoning acceptable, and what did the
-answer cost in time and tokens. Nothing else enters a score.
+**Historical scores: attribution unchecked, not regraded.** The rates, rankings
+and figures below retain the September 2026 rules. M2 added a bounded author/year
+check on 2026-10-23, but the 144 original paid transcripts are absent here. Their
+scores cannot establish attribution correctness or a pass rate under the new
+keys. [The acceptance record](../analysis/warnings-benchmark-claims.md) describes
+the current check and its limits; no revised historical ranking is claimed.
+
+**What this measures.** For each prompt: whether the answer passed the enabled
+checks, diagnostics about its tool calls and reasoning, and its time/token cost.
+Passing those checks does not establish that every factual claim is correct.
 
 **Every verdict is a deterministic assertion against recorded evidence.**
 Nothing here asks a model whether an answer is correct. An optional LLM judge
@@ -25,7 +32,7 @@ after the fact. The four answer keys that changed are re-digested in
 `benchmarks/keys.lock` in the same commit, which is the guard that stops a key
 being quietly revised to move a score.
 
-**One key has moved since this sweep, and it is recorded here rather than
+**One key had moved before M2, and it is recorded here rather than
 folded in silently.** P8 (2026-09-16) added three frames, making the bundled
 library 42 rather than 39, and `optical-listing-truncated`'s disclosure
 alternation had offered the bare total `39` as evidence a model had disclosed
@@ -42,6 +49,11 @@ connection failures noted above — and each of the other eight matched
 the number appeared. So every scored verdict stands under both keys. A key
 change that could flip a verdict would still owe a full re-grade; this one
 cannot, and the check is reproducible from the answers in `artifacts/bench/`.
+
+That conclusion concerns the P8 optical-key change only. M2's two new
+attribution checks can change verdicts; their effect on the archived sweep is
+unknown without the original transcripts. The historical scores remain separate
+from results graded under the new rules.
 
 **Health of the sweep.** 3 of 144 sessions (2%) failed inside the harness — all
 three transient connection errors on the hosted backend. Those sessions are
@@ -465,13 +477,14 @@ every legitimate exclusion into an accusation.
 
 ---
 
-## What no check catches: fabricated attributions
+## Historical gap: fabricated attributions
 
-The one finding from reading the answers that is **not** fixed, because closing
-it needs a check that does not exist.
+The archived sweep had no author-attribution check. The examples below describe
+that historical gap. M2 now checks supported author/year forms against returned
+metadata on two core tasks; it does not retrospectively validate these scores.
 
 `must_source_value` requires every *number* in an answer to appear in a tool
-result. Nothing checks anything else. The NED photometry fixture carries three
+result. The old grader did not check author names. The NED photometry fixture carries three
 bibcodes and **no author names at all**:
 
 ```
@@ -501,11 +514,10 @@ most easily observed millisecond-range pulsars"* — on all three repeats, two
 lines below correctly reporting its 0.7145197 s period, which is 714 ms and
 not a millisecond pulsar.
 
-Every one of these sessions scores **correct**, and nothing in the suite has
-anything to say about it. The fix is a sourcing check over cited *strings*, not
-only numbers — bibcodes, designations, catalogue names — which is a different
-piece of machinery from anything in the graders today. It is the next thing to
-build.
+Every one of these sessions passed the old enabled checks, despite these
+unsupported claims. The current author/year check addresses a bounded subset
+of this problem; catalogue names, nicknames and other unrestricted prose still
+need review. These historical verdicts have not been regraded under that check.
 
 ---
 
@@ -542,11 +554,10 @@ by grammar rather than by a list of phrasings.
    that one.
 2. **Three backends, one of them hosted.** The speed board measures where a
    model runs as much as the model.
-3. **Nothing checks non-numeric provenance.** `must_source_value` covers
-   numbers because a tolerance can be defined on a number. A fabricated author,
-   catalogue name or object nickname passes every check in the suite, and the
-   sweep contains real instances (below). **This is the largest known hole**
-   and it is not fixed.
+3. **The historical sweep did not check author provenance.** A sourced number
+   did not establish the author attached to it. The current bounded author/year
+   check has not been applied to these sessions. Catalogue names, nicknames and
+   claims outside its grammar still require separate review.
 4. **Every check is a regex over prose.** Five of the checks that fired in this
    sweep were the grader being wrong, all found by reading the answers. The
    fixes hold against these 144 transcripts and `falsify`'s probes; that is

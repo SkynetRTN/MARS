@@ -70,6 +70,12 @@ Reading the result:
   tenths of a magnitude is expected.
 - `zero_point_error_mag` is the solve's statistical scatter, not the accuracy
   of the magnitudes. Never say "accurate to" it.
+- Relay numerical warnings with the result. `nonpositive_aperture_flux` means
+  a retained zero magnitude can be a placeholder; `empty_background_annulus`
+  can affect even a finite flux. Aperture-correction crowding, adaptive
+  isophotal origin and downsampled saturation warnings describe retained
+  measurement limits, not corrected values. These can also appear in
+  FITS-driven HR extraction or WCS results.
 - Report the plot paths; do not describe plots you have not looked at.
 
 > Authority: `tools/agent/prompt.py`, "PHOTOMETRY", "Confirmed live, and worth
@@ -105,6 +111,14 @@ coverage may be incomplete and brightness-biased; `catalog_fallback_not_exhauste
 names alternatives left unqueried after the first nonempty catalog. A
 `catalog_query_incomplete` or `catalog_coverage_unverified` warning must accompany
 any conclusion about the field's reference coverage.
+
+`limiting_magnitude_unvalidated` means the retained log-SNR extrapolation is
+not a measured completeness limit; near-flat fits can produce implausible
+magnitudes. `magnitude_error_snr_cut` discloses thresholds on inverse magnitude
+error rather than exact flux SNR. `ra_seam_matching_approximation` means close
+sources across 0/24 hours can fail to match. `retained_catalog_uncertainty`
+identifies Landolt U's retained wrong-colour error; do not claim a repaired
+uncertainty or change its transform.
 
 > Authority: `tools/registry.py`, the `calibrate_zeropoint`,
 > `replay_field_calibration` and `compare_zeropoint_to_reference`

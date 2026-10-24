@@ -322,7 +322,10 @@ def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
     replay = replay_field_calibration("ngc5128_b_002", tmp_path)
     assert replay.errors == []
     assert (replay.num_variable_rows, replay.num_variable_sources) == (0, 0)
-    assert [w.code for w in replay.warnings] == ["variable_sources_not_recorded", "calibration_sufficiency_unverified"]
+    assert [w.code for w in replay.warnings] == [
+        "variable_sources_not_recorded", "magnitude_error_snr_cut",
+        "limiting_magnitude_unvalidated", "calibration_sufficiency_unverified",
+    ]
     assert "No recorded VSX response" in replay.warnings[0].message
     assert replay.num_matched == 36
     assert replay.selection_matches_recorded is False

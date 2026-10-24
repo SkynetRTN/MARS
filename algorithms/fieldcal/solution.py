@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from algorithms.diagnostics import note_numerical_issue
 from numpy import transpose
 
 # EXTRACTED: was `from skylib.util.stats import chauvenet` (installed skylib
@@ -192,6 +193,10 @@ def _calc_solution_with_mask(sources: list[PhotometryData]):
 
     limmag = np.nan
     if snr is not None:
+        note_numerical_issue("limiting_magnitude_unvalidated",
+            "The retained 5-sigma limiting-magnitude estimate uses an unvalidated log-SNR line "
+            "extrapolation. Near-flat fits can yield implausible limits; this is not a measured "
+            "detection-completeness limit.")
         limmag_a, limmag_b = np.polyfit(mags + m0, np.log10(snr), 1)
         if limmag_a:
             limmag = (np.log10(5) - limmag_b) / limmag_a

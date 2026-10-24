@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 __all__ = [
     "MARSToolModel",
@@ -434,6 +434,12 @@ class PhotometryRunResult(MARSToolModel):
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def status(self) -> Literal["ok", "error"]:
+        """Preserve the MCP/agent error flag for structured photometry failures."""
+        return "error" if self.errors else "ok"
 
 
 class PulsarObservationInfo(MARSToolModel):

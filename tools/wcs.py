@@ -35,6 +35,7 @@ from tools.astrometry import (
 )
 from tools.config import BUNDLED_DATA_DIR
 from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
+from tools.science_warnings import capture_numerical_warnings
 
 
 #: The committed fixture tree, and the subtrees under it that hold fixtures.
@@ -542,7 +543,7 @@ def solve_astrometry(
     attempted_backends: list[str] = []
     solver_failures: list[str] = []
     try:
-        with TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
+        with capture_numerical_warnings(configuration_warnings), TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
             solve_result = _solve_wcs(
                 header,
                 data,

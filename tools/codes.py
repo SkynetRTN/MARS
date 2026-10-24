@@ -89,6 +89,15 @@ TOOL_ERROR_CODES: dict[str, str] = {
 #: visible -- ``peak_does_not_fold`` and ``weak_or_absent_pulse`` above all,
 #: because a fold at a wrong period returns a flat profile rather than an error.
 TOOL_WARNING_CODES: dict[str, str] = {
+    "nonpositive_aperture_flux": "Retained finite magnitude placeholders for nonpositive net flux are not valid magnitudes or detections.",
+    "empty_background_annulus": "An empty sky annulus can leave finite uncorrected flux without a reliable failure flag.",
+    "isophotal_origin_approximation": "Retained adaptive isophotal remeasurement has a one-pixel origin mismatch that can bias shape and flux.",
+    "aperture_correction_crowding": "The enabled growth-curve correction retains an ineffective neighbour guard and can be crowding-biased.",
+    "saturation_count_unreliable": "Downsampled source extraction can lose saturation counts, so zero counts and filtering are unreliable.",
+    "limiting_magnitude_unvalidated": "The 5-sigma limit is an unvalidated SNR-line extrapolation and can be implausible for near-flat inputs.",
+    "magnitude_error_snr_cut": "Calibration selection uses inverse magnitude error rather than exact flux/error SNR.",
+    "ra_seam_matching_approximation": "Retained angular matching does not unwrap the 0/24-hour RA seam and can miss nearby stars.",
+    "retained_catalog_uncertainty": "A retained catalog uncertainty formula uses the wrong colour-error input and can bias reported errors and fit weights.",
     "afterglow_base_convention": "The zero point matches Afterglow's base-20 correction, not an absolute magnitude.",
     "approximate_transform": "A retained stellar magnitude conversion has source-dependent systematics not included in its propagated measurement error.",
     "back_scale_too_narrow": "The background window is too narrow for the sample spacing; the running median degenerates.",

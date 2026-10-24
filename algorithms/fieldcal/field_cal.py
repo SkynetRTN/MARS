@@ -21,6 +21,7 @@ from numbers import Integral
 from typing import Iterable, Mapping
 
 import numpy as np
+from algorithms.diagnostics import note_numerical_issue
 from astropy.wcs import WCS
 from scipy.spatial import cKDTree
 
@@ -255,6 +256,14 @@ def _match_detected_sources(
     det_ra_h = [getattr(s, "ra_hours", None) for s in detected_sources]
     det_dec_d = [getattr(s, "dec_degs", None) for s in detected_sources]
     use_angular = all(v is not None for v in det_ra_h) and all(v is not None for v in det_dec_d)
+    if use_angular:
+        longitudes = [float(v) for v in det_ra_h if v is not None and np.isfinite(v)]
+        longitudes += [float(s.ra_hours) for s in catalog_sources
+                       if s.ra_hours is not None and np.isfinite(s.ra_hours)]
+        if longitudes and max(longitudes) - min(longitudes) > 12:
+            note_numerical_issue("ra_seam_matching_approximation",
+                "Angular source matching retains an unwrapped flat-sky RA approximation "
+                "across the 0/24-hour seam; nearby catalog stars can fail to match.")
 
     if not use_angular and wcs is None:
         raise ValueError("Missing WCS for catalog source matching")
@@ -707,6 +716,9 @@ def perform_field_calibration(
     min_snr = settings.min_snr or 0
     max_snr = settings.max_snr or np.inf
     if settings.min_snr or settings.max_snr:
+        note_numerical_issue("magnitude_error_snr_cut",
+            "Calibration SNR selection uses the retained inverse-magnitude-error proxy, "
+            "which differs from flux/error SNR. Thresholds are not exact flux-SNR cuts.")
         photometry_results = [
             source
             for source in photometry_results

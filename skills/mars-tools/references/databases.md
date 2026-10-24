@@ -27,6 +27,13 @@ unclear name — not a step before every search.
 - `get_paper_abstract` — the abstract for one bibcode. The way to ground a
   specific number in a named paper.
 
+A returned number or bibcode does not establish an author name. Use author/year
+metadata returned for that same paper, for example from `search_ads`, before
+expanding an identifier into a named citation. Abstract text mentioning another
+paper is not its authorship metadata. Author metadata alone also does not
+establish that the paper supports a specific scientific claim; read its abstract
+or source before attributing that claim.
+
 ## NED
 
 `search_ned` returns a whole historical table: `photometry` (default),

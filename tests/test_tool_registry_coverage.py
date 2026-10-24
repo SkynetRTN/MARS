@@ -20,6 +20,9 @@ NOT_TOOL_MODULES = {
     "tools.downloads",
     "tools.runtime",
     "tools.models",
+    # Operation-scoped numerical notices translated to structured warnings;
+    # shared implementation infrastructure, with no callable agent tool.
+    "tools.science_warnings",
     "tools.registry",
     "tools.sessions",
     # A reusable pipeline; its public surface is re-exported through

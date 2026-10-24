@@ -12,8 +12,9 @@ was met on 2026-09-14, and a completion audit on 2026-09-18 re-verified the
 harness against `dev`. [harness.md](harness.md) is therefore a record rather
 than a plan, and carries an `Archived` block saying what was re-checked.
 
-Continuing attribution-grader and experiment-design work is tracked as BEN-01/02
-in the [master continuation plan](../working/master-continuation-plan.md);
+The M2 attribution-grader correction is described in
+[its acceptance record](../analysis/warnings-benchmark-claims.md). Further
+experiment-design work is tracked in the [master continuation plan](../working/master-continuation-plan.md);
 artifact-destination hardening is ART-01. Completion of the original harness
 does not close these later findings.
 
@@ -51,8 +52,11 @@ bound what the scoreboard means rather than qualifying a detail:
    first**, which no test can fully rule out.
 
 `results.md`'s own *Limits* section carries four more, including the largest
-known hole: nothing checks non-numeric provenance, so a fabricated author or
-catalogue name passes every check in the suite.
+historical hole: the archived sweep did not check author attribution. Its scores,
+JSON and figures remain **attribution-unchecked**, without a new regrade; the
+original paid transcripts are absent here. The current bounded author/year
+check is enabled on two core tasks. It does not verify all non-numeric prose,
+catalogue names or object nicknames, and it cannot certify the historical scores.
 
 ## Reproducing
 

@@ -1,14 +1,14 @@
 # MARS release closure gate
 
-Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with the first nine M2 checkpoints
-closed on the single working branch `feature/m2`. Keep the remaining M2
-work on this branch. It includes the channels-and-axes checkpoint at `27bdceb`.
+Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
+closed locally on the single working branch `feature/m2`. It includes the
+channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 remains open after the first nine checkpoints
-below. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
+M2 is complete locally; its changes remain unmerged and unpublished. Other
+release gates below remain open. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
 
@@ -198,7 +198,7 @@ the subsequent work.
   checks passed again during follow-up review. Compilation, schema goldens, generated
   guidance, repository shape and whitespace checks pass. Changes remain local
   to `feature/m2`; the following checkpoint addresses coverage/sufficiency,
-  and the separate retained-defect warnings/benchmark gate remains open.
+  and the retained-defect warnings/benchmark checkpoint below records disclosures.
 - [x] **Catalog coverage and sufficiency.** Both WCS runner entry points use
   enclosing cones and detector clipping, including RA seams, pole-crossing
   fields, anisotropic scales and off-detector CRPIX. Explicit polar boxes keep
@@ -219,13 +219,24 @@ the subsequent work.
   queries, a capped response and 3,355 matching magnitude/filter values across
   317 stars in ten catalogs. Compilation, schema goldens, generated guidance,
   repository shape and whitespace checks pass. Changes remain local to `feature/m2`.
-- [ ] **Warnings and benchmark claims.** Reachable retained numerical bugs
-  are not consistently disclosed in tool results. The answer grader can accept
-  invented author attribution when numbers are sourced. Users need relevant
-  limitations, and benchmark conclusions must account for attribution errors.
-  Calibration limitations include PHOT-06 downsampled saturation counts and
-  the near-flat SNR regression's implausible limiting magnitudes; see the
-  [calibration acceptance record](../analysis/photometric-calibration.md).
+- [x] **Warnings and benchmark claims.** Operation-scoped notices disclose
+  retained aperture/background defects, downsampled saturation counts,
+  adaptive isophotal origin, aperture-correction crowding, magnitude-error SNR
+  cuts, RA-seam matching and unvalidated limiting-magnitude extrapolation.
+  Landolt U-dependent references disclose the retained wrong-colour error.
+  Public result boundaries retain relevant notices through handled failures;
+  structured photometry failures also preserve MCP/agent error status.
+  Numerical transforms, H-alpha, error propagation and solver arithmetic remain
+  unchanged. A bounded author/year check requires returned metadata and explicit
+  bibcode consistency on two core benchmark tasks. Reports disclose check
+  coverage; historical scores/figures remain attribution-unchecked and
+  unregraded because the original paid transcripts are absent. The check does
+  not verify all prose or scientific paper support. Evidence:
+  [acceptance, review corrections and limits](../analysis/warnings-benchmark-claims.md),
+  57 added test cases, **4,036 passed, 88 skipped** in the final complete suite,
+  compilation, schema goldens, generated guidance, repository shape and whitespace
+  checks. Independent review's three findings and the MCP status follow-up were
+  reproduced and corrected. All ten M2 checkboxes are complete locally on `feature/m2`.
 
 Evidence: [pulsar tool](../../tools/pulsar.py),
 [legacy HR helpers](../../algorithms/hrdiagram_py/legacy.py),

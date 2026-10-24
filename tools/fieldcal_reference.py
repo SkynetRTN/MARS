@@ -53,6 +53,7 @@ import math
 from pathlib import Path
 
 from tools.calibration import solve_zeropoint_from_measurements
+from tools.science_warnings import capture_numerical_warnings
 from tools.config import is_lfs_pointer
 from tools.models import (
     CatalogResponseReference,
@@ -1019,16 +1020,17 @@ def replay_field_calibration(
             catalogs=[catalog],
             strict_filter_parity=bool(summary.get("strict_filter_parity", False)),
         )
-        outcome = perform_field_calibration(
-            header.copy(),
-            np.zeros((2, 2), dtype=float),
-            wcs=wcs,
-            field_cal_settings=settings,
-            catalog_sources=candidates,
-            variable_sources=variables,
-            detected_sources=detections,
-            use_provided_photometry=True,
-        )
+        with capture_numerical_warnings(warnings):
+            outcome = perform_field_calibration(
+                header.copy(),
+                np.zeros((2, 2), dtype=float),
+                wcs=wcs,
+                field_cal_settings=settings,
+                catalog_sources=candidates,
+                variable_sources=variables,
+                detected_sources=detections,
+                use_provided_photometry=True,
+            )
     except DegenerateCalibrationError as exc:
         # Same code calibrate_zeropoint gives the same condition.
         return FieldCalReplay(

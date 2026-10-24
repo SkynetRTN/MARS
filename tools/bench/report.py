@@ -57,7 +57,7 @@ REPORT_JSON_NAME = "report.json"
 #:
 #: They are not the same kind of quantity, and a weighted sum of them would
 #: hide that. Correctness is *absolute*: it is a rate in [0, 1], 1.0 means the
-#: model answered every question correctly, and the figure means the same thing
+#: model passed all enabled hard checks, and the figure means the same thing
 #: whether it was measured against one other backend or ten.
 #:
 #: Speed and cost have no such baseline. Seconds and tokens are unbounded below
@@ -99,6 +99,8 @@ def build_report(
     from tools.bench.grade import summarize
 
     header = _header(runs, tag=tag)
+    attribution_coverage = {"checked": 0, "scored": 0, "flagged_claims": 0}
+    header["attribution_coverage"] = attribution_coverage
     matrix: dict[str, dict[str, Any]] = {}
     grid: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -111,6 +113,11 @@ def build_report(
         for entry in grades.get("grades", ()):
             if "answer" not in entry:
                 continue
+            if not entry.get("incomplete"):
+                metrics = entry["answer"].get("metrics") or {}
+                attribution_coverage["scored"] += 1
+                attribution_coverage["checked"] += int(metrics.get("attribution_checked") is True)
+                attribution_coverage["flagged_claims"] += len(metrics.get("unsourced_attributions") or ())
             grid.append(_grid_row(entry))
             failures.extend(_failures(entry))
 
@@ -819,6 +826,24 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         )
         lines.append("")
 
+    coverage = header.get("attribution_coverage")
+    if coverage is None:
+        lines.append(
+            "> **Author attribution checks: unavailable in this historical report.** "
+            "Its scores may include unsupported author names and have not been regraded for attribution."
+        )
+    else:
+        lines.append(
+            f"> **Author attribution checks: {coverage['checked']} of {coverage['scored']} scored answers.** "
+            "Only supported author/year citation forms are checked against returned paper metadata. "
+            "Passing enabled checks does not establish every factual claim in the answer."
+        )
+        if coverage["flagged_claims"]:
+            lines.append(
+                f"> {coverage['flagged_claims']} unsupported author/year claim(s) were flagged. "
+                "Flags affect the score only where the task enables the attribution check."
+            )
+    lines.append("")
     lines.extend(_task_matrix(report))
     lines.extend(_ranking_table(report))
     lines.extend(_matrix_table(report))
@@ -830,8 +855,8 @@ def render_markdown(report: Mapping[str, Any]) -> str:
 #: What each board measures, in the report's own words.
 _BOARD_BLURB: Mapping[str, str] = {
     "correctness": (
-        "**Absolute.** Share of sessions whose answer passed every hard check. "
-        "1.0 means every question answered correctly, and the figure means the "
+        "**Absolute.** Share of sessions whose answer passed every enabled hard check. "
+        "1.0 means every scored answer passed those checks, and the figure means the "
         "same whoever else was measured.\n\n"
         "The interval is computed on the **effective** sample size, not the "
         "session count. Repeats of one task are one question asked several "

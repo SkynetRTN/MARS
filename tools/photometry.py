@@ -35,6 +35,7 @@ import math
 from pathlib import Path
 
 import pandas as pd
+from tools.science_warnings import capture_numerical_warnings
 
 from tools.artifacts import artifact_write_directory, describe_file, discard_placeholder, reserve_path_in
 from tools.photometry_pipeline import (
@@ -269,6 +270,42 @@ def run_photometry_on_target(
     not the CLI script's own ``~/Downloads`` default), returned as
     ``artifacts``.
     """
+    numerical_warnings: list[ToolWarning] = []
+    try:
+        with capture_numerical_warnings(numerical_warnings):
+            result = _run_photometry_on_target(
+                target, use_field_cal=use_field_cal, catalogs=catalogs,
+                zero_point_mag=zero_point_mag, output_dir=output_dir,
+                write_source_table=write_source_table,
+            )
+    except Exception as exc:
+        # A compute or artifact failure must retain notices already emitted.
+        try:
+            file = describe_file(resolve_fits_path(target))
+        except Exception:
+            file = FileMetadata(path=str(target), exists=False)
+        return PhotometryRunResult(
+            file=file,
+            errors=[ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")],
+            warnings=numerical_warnings,
+        )
+    for warning in numerical_warnings:
+        if warning not in result.warnings:
+            result.warnings.append(warning)
+        if result.zero_point is not None and warning not in result.zero_point.warnings:
+            result.zero_point.warnings.append(warning)
+    return result
+
+
+def _run_photometry_on_target(
+    target: str,
+    *,
+    use_field_cal: bool,
+    catalogs: list[str] | None,
+    zero_point_mag: float | None,
+    output_dir: str | Path | None,
+    write_source_table: bool,
+) -> PhotometryRunResult:
     try:
         fits_path = resolve_fits_path(target)
     except FileNotFoundError:
@@ -589,16 +626,17 @@ def calibrate_zeropoint(
                 )
             finally:
                 warnings.extend(catalog_query_warnings(notices))
-        outcome = perform_field_calibration(
-            header.copy(),
-            data,
-            wcs=wcs,
-            field_cal_settings=field_cal_settings,
-            photometry_settings=photometry_settings,
-            extraction_settings=SourceExtractionSettings(),
-            catalog_sources=resolved_sources,
-            variable_sources=variable_sources,
-        )
+        with capture_numerical_warnings(warnings):
+            outcome = perform_field_calibration(
+                header.copy(),
+                data,
+                wcs=wcs,
+                field_cal_settings=field_cal_settings,
+                photometry_settings=photometry_settings,
+                extraction_settings=SourceExtractionSettings(),
+                catalog_sources=resolved_sources,
+                variable_sources=variable_sources,
+            )
     except UnsupportedFilterError as exc:
         return ZeropointComparison(
             errors=[ToolError(code="unsupported_filter", message=str(exc))],

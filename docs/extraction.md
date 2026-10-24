@@ -1353,6 +1353,19 @@ unqueried fallback catalogs, unavailable queries and unverified distorted-WCS
 coverage, including on failure returns. No magnitude transform or fitting
 equation changes. See [acceptance and retained limits](analysis/catalog-coverage-sufficiency.md).
 
+#### 5e. M2 retained numerical disclosures (2026-10-23)
+
+Operation-scoped notices now disclose nonpositive aperture-flux placeholders,
+empty background annuli, downsampled saturation counts, the adaptive isophotal
+origin mismatch, aperture-correction crowding, magnitude-error SNR cuts,
+RA-seam matching and unvalidated limiting-magnitude extrapolation. Public
+photometry, calibration, replay, FITS-driven HR and WCS boundaries retain
+notices in structured results, including handled failures. Landolt U-dependent
+references disclose the retained wrong-colour uncertainty. No numerical
+transform, error propagation or fitting arithmetic changes in this checkpoint.
+These defects are disclosed rather than repaired; see the
+[branch conditions and acceptance record](analysis/warnings-benchmark-claims.md).
+
 ---
 
 #### 6. Catalog-backend code — now extracted

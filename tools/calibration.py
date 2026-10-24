@@ -7,9 +7,11 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
+from algorithms.fieldcal.ref_mag import _resolve_ref_mag_for_filter_with_route
 from algorithms.fieldcal.schemas import CatalogSource, Mag, PhotometryData
 from algorithms.fieldcal.solution import _calc_solution_with_mask
 from tools.models import ToolError, ToolWarning, ZeropointSolution
+from tools.science_warnings import capture_numerical_warnings
 
 
 def _finite(value: Any) -> float | None:
@@ -63,9 +65,11 @@ def solve_zeropoint_from_measurements(
 
     warnings: list[ToolWarning] = []
     usable_sources: list[PhotometryData] = []
+    reference_routes: list[tuple[str | None, str, str | None]] = []
 
     for index, measurement in enumerate(normalized_measurements):
         source = measurement.model_copy(deep=True)
+        route = (source.catalog_name, "provided", None)
         if source.mag is None:
             warnings.append(ToolWarning(code="missing_mag", message=f"Measurement {index} has no instrumental mag."))
             continue
@@ -81,13 +85,14 @@ def solve_zeropoint_from_measurements(
                 source.ref_mag = catalog_source.ref_mag
                 source.ref_mag_error = catalog_source.ref_mag_error
             elif source.filter:
-                ref_mag, ref_error = resolve_ref_mag_for_filter(
+                resolved = _resolve_ref_mag_for_filter_with_route(
                     image_filter=source.filter,
                     catalog_name=catalog_source.catalog_name,
                     cs_mags=catalog_source.mags,
                 )
-                source.ref_mag = ref_mag
-                source.ref_mag_error = ref_error
+                source.ref_mag = resolved.value
+                source.ref_mag_error = resolved.error
+                route = (catalog_source.catalog_name, resolved.kind, resolved.reference)
             source.catalog_name = source.catalog_name or catalog_source.catalog_name
 
         if source.ref_mag is None:
@@ -100,6 +105,7 @@ def solve_zeropoint_from_measurements(
             continue
 
         usable_sources.append(source)
+        reference_routes.append(route)
 
     if not usable_sources:
         return ZeropointSolution(
@@ -114,7 +120,8 @@ def solve_zeropoint_from_measurements(
         )
 
     try:
-        solution, survivor_mask = _calc_solution_with_mask(usable_sources)
+        with capture_numerical_warnings(warnings):
+            solution, survivor_mask = _calc_solution_with_mask(usable_sources)
         m0, m0_error, slop, limmag, rej_percent = solution
     except ValueError as exc:
         # Invalid measurement variances or an unusable numerical fit must
@@ -125,9 +132,14 @@ def solve_zeropoint_from_measurements(
             warnings=warnings,
             errors=[ToolError(code="numerical_error", message=str(exc))],
         )
-    from tools.catalogs import calibration_sample_warnings
+    from tools.catalogs import calibration_sample_warnings, reference_band_warnings
 
     surviving = int(sum(survivor_mask))
+    for source, kept, (catalog, kind, reference) in zip(usable_sources, survivor_mask, reference_routes):
+        if kept:
+            for warning in reference_band_warnings(catalog, source.filter, kind=kind, reference=reference):
+                if warning not in warnings:
+                    warnings.append(warning)
     warnings.extend(calibration_sample_warnings(usable_sources, surviving))
     if _finite(m0) is None or _finite(m0_error) is None or m0_error <= 0:
         return ZeropointSolution(

@@ -15,11 +15,16 @@
 # harness error and the other eight each matched "truncat" or "only the first"
 # in their own answer text, so all of them stand under both keys. Checked, not
 # assumed -- see docs/working/benchmark-results.md.
+# 2026-10-23 (M2): add metadata-grounded author/year attribution checks to
+# ned-formal-designation and abstract-before-attribution. The archived paid
+# transcripts are absent here, so historical scores are explicitly labelled
+# attribution-unchecked rather than replaced by an invented regrade. Regrade
+# all backends together when their original events and answers are available.
 {
   "core": {
-    "abstract-before-attribution": "b4f1857da0172ea0aaebc7d19defc08af03d4c8581deedac4b975c0487ff188a",
+    "abstract-before-attribution": "129cad1e648314ca83768376dc22d87632ba55ff1800030484ad01c83dd951d3",
     "atnf-formal-designation": "c3243d92f213a019e97e58016081d21f6d808f86779c8c32cb377d91d4da3b58",
-    "ned-formal-designation": "976984aef2388112cea966b460f6eab82ad4965779dc0227b42a0ee4bfdc0a64",
+    "ned-formal-designation": "ba4eda7610c5161b9e68a5d07acdd9d22e1880f221494947ae85f52cef74c38f",
     "no-identical-retry": "641c2e9e7c31824ca306e781522f94285602c9d2074c9c51cac74bd109b657e1",
     "null-argument-fidelity": "add036222b044cbd90c0bb625fabaf1984dd4b3a169d457461d95fa292c64883",
     "preview-is-not-the-answer": "eea5b7c88b54f11140a469ad49d82f4947990fd715c2168902539deda0db4a21",

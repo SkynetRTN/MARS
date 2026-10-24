@@ -38,6 +38,11 @@ expect:
           one lucky retry after two colloquial attempts is not the behaviour
           being graded.
   answer:
+    must_source_attribution:
+      - because: >
+          A NED reference code alone supplies no author names. Any asserted
+          author/year citation must match returned bibliographic metadata,
+          rather than an expansion from model memory.
     # Added after a live run: the key was trajectory-only, so the answer axis
     # had zero checks and passed vacuously. Trajectory is diagnostic and
     # cannot be a whole key.
