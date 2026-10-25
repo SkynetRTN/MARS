@@ -1,7 +1,14 @@
 # Desktop acceptance: MARS in the real Claude and ChatGPT desktop apps
 
+> **Archived 2026-10-23.** M4's *Real desktop use* closed on this guide:
+> the maintainer verified Claude Desktop with the `.mcpb` on an Apple Silicon
+> Mac and x64 Windows, and Codex in the ChatGPT app on x64 Windows and
+> Linux. Codex on the Mac was accepted untested (Issue #51667). No OS or app
+> versions were recorded. The install steps moved to the per-platform guides
+> in [`../installing/`](../installing/); this copy is the record.
+
 Completed 2026-10-23 for the M4 item **Real desktop use** in the
-[release checklist](master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
+[release checklist](../working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
 This is the guide for installing MARS into the Claude and ChatGPT desktop
 apps on a real machine and checking that it works. The tester installs,
 tries the checks in Part 3, and says whether MARS behaved and looked as
@@ -176,5 +183,6 @@ platform and app (`win-claude/`, `mac-codex/`, …) and hand it back:
 ## Closing the item
 
 The item closed on 2026-10-23: every row of the [status](#status) table is
-verified, closed, or accepted by the maintainer. The install steps here now move into the installation guides and
-this document is archived (the M4 checkbox **Desktop install guides**).
+verified, closed, or accepted by the maintainer. The install steps moved into
+[`../installing/`](../installing/) and this document was archived (the M4
+checkbox **Desktop install guides**).

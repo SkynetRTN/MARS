@@ -10,7 +10,6 @@ original findings; implementation choices belong in subsequent work.
 | Plan | Status |
 | --- | --- |
 | [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-20 against `main` at `a6785aa`. M0/M1 closed; M1 merged and unreleased. M2 must be reassessed without PR #120. Remaining gates describe failures, missing evidence and final release checks. Browser hosting remains deferred. |
-| [desktop-acceptance.md](desktop-acceptance.md) | Completed 2026-10-23 for M4's real desktop use. Install and test guide for the Claude and ChatGPT desktop apps; verified on Mac, Windows and Linux (Codex on the Mac accepted untested, Issue #51667). To be archived into per-platform install guides. |
 
 ## Landed
 
@@ -28,6 +27,7 @@ from the record.
 | MCP tool surface | [`../archive/mcp-tool-surface.md`](../archive/mcp-tool-surface.md); `v0.1.0rc1` published | 2026-09-25 (C9, the last phase) |
 | Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
 | Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |
+| Desktop acceptance (M4) | [`../archive/desktop-acceptance.md`](../archive/desktop-acceptance.md); install steps in [`../installing/`](../installing/) | 2026-10-23 |
 | Benchmark | [`../benchmarking/`](../benchmarking/README.md) — phases 4–5 of the model port, with its results, report and figures | 2026-09-14 (calibration gate) |
 | TUI | `../tool-architecture.md` section 10.2; working document deleted, git history has it | 2026-09-18 (phase G) |
 

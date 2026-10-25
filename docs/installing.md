@@ -4,6 +4,12 @@ How to install MARS (MCP Astronomy Research Suite) from PyPI, with no checkout
 of this repository, and register its MCP server with an agent host. How the
 package and its data are built is `tool-architecture.md` §10.3.
 
+**For the Claude or ChatGPT desktop app**, follow the step-by-step guide for
+your platform: [Windows (x64)](installing/windows.md),
+[macOS (Apple Silicon)](installing/macos.md) or
+[Linux (ARM)](installing/linux.md). This page is the reference for every
+other host and for what the guides leave out.
+
 ## Install
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/):
@@ -65,9 +71,10 @@ newest one. To install a specific release, use
 talks to it over stdin/stdout, with no port and no network listener. So it
 works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
 (in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
-[dated host proposal](analysis/mcp-desktop-hosts.md) §6. Real desktop-host
-validation is still an open gate in the
-[release checklist](working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
+[dated host proposal](analysis/mcp-desktop-hosts.md) §6. The maintainer
+verified Claude Desktop on macOS and Windows and the ChatGPT app on Windows
+and Linux on 2026-10-23 ([record](archive/desktop-acceptance.md)); the
+ChatGPT app on macOS, Cursor, VS Code and Gemini CLI are untested.
 
 In the examples below, replace `/path/to/mars-mcp` with the full path from
 [Install](#install).

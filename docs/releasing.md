@@ -58,7 +58,7 @@ with the build artifact, installed and self-tested.
    the newest release it can find; `UV_FIND_LINKS` offers it this build, and
    on a tag the job fails unless the extension served this build's version. It
    proves the launch, not the app: installing in Claude Desktop stays a manual
-   check (`working/desktop-acceptance.md`).
+   check (`installing/`; record in `archive/desktop-acceptance.md`).
 4. **data** checks that the `data` release holds every archive
    `bundles.json` pins, at the pinned size and SHA-256. It reads GitHub's own
    asset digest.

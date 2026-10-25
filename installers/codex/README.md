@@ -173,7 +173,12 @@ the update.
 ## Platforms
 
 Verified in clean Fedora 44 containers, x86_64 and aarch64, through Codex
-0.160's app server, installing from GitHub with Fedora's `uv`. On aarch64
+0.160's app server, installing from GitHub with Fedora's `uv`, and by the
+maintainer in the ChatGPT app on Fedora Workstation and x64 Windows
+(2026-10-23). The app on macOS is untested: a macOS VM blocks Codex
+messages by workspace settings (Issue #51667). Step-by-step installs:
+[Linux](../../docs/installing/linux.md), [Windows](../../docs/installing/windows.md),
+[macOS](../../docs/installing/macos.md). On aarch64
 the first start also compiles `photutils` with `gcc`. macOS and Windows use
 the same wheels as the Claude Desktop extension, and the same limits apply.
 `numba` and `llvmlite` have no Intel Mac wheels, and several dependencies

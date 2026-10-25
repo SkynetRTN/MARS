@@ -99,4 +99,6 @@ The manifest says macOS and Windows, but MCPB cannot name a CPU. `numba` and
 `llvmlite` publish macOS wheels for **Apple Silicon only**, and
 `sep`, `photutils` and others have no Windows-on-ARM wheels. On an Intel Mac
 or an ARM Windows machine, the first launch would have to compile them and
-fails. Supported: Apple Silicon Macs and x64 Windows.
+fails. Supported: Apple Silicon Macs and x64 Windows, both verified in
+Claude Desktop by the maintainer on 2026-10-23. Step-by-step installs:
+[macOS](../../docs/installing/macos.md), [Windows](../../docs/installing/windows.md).

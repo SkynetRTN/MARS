@@ -191,19 +191,23 @@ Evidence: [query backends](../../algorithms/query/),
   and media. Missing macOS/Windows and other advertised-host evidence must
   remain explicit.
   *Done 2026-10-23,* by the maintainer, following
-  [desktop-acceptance.md](desktop-acceptance.md): Claude Desktop with the
+  [desktop-acceptance.md](../archive/desktop-acceptance.md): Claude Desktop with the
   `.mcpb` verified on an Apple Silicon Mac and x64 Windows, and Codex in the
   ChatGPT app on x64 Windows and Linux (Fedora Workstation). Claude Desktop
   on Linux is closed (no build). Codex on the Mac is accepted untested: the
   maintainer's macOS VM blocks Codex messages by workspace settings (Issue
   #51667), and the route is the Unix one verified on Fedora; test it on a
   physical Mac when one is available.
-- [ ] **Desktop install guides.** Once real desktop use is verified, archive
-  [desktop-acceptance.md](desktop-acceptance.md) and fold its Claude Desktop
-  and Codex install steps into per-platform guides under `../installing/`:
-  Windows (x64), macOS (Apple Silicon) and Linux (ARM), with the verified OS
-  and app versions. Update every link to `../installing.md` and the archived
-  guide.
+- [x] **Desktop install guides.** Once real desktop use is verified, archive
+  the desktop guide and fold its Claude Desktop and Codex install steps into
+  per-platform guides under `../installing/`: Windows (x64), macOS (Apple
+  Silicon) and Linux (ARM), with the verified OS and app versions.
+  *Done 2026-10-23:* [Windows](../installing/windows.md),
+  [macOS](../installing/macos.md) and [Linux](../installing/linux.md), linked
+  from `../installing.md`, which stays where it is because shipped wheels and
+  the `.mcpb` manifest link to it; the guide is
+  [archived](../archive/desktop-acceptance.md). No OS or app versions were
+  recorded, so the guides name none.
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
