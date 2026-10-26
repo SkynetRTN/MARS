@@ -286,17 +286,24 @@ def _remedy(variable: str, *, running: bool) -> str:
 
 
 def unavailable_message(
-    spec: str, exc: BackendUnavailableError, current_spec: str = ""
+    spec: str,
+    exc: BackendUnavailableError,
+    current_spec: str = "",
+    *,
+    running: bool | None = None,
 ) -> str:
     """One wording for a refused backend, shared by the launcher and ``/backend``.
 
     Always says what to do, and -- when the console is already running --
     which backend is still answering, so a failed switch never reads as a
     session that has lost its model. ``current_spec`` is that backend; its
-    absence is what marks the launcher's wording.
+    absence marks the launcher's wording unless ``running`` says otherwise --
+    a backend failing mid-session is inside the console with nothing else
+    still answering.
     """
 
-    running = bool(current_spec)
+    if running is None:
+        running = bool(current_spec)
     if isinstance(exc, ModelNotInstalled):
         # Naming the installed models is the whole remedy: there is no
         # variable to set, and guessing a substitute would silently answer a
@@ -337,7 +344,8 @@ def failure_message(exc: BaseException, spec: str = "", *, saved: bool = False) 
     if saved:
         retry = "The session so far is saved. " + retry
     if isinstance(exc, BackendUnavailableError):
-        return unavailable_message(spec or "the backend", exc)
+        text = unavailable_message(spec or "the backend", exc, running=True)
+        return f"{text} {retry}"
 
     status = getattr(exc, "status_code", None)
     if status is None:
@@ -364,7 +372,11 @@ def failure_message(exc: BaseException, spec: str = "", *, saved: bool = False) 
         cause = f"could not reach {backend} ({name})"
     else:
         cause = f"the session stopped on an unexpected {name}"
-    return f"{cause[0].upper()}{cause[1:]}. {retry}"
+    # A sentence starts with a capital, but a provider/model spec is written
+    # exactly as typed, or copying it into /backend no longer matches.
+    if not (spec and cause.startswith(spec)):
+        cause = cause[0].upper() + cause[1:]
+    return f"{cause}. {retry}"
 
 
 def describe_choices(active_spec: str | None = None) -> str:

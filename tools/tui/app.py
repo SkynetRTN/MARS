@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Mapping
@@ -35,6 +36,7 @@ from tools.agent.events import (
 from tools.agent.events import UserMessage as UserMessageEvent
 from tools.agent.policy import SessionPolicy, policy_approver, risk_tags
 from tools.agent.prompt import SYSTEM_PROMPT
+from tools.effects import DOWNLOAD_FLAGS, WRITE_FLAGS
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import Message, TextBlock
 from tools.tui.backends import (
@@ -95,24 +97,24 @@ def _current_worker() -> Worker | None:
 class ApprovalModal(ModalScreen[Decision]):
     """Ask the UI user for one risky tool-call decision.
 
-    Answerable from the keyboard: ``y`` allows, ``a`` allows always, and
-    ``n`` or Esc denies. Esc denies rather than dismissing to nothing, because
-    the worker is blocked on an answer and a call nobody approved must not run.
+    Answerable from the keyboard: Tab or the arrow keys move between the
+    buttons and Enter presses one; ``n`` or Esc denies. Esc denies rather than
+    dismissing to nothing, because the worker is blocked on an answer and a
+    call nobody approved must not run.
 
     The prompt stays live during a turn, so the dialog can open under someone
-    mid-sentence. Two guards keep a keystroke meant for the prompt from
-    approving a call: **Deny** has focus when the dialog opens, so a stray
-    Enter refuses, and every answer is ignored for :attr:`GRACE_S` after it
-    appears. Tab or the arrow keys move between the buttons.
+    mid-sentence, and the rest of their sentence lands here. So no letter
+    allows anything -- an earlier ``y``/``a`` binding approved a call on the
+    ``a`` in "galaxy" -- **Deny** has focus when the dialog opens, so a stray
+    Enter refuses, and an allow within :attr:`GRACE_S` of opening is ignored
+    (a deny never is: refusing early is always safe).
     """
 
-    #: How long after opening the dialog ignores answers. Long enough to
-    #: absorb the rest of a word being typed; short enough not to be noticed.
+    #: How long after opening the dialog ignores an allow. Long enough to
+    #: absorb an Enter typed for the prompt; short enough not to be noticed.
     GRACE_S = 0.5
 
     BINDINGS = [
-        Binding("y", "decide('allow')", "Allow"),
-        Binding("a", "decide('allow-always')", "Allow always"),
         Binding("n", "decide('deny')", "Deny"),
         Binding("escape", "decide('deny')", "Deny"),
         Binding("left", "app.focus_previous", show=False),
@@ -182,7 +184,7 @@ class ApprovalModal(ModalScreen[Decision]):
                 yield Button("Allow always", id="allow-always")
                 yield Button("Deny", id="deny", variant="error")
             yield Static(
-                "y allow · a allow always · n or esc deny",
+                "tab or arrows to choose, enter to press · n or esc deny",
                 id="approval-keys",
                 markup=False,
             )
@@ -212,10 +214,12 @@ class ApprovalModal(ModalScreen[Decision]):
         self.action_decide(event.button.id or "deny")
 
     def action_decide(self, choice: str) -> None:
+        decision = self._DECISIONS.get(choice, Decision.DENY)
         opened = getattr(self, "_opened_at", None)
-        if opened is None or time.monotonic() - opened < self.GRACE_S:
+        early = opened is None or time.monotonic() - opened < self.GRACE_S
+        if decision is not Decision.DENY and early:
             return
-        self.dismiss(self._DECISIONS.get(choice, Decision.DENY))
+        self.dismiss(decision)
 
 
 class MARSApp(App[None]):
@@ -829,9 +833,12 @@ class MARSApp(App[None]):
             self._append_transcript(f"Unknown tool: {name}. /tools lists them.")
             return
 
-        lines = [f"{len(TOOL_SCHEMAS)} tools; * asks before running. /tools <name> describes one."]
+        lines = [
+            f"{len(TOOL_SCHEMAS)} tools; * asks before running, + asks for some "
+            "arguments (a download, a header write). /tools <name> describes one."
+        ]
         for schema in TOOL_SCHEMAS:
-            marker = "*" if risk_tags(schema["name"]) else " "
+            marker = _approval_marker(schema["name"])
             lines.append(f"{marker} {schema['name']} — {_first_sentence(schema.get('description', ''))}")
         self._append_transcript("\n".join(lines))
 
@@ -976,11 +983,41 @@ class MARSApp(App[None]):
         return " • ".join(parts)
 
 
-def _first_sentence(text: str) -> str:
-    """A tool description's opening sentence, for a one-line listing."""
+def _approval_marker(name: str) -> str:
+    """``*`` for a tool that always asks, ``+`` for one whose arguments can.
 
-    first = " ".join(text.split()).split(". ", 1)[0]
-    return first if first.endswith(".") else first + "."
+    ``risk_tags`` by name alone misses the argument-borne risks: a MAST
+    search asks only when it downloads, a solve only when it writes the
+    header. Listing those as never asking is how a prompt becomes a surprise.
+    """
+
+    if risk_tags(name):
+        return "*"
+    if name in DOWNLOAD_FLAGS or name in WRITE_FLAGS:
+        return "+"
+    return " "
+
+
+#: A sentence ends at ., ! or ? followed by space and a capital -- so "e.g. a"
+#: and "i.e. the" do not end one.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+def _first_sentence(text: str, minimum: int = 40, limit: int = 140) -> str:
+    """A tool description's opening, for a one-line listing.
+
+    Sentences are taken until there are ``minimum`` characters, so a terse
+    lead such as "Stage 0." carries on into the sentence that says what the
+    tool does, and the result is cut at ``limit``.
+    """
+
+    sentences = _SENTENCE_END.split(" ".join(text.split()))
+    taken = ""
+    for sentence in sentences:
+        taken = f"{taken} {sentence}".strip()
+        if len(taken) >= minimum:
+            break
+    return taken if len(taken) <= limit else taken[: limit - 1].rstrip() + "…"
 
 
 def _describe_tool(schema: Mapping[str, object]) -> str:

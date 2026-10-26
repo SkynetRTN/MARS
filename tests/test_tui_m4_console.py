@@ -157,6 +157,25 @@ def test_failure_message_reuses_the_unavailable_wording(monkeypatch):
     )
 
     assert "ollama serve" in message
+    assert "Send your question again" in message
+
+
+def test_a_key_lost_mid_session_is_told_the_in_console_command(monkeypatch):
+    monkeypatch.setattr(backends, "is_checkout", lambda: False)
+
+    message = backends.failure_message(
+        BackendUnavailableError("ANTHROPIC_API_KEY"), "anthropic/claude-sonnet-5"
+    )
+
+    assert "`/backend ollama`" in message
+    assert "mars --backend" not in message
+
+
+def test_a_spec_at_the_start_of_a_failure_keeps_its_case():
+    message = backends.failure_message(_StatusError(401), "ollama/llama3.1")
+
+    assert message.startswith("ollama/llama3.1 refused")
+    assert backends.failure_message(KeyError()).startswith("The session stopped")
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +254,8 @@ def test_tools_lists_every_tool_and_describes_one():
             rendered = _rendered(app)
             assert f"{len(TOOL_SCHEMAS)} tools" in rendered
             assert "* plot_pulsar" in rendered
+            assert "+ search_mast" in rendered
+            assert "+ solve_astrometry" in rendered
             await _type(pilot, "/tools search_simbad")
             assert "Parameters:" in _rendered(app)
             await _type(pilot, "/tools nope")
@@ -312,16 +333,16 @@ def test_session_policy_reset_forgets_allow_always():
 
 
 @pytest.mark.parametrize(
-    ("key", "expected"),
+    ("keys", "expected"),
     [
-        ("y", Decision.ALLOW),
-        ("a", Decision.ALLOW_ALWAYS),
-        ("n", Decision.DENY),
-        ("escape", Decision.DENY),
-        ("enter", Decision.DENY),
+        (("n",), Decision.DENY),
+        (("escape",), Decision.DENY),
+        (("enter",), Decision.DENY),
+        (("left", "left", "enter"), Decision.ALLOW),
+        (("left", "enter"), Decision.ALLOW_ALWAYS),
     ],
 )
-def test_the_approval_modal_answers_from_the_keyboard(monkeypatch, key, expected):
+def test_the_approval_modal_answers_from_the_keyboard(monkeypatch, keys, expected):
     monkeypatch.setattr(ApprovalModal, "GRACE_S", 0.0)
     decisions: list[Decision | None] = []
 
@@ -332,7 +353,7 @@ def test_the_approval_modal_answers_from_the_keyboard(monkeypatch, key, expected
             app.push_screen(modal, decisions.append)
             await pilot.pause()
             assert app.focused is modal.query_one("#deny", Button)
-            await pilot.press(key)
+            await pilot.press(*keys)
             await pilot.pause()
 
     _run(scenario())
@@ -340,9 +361,48 @@ def test_the_approval_modal_answers_from_the_keyboard(monkeypatch, key, expected
     assert decisions == [expected]
 
 
-def test_keys_typed_as_the_approval_opens_are_ignored():
-    """The prompt is live during a turn: a `y` or Enter meant for a note
-    must not approve a call whose dialog appeared under it."""
+def test_no_letter_allows_a_call(monkeypatch):
+    """The rest of a sentence typed for the prompt lands in the dialog: the
+    `a` in "galaxy" once allowed a call always."""
+
+    monkeypatch.setattr(ApprovalModal, "GRACE_S", 0.0)
+    decisions: list[Decision | None] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
+            app.push_screen(modal, decisions.append)
+            await pilot.pause()
+            await pilot.press(*"what does this galaxy look like")
+            await pilot.pause()
+            assert app.screen is modal
+
+    _run(scenario())
+
+    assert decisions == []
+
+
+def test_a_deny_is_never_held_back_by_the_grace_period():
+    decisions: list[Decision | None] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
+            app.push_screen(modal, decisions.append)
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+    _run(scenario())
+
+    assert decisions == [Decision.DENY]
+
+
+def test_an_allow_as_the_approval_opens_is_ignored():
+    """The prompt is live during a turn: an Enter meant for a note must not
+    approve a call whose dialog appeared under it, even with Allow focused."""
 
     decisions: list[Decision | None] = []
 
@@ -352,10 +412,22 @@ def test_keys_typed_as_the_approval_opens_are_ignored():
             modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
             app.push_screen(modal, decisions.append)
             await pilot.pause()
-            await pilot.press("y", "a", "enter")
+            await pilot.press("left", "left", "enter")
             await pilot.pause()
             assert app.screen is modal
 
     _run(scenario())
 
     assert decisions == []
+
+
+def test_a_tool_listing_line_says_what_the_tool_does():
+    from tools.tui.app import _first_sentence
+
+    assert _first_sentence("Stage 0. Resolve an optical frame by name or path.") == (
+        "Stage 0. Resolve an optical frame by name or path."
+    )
+    assert _first_sentence(
+        "Search VizieR tables, e.g. a catalog by its name. More here."
+    ) == "Search VizieR tables, e.g. a catalog by its name."
+    assert len(_first_sentence("word " * 100)) <= 140

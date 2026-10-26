@@ -266,7 +266,7 @@ def test_a_missing_suite_root_says_where_the_suites_live(tmp_path, capsys, verb)
 
     assert main([*argv, "--suite-root", str(missing)]) == 2
     err = capsys.readouterr().err
-    assert f"no benchmark suites at {missing}" in err
+    assert f"no benchmark inputs at {missing}" in err
     assert "checkout" in err
     assert "--suite-root" in err
 
@@ -276,3 +276,16 @@ def test_reference_data_is_the_bundled_data_not_a_path_beside_the_package():
     from tools.paths import bundled_data_dir
 
     assert REPO_DATA_ROOT == bundled_data_dir()
+
+
+def test_a_missing_fixture_root_is_reported_too(tmp_path, capsys):
+    suites = tmp_path / "suites"
+    suites.mkdir()
+    missing = tmp_path / "fixtures"
+
+    code = main(
+        ["run", "smoke", "--dry-run", "--suite-root", str(suites), "--fixture-root", str(missing)]
+    )
+
+    assert code == 2
+    assert f"no benchmark inputs at {missing}" in capsys.readouterr().err

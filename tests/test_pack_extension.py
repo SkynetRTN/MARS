@@ -10,6 +10,8 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import zipfile
+
+import pytest
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -50,3 +52,31 @@ def test_the_archive_is_deterministic(tmp_path):
     pack_extension.pack(_copy(tmp_path), first)
     pack_extension.pack(_EXT, second)
     assert first.read_bytes() == second.read_bytes()
+
+
+def test_comments_and_anchored_directories_are_honoured(tmp_path):
+    source = _copy(tmp_path)
+    ignore = source / ".mcpbignore"
+    ignore.write_text(
+        ignore.read_text() + "# local only, not a pattern\nsrc/tests/\n", encoding="utf-8"
+    )
+    (source / "src" / "tests").mkdir()
+    (source / "src" / "tests" / "test_x.py").write_text("x")
+    (source / "local").write_text("kept: the comment is not a pattern")
+    (source / "tests").mkdir()
+    (source / "tests" / "kept.py").write_text("x")
+
+    names = [p.as_posix() for p in pack_extension.packed_files(source)]
+
+    assert "src/tests/test_x.py" not in names
+    assert "local" in names
+    assert "tests/kept.py" in names
+
+
+def test_a_negation_is_refused_rather_than_ignored(tmp_path):
+    source = _copy(tmp_path)
+    ignore = source / ".mcpbignore"
+    ignore.write_text(ignore.read_text() + "!README.md\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="negation"):
+        pack_extension.packed_files(source)

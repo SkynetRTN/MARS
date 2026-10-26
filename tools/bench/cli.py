@@ -174,10 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    suite_root = getattr(args, "suite_root", None)
-    if suite_root is not None and not Path(suite_root).is_dir():
-        print(_no_suites_message(Path(suite_root)), file=sys.stderr)
-        return 2
+    # `record` writes into its fixture root and creates what it needs, so
+    # only the verbs that read their inputs are checked here.
+    if args.verb != "record":
+        for root in (getattr(args, "suite_root", None), getattr(args, "fixture_root", None)):
+            if root is not None and not Path(root).is_dir():
+                print(_no_suites_message(Path(root)), file=sys.stderr)
+                return 2
     if args.verb == "run":
         return _run(args)
     if args.verb == "grade":
@@ -203,7 +206,7 @@ def _no_suites_message(suite_root: Path) -> str:
     """
 
     return (
-        f"mars-bench: no benchmark suites at {suite_root}. The suites and "
+        f"mars-bench: no benchmark inputs at {suite_root}. The suites and "
         "fixtures live in a MARS checkout (benchmarks/), not in the installed "
         "package. Run mars-bench from the root of a clone "
         "(git clone https://github.com/SkynetRTN/MARS), or pass --suite-root "

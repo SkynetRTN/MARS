@@ -7,9 +7,13 @@ unlocked dependency tree on the bytes users install, so the release packs here
 and runs ``mcpb validate`` only in a job whose output nothing uses.
 
 Packs every file under the folder except ``.mcpbignore`` itself and what it
-lists, as ``mcpb pack`` does: a pattern ending in ``/`` excludes a directory
-anywhere in the tree, any other pattern is matched against each name. The
-archive is deterministic: sorted entries, a fixed timestamp and mode.
+lists, one pattern per line; blank lines and ``#`` comments are skipped. A
+pattern ending in ``/`` excludes a directory: anywhere in the tree when it
+has no other slash, at that path when it does. Any other pattern is matched
+against each file's name and its path. ``!`` negations are refused rather
+than ignored, since packing what ``mcpb pack`` would leave out (or the
+reverse) changes the bytes users install. The archive is deterministic:
+sorted entries, a fixed timestamp and mode.
 
 Usage: pack_extension.py SOURCE_DIR OUTPUT.mcpb
 """
@@ -25,9 +29,33 @@ IGNORE_FILE = ".mcpbignore"
 TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
+def read_patterns(source: Path) -> list[str]:
+    patterns = []
+    for line in (source / IGNORE_FILE).read_text(encoding="utf-8").splitlines():
+        pattern = line.strip()
+        if not pattern or pattern.startswith("#"):
+            continue
+        if pattern.startswith("!"):
+            raise ValueError(f"{IGNORE_FILE}: negation is not supported: {pattern}")
+        patterns.append(pattern.lstrip("/"))
+    return patterns
+
+
+def _directory_excluded(relative: Path, pattern: str) -> bool:
+    pattern = pattern.rstrip("/")
+    parents = relative.parts[:-1]
+    if "/" in pattern:
+        # Anchored: the pattern names a directory path from the folder root.
+        return any(
+            fnmatch.fnmatch("/".join(parents[: depth + 1]), pattern)
+            for depth in range(len(parents))
+        )
+    return any(fnmatch.fnmatch(part, pattern) for part in parents)
+
+
 def packed_files(source: Path) -> list[Path]:
-    patterns = (source / IGNORE_FILE).read_text(encoding="utf-8").split()
-    directories = [p.rstrip("/") for p in patterns if p.endswith("/")]
+    patterns = read_patterns(source)
+    directories = [p for p in patterns if p.endswith("/")]
     names = [p for p in patterns if not p.endswith("/")]
     files = []
     for path in sorted(source.rglob("*")):
@@ -36,7 +64,7 @@ def packed_files(source: Path) -> list[Path]:
         relative = path.relative_to(source)
         if relative.as_posix() == IGNORE_FILE:
             continue
-        if any(fnmatch.fnmatch(part, d) for part in relative.parts[:-1] for d in directories):
+        if any(_directory_excluded(relative, d) for d in directories):
             continue
         if any(fnmatch.fnmatch(relative.name, n) or fnmatch.fnmatch(relative.as_posix(), n) for n in names):
             continue

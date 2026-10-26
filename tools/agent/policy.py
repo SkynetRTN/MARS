@@ -9,6 +9,7 @@ current session.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping
 
@@ -88,6 +89,9 @@ class SessionPolicy:
 
     ask: Approver
     _always_allowed: set[tuple[str, frozenset[RiskTag]]] = field(default_factory=set, init=False)
+    # The engine thread answers calls while the console's UI thread reads or
+    # resets the set (/status, /approve), so every access holds this.
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def approve(self, proposed: "ToolCallProposed") -> Decision:
         """Return the decision for one proposed tool call."""
@@ -96,12 +100,15 @@ class SessionPolicy:
         if not tags:
             return Decision.ALLOW
         key = (proposed.name, tags)
-        if key in self._always_allowed:
-            return Decision.ALLOW
+        with self._lock:
+            if key in self._always_allowed:
+                return Decision.ALLOW
 
+        # Asked outside the lock: the answer can take a person minutes.
         decision = self.ask(proposed)
         if decision is Decision.ALLOW_ALWAYS:
-            self._always_allowed.add(key)
+            with self._lock:
+                self._always_allowed.add(key)
             return Decision.ALLOW
         return decision
 
@@ -109,12 +116,14 @@ class SessionPolicy:
     def always_allowed(self) -> frozenset[tuple[str, frozenset[RiskTag]]]:
         """The (tool, risk) pairs answered "Allow always" so far."""
 
-        return frozenset(self._always_allowed)
+        with self._lock:
+            return frozenset(self._always_allowed)
 
     def reset(self) -> None:
         """Forget every "Allow always", so each risky call asks again."""
 
-        self._always_allowed.clear()
+        with self._lock:
+            self._always_allowed.clear()
 
 
 def policy_approver(policy: SessionPolicy) -> Approver:
