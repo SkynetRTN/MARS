@@ -241,13 +241,21 @@ Evidence: [query backends](../../algorithms/query/),
   `../installing.md` does not cover the console, and the default Ollama
   model's `-mlx` tag may exist only on Apple Silicon. A clean install on
   each supported OS must reach a working session or an accurate next step.
+  *In progress (2026-10-26):* the message now depends on the install (a
+  checkout's `.env`, or the shell for an installed copy) and offers
+  `mars --backend ollama`; a missing Ollama model lists what the daemon
+  holds with the exact command to pick one or `ollama pull` it.
+  `../installing.md` has a console section, including the `-mlx` default.
+  The default model is unchanged. Remaining: a clean-install run on each
+  supported OS.
 - [ ] **Console terminals and long runs.** Nothing records the console in
   Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
   questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the
   forced dark theme on light terminals, `NO_COLOR`, and an 80-column status
   line that cuts off the stop hint and never names a quit key. Esc cannot
   stop a running tool, quitting during a plate solve may wait for it, and
-  progress reads in raw milliseconds. Record supported terminals and the
+  progress reads in raw milliseconds (now seconds and minutes past one
+  second, 2026-10-26). Record supported terminals and the
   measured stop and quit behavior during a real solve.
 - [ ] **Console failures and commands.** A tool that returns an error is
   marked ✓, and a backend failure mid-turn reports only "Session finished:
@@ -258,6 +266,14 @@ Evidence: [query backends](../../algorithms/query/),
   next step, approvals must work from the keyboard, and each listed command
   must work or be removed. Resume showing only assistant text needs a
   decision.
+  *In progress (2026-10-26):* tool calls are marked by their result (✓ only
+  for `ok`; ✗ with the error's message, `!` partial, `∅` not found). A failed
+  session names its cause from the exception's type and HTTP status, never
+  its text, plus a next step. `/status`, `/tools`, `/approve`, `/prompt` and
+  `/new` work, and a test requires a handler for every command. Approvals
+  answer to `y`/`a`/`n`, Enter on the focused Allow, and Esc, which denies.
+  "Allow always" still lasts one question, as a test pins. Remaining: the
+  maintainer's decision on resume showing only assistant text.
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of

@@ -168,6 +168,25 @@ passes, the problem is the host config. Claude Desktop logs the server's
 output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
 `%APPDATA%\Claude\logs\` on Windows.
 
+## The `mars` console
+
+The install above also puts `mars` on your `PATH`: a terminal console where a
+model calls MARS's tools itself, with no agent host. It needs a model:
+
+- **Anthropic** (the default): set `ANTHROPIC_API_KEY` in your shell before
+  starting `mars`. An installed MARS reads no `.env` file; only a checkout
+  does.
+- **A local Ollama model**, which needs no key: start `ollama serve`, then
+  `mars --backend ollama/<model>` with a model from `ollama list`. The
+  default, `qwen3.8:27b-mlx`, is an MLX build for Apple Silicon; on Linux
+  and Windows, name another model.
+
+`MARS_MODEL_BACKEND=provider/model` sets the default backend, and `/backend`
+switches inside the console. If the backend it starts on cannot be used,
+`mars` exits and says what to set or which model to name. `/help` lists the
+commands. Sessions and their artifacts are kept in the MARS home
+([Where things go](#where-things-go)).
+
 ## Optional data
 
 With the Claude Desktop extension or the Codex plugin there is no `mars-mcp`
