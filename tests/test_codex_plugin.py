@@ -68,8 +68,11 @@ def test_the_server_is_the_newest_release_run_from_uvs_cache():
     server = _SERVERS[name]
     assert name == "mars"
     assert server["command"] == "uv"
+    # -I: the launcher runs isolated, so a module planted in whatever folder
+    # Codex starts it from is never imported; --no-config: a uv.toml there
+    # cannot pick the package index.
     assert server["args"][:-1] == [
-        "run", "--no-project", "--python", "3.13", "python", "-c",
+        "run", "--no-project", "--no-config", "--python", "3.13", "python", "-I", "-c",
     ]
     assert "cwd" not in server
 

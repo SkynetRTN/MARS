@@ -214,3 +214,13 @@ def test_an_unfilled_release_setting_means_the_newest():
     entry.main([], environ=environ, run=run, execv=lambda path, argv: calls.append(argv))
     assert "skynet-mars[mcp]@latest" in calls[0]
     assert "MARS_VERSION" not in environ
+
+
+
+def test_no_uv_call_reads_a_config_file_from_the_starting_folder():
+    """The host may start the launcher anywhere; a uv.toml there must not
+    choose the index MARS comes from."""
+
+    entry = _entry_point()
+    assert "--no-config" in entry.refresh_command("uv")
+    assert "--no-config" in entry.serve_command("uv", [])

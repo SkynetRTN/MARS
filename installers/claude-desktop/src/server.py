@@ -19,7 +19,10 @@ release can be stepped back from without reinstalling anything. Empty means
 the newest. A value that is not a version stops here with a message rather
 than silently serving the newest.
 
-uv is whichever binary ran this file: ``uv run`` names it in ``UV``.
+uv is whichever binary ran this file: ``uv run`` names it in ``UV``. Every
+uv call passes ``--no-config``: the host may start this in any folder, and a
+``uv.toml`` there must not choose the index MARS is installed from. (uv's
+``UV_*`` environment variables still apply.)
 
 The manifest maps each optional ``user_config`` field to an environment
 variable. A field the user left empty can arrive as an empty string, or as
@@ -68,12 +71,12 @@ def requirements(pin=None):
 def refresh_command(uv, pin=None):
     """Fetch the release into uv's cache; runs nothing of MARS's."""
     fetch, _ = requirements(pin)
-    return [uv, "tool", "run", "--python", PYTHON, "--from", fetch, "python", "-c", "pass"]
+    return [uv, "tool", "run", "--no-config", "--python", PYTHON, "--from", fetch, "python", "-c", "pass"]
 
 
 def serve_command(uv, args, pin=None):
     _, serve = requirements(pin)
-    return [uv, "tool", "run", "--offline", "--python", PYTHON, "--from", serve, "mars-mcp", *args]
+    return [uv, "tool", "run", "--no-config", "--offline", "--python", PYTHON, "--from", serve, "mars-mcp", *args]
 
 
 def main(args, environ=os.environ, run=subprocess.run, execv=os.execv):
