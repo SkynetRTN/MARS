@@ -77,7 +77,8 @@ dedispersion. Expect the fallback there.
    Current threshold lines say Gaussian noise FAP; historical confidence
    levels are labelled uncalibrated and warn `legacy_confidence_uncalibrated`.
    Earlier Gaussian-bound artifacts also take that fallback when they lack
-   `false_alarm_statistic=residual_fraction`; recompute from the light curve.
+   `false_alarm_statistic=residual_fraction` or
+   `false_alarm_flux_centering=observed_offsets`; recompute from the light curve.
    Retuning is outside the single-search false-alarm bound.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.

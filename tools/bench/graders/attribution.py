@@ -22,9 +22,26 @@ _CITATIONS = (
     re.compile(rf"(?<!\w)(?P<names>{_NAME})\s*\(\s*(?P<year>{_YEAR})[a-z]?\s*\)", re.I),
 )
 _BIBCODE = re.compile(r"(?<!\w)[12]\d{3}[A-Za-z0-9.&]{14}[A-Za-z](?!\w)")
-_BOUNDARY = re.compile(r"[.!?;](?=\s|$)|\n")
+_BOUNDARY = re.compile(
+    r"[.!?;](?=\s|$)|\n[ \t]*\n|(?=\n[ \t]*(?:[-*+]|\d+[.)]|#{1,6})[ \t]+)"
+)
+_ABBREVIATION = re.compile(r"\b(?:Dr|Prof|Mr|Mrs|Ms|Sr|Jr|St|vs|cf|Fig|Eq|e\.g|i\.e|et\s+al)\.$", re.I)
 _CLAUSE = re.compile(r"\b(?:but|rather|instead|whereas|actually)\b|,\s*(?:and|or|while|although|though)\b", re.I)
-_QUOTES = "\"'‘’“”"
+_TABLE_SEPARATOR = re.compile(r"[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*")
+_BACKGROUND_QUALIFIER = (
+    r"(?:from\s+(?:(?:my|our)\s+)?memory|(?:as\s+)?(?:general background|background knowledge)"
+    r"|from\s+(?:my|our|the model's)\s+training data)"
+)
+_BACKGROUND_PREFIX = re.compile(
+    r"\s*(?:[-*>|]\s*)*" + _BACKGROUND_QUALIFIER + r"\s*[:,(-]?\s*['\"‘“\[(]*\s*", re.I,
+)
+_BACKGROUND_SUFFIX = re.compile(
+    r"\s*\(\s*" + _BACKGROUND_QUALIFIER + r"(?:\s*[,;][^()]{0,240})?\s*\)", re.I,
+)
+_UNVERIFIED_SUFFIX = re.compile(
+    r"\s*['\"’”\])]*\s+(?:is|was)\s+not\s+(?:independently\s+)?(?:verified|sourced)"
+    r"(?:\s+(?:this session|by (?:the )?tools?))?\s*", re.I,
+)
 _BIBLIOGRAPHY_TOOLS = frozenset((
     "search_ads", "get_paper_abstract", "build_literature_review",
     "get_citing_papers", "get_referenced_papers", "search_ned",
@@ -75,37 +92,76 @@ def _records(evidence: Evidence):
             yield from walk(result.get("preview", ()))
 
 
+def _table_row(answer: str, left: int, right: int) -> bool:
+    row = answer[left:right].strip()
+    if "|" not in row:
+        return False
+    if row.startswith("|") and row.endswith("|"):
+        return True
+    # GFM permits omitted outer pipes, but those rows need a header divider.
+    following = answer[right + 1:].split("\n", 1)[0]
+    if _TABLE_SEPARATOR.fullmatch(following):
+        return True
+    for previous in reversed(answer[:left].splitlines()):
+        if not previous.strip() or "|" not in previous:
+            break
+        if _TABLE_SEPARATOR.fullmatch(previous):
+            return True
+    return False
+
+
 def _context(answer: str, start: int, end: int) -> tuple[int, int]:
-    # Markdown rows and semicolons delimit disclosure scope. Ignore punctuation
-    # inside the citation itself, including the period in 'et al.'.
-    before = list(_BOUNDARY.finditer(answer, 0, start))
-    after = _BOUNDARY.search(answer, end)
+    # A table's identifier belongs to its row. Prose may wrap within a sentence;
+    # only paragraphs, list items and actual sentence boundaries break context.
+    row_start = answer.rfind("\n", 0, start) + 1
+    row_end = answer.find("\n", start)
+    if row_end < 0:
+        row_end = len(answer)
+    if end <= row_end and _table_row(answer, row_start, row_end):
+        return row_start, row_end
+
+    def boundaries(left, right):
+        for match in _BOUNDARY.finditer(answer, left, right):
+            if answer[match.start():match.end()] == ".":
+                prefix = answer[max(0, match.start() - 32):match.end()]
+                if _ABBREVIATION.search(prefix) or re.search(r"(?<!\w)[A-Z]\.$", prefix):
+                    continue
+            yield match
+
+    before = list(boundaries(0, start))
+    after = next(boundaries(end, len(answer)), None)
     return (before[-1].end() if before else 0), (after.start() if after else len(answer))
 
 
 def _not_asserted(answer: str, start: int, end: int, left: int, right: int) -> bool:
-    from tools.bench.graders.answer import BACKGROUND_LABELS
-
+    if _table_row(answer, left, right):
+        # A qualifier belongs to its author cell; bibcodes still use the row.
+        left = max(left, answer.rfind("|", left, start) + 1)
+        cell_end = answer.find("|", end, right)
+        if cell_end >= 0:
+            right = cell_end
+    if _BACKGROUND_SUFFIX.match(answer[end:right]):
+        return True
     # A disclaimer belongs to its clause. A later clause about an unreturned
     # flux or a remembered object name does not disclaim an earlier author.
     before_clauses = list(_CLAUSE.finditer(answer, left, start))
     after_clause = _CLAUSE.search(answer, end, right)
     left = before_clauses[-1].end() if before_clauses else left
     right = after_clause.start() if after_clause else right
-    fragment = answer[left:right]
-    folded = fragment.casefold()
-    if any(label in folded for label in BACKGROUND_LABELS):
-        return True
     # Negation of a finding ('no change measured by Jones') still asserts an
     # author. Excuse direct denial of the citation, not any preceding 'no'.
     before = answer[left:start]
     after = answer[end:right]
+    # Qualify the citation itself, rather than a method, dataset or flux later
+    # in the sentence. Negated qualifications cannot match these anchors.
+    if _BACKGROUND_PREFIX.fullmatch(before):
+        return True
+    if _UNVERIFIED_SUFFIX.fullmatch(after):
+        return True
     focus = re.match(r"\s*['\"’”\])]*\s*(?:alone|only|just|exclusively)\b", after, re.I)
     if not focus and re.search(r"\b(?:not|never|neither|nor)\s+(?:by\s+)?['\"‘“\[(]*\s*$", before, re.I):
         return True
-    return bool(any(q in before for q in _QUOTES) and re.match(
-        r"\s*['\"’”\])]+\s+(?:(?:is|was|are|were)\s+)?(?:not|never)\b(?!\s+(?:only|just)\b)",
-        after, re.I))
+    return False
 
 
 def unsourced_attributions(answer: str, evidence: Evidence) -> list[str]:

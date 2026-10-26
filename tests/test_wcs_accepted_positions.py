@@ -86,6 +86,32 @@ def test_a_nonfinite_solution_is_rejected_even_without_a_hint(monkeypatch, tmp_p
     assert header == before
 
 
+@pytest.mark.parametrize("backend", ["anet", "atlas"])
+@pytest.mark.parametrize("representation", ["cd", "pc"])
+def test_nonzero_rank_one_solution_preserves_the_original_header(
+    monkeypatch, tmp_path, backend, representation,
+):
+    solution = _wcs()
+    solution.wcs.cd = np.ones((2, 2)) / 3600
+    if representation == "pc":
+        del solution.wcs.cd
+        solution.wcs.pc = np.ones((2, 2))
+        solution.wcs.cdelt = [1 / 3600, 1 / 3600]
+    result, header, before = _run(monkeypatch, tmp_path, solution, backend=backend)
+    assert result.wcs is None
+    assert header == before
+    if backend == "atlas":
+        assert result.metadata.atlas_accepted is False
+
+
+def test_small_valid_anisotropic_solution_is_not_rejected_as_rank_deficient(monkeypatch, tmp_path):
+    solution = _wcs()
+    solution.wcs.cd = np.diag([-1e-8, 1e-4])
+    result, header, _ = _run(monkeypatch, tmp_path, solution, hint=None)
+    assert result.wcs is not None
+    assert header["CTYPE1"] == "RA---TAN"
+
+
 @pytest.mark.parametrize("frame,equinox", [("FK4", 1900.0), ("FK5", 1800.0)])
 @pytest.mark.parametrize("solution_frame", ["native", "icrs"])
 def test_header_wcs_hints_and_solutions_are_compared_in_icrs(

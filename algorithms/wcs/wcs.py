@@ -226,6 +226,9 @@ def _solution_footprint(wcs_obj: WCS, width: int, height: int) -> tuple[float, f
                (wcs_obj.wcs.crval, wcs_obj.wcs.crpix, wcs_obj.pixel_scale_matrix)):
         raise ValueError("solution has nonfinite WCS parameters")
     celestial = wcs_obj.celestial
+    sign, log_det = np.linalg.slogdet(celestial.pixel_scale_matrix)
+    if sign == 0 or not math.isfinite(log_det):
+        raise ValueError("solution has a singular celestial transformation")
     center = celestial.pixel_to_world((width - 1) / 2, (height - 1) / 2).icrs
     xs = np.linspace(-0.5, width - 0.5, 65)
     ys = np.linspace(-0.5, height - 0.5, 65)

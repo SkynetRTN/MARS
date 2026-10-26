@@ -738,6 +738,13 @@ Historical reports without the new checks remain attribution-unchecked until
 all original transcripts are regraded together. See
 [acceptance and examples](../analysis/warnings-benchmark-claims.md).
 
+The 2026-10-26 correction anchors provenance qualifications to the cited author;
+ordinary method words and negated empirical findings remain assertions.
+Identifier association survives common scholarly abbreviations and wrapped
+prose. Structural table rows retain row-level identifiers and cell-level
+qualifications; ordinary absolute-value notation does not create a table.
+See [review corrections](../analysis/m2-review-fixes.md).
+
 - `yaml.safe_load` only (S5). A Python-object construction tag raises.
 - `fixtures:` entries are **bare names**, resolved as
   `<fixture-root>/<name>.yaml`. Anything containing a path separator, a `..`

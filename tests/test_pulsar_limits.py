@@ -94,13 +94,25 @@ def test_audio_limits_precede_interpolation(monkeypatch, settings):
     ([0., 1., 2.], [0., np.inf, 1.]),
     ([1., 1., 1.], [0., 1., 0.]),
     ([0., 1.], [0., 1.]),
-    ([0., 1., 2.], [0., 1e-300, 0.]),
 ])
 def test_degenerate_periodograms_raise_a_declared_validation_error(times, values):
     with pytest.raises(ValueError):
         periodogram.compute_periodogram(
             np.array(times), np.array(values), start=0.1, stop=3.0, steps=10
         )
+
+
+@pytest.mark.parametrize("amplitude", [1.0, 1e-300, 1e300])
+def test_resolvable_flux_keeps_its_power_when_variance_would_underflow_or_overflow(amplitude):
+    result = periodogram.compute_periodogram(
+        np.array([0., 1., 2.]), np.array([0., amplitude, 0.]),
+        start=0.5, stop=0.5001, steps=1, freq_mode=True,
+    )
+    # At Nyquist, project [-1/3, 2/3, -1/3] on [1, -1, 1].
+    # Explained norm is 16/27 and twice population variance is 4/9.
+    assert result.power == pytest.approx([4 / 3], rel=2e-14)
+    assert result.peak_power == pytest.approx(4 / 3, rel=2e-14)
+    assert result.false_alarm_probability_upper_bound is None  # only three samples
 
 
 @pytest.mark.parametrize("settings", [

@@ -121,14 +121,24 @@ def _trial_terms(ts: np.ndarray, frequency: float) -> tuple[np.ndarray, np.ndarr
     return np.cos(angles), np.sin(angles)
 
 
+def _centered_flux(ys: np.ndarray) -> np.ndarray:
+    """Center observed-value offsets at a safe scale, retaining ULP variation."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        offsets = ys - ys[0]
+        scale = float(np.max(np.abs(offsets)))
+    limits.finite(scale, "flux variation", positive=True)
+    offsets = offsets / scale
+    response = offsets - offsets.mean()
+    return response / np.max(np.abs(response))
+
+
 def _peak_residual_fraction(ts: np.ndarray, ys: np.ndarray, frequency: float) -> float | None:
     """Direct RSS/TSS, or null below an estimate of the solver's resolution.
 
     Scaling the centered response keeps squared norms finite. The cutoff is
     a standard backward-error scale, not a certified forward-error enclosure.
     """
-    response = ys - ys.mean()
-    response = response / np.max(np.abs(response))
+    response = _centered_flux(ys)
     design = np.column_stack(_trial_terms(ts, frequency))
     try:
         basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
@@ -210,10 +220,9 @@ def lomb_scargle(
     if np.all(ys == ys[0]):
         raise ValueError("flux is constant; a periodogram requires variation")
 
-    h_residue = ys - ys.mean()
+    h_residue = _centered_flux(ys)
     # ArrMath.var is the population variance (divides by N).
-    with np.errstate(over="ignore", invalid="ignore"):
-        two_var_of_y = 2 * float(np.var(ys))
+    two_var_of_y = 2 * float(np.dot(h_residue, h_residue)) / ts.size
     limits.finite(two_var_of_y, "flux variance", positive=True)
 
     log_start = math.log(start)

@@ -1,6 +1,6 @@
 # MARS release closure gate
 
-Updated 2026-10-23 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
+Updated 2026-10-26 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
 closed locally on the single working branch `feature/m2`. It includes the
 channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
@@ -21,6 +21,15 @@ states what needs to change or be verified; implementation choices belong in
 the subsequent work.
 
 ## M2: results must mean what their labels and units say
+
+The 2026-10-25 comprehensive audit reopened six reproducible issues despite its
+green suite. All six are corrected on this branch: stable pulsar centering,
+nonzero singular WCS rejection, author-qualification/identifier association,
+memory-limit classification and HR write-failure notices. Fresh-review edge
+cases are covered by regressions. Latest validation: **4,094 passed, 88 skipped**,
+58 net added cases, compilation, schema goldens, generated guidance, repository
+shape and whitespace checks. See [corrections and limits](../analysis/m2-review-fixes.md).
+All changes remain local, unmerged and unpublished; other release gates remain open.
 
 - [x] **Pulsar channels and axes.** New spectrum artifacts retain the selected
   channel and attach seconds or hertz to their coordinate column. Plots and
@@ -67,11 +76,11 @@ the subsequent work.
   filtered radio noise, RFI and repeated retuning remain outside that model.
   Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
   [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
-  [34 numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
+  [numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
   and actual rendered threshold checks in both modes. All five scans complete;
   only B0329 matches its reference at the revised defaults. Frozen historical
   benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
-  Latest review follow-up: exact-constant regressions passed after eight observed
+  Earlier review follow-up: exact-constant regressions passed after eight observed
   failures; independent review found no remaining issues and verified 44
   nonconstant controls bit-for-bit against pre-fix results. Validation:
   Python 3.13.15, full offline suite **3,812 passed, 75 skipped**;

@@ -106,3 +106,14 @@ their skips. No new paid model sweep or historical regrade was performed.
 All ten M2 checkboxes are complete locally on `feature/m2`; these changes are
 unmerged and unpublished. Other release gates remain open. The
 [implementation plan](../working/warnings-benchmark-claims.md) records the work.
+
+## 2026-10-26 comprehensive-review corrections
+
+The follow-up audit found the remaining method-word exemption and abbreviation/
+line-wrap association gaps in author grading. Citation qualifications are now
+explicitly anchored, and identifier context survives scholarly abbreviations and
+wrapped prose while keeping independent blocks/table rows separate. It also
+found MemoryError masked by photometry's broad catch and HR warnings lost on
+artifact failure. Allocation errors retain `resource_limit`; ordinary HR write
+errors retain their extraction notices. See the
+[six-finding correction record](m2-review-fixes.md) and its validation ledger.

@@ -278,10 +278,14 @@ def run_photometry_on_target(
                 zero_point_mag=zero_point_mag, output_dir=output_dir,
                 write_source_table=write_source_table,
             )
+    except MemoryError:
+        raise
     except Exception as exc:
         # A compute or artifact failure must retain notices already emitted.
         try:
             file = describe_file(resolve_fits_path(target))
+        except MemoryError:
+            raise
         except Exception:
             file = FileMetadata(path=str(target), exists=False)
         return PhotometryRunResult(

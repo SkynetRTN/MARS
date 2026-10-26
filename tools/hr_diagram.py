@@ -301,7 +301,14 @@ def extract_photometry_from_fits(fits_path: str, threshold: float = 2.5) -> Tool
     except RuntimeError as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}], warnings=warnings)
 
-    artifact = _write_df_artifact(df, f"{Path(fits_path).stem}_photometry")
+    try:
+        artifact = _write_df_artifact(df, f"{Path(fits_path).stem}_photometry")
+    except MemoryError:
+        raise
+    except Exception as exc:
+        return ToolResult(status="error", warnings=warnings, errors=[{
+            "code": "tool_exception", "message": f"{type(exc).__name__}: {exc}",
+        }])
     return ToolResult(
         status="ok",
         count=len(df),

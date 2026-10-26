@@ -61,6 +61,35 @@ def test_one_ulp_flux_variation_is_not_rejected_as_constant(tmp_path, artifact_d
     assert result.peak_power is not None and np.isfinite(result.peak_power)
 
 
+@pytest.mark.parametrize("freq_mode", [False, True])
+@pytest.mark.parametrize("baseline", [0.1, -0.1, 1e-300, 1e300])
+def test_one_ulp_variation_has_translation_invariant_power_and_tail(
+    tmp_path, artifact_dir, freq_mode, baseline,
+):
+    times = np.arange(20) * 0.01
+    values = np.full(20, baseline)
+    values[10] = np.nextafter(baseline, np.inf)
+    results = []
+    for name, flux in [("absolute", values), ("offset", values - values[0])]:
+        path = tmp_path / f"{name}.ecsv"
+        Table({"time_s": times, "source1": flux}, meta={"flavour": "standard"}).write(
+            path, format="ascii.ecsv",
+        )
+        result = pulsar.compute_pulsar_periodogram(
+            path, start=1.0, stop=1.001, steps=1, freq_mode=freq_mode,
+        )
+        assert result.errors == []
+        # Independently fitted QR on the unit impulse minus its mean at 1 Hz.
+        assert result.peak_power == pytest.approx(0.006722674417646273, rel=2e-12)
+        assert result.peak_residual_fraction == pytest.approx(0.999327732558236, rel=2e-14)
+        assert result.false_alarm_probability_upper_bound == pytest.approx(0.9943001114808298, rel=2e-13)
+        assert result.false_alarm_resolution_limited is False
+        saved = Table.read(result.artifact.path, format="ascii.ecsv")
+        assert saved.meta["false_alarm_probability_upper_bound"] == result.false_alarm_probability_upper_bound
+        results.append(result)
+    assert results[0].peak_power == pytest.approx(results[1].peak_power, rel=2e-14)
+
+
 def _quadrature(exponent):
     times = np.arange(4) * 0.25
     delta = 2.0**-exponent
@@ -193,15 +222,21 @@ def test_public_thresholds_are_independent_of_host_decimal_context(
     }, rel=1e-13)
 
 
+@pytest.mark.parametrize("has_residual_statistic", [False, True])
 def test_old_gaussian_artifact_does_not_advertise_pre_fix_thresholds_as_current(
-    tmp_path, artifact_dir,
+    tmp_path, artifact_dir, has_residual_statistic,
 ):
     path = tmp_path / "old-gaussian.ecsv"
-    Table({"period_s": [0.9, 1.0, 1.1], "power": [1.0, 2.0, 1.0]}, meta={
+    metadata = {
         "channel": "sum", "false_alarm_method": "gaussian_bonferroni",
         "false_alarm_probability_upper_bound": 2.2250738585072014e-308,
         "false_alarm_thresholds": {"0.1": 1.99, "0.01": 1.9999, "0.001": 2.0},
-    }).write(path, format="ascii.ecsv")
+    }
+    if has_residual_statistic:
+        metadata["false_alarm_statistic"] = "residual_fraction"
+    Table({"period_s": [0.9, 1.0, 1.1], "power": [1.0, 2.0, 1.0]}, meta=metadata).write(
+        path, format="ascii.ecsv",
+    )
     result = pulsar.plot_pulsar(path)
     assert result.errors == []
     assert "legacy_confidence_uncalibrated" in [warning.code for warning in result.warnings]

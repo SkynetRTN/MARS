@@ -3549,6 +3549,15 @@ Both direct entry points raise `ValueError`; the public tool returns
 The equality check uses no tolerance and retains representable nonzero
 variation; ordinary nonconstant arithmetic and the trial grid are unchanged.
 
+The 2026-10-26 comprehensive review supersedes that centering arithmetic:
+accepted one-ULP variation around a fractional baseline could still yield a
+rounding-only apparent signal. Powers and residuals now share scaled
+observed-value offsets and the same centered sum of squares. The grid and
+conditional Gaussian model remain unchanged. Current artifacts additionally
+require `false_alarm_flux_centering=observed_offsets`; older M2 levels are
+uncalibrated until recomputed from the light curve. See
+[the correction record](analysis/m2-review-fixes.md).
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in

@@ -78,3 +78,13 @@ M3 live ADS grouping check remains open.
 
 Astropy references: [frame-aware WCS interface](https://docs.astropy.org/en/stable/wcs/wcsapi.html)
 and [great-circle coordinate separation](https://docs.astropy.org/en/stable/coordinates/matchsep.html).
+
+## 2026-10-26 review follow-up: nonzero singular matrices
+
+The original finite-footprint checks still accepted nonzero rank-one CD/PC
+matrices, whose forward coordinates can be finite while the inverse is NaN.
+The celestial matrix now needs a finite log determinant and nonzero sign before
+acceptance/header writes. Four backend/result regressions reproduce the gap
+before the fix; a valid small anisotropic matrix remains accepted. This closes
+the earlier singular-geometry acceptance claim without changing catalog or
+solver arithmetic. See [the correction record](m2-review-fixes.md).

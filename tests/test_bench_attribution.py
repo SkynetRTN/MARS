@@ -143,3 +143,102 @@ def test_unrelated_trailing_disclosures_and_focus_negation_do_not_hide_an_author
     result = _grade(tmp_path, answer, [_metadata(first_author="Trotter, A.")])
     assert result.passed is False
     assert any("Jones" in claim for claim in result.metrics["unsourced_attributions"])
+
+
+@pytest.mark.parametrize("answer", [
+    "Jones et al. 2017 used interpolation.",
+    "Jones et al. 2017 did not use interpolation.",
+    "Jones et al. 2017 analyzed training data.",
+    "The study of interpolation is by Jones et al. 2017.",
+    "Jones et al. 2017 measured the decline, a flux not returned by this tool.",
+    "Not from memory, Jones et al. 2017 measured the decline.",
+    "Jones et al. 2017 measured the decline, not from memory.",
+])
+def test_method_words_and_unrelated_qualifications_are_still_author_assertions(tmp_path, answer):
+    result = _grade(tmp_path, answer, [])
+    assert result.passed is False
+    assert result.metrics["unsourced_attributions"] == ["Jones et al. 2017"]
+
+
+@pytest.mark.parametrize("answer", [
+    "From memory, Jones et al. 2017 measured the decline.",
+    "As general background: Jones et al. 2017 measured the decline.",
+    "Jones et al. 2017 (from memory) measured the decline.",
+    "Jones et al. 2017 is not independently verified.",
+])
+def test_explicit_citation_qualifications_remain_disclaimed(tmp_path, answer):
+    assert _grade(tmp_path, answer, []).passed is True
+
+
+@pytest.mark.parametrize("author", ["Dr. Jones", "Prof. Jones", "A. Jones", "\nJones", "\n  Jones"])
+def test_honorifics_and_wrapped_prose_keep_the_explicit_paper_association(tmp_path, author):
+    answer = f"The paper {BIBCODE} was written by {author} et al. 2017."
+    result = _grade(tmp_path, answer, [
+        _metadata(first_author="Trotter, A."),
+        _metadata(bibcode=OTHER, first_author="Jones, A."),
+    ])
+    assert result.passed is False
+    assert result.metrics["unsourced_attributions"] == ["Jones et al. 2017"]
+
+
+@pytest.mark.parametrize("answer", [
+    f"The paper {BIBCODE} was written by Dr. Trotter et al. 2017.",
+    f"The paper {BIBCODE} was written by\nTrotter et al. 2017.",
+    f"Trotter et al. 2017 wrote {BIBCODE}. Jones et al. 2017 measured it.",
+    f"Trotter et al. 2017 wrote {BIBCODE}.\n\nJones et al. 2017 measured it.",
+    f"| {BIBCODE} | Trotter et al. 2017 |\n| {OTHER} | Jones et al. 2017 |",
+    f"Trotter et al. 2017 wrote {BIBCODE}\n- Jones et al. 2017 measured it.",
+])
+def test_association_preserves_supported_authors_and_independent_blocks(tmp_path, answer):
+    result = _grade(tmp_path, answer, [
+        _metadata(first_author="Trotter, A."),
+        _metadata(bibcode=OTHER, first_author="Jones, A."),
+    ])
+    assert result.passed is True
+
+
+def test_abbreviations_in_a_markdown_row_cannot_hide_its_bibcode(tmp_path):
+    answer = f"| {BIBCODE} | By Dr. Jones et al. 2017 |"
+    assert _grade(tmp_path, answer, [
+        _metadata(first_author="Trotter, A."),
+        _metadata(bibcode=OTHER, first_author="Jones, A."),
+    ]).passed is False
+
+
+@pytest.mark.parametrize("ending", ["|b|.", "|b|"])
+def test_absolute_value_prose_does_not_merge_independent_paper_sentences(tmp_path, ending):
+    answer = f"The paper {BIBCODE} was written by Jones et al. 2017. {OTHER} gives {ending}"
+    assert _grade(tmp_path, answer, [
+        _metadata(first_author="Trotter, A."),
+        _metadata(bibcode=OTHER, first_author="Jones, A."),
+    ]).passed is False
+
+
+@pytest.mark.parametrize("answer", [
+    "Jones et al. 2017 (from memory, not independently verified) measured the decline.",
+    "Jones et al. 2017 (general background, not independently verified this session) measured it.",
+    "Jones et al. 2017 (from memory, and not independently verified) measured it.",
+    f"| {BIBCODE} | From memory, Jones et al. 2017 |",
+    f"Paper | Author\n--- | ---\n{BIBCODE} | From memory, Jones et al. 2017",
+    f"Author | Paper\n--- | ---\nFrom memory, Jones et al. 2017 | {BIBCODE}",
+])
+def test_combined_and_table_cell_qualifications_remain_explicit_disclaimers(tmp_path, answer):
+    assert _grade(tmp_path, answer, []).passed is True
+
+
+@pytest.mark.parametrize("answer", [
+    "Jones et al. 2017 were not confirmed by later observations.",
+    "Jones et al. 2017 was not established at high significance.",
+    "Jones et al. 2017 is not independently verified by later observations.",
+    '"Jones et al. 2017" was not confirmed by later observations.',
+])
+def test_negating_confirmation_of_a_finding_still_asserts_its_author(tmp_path, answer):
+    assert _grade(tmp_path, answer, []).passed is False
+
+
+def test_unbounded_markdown_rows_keep_independent_identifiers(tmp_path):
+    answer = f"Paper | Author\n--- | ---\n{BIBCODE} | Jones et al. 2017\n{OTHER} | Another row"
+    assert _grade(tmp_path, answer, [
+        _metadata(first_author="Trotter, A."),
+        _metadata(bibcode=OTHER, first_author="Jones, A."),
+    ]).passed is False

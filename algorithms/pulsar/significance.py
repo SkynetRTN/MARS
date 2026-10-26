@@ -29,6 +29,7 @@ from . import limits
 
 METHOD = "gaussian_bonferroni"
 STATISTIC = "residual_fraction"
+CENTERING = "observed_offsets"
 PROBABILITIES = (0.1, 0.01, 0.001)
 ASSUMPTIONS = (
     "Independent Gaussian errors with equal variance around a constant mean.",

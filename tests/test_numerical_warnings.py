@@ -210,3 +210,43 @@ def test_supplied_reference_magnitudes_do_not_invent_a_landolt_transform():
             "U": {"value": 14.+i, "error": .03}}} for i in range(3)])
     assert result.errors == []
     assert "retained_catalog_uncertainty" not in {warning.code for warning in result.warnings}
+
+
+@pytest.mark.parametrize("phase", ["compute", "plot", "metadata", "hr_artifact"])
+def test_public_allocation_failure_keeps_the_resource_limit_code(phase, frame_path, tmp_path, monkeypatch):
+    from tools import hr_diagram, photometry
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test allocation failure")
+
+    if phase == "hr_artifact":
+        monkeypatch.setattr(hr_diagram, "_write_df_artifact", exhausted)
+        reply = call_tool("extract_photometry_from_fits", {"fits_path": str(frame_path("ngc5128_b"))})
+    else:
+        if phase == "metadata":
+            def invalid(*args, **kwargs):
+                raise ValueError("test compute failure")
+            monkeypatch.setattr(photometry, "compute_photometry", invalid)
+            monkeypatch.setattr(photometry, "describe_file", exhausted)
+        else:
+            monkeypatch.setattr(photometry, "compute_photometry" if phase == "compute" else "plot_photometry", exhausted)
+        reply = call_tool("run_photometry_on_target", {
+            "target": str(frame_path("ngc5128_b")), "use_field_cal": False, "output_dir": tmp_path})
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("failure", [OSError, ValueError])
+def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, frame_path, monkeypatch):
+    from tools import hr_diagram
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def fail(*args, **kwargs):
+        raise failure("test output failure")
+
+    monkeypatch.setattr(hr_diagram, "_write_df_artifact", fail)
+    reply = call_tool("extract_photometry_from_fits", {"fits_path": str(frame_path("ngc5128_b"))})
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["tool_exception"]
+    assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}

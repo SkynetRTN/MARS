@@ -9,9 +9,10 @@ original findings; implementation choices belong in subsequent work.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-23 against `main` at `9544782` (M3 PR #122). M0/M1 closed; all ten M2 checkpoints complete locally on `feature/m2`, unmerged/unpublished. Remaining gates describe missing evidence and release checks. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-26 against `main` at `9544782` (M3 PR #122). All ten M2 checkpoints and six comprehensive-review corrections complete locally on `feature/m2`, unmerged/unpublished. Remaining gates describe missing evidence and release checks. |
 | [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | M2 checkpoint complete locally on `feature/m2`; [acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md). |
 | [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | Final M2 checkpoint complete locally on `feature/m2`; [acceptance, review corrections and retained limits](../analysis/warnings-benchmark-claims.md). |
+| [m2-review-fixes.md](m2-review-fixes.md) | All six comprehensive-review findings corrected; 4,094 full-suite passes, 88 skips; [acceptance](../analysis/m2-review-fixes.md). |
 
 ## Landed
 

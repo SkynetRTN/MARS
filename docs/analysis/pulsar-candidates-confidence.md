@@ -245,3 +245,16 @@ with pre-fix `41f6a43`. Those controls include one-ULP perturbations and
 suite. Compilation, schema goldens, generated-skill consistency, repository
 shape and whitespace checks pass. Live-provider, native-Windows and external
 solver-data checks retain their separate gates.
+## 2026-10-26 review follow-up: translation-invariant centering
+
+The exact-constant guard did not establish correct statistics for accepted
+one-ULP variations. Subtracting the rounded absolute mean could manufacture
+an apparent strong signal near a fractional baseline. Both powers and residual
+fits now share observed-value offset centering and scaling, with variance
+derived from that same response. Public/ECSV tests in both modes compare a
+single perturbed observation against independent QR and the baseline-subtracted
+input. Safe scaling covers tiny and large finite baselines. Exact constants
+remain rejected. Earlier M2 Gaussian artifacts also need the new
+`false_alarm_flux_centering=observed_offsets` marker before plotting as current;
+otherwise their levels remain uncalibrated. See
+[the six-finding correction record](m2-review-fixes.md).

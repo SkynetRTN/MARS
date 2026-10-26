@@ -187,7 +187,10 @@ power thresholds that cannot be represented below the maximum are omitted.
 `false_alarm_resolution_limited` and its warning disclose either case. This
 is a numerical resolution policy, not certified floating-point interval
 arithmetic. Read the returned bound rather than deriving one from rounded
-power. New artifacts identify `false_alarm_statistic=residual_fraction`;
+power. New artifacts identify `false_alarm_statistic=residual_fraction` and
+`false_alarm_flux_centering=observed_offsets`; both are required for current
+calibration after the 2026-10-26 translation-invariance correction. Powers and
+residual fits now share observed-value offset centering and safe scaling;
 earlier Gaussian-bound artifacts need recomputation, and their saved levels
 are drawn as uncalibrated legacy thresholds.
 
