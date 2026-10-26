@@ -39,12 +39,17 @@ that rule does not depend on either.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import re
+import shutil
 from pathlib import Path
 
 __all__ = [
     "BRIEF_LIMIT",
     "CODEX_PLUGIN_COPY",
+    "INSTALL_RECORD",
     "RENDERED_COPIES",
     "REPOSITORY_COPY",
     "SERVED_URI_PREFIX",
@@ -211,26 +216,105 @@ def write_repository_copy(target: Path = REPOSITORY_COPY) -> list[str]:
     return changed
 
 
-def install_native_skill(target: Path) -> bool:
-    """Install the rendered skill at an explicitly chosen agent skill path.
+#: Written beside an installed skill: the SHA-256 of every file the installer
+#: wrote. It is what tells an unedited copy from an older release (safe to
+#: replace) apart from one the user changed (never replaced).
+INSTALL_RECORD = ".mars-skill.json"
 
-    The wheel carries the source but never writes into an agent's home on
-    install. This command is opt-in, refuses to replace a modified skill, and
-    returns false when the exact version is already present.
-    """
 
-    target = target.expanduser()
-    if target.is_symlink():
-        raise FileExistsError(f"refusing a symlinked skill directory: {target}")
-    if target.exists():
-        if target.is_dir() and not check_repository_copy(target):
-            return False
-        raise FileExistsError(f"{target} already exists with different contents")
-    target.mkdir(parents=True, mode=0o700)
-    for name, body in render_repository_copy().items():
-        path = target / name
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _write_skill(directory: Path, rendered: dict[str, str]) -> None:
+    directory.mkdir(parents=True, mode=0o700)
+    for name, body in rendered.items():
+        path = directory / name
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with path.open("x", encoding="utf-8") as handle:
             handle.write(body)
         path.chmod(0o600)
+    _write_record(directory, rendered)
+
+
+def _write_record(directory: Path, rendered: dict[str, str]) -> None:
+    record = {"files": {name: _digest(body) for name, body in sorted(rendered.items())}}
+    path = directory / INSTALL_RECORD
+    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
+def _edited_files(target: Path) -> list[str] | None:
+    """Files changed since the installer wrote them, or ``None`` without a record."""
+
+    try:
+        recorded = json.loads((target / INSTALL_RECORD).read_text(encoding="utf-8"))["files"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(recorded, dict):
+        return None
+    present = {p.relative_to(target).as_posix() for p in target.rglob("*.md")}
+    edited = set(present - recorded.keys())
+    for name, digest in recorded.items():
+        try:
+            if _digest((target / name).read_text(encoding="utf-8")) != digest:
+                edited.add(name)
+        except (OSError, UnicodeDecodeError):
+            edited.add(name)
+    return sorted(edited)
+
+
+def install_native_skill(target: Path) -> bool:
+    """Install or upgrade the rendered skill at an explicitly chosen path.
+
+    The wheel carries the source but never writes into an agent's home on
+    install; this command is opt-in. Returns false when this release's skill
+    is already there. A copy from an earlier release is replaced only when
+    it is exactly what the installer wrote (:data:`INSTALL_RECORD`): the
+    user's own changes are never overwritten, and a copy with no record --
+    from a release before the record existed -- is refused rather than
+    guessed at, since an edit cannot be told from an older version.
+    """
+
+    target = target.expanduser()
+    rendered = render_repository_copy()
+    if target.is_symlink():
+        raise FileExistsError(f"refusing a symlinked skill directory: {target}")
+    if not target.exists():
+        _write_skill(target, rendered)
+        return True
+    if not target.is_dir():
+        raise FileExistsError(f"{target} exists and is not a directory")
+    if not check_repository_copy(target):
+        if not (target / INSTALL_RECORD).is_file():
+            _write_record(target, rendered)
+        return False
+
+    edited = _edited_files(target)
+    if edited is None:
+        raise FileExistsError(
+            f"{target} already exists with different contents, and was installed "
+            "by an earlier MARS that kept no record of what it wrote, so your "
+            "edits cannot be told from an older version. If you have not edited "
+            "it, remove the directory and run this again; otherwise move it aside."
+        )
+    if edited:
+        raise FileExistsError(
+            f"{target} has your changes in {', '.join(edited)}; refusing to replace "
+            "it. Move it aside to install this release's skill."
+        )
+
+    # Unedited and older: build the new copy beside it, then swap, so an
+    # interrupted upgrade leaves one whole skill, never half of each.
+    staging = target.with_name(f".{target.name}.new-{os.getpid()}")
+    previous = target.with_name(f".{target.name}.old-{os.getpid()}")
+    shutil.rmtree(staging, ignore_errors=True)
+    _write_skill(staging, rendered)
+    os.replace(target, previous)
+    try:
+        os.replace(staging, target)
+    except OSError:
+        os.replace(previous, target)
+        raise
+    shutil.rmtree(previous, ignore_errors=True)
     return True

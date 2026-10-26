@@ -170,3 +170,47 @@ def test_without_a_network_the_last_release_fetched_still_starts(capsys):
     entry.main([], environ={"UV": "uv"}, run=run, execv=lambda path, argv: commands.append(argv))
     assert "--offline" in commands[-1]
     assert "starting the last one fetched" in capsys.readouterr().err
+
+
+
+def test_a_pinned_release_is_fetched_and_served_exactly():
+    """MARS_VERSION (the *MARS release* setting) is the rollback route: both
+    steps name that release, so the newest is neither fetched nor served."""
+
+    entry = _entry_point()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return type("Done", (), {"returncode": 0})()
+
+    entry.main([], environ={"UV": "uv", "MARS_VERSION": " 0.1.0rc5 "}, run=run, execv=lambda path, argv: calls.append(argv))
+    refresh, serve = calls[:2]
+    assert refresh[refresh.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc5"
+    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc5"
+    assert "--offline" in serve
+
+
+def test_a_pin_that_is_not_a_version_stops_with_a_message(capsys):
+    entry = _entry_point()
+    calls = []
+
+    code = entry.main([], environ={"UV": "uv", "MARS_VERSION": ">=0.1"}, run=lambda c, **k: calls.append(c), execv=lambda p, a: calls.append(a))
+
+    assert code == 2
+    assert calls == []
+    assert "not an exact release number" in capsys.readouterr().err
+
+
+def test_an_unfilled_release_setting_means_the_newest():
+    entry = _entry_point()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return type("Done", (), {"returncode": 0})()
+
+    environ = {"UV": "uv", "MARS_VERSION": "${user_config.mars_version}"}
+    entry.main([], environ=environ, run=run, execv=lambda path, argv: calls.append(argv))
+    assert "skynet-mars[mcp]@latest" in calls[0]
+    assert "MARS_VERSION" not in environ

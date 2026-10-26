@@ -56,20 +56,39 @@ def test_the_plugin_names_no_mars_version():
 
 
 def test_the_server_is_the_newest_release_run_from_uvs_cache():
-    """``@latest`` asks PyPI for the newest release each start and installs it
-    into uv's cache if needed; Python 3.13 is the newest version every MARS
-    dependency ships wheels for. No ``cwd``, and no environment in the plugin:
-    nothing may depend on the plugin's directory, which Codex replaces.
-    ``command`` is a bare name, resolved on the PATH the app was started with."""
+    """The plugin runs the Claude extension's launcher, so both routes behave
+    alike: refresh to the newest release, serve the newest cached one (so an
+    offline start still works), or the release ``MARS_VERSION`` pins. The
+    code goes in as ``python -c``: no ``cwd`` and no file in the plugin,
+    because nothing may depend on the plugin's directory, which Codex
+    replaces. ``command`` is a bare name, resolved on the PATH the app was
+    started with; Python 3.13 is the newest every MARS dependency supports."""
 
     (name,) = _SERVERS
     server = _SERVERS[name]
     assert name == "mars"
     assert server["command"] == "uv"
-    assert server["args"] == [
-        "tool", "run", "--python", "3.13", "--from", "skynet-mars[mcp]@latest", "mars-mcp",
+    assert server["args"][:-1] == [
+        "run", "--no-project", "--python", "3.13", "python", "-c",
     ]
     assert "cwd" not in server
+
+
+def test_the_launcher_is_the_extensions_own_code():
+    """One launcher for both routes; .github/scripts/sync_codex_launcher.py
+    writes this copy, and fails --check when it is stale."""
+
+    import importlib.util
+
+    script = _ROOT / ".github" / "scripts" / "sync_codex_launcher.py"
+    spec = importlib.util.spec_from_file_location("sync_codex_launcher", script)
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+
+    assert sync.main(["--check"]) == 0, "run python3 .github/scripts/sync_codex_launcher.py"
+    code = _SERVERS["mars"]["args"][-1]
+    assert "skynet-mars[mcp]" in code and '"--offline"' in code
+    compile(code, "<launcher>", "exec")
     shipped = {p.name for p in _PLUGIN.iterdir()}
     assert not shipped & {"pyproject.toml", "uv.lock", "src", ".venv"}
 
@@ -121,6 +140,7 @@ def test_only_variables_mars_reads_are_forwarded():
         "ADS_DEV_KEY",
         MARS_HOME_ENV,
         TOOLS_ENV,
+        "MARS_VERSION",
         "XDG_DATA_HOME",
         "CASDA_OPAL_USERNAME",
         "DBUS_SESSION_BUS_ADDRESS",

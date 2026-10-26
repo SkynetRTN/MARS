@@ -3,13 +3,13 @@
     "mars": {
       "command": "uv",
       "args": [
-        "tool",
         "run",
+        "--no-project",
         "--python",
         "3.13",
-        "--from",
-        "skynet-mars[mcp]@latest",
-        "mars-mcp"
+        "python",
+        "-c",
+        "# The MARS launcher, copied from installers/claude-desktop/src/server.py by .github/scripts/sync_codex_launcher.py.\nimport os\nimport re\nimport shutil\nimport subprocess\nimport sys\n\nOPTIONAL_SETTINGS = (\"ADS_DEV_KEY\", \"MARS_MCP_TOOLS\", \"MARS_HOME\", \"MARS_VERSION\")\n\n#: A release as PyPI names one (PEP 440's characters), never a specifier.\nVERSION = re.compile(r\"[0-9][0-9A-Za-z.!+-]*\")\n\n#: The one Python every MARS dependency ships wheels for (docs/installing.md).\nPYTHON = \"3.13\"\nREQUIREMENT = \"skynet-mars[mcp]\"\n\n\ndef drop_unset(environ):\n    for name in OPTIONAL_SETTINGS:\n        value = environ.get(name)\n        if value is not None and (not value.strip() or value.startswith(\"${\")):\n            del environ[name]\n\n\ndef uv_binary(environ):\n    return environ.get(\"UV\") or shutil.which(\"uv\") or \"uv\"\n\n\ndef requirements(pin=None):\n    \"\"\"What step 1 fetches and step 2 serves: the newest, or the pinned one.\"\"\"\n    if pin:\n        return f\"{REQUIREMENT}=={pin}\", f\"{REQUIREMENT}=={pin}\"\n    return f\"{REQUIREMENT}@latest\", REQUIREMENT\n\n\ndef refresh_command(uv, pin=None):\n    \"\"\"Fetch the release into uv's cache; runs nothing of MARS's.\"\"\"\n    fetch, _ = requirements(pin)\n    return [uv, \"tool\", \"run\", \"--python\", PYTHON, \"--from\", fetch, \"python\", \"-c\", \"pass\"]\n\n\ndef serve_command(uv, args, pin=None):\n    _, serve = requirements(pin)\n    return [uv, \"tool\", \"run\", \"--offline\", \"--python\", PYTHON, \"--from\", serve, \"mars-mcp\", *args]\n\n\ndef main(args, environ=os.environ, run=subprocess.run, execv=os.execv):\n    drop_unset(environ)\n    pin = environ.get(\"MARS_VERSION\", \"\").strip() or None\n    if pin is not None and not VERSION.fullmatch(pin):\n        print(f\"mars: MARS_VERSION={pin!r} is not an exact release number; leave it empty for the newest.\", file=sys.stderr)\n        return 2\n    uv = uv_binary(environ)\n    refreshed = run(refresh_command(uv, pin), stdin=subprocess.DEVNULL, stdout=sys.stderr, env=environ)\n    if refreshed.returncode != 0:\n        if pin:\n            print(f\"mars: could not fetch release {pin}; starting it from uv's cache if it was fetched before.\", file=sys.stderr)\n        else:\n            print(\"mars: could not reach PyPI for the newest release; starting the last one fetched.\", file=sys.stderr)\n    command = serve_command(uv, args, pin)\n    if os.name == \"posix\":\n        # Replace this process, so the host's signals reach mars-mcp directly.\n        execv(command[0] if os.path.isabs(command[0]) else shutil.which(command[0]) or command[0], command)\n    return run(command, env=environ).returncode\n\n\nif __name__ == \"__main__\":\n    sys.exit(main(sys.argv[1:]))\n"
       ],
       "env": {
         "UV_PYTHON_DOWNLOADS": "automatic"
@@ -18,6 +18,7 @@
         "ADS_DEV_KEY",
         "MARS_HOME",
         "MARS_MCP_TOOLS",
+        "MARS_VERSION",
         "XDG_DATA_HOME",
         "CASDA_OPAL_USERNAME",
         "DBUS_SESSION_BUS_ADDRESS",

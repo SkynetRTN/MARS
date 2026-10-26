@@ -217,6 +217,25 @@ Evidence: [query backends](../../algorithms/query/),
   behind the server, and the native skill installer rejects older pristine
   copies. Upgrade, startup failure, offline use and rollback need documented,
   verified behavior that preserves user changes.
+  *In progress (2026-10-26),* with the maintainer's choices:
+  - **One launcher:** the Codex plugin now runs the Claude extension's
+    launcher (`uv run python -c`, kept identical by a test), so both routes
+    fall back offline to the newest cached release.
+  - **Rollback:** `MARS_VERSION`, the extension's *MARS release* setting,
+    pins a release; a malformed pin stops with a message. Extension and
+    plugin are now 1.1.0.
+  - **Verified on this host** through both routes' own commands: an online
+    start; no network (a dead proxy), which started the newest cached
+    release, rc6; a pin to rc5 served rc5; a bad pin exited 2.
+  - **Skill upgrades:** `install-skill` writes a record of what it wrote. It
+    upgrades an unedited older copy by swapping in a complete new one, and
+    refuses an edited copy, naming the edited files. A copy from before the
+    record existed is refused, with how to proceed.
+  - **Docs:** `../installing.md` has an updates, offline and rollback
+    table; the installer READMEs explain the shared launcher and that the
+    plugin's skill copy can lag the server.
+  - **Remaining:** re-check the changed Codex launch in the ChatGPT app on
+    Windows and Linux, and the *MARS release* setting in Claude Desktop.
 - [ ] **Installed commands and data.** `mars-bench` ships without its
   checkout-only assets. Verify its installed behavior and cross-platform bundle
   installation, interruption and recovery. Record current cold/warm startup

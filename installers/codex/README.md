@@ -5,17 +5,21 @@ threads), the Codex CLI and the Codex IDE extension. All three share
 `~/.codex`, so one install serves all of them. The plugin carries the MCP
 server's launch configuration and the `mars-tools` skill. It carries no Python,
 no dependencies and no MARS version. Codex starts the server with
+`uv run --no-project --python 3.13 python -c <launcher>`, where the launcher
+is the Claude Desktop extension's own
+[`src/server.py`](../claude-desktop/src/server.py), copied into `.mcp.json` by
+`.github/scripts/sync_codex_launcher.py` (a test keeps them identical). It
+runs the **newest `skynet-mars` release** on PyPI in two steps:
 
-```bash
-uv tool run --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp
-```
+1. `uv tool run --from "skynet-mars[mcp]@latest"` fetches the newest release
+   into uv's cache if it is not there yet: Python 3.13 and about 640 MB of
+   dependencies the first time, a quick check after that.
+2. `uv tool run --offline --from "skynet-mars[mcp]" mars-mcp` starts the
+   newest release in the cache.
 
-which runs the **newest `skynet-mars` release** on PyPI, like the Claude
-Desktop extension. Each start asks PyPI for the newest release and installs it
-into uv's cache if it is not there yet: Python 3.13 and about 640 MB of
-dependencies the first time, a quick check after that. So the plugin picks up
-a new MARS release the next time it starts, with no change here. Starting
-needs that one PyPI lookup; with no network the server does not start.
+So the plugin picks up a new MARS release the next time it starts, with no
+change here, and **with no network it starts the last release fetched**.
+`MARS_VERSION` pins one release instead (see [Settings](#settings)).
 
 The server runs from uv's cache, never from the plugin's directory. Codex
 replaces that directory while a server starts, and an earlier design that ran
@@ -86,6 +90,9 @@ Codex asks before any tool that writes an artifact
 **Updating.** A new MARS release needs nothing: the server starts the newest
 one. A new version of the plugin itself (its launch settings or skill) comes
 with `codex plugin marketplace upgrade mars`, then `codex plugin add mars@mars`.
+Until then the plugin's copy of the `mars-tools` skill can be older than the
+server, which always sends its own current guide as instructions and
+`mars://skill/` resources.
 
 ## Settings
 
@@ -99,6 +106,7 @@ started with them:
 | `ADS_DEV_KEY` | Enables the ADS literature tools. Simpler for a desktop app: write the token to `~/.ads/dev_key` |
 | `MARS_HOME`, `XDG_DATA_HOME` | Where artifacts, downloads and data bundles go. Default: `~/.local/share/mars` |
 | `MARS_MCP_TOOLS` | A subset of tool groups to serve: `databases`, `optical`, `timeseries`, `hr`, `radio` |
+| `MARS_VERSION` | Run this exact release (for example to step back from a bad one) instead of the newest. Empty or unset means the newest |
 | `CASDA_OPAL_USERNAME` | CASDA downloads. The password is read from the system keyring, which needs `DBUS_SESSION_BUS_ADDRESS` (or `XDG_RUNTIME_DIR`); both are forwarded |
 | `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' index and catalogue data ([installing](../../docs/installing.md)) |
 

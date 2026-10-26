@@ -170,6 +170,28 @@ passes, the problem is the host config. Claude Desktop logs the server's
 output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
 `%APPDATA%\Claude\logs\` on Windows.
 
+## Updates, offline use and rollback
+
+| | Claude Desktop extension, Codex plugin | `uv tool install` |
+| --- | --- | --- |
+| **New release** | Picked up at the next start: the launcher asks PyPI for the newest release each time. Nothing to do. | `uv tool upgrade skynet-mars` |
+| **No network** | Starts the newest release already in uv's cache, and says so in the app's log. Only a first start needs the network. | Runs what is installed. |
+| **Roll back** | Set the extension's *MARS release* setting, or `MARS_VERSION` for Codex, to an earlier release (for example `0.1.0rc5`). Clear it to return to the newest. | `uv tool install --force --python 3.13 "skynet-mars[mcp]==<version>"` |
+| **Fails to start** | Run the self-test below; when it passes, the fault is in the app's configuration. The app's log has the server's output. | `mars-mcp self-test` |
+
+```bash
+uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
+```
+
+An update never touches your files. Artifacts, downloads and bundles stay in
+the MARS home; after an upgrade, `mars-mcp fetch-data` re-checks installed
+bundles against the new release's pins and downloads only what changed. The
+skill copy `mars-mcp install-skill` wrote is upgraded by running it again if
+you have not edited it; with your edits it is left alone and the edited files
+are named. The Codex plugin's own copy of the skill updates with the plugin
+(`codex plugin marketplace upgrade mars`); the server always sends its current
+guide as instructions and resources.
+
 ## The `mars` console
 
 The install above also puts `mars` on your `PATH`: a terminal console where a

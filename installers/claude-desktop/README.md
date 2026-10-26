@@ -20,9 +20,14 @@ uv run --directory <unpacked extension> --locked src/server.py
    cache. Without a network, step 1 fails and the last release fetched still
    starts.
 
+The *MARS release* setting (`MARS_VERSION`) pins one release instead, for
+both steps: the way to step back from a bad release. The Codex plugin runs
+this same file (see [its README](../codex/README.md)); after changing it, run
+`python3 .github/scripts/sync_codex_launcher.py`.
+
 | File | What |
 | --- | --- |
-| `manifest.json` | Name, the extension's own version, the `uv run` command, and three optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, and the MARS home |
+| `manifest.json` | Name, the extension's own version, the `uv run` command, and four optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, the MARS home, and a MARS release to pin |
 | `pyproject.toml`, `uv.lock` | The entry point's environment, empty on purpose: MARS comes from `uv tool run` |
 | `src/server.py` | Removes settings the user left empty, then runs the newest `mars-mcp` |
 | `icon.png` | The 512 px mark, exported by `docs/assets/make_brand.py` |
