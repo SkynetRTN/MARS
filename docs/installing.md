@@ -20,7 +20,9 @@ mars-mcp self-test
 ```
 
 This creates a private environment for MARS and puts its commands
-(`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. uv fetches
+(`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. `mars-bench`
+benchmarks models on suites kept in a checkout's `benchmarks/`, which the
+package does not ship; run it from the root of a clone. uv fetches
 Python 3.13 itself if you do not have it. `self-test` launches the server the
 way a host would. If it passes, the install works. If `mars-mcp` is not
 found, uv's command directory is not on your `PATH` yet: run

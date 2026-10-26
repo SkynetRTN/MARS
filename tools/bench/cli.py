@@ -174,6 +174,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    suite_root = getattr(args, "suite_root", None)
+    if suite_root is not None and not Path(suite_root).is_dir():
+        print(_no_suites_message(Path(suite_root)), file=sys.stderr)
+        return 2
     if args.verb == "run":
         return _run(args)
     if args.verb == "grade":
@@ -187,6 +191,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.verb == "record":
         return _record(args)
     raise SystemExit(f"unknown verb {args.verb!r}")
+
+
+def _no_suites_message(suite_root: Path) -> str:
+    """Why an installed ``mars-bench`` finds nothing to run, and what to do.
+
+    The suites, answer keys and recorded fixtures are inputs kept in the
+    repository's ``benchmarks/``, which the package does not ship. The
+    defaults are relative to the working directory, so a run from anywhere
+    but a checkout's root used to end in a ``FileNotFoundError`` traceback.
+    """
+
+    return (
+        f"mars-bench: no benchmark suites at {suite_root}. The suites and "
+        "fixtures live in a MARS checkout (benchmarks/), not in the installed "
+        "package. Run mars-bench from the root of a clone "
+        "(git clone https://github.com/SkynetRTN/MARS), or pass --suite-root "
+        "and --fixture-root."
+    )
 
 
 def _falsify(args: Any) -> int:

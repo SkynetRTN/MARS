@@ -46,6 +46,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from tools.paths import bundled_data_dir
+
 __all__ = [
     "SOURCE_KINDS",
     "SourceError",
@@ -212,11 +214,14 @@ def _resolve_fixture(
     )
 
 
-#: The repository's own data tree. Deliberately **not** ``tools.config.DATA_DIR``:
-#: that one is an operator setting, and a ground-truth reference that moves when
-#: an operator repoints a directory is not ground truth. ``tools/wcs.py`` pins
-#: its fixture-subtree guard to the repository for the same reason.
-REPO_DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
+#: The package's own bundled data: the repository's ``data/`` in a checkout,
+#: the shipped core data in a wheel (``tools.paths.bundled_data_dir``). It was
+#: ``parents[2] / "data"``, which under a wheel names a directory that does
+#: not exist. Deliberately **not** ``tools.config.DATA_DIR``: that one is an
+#: operator setting, and a ground-truth reference that moves when an operator
+#: repoints a directory is not ground truth. ``tools/wcs.py`` pins its
+#: fixture-subtree guard to the bundled data for the same reason.
+REPO_DATA_ROOT = bundled_data_dir()
 
 
 def _resolve_dataset(

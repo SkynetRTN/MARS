@@ -269,10 +269,19 @@ jobs:
             echo "ok $archive"
           done
 
+  # Every supported platform (M4): bundle installation writes, renames and
+  # verifies trees under the MARS home, which differs per OS.
   verify-data:
-    name: verify installed optional data
+    name: verify installed optional data (${{ matrix.os }})
     needs: [build, data]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -287,12 +296,14 @@ jobs:
           MPLBACKEND: Agg
         working-directory: ${{ runner.temp }}
         run: |
-          python -m venv "$RUNNER_TEMP/mars"
-          wheel=$(ls "$GITHUB_WORKSPACE"/dist/*.whl)
-          "$RUNNER_TEMP/mars/bin/pip" install --quiet "${wheel}[mcp]"
-          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data all
-          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data --verify
-          "$RUNNER_TEMP/mars/bin/mars-mcp" self-test --with-data
+          python -m venv mars
+          # A venv keeps its interpreter in Scripts/ on Windows, bin/ elsewhere.
+          if [ -d mars/Scripts ]; then py=mars/Scripts/python; else py=mars/bin/python; fi
+          wheel=$(python -c 'import glob, os; print(glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "dist", "*.whl"))[0])')
+          "$py" -m pip install --quiet "${wheel}[mcp]"
+          "$py" -m tools.mcp fetch-data all
+          "$py" -m tools.mcp fetch-data --verify
+          "$py" -m tools.mcp self-test --with-data
 
   publish:
     name: publish

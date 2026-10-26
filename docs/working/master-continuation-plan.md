@@ -222,11 +222,25 @@ Evidence: [query backends](../../algorithms/query/),
   installation, interruption and recovery. Record current cold/warm startup
   where host timeouts matter. Claude's MCPB is built manually and is absent
   from release assets; the advertised installation route must say so.
-  *In progress:* the release workflow now packs `mars.mcpb`, runs its launch
-  command through `self-test` against the release build on macOS and
-  Windows runners, and attaches it to the GitHub release; the install guide
-  says which releases carry it. No release has shipped it yet, and the
-  workflow job has not run.
+  *In progress (2026-10-26):*
+  - **`mars-bench`:** checked from a built wheel. Outside a checkout it now
+    exits 2 and says the suites live in a clone, instead of a traceback. From
+    a clone's root it replays the smoke suite. Its reference data now
+    resolves through the bundled-data root rather than a path beside the
+    package. `../installing.md` says it needs a checkout.
+  - **Bundles:** interruption and recovery are unit-tested (an interrupted
+    swap, a restored backup, a resumed range download, a corrupt marker).
+    The release workflow's installed-wheel `fetch-data all`, `--verify` and
+    `self-test --with-data` now run on Linux, macOS and Windows, not Linux
+    only. actionlint and zizmor are clean.
+  - **Startup:** the routes' own command (`uvx … mars-mcp self-test`) took
+    47 s cold, from an empty uv cache with uv-managed Python only (752 MB
+    cache + 91 MB Python), and 8.2 s warm, on this 8-core aarch64 host. Both
+    include a blind pulsar detection. The Codex plugin allows 600 s to start.
+  - **MCPB:** the release workflow packs, tests and attaches `mars.mcpb`, and
+    the guides point at the newest release.
+  - **Remaining:** none of these workflow jobs has run. A `workflow_dispatch`
+    dry run of Release would exercise them before the next tag.
 - [x] **Configured solver success.** A blind WCS test can skip after failing
   even when resources exist, and omits configured settings. ATLAS reachability
   does not establish blind convergence. A supported known-solution fixture

@@ -245,3 +245,34 @@ def test_answers_filters_to_nothing_without_failing(tmp_path, capsys):
     out = _replay_run(tmp_path)
     assert main(["answers", str(out), "--task", "no-such-task"]) == 0
     assert "No sessions matched." in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Installed: the suites are not in the package
+
+
+@pytest.mark.parametrize("verb", ["run", "grade", "falsify", "answers"])
+def test_a_missing_suite_root_says_where_the_suites_live(tmp_path, capsys, verb):
+    """An installed mars-bench run outside a checkout used to end in a
+    FileNotFoundError traceback for benchmarks/suites."""
+
+    missing = tmp_path / "benchmarks" / "suites"
+    argv = {
+        "run": ["run", "smoke", "--dry-run"],
+        "grade": ["grade", str(tmp_path)],
+        "falsify": ["falsify", str(tmp_path)],
+        "answers": ["answers", str(tmp_path)],
+    }[verb]
+
+    assert main([*argv, "--suite-root", str(missing)]) == 2
+    err = capsys.readouterr().err
+    assert f"no benchmark suites at {missing}" in err
+    assert "checkout" in err
+    assert "--suite-root" in err
+
+
+def test_reference_data_is_the_bundled_data_not_a_path_beside_the_package():
+    from tools.bench.sources import REPO_DATA_ROOT
+    from tools.paths import bundled_data_dir
+
+    assert REPO_DATA_ROOT == bundled_data_dir()
