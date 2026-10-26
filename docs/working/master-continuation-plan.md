@@ -24,305 +24,120 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-The 2026-10-25 comprehensive audit reopened six reproducible issues despite its
-green suite. All six are corrected on this branch: stable pulsar centering,
-nonzero singular WCS rejection, author-qualification/identifier association,
-memory-limit classification and HR write-failure notices. Fresh-review edge
-cases are covered by regressions. Latest validation: **4,094 passed, 88 skipped**,
-58 net added cases, compilation, schema goldens, generated guidance, repository
-shape and whitespace checks. See [review corrections and limits](#m2-review-corrections).
-All changes remain local, unmerged and unpublished; other release gates remain open.
+**Complete on `feature/m2`, including the comprehensive-review fixes in
+`71d3a80`.** The changes are pushed for review, unmerged and unpublished.
+Other release gates remain open. Technical derivations and detailed acceptance
+evidence are linked below; this section records outcomes and remaining limits.
 
-- [x] **Pulsar channels and axes.** New spectrum artifacts retain the selected
-  channel and attach seconds or hertz to their coordinate column. Plots and
-  their metadata identify Sum, XX or YY; period spectra use logarithmic seconds
-  and frequency spectra use linear hertz. Both label spectral power and include
-  units on peak coordinates. Older artifacts with missing or unrecognized
-  channel metadata show "Unknown channel" and warn, while their saved coordinate
-  column determines the axis even without a reliable mode flag. Non-string
-  channel metadata also takes that fallback. Standard-format single-flux
-  spectra use "Data" without claiming a polarization, preserving the selected
-  `sum` or `source1` channel. Evidence:
-  [spectrum acceptance tests](../../tests/test_pulsar_spectrum_semantics.py)
-  inspect actual matplotlib traces, axes, peak markers and confidence lines
-  across all three channels and both modes, plus legacy artifacts.
-  Validation: Python 3.13.15 with locked dependencies and `[mcp]`, full offline
-  suite **3,409 passed, 49 skipped**; compileall, generated-skill consistency
-  and `git diff --check` pass. Skips retain the live-service, untracked benchmark,
-  native Windows and external solver-data gates. Changes are local to this
-  feature branch and are not in published `0.1.0rc6`.
-- [x] **Pulsar candidates and confidence.** Every candidate exposes `period_s`,
-  `frequency_hz` and `power` in either mode; search bounds have `search_unit`,
-  and `evaluated_trials` counts the actual saved grid. Defaults use twice
-  median positive spacing through 3 s (the reciprocal frequency band).
-  Irregular epochs get an explicit search heuristic and warning, with no
-  claimed hard Nyquist limit; all stages rederive sampling from the data.
-  Legacy confidence fields return null/empty. Their replacement is a
-  finite-sample Gaussian-noise tail with a Bonferroni union bound over actual
-  trials, without assuming independent frequencies. Numerically degenerate
-  Nyquist trials use a stable SVD projection. Results/plots state the noise
-  model; old artifact thresholds are uncalibrated. Independent review's
-  maximum-power endpoint defect is corrected: directly fitted RSS/TSS retains
-  the resolvable tail near `1.05e-8` in its four-sample reproduction. Fits below
-  estimated solver resolution return null and warn; this estimate is not a
-  certified numerical error enclosure. Threshold inverses use 80-digit Decimal
-  arithmetic isolated from host Decimal settings, round toward larger powers
-  and omit unrepresentable levels with a warning. Earlier Gaussian artifacts
-  without the residual-statistic marker also plot as uncalibrated; see the
-  [review correction](../analysis/pulsar-candidates-confidence.md#review-follow-up-endpoint-probability-correction).
-  Exact constants, including fractional values whose rounded means fabricate
-  positive variance, fail before power/significance evaluation; public results
-  return `invalid_input` without a spectrum or noise bound. One-ULP variation
-  remains accepted. Neither the bound nor
-  empirical fold SNR is a pulsar/correct-period probability. Correlated or
-  filtered radio noise, RFI and repeated retuning remain outside that model.
-  Evidence: [derivation and acceptance record](../analysis/pulsar-candidates-confidence.md),
-  [independent references and regressions](../../tests/test_pulsar_candidates_confidence.py),
-  [numerical precision regressions](../../tests/test_pulsar_probability_precision.py),
-  and actual rendered threshold checks in both modes. All five scans complete;
-  only B0329 matches its reference at the revised defaults. Frozen historical
-  benchmark verdict keys remain unchanged; no model sweep was rerun/regraded.
-  Earlier review follow-up: exact-constant regressions passed after eight observed
-  failures; independent review found no remaining issues and verified 44
-  nonconstant controls bit-for-bit against pre-fix results. Validation:
-  Python 3.13.15, full offline suite **3,812 passed, 75 skipped**;
-  compileall, schema goldens, generated-skill consistency, repository shape and
-  `git diff --check` pass. The changes remain local, unmerged and unpublished.
-- [x] **Variable-star powers and errors.** Weighted floating-mean least squares
-  uses the same inverse-variance weights for the response, fitted columns and
-  reference variance. Standard power in [0, 1] is fractional weighted chi-square
-  improvement, not a detection probability. Response offsets are scaled before
-  squared energies to preserve powers at tiny and large amplitudes. SVD uses
-  an estimated solver/phase resolution policy for collapsed aliases; exact constants remain rejected
-  publicly. Differential standard errors use independent quadrature without
-  halving; covariance, shared systematics and uncertainty in the fixed reference
-  magnitude are excluded. Public stages rederive old cached errors from source
-  components, reject unrepresentable full error bars and identify days,
-  magnitudes, normalization and uncertainty convention in results/artifacts.
-  The period grid, work bounds and fold ordering remain. Evidence:
-  [derivation and acceptance record](../analysis/variable-star-powers-errors.md),
-  [25 scientific regressions](../../tests/test_variable_star_science.py),
-  independent Astropy/full-model QR comparisons and public ECSV handoffs.
-  Review found and verified constant-series and response-amplitude corrections;
-  final review has no outstanding findings. Validation: Python 3.13.15,
-  full offline suite **3,503 passed, 49 skipped**; compileall, schema goldens, generated-skill
-  consistency, repository shape and `git diff --check` pass. M3 subsequently
-  defines direct constant rejection and masked missing fold bounds; the
-  [integration record](../analysis/m2-m3-integration.md) checks coexistence with
-  M2's science. M2 changes remain local, unmerged and unpublished.
-- [x] **Cluster ages and membership.** Legacy HR helpers convert MWSC log-year
-  ages to Myr within the retained 13.8 Gyr display window, keeping valid old
-  clusters. FSR joins use exact IDs independent of source/result order and
-  numeric conversion; source order, in-place updates and first duplicate
-  results are retained. Membership accepts finite zero proper motion and
-  rejects missing/nonfinite components, including with unbounded selection.
-  Zero-width ellipse axes define closed lines or points. Post-commit review
-  corrected NumPy integer-age arithmetic and exact decimal ellipse endpoints
-  while rejecting immediately adjacent outside values. These exported legacy
-  helpers have no registered-tool callers; the separate registered membership
-  implementation already accepts zero motion, verified through its written
-  ECSV output. No membership probabilities are claimed. Evidence:
-  [scope and acceptance record](../analysis/cluster-ages-membership.md),
-  [34 regressions](../../tests/test_cluster_ages_membership.py), and independent
-  follow-up review with no outstanding findings. **73 cluster/HR tests** pass.
-  Validation: Python 3.13.15, full offline suite **3,514 passed, 49 skipped**;
-  compileall, schema goldens, generated-skill consistency, repository shape and
-  `git diff --check` pass. Changes remain local, unmerged and unpublished.
-- [x] **Legacy coordinates, extinction and mass.** Signed DMS/HMS triples carry
-  the angle's sign in their first component, including negative zero below one
-  degree/hour. The legacy CCM89 IR/optical helper rejects unsupported WISE
-  bands, honors R(V) throughout, propagates it through plot parameters and uses
-  nominal V wavelength 0.55 microns. Supported domains and monochromatic
-  passband limitations are explicit. The old trimmed radial mean is replaced
-  by observed isotropic one-dimensional PM RMS about the supplied center,
-  with no intrinsic/noise-free dispersion claim. Summaries identify units,
-  methods and limitations: projected number radius and eta=10 virial mass
-  proxy, with unverified structural/equilibrium assumptions. Protected mass
-  and radius conversion arithmetic is unchanged and independently checked.
-  Caller searches found no registered-tool use of these exported legacy APIs;
-  the newer HR fitter remains separate. Evidence:
-  [derivation and acceptance record](../analysis/legacy-coordinates-extinction-mass.md),
-  [51 scientific cases](../../tests/test_hrdiagram_legacy_science.py), independent
-  Astropy/CCM89/Decimal references, and review with no outstanding findings.
-  Validation: **144 focused tests passed**; Python 3.13.15 full offline suite
-  **3,565 passed, 49 skipped**. Compileall, schema goldens, generated-skill
-  consistency, repository shape and `git diff --check` pass. Changes remain
-  local, unmerged and unpublished.
-- [x] **Accepted sky positions and reference stars.** Missing-scale position
-  checks now derive image size from the solved WCS, preserving the one-degree
-  floor and three-diagonal tolerance. Header-WCS hints and candidate centres
-  use ICRS; nonfinite/singular geometry is rejected before header write-back.
-  ATLAS references use the solved centre and a padded, sampled outer-pixel
-  footprint, including rotation, shear, offset CRPIX and SIP edge curvature.
-  RA seams and pole-crossing follow-ups retain coverage with bounded queries;
-  oversized footprints fail before catalog initialization. Southern no-WCS
-  fallback coordinates retain their sign, including `-00` degrees. Evidence:
-  [acceptance record and scope limits](../analysis/accepted-sky-positions.md),
-  [19 pipeline cases](../../tests/test_wcs_accepted_positions.py), signed
-  fallback regressions, independent analytical TAN/cap checks and fresh review
-  with no outstanding findings. M3 PR #122 was integrated and validated in
-  `160b3e4` before this work. Final Python 3.13.15 offline suite:
-  **3,798 passed, 75 skipped**. Compilation, schema goldens, generated-skill
-  consistency, repository shape and whitespace checks pass. Native convergence,
-  sampled-distortion limits and catalog completeness retain their separately
-  documented evidence gates. Changes remain local to `feature/m2`.
-- [x] **Photometric calibration.** PHOT-03/09/10/14: rejection runs for small
-  samples while retaining at least two stars; weighted residuals use each
-  star's measurement error plus fitted scatter. The likelihood admits zero
-  additional variance, preserves heterogeneous weights and compares positive
-  minima with the boundary. Known saturated measurements are removed before
-  brightness trimming, magnitude zero sorts normally, and explicit gain `1`
-  is honored. Solver and plot share an exact surviving-row mask. Empirical
-  zero-point errors avoid the former cancellation crash; M3's degenerate-solve
-  safeguards remain. Evidence: [acceptance, independent references and limits](../analysis/photometric-calibration.md),
-  22 new scientific cases, real-frame gain control, independent joint fits on
-  all four unchanged recorded inputs and fresh review with no outstanding
-  findings. The corrected NGC 5128 result exceeds the historical parity
-  tolerance; comparisons disclose this without changing fixtures or thresholds.
-  Final Python 3.13.15 offline suite: **3,834 passed, 75 skipped**. Compilation,
-  schema goldens, generated guidance, repository shape and whitespace checks
-  pass. PHOT-06 downsampled saturation counts, calibration sufficiency and
-  retained numerical limitations remain open in their separate gates.
-  Changes remain local to `feature/m2`.
-- [x] **Catalog magnitudes and filters.** Implementation is complete and reviewed
-  on `feature/m2`: selection, numeric resolution and tool reports use one
-  production-aligned map; photographic/associated optical and Tycho bands keep
-  distinct names; UCAC Open cannot satisfy arbitrary filters. Source-name
-  aliases and spelling/case handling agree across entry points, finite zeros
-  survive, and results disclose retained approximations and relative narrowband
-  references. All 65 numerical catalog expressions, including APASS H-alpha's
-  production Lupton R expression, are unchanged by explicit maintainer request.
-  Evidence: [acceptance, supported bands and retained limits](../analysis/catalog-magnitudes-filters.md),
-  82 initial offline cases and 18 review regressions, 135 production magnitude/error
-  pairs and 45 selection lists. Follow-up review fixes source-name override
-  priority and carries actual reference provenance through the exact solver
-  survivor mask; provided/native references and rejected proxies cannot cause
-  false transformation disclosures. Independent review also checked 14,663
-  production magnitude/error pairs over partial band sets with no differences
-  and found no outstanding actionable findings. The full offline suite passes
-  **3,934 tests, 85 skipped**. Fresh VizieR checks
-  pass 2,688 values across 294 stars in nine calibration catalogs, plus two M3
-  identifier checks. After earlier connection timeouts, the concluding fresh
-  SDSS retry passes **667 values across 23 stars**, including its unchanged
-  narrowband aliases. Together the ten calibration catalogs pass **3,355 value
-  comparisons across 317 stars**; all ten catalogs and both M3 identifier
-  checks passed again during follow-up review. Compilation, schema goldens, generated
-  guidance, repository shape and whitespace checks pass. Changes remain local
-  to `feature/m2`; the following checkpoint addresses coverage/sufficiency,
-  and the retained-defect warnings/benchmark checkpoint below records disclosures.
-- [x] **Catalog coverage and sufficiency.** Both WCS runner entry points use
-  enclosing cones and detector clipping, including RA seams, pole-crossing
-  fields, anisotropic scales and off-detector CRPIX. Explicit polar boxes keep
-  a conservative full-RA declination band instead of dropping stars or failing
-  on NaN. Cached cones compensate for their rounded centre. Distorted/non-TAN
-  footprints, including internally normalized TPV, use sampled boundaries and
-  disclose unverified coverage. SkyMapper copies constraints before defaults.
-  Raw VizieR/SDSS limits are disclosed before mapping/clipping hides the cap,
-  including brightness bias and the SDK default limit. First-nonempty fallback
-  names unqueried alternatives; skipped queries and failed variable-star
-  checks remain visible. All registered fits disclose unverified sufficiency
-  and report actual solver survivors, not rejected candidates. Direct
-  degenerate fits share M3's no-solution policy. Numerical transforms and solver
-  arithmetic remain unchanged. Evidence: [acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md),
-  45 new offline cases, 613 focused passes, review findings fixed with
-  failing-then-passing regressions, and **3,979 passed, 88 skipped** in the full
-  suite. All **15 live checks** pass, including near-pole/ordinary detector
-  queries, a capped response and 3,355 matching magnitude/filter values across
-  317 stars in ten catalogs. Compilation, schema goldens, generated guidance,
-  repository shape and whitespace checks pass. Changes remain local to `feature/m2`.
-- [x] **Warnings and benchmark claims.** Operation-scoped notices disclose
-  retained aperture/background defects, downsampled saturation counts,
-  adaptive isophotal origin, aperture-correction crowding, magnitude-error SNR
-  cuts, RA-seam matching and unvalidated limiting-magnitude extrapolation.
-  Landolt U-dependent references disclose the retained wrong-colour error.
-  Public result boundaries retain relevant notices through handled failures;
-  structured photometry failures also preserve MCP/agent error status.
-  Numerical transforms, H-alpha, error propagation and solver arithmetic remain
-  unchanged. A bounded author/year check requires returned metadata and explicit
-  bibcode consistency on two core benchmark tasks. Reports disclose check
-  coverage; historical scores/figures remain attribution-unchecked and
-  unregraded because the original paid transcripts are absent. The check does
-  not verify all prose or scientific paper support. Evidence:
-  [acceptance, review corrections and limits](../analysis/warnings-benchmark-claims.md),
-  57 added test cases, **4,036 passed, 88 skipped** in the final complete suite,
-  compilation, schema goldens, generated guidance, repository shape and whitespace
-  checks. Independent review's three findings and the MCP status follow-up were
-  reproduced and corrected. All ten M2 checkboxes are complete locally on `feature/m2`.
-
-Evidence: [pulsar tool](../../tools/pulsar.py),
-[legacy HR helpers](../../algorithms/hrdiagram_py/legacy.py),
-[algorithm review](../analysis/algorithm-remediation-plan.md),
-[pulsar review](../analysis/pulsar-pipeline-review.md),
-[benchmark results](../benchmarking/results.md).
+- [x] **Pulsar channels and axes.** Results, saved spectra and plots preserve
+  the selected channel and consistently identify periods in seconds and
+  frequencies in hertz. Legacy artifacts warn when channel metadata is missing
+  or confidence levels are uncalibrated.
+  [Evidence](../../tests/test_pulsar_spectrum_semantics.py).
+- [x] **Pulsar candidates and confidence.** Candidates expose both period and
+  frequency; bounds and evaluated trial counts describe the actual search.
+  Sampling heuristics and conditional Gaussian false-alarm assumptions are
+  explicit. Stable centering and residual fitting handle representable variation;
+  constants are rejected and unresolved bounds warn. Older M2 spectra require
+  recomputation before their thresholds are treated as current. The bound and
+  empirical fold SNR are not pulsar probabilities; correlated noise, interference
+  and repeated retuning remain outside the calibration.
+  [Acceptance and limits](../analysis/pulsar-candidates-confidence.md).
+- [x] **Variable-star powers and errors.** Weighted powers use consistent
+  floating-mean least squares and remain stable across response amplitudes.
+  Differential errors use independent quadrature; old cached errors are
+  rederived. Results identify units, normalization and excluded uncertainty
+  sources. Invalid or degenerate inputs have defined failures.
+  [Acceptance and limits](../analysis/variable-star-powers-errors.md).
+- [x] **Cluster ages and membership.** Legacy ages use the correct units and
+  source joins use exact identifiers. Selection accepts measured zero motion,
+  rejects missing/nonfinite components and handles degenerate boundaries.
+  These legacy helpers remain distinct from registered membership tools; no
+  membership probability is claimed.
+  [Acceptance and scope](../analysis/cluster-ages-membership.md).
+- [x] **Legacy coordinates, extinction and mass.** Sexagesimal signs, including
+  negative zero, are preserved. Extinction honors its supported domain and
+  supplied parameters. Motion scatter, radius and mass outputs identify their
+  units and proxy assumptions. Protected radius/mass conversions are unchanged.
+  [Acceptance and limits](../analysis/legacy-coordinates-extinction-mass.md).
+- [x] **Accepted sky positions and reference stars.** Position checks and
+  reference queries use solved WCS geometry in a consistent sky frame. Invalid
+  and singular solutions are rejected before header writes. Footprints account
+  for rotation, displaced reference pixels, seams and poles; sampled distortion
+  coverage remains an estimate. Southern fallback coordinates retain their sign.
+  [Acceptance and scope](../analysis/accepted-sky-positions.md).
+- [x] **Photometric calibration.** Small-sample rejection, heterogeneous errors
+  and fitted scatter are handled consistently. Saturation/brightness selection,
+  zero magnitudes and explicit gain settings are respected. Solver and plots
+  share the surviving rows; empirical errors avoid cancellation. Differences
+  from historical fits are disclosed rather than hidden by changed fixtures.
+  [Acceptance and limits](../analysis/photometric-calibration.md).
+- [x] **Catalog magnitudes and filters.** Selection, numeric resolution and
+  reporting share production filter precedence and preserve native band
+  identities. Existing transforms, including H-alpha, are unchanged. Retained
+  approximations and relative narrowband references are disclosed. Live catalog
+  comparisons were recorded on 2026-10-23; the offline run below does not repeat
+  those queries.
+  [Acceptance and live evidence](../analysis/catalog-magnitudes-filters.md).
+- [x] **Catalog coverage and sufficiency.** Queries enclose and clip to detector
+  footprints, including seams, poles and cache rounding. Raw response caps,
+  unqueried fallback catalogs and failed variable-star checks remain visible.
+  Fits report actual survivors and disclose unverified sample sufficiency;
+  distorted-footprint coverage is not guaranteed complete.
+  [Acceptance and limits](../analysis/catalog-coverage-sufficiency.md).
+- [x] **Warnings and benchmark claims.** Tool results disclose retained numerical
+  and calibration limits, including through handled failures. Memory failures
+  retain `resource_limit`; HR artifact failures retain extraction notices.
+  Author citations require matching returned metadata and preserve bibcode
+  association across supported prose/table forms. The grammar is bounded and
+  does not verify every factual claim. Historical benchmark scores remain
+  attribution-unchecked until the original sessions can be regraded together.
+  [Acceptance and limits](../analysis/warnings-benchmark-claims.md).
 
 ### M2 review corrections
 
-**Closed 2026-10-26 in `71d3a80` on `feature/m2`.** The comprehensive audit of
-`62da5cc` found five P2 issues and one P3 even though its existing suite passed
-4,036 tests with 88 skips. All six findings and the subsequent review edge
-cases are corrected:
+The comprehensive audit's six findings are resolved: pulsar centering, singular
+WCS acceptance, author-qualification scope, bibcode association, memory-error
+classification and HR warnings after artifact failure. Regression tests cover
+those failures and the subsequent review cases, including genuine disclaimers,
+wrapped citations and table boundaries. No catalog/H-alpha transform,
+calibration equation, public input or historical benchmark score was changed.
 
-1. **Pulsar centering:** both power and residual fitting now center and scale
-   observed-value offsets. Twenty observations near `0.1`, with one perturbed
-   by one ULP, previously reported power `9.39736` and false-alarm bound
-   `4.27e-11`; the corrected power is `0.00672267` and bound `0.99430011`, agreeing
-   with independent QR. Public/ECSV regressions cover both modes, translation
-   invariance and baselines `0.1`, `-0.1`, `1e-300` and `1e300`. Exact constants
-   remain rejected. Current plotted calibration also requires
-   `false_alarm_flux_centering=observed_offsets`; recompute older M2 spectra
-   from their light curves, since saved bounds cannot be corrected without
-   those observations. The grid and conditional Gaussian model are unchanged.
-   Evidence: [precision regressions](../../tests/test_pulsar_probability_precision.py).
-2. **Singular WCS acceptance:** the effective celestial matrix must have a
-   finite log determinant and nonzero sign before acceptance/header writes.
-   Nonzero rank-one CD/PC matrices previously passed finite forward-footprint
-   checks while their inverse returned NaN. Both native-result paths now reject
-   them and preserve the header; small valid anisotropic scales remain accepted.
-   Evidence: [acceptance regressions](../../tests/test_wcs_accepted_positions.py).
-3. **Author qualifications:** method words such as “interpolation” and
-   “training data” no longer excuse an invented author. Qualifications must
-   apply explicitly to the citation. Combined parenthetical and table-cell
-   disclaimers remain accepted; unrelated/negated qualifications and negated
-   empirical findings still assert their authors.
-4. **Bibcode association:** common scholarly abbreviations/initials and wrapped
-   prose retain the cited paper's identifier. Paragraph/list boundaries and
-   structural Markdown rows keep independent references separate. A table's
-   identifiers use row scope, while qualifications use cell scope; ordinary
-   absolute-value notation does not create a table. Evidence for both author
-   fixes: [67 attribution regressions](../../tests/test_bench_attribution.py).
-5. **Memory-limit failures:** public photometry lets MemoryError reach MCP's
-   `resource_limit` handler, including failures during fallback file metadata.
-   Ordinary computation/plot failures continue to return their collected warnings.
-6. **HR artifact failures:** ordinary construction/write errors now retain
-   notices from the completed real-frame extraction, without reporting a
-   successful artifact. OSError/ValueError cases and preserved MemoryError
-   classification are covered by [public failure regressions](../../tests/test_numerical_warnings.py).
+Evidence: [pulsar precision](../../tests/test_pulsar_probability_precision.py),
+[WCS acceptance](../../tests/test_wcs_accepted_positions.py),
+[attribution](../../tests/test_bench_attribution.py),
+[public failure handling](../../tests/test_numerical_warnings.py).
 
-Each original failure class was reproduced before its fix. Fresh review found
-three additional attribution edge cases; failing regressions reproduced those
-before correction. Independent review's 210 QR comparisons had maximum absolute
-differences of `2.67e-15` in power and `1.12e-15` in residual fraction.
-An obsolete preservation expectation rejected `[0, 1e-300, 0]` solely because
-its unscaled variance underflowed. It now checks the independently derived
-three-sample Nyquist power `4/3` at unit, tiny and large amplitude; true
-degenerate/nonfinite inputs retain their rejection tests in
-[the limits suite](../../tests/test_pulsar_limits.py).
+### M2 validation and remaining checks
 
-Final validation: **4,094 passed, 88 skipped, 220 warnings in 918.18 seconds**,
-Python 3.13.15 with locked dependencies and MCP; 58 net added cases. Compilation,
-schema goldens, generated guidance, repository shape and whitespace checks pass.
-Catalog/H-alpha transforms, calibration fitting/error propagation, public inputs,
-benchmark keys and historical score data are unchanged. No paid sessions or
-historical regrade were performed; earlier model sessions must be regraded
-together before comparing verdicts from different grader implementations.
+Recorded full offline run, 2026-10-26: **4,094 passed, 88 skipped, 220 warnings**
+with Python 3.13.15, locked dependencies and MCP. Compilation, schema goldens,
+generated guidance, repository shape and whitespace checks passed. The following
+are Python/test warning events, separate from structured MARS tool warnings;
+repeated reads of the same fixtures account for most of the count.
 
-The attribution grammar remains bounded rather than a general prose or
-scientific-paper-support check. Gaussian-noise exclusions and numerical-resolution
-limits remain; these corrections do not certify probability enclosures,
-arbitrary distortion invertibility or native solver convergence. Live-service,
-paid-transcript, native Windows and external solver-data checks retain their
-independent gates/skips. M2 remains complete locally, unmerged and unpublished;
-other release gates remain open.
+| Warnings | Count | Meaning |
+| --- | ---: | --- |
+| Astropy FITS header notices | 214 | Repeated date-to-MJD normalization notices (213), plus the textual `J2000` equinox regression (1). |
+| Poorly conditioned polynomial fits | 2 | Deliberate single-source/degenerate calibration cases. |
+| Masked value converted to NaN | 1 | A malformed provider-row regression exercises missing-position handling. |
+| Invalid division | 1 | The retained empty-background-annulus defect is deliberately exercised and disclosed by the tool. |
+| Overflow while squaring | 2 | Extreme synthetic flux tests reach the fold-SNR standard-deviation fallback. Spectral assertions pass; that auxiliary diagnostic retains an extreme-scale numerical limitation. |
+
+| Skipped tests | Count | Reason |
+| --- | ---: | --- |
+| Live catalog/network queries | 77 | Opt-in `MARS_TEST_NETWORK` was disabled. |
+| Live ADS grouping check | 1 | `ADS_DEV_KEY` was unavailable; the M3 verification remains open. |
+| Live Ollama provider check | 1 | Opt-in `MARS_TEST_MODEL_API` was disabled. |
+| Historical benchmark falsification | 4 | Original untracked run artifacts were absent. |
+| Native Windows allocation control | 1 | Requires Windows. |
+| Native solver/catalog prerequisites | 3 | Local UCAC configuration or astrometry.net binary/index configuration was unavailable. |
+| Blind native plate solve | 1 | Pipeline returned no WCS and the test self-skipped. The skip message suggests index coverage; this run does not establish the cause. |
+
+Skipped tests provide no passing evidence. In particular, the blind-solve skip
+leaves native solver success unverified by this run. Live-service, native-platform
+and solver-data acceptance retain their separate gates; conditional-noise,
+sampled-distortion and catalog-sufficiency limitations remain explicit above.
 
 ## M3: failed inputs and services must produce usable failures
 
