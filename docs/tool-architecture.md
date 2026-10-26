@@ -622,9 +622,11 @@ The header names the session's `provider/model`; the status bar counts turns
 against the ceiling, token usage once a turn reports it, the artifacts
 written, and the graphics tier detected for this terminal. It needs a backend
 before it will answer anything — a key for the provider it opens on, or a
-local Ollama daemon, which needs none — but if the default cannot be used the
-console still opens and says why, and `/backend` fixes it from inside the
-session (section 10 lists the environment).
+local Ollama daemon, which needs none. If the backend it starts on cannot be
+used, `mars` exits before the interface opens and names the next step: where
+to set the key (a checkout's `.env`, or the shell for an installed copy), or
+`mars --backend ollama/<model>` with the models the daemon holds. Inside the
+session, `/backend` switches (section 10 lists the environment).
 
 | Command | Aliases | Does |
 | --- | --- | --- |
@@ -633,11 +635,14 @@ session (section 10 lists the environment).
 | `/artifacts` | `/a` | Browse what this session wrote, with previews. |
 | `/sessions` | `/s` | Browse saved sessions and resume one. |
 | `/resume <id>` | `/r` | Resume a saved session by id. |
+| `/status` | | The backend, session directory, turns, artifacts, carried conversation and approvals. |
+| `/tools [name]` | `/t` | List the tools, marking those that ask first, or describe one and its parameters. |
+| `/approve [reset]` | | Explain which calls ask first and show what is always allowed; `reset` makes them ask again. |
+| `/prompt` | `/p` | Show the system prompt. |
+| `/new` | `/n` | Start a fresh conversation without restarting; saved sessions stay. |
 | `/quit` | `/q`, `/exit` | Exit. |
 
-`/status`, `/tools`, `/approve`, `/prompt` and `/new` are registered and
-offered by the menu, but not implemented yet: they answer with a notice
-rather than doing anything.
+A test asserts that every registered command has a handler.
 
 | Key | Does |
 | --- | --- |
@@ -645,6 +650,7 @@ rather than doing anything.
 | `F3` / `F4` | Artifact browser · session browser. |
 | `Esc` | Stop the running turn at its next safe point; close a browser. |
 | `o` | In the artifact browser, open the selected file in the desktop handler. |
+| `y` / `a` / `n` | In an approval: allow, allow always, deny. `Enter` takes the focused button (Allow, when it opens); `Esc` denies. |
 | `Ctrl+Q` | Quit. |
 
 Everything a run writes is kept: tool artifacts land under
@@ -659,7 +665,8 @@ on it, and the UI thread sets it when the modal is answered. Nothing about the
 engine knows a UI exists.
 
 **Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
-`ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
+`ALLOW_ALWAYS` — the last persisting for the current question only; each new
+question asks again), the per-tool risk tags,
 and `policy_approver`. A denied call never dispatches: it returns an error
 result to the model and the loop continues. The headless default denies risky
 calls; trusted callers such as the benchmark replay plane opt in explicitly
@@ -690,6 +697,13 @@ Two properties of the ask itself:
   on a decision cannot be cancelled — it waits on an event only the interface
   sets — and Python joins its executor threads at exit, so an unreleased
   modal turns a quit into a hung process rather than a closed one.
+
+**Failures.** A tool call is marked by its own result: ✓ only for `ok`, ✗
+with the first error's message for `error`, `!` for `partial`, `∅` for
+`not_found`; durations past a second read in seconds and minutes. A session
+the engine could not finish names its cause from the exception's type and
+HTTP status — never its text, which can quote a request back — and the next
+step (`tools/tui/backends.py`, `failure_message`).
 
 **Slash commands** (`tools/tui/commands.py`) are UI-level and never reach the
 model — a mistyped command would otherwise cost a turn and pollute the

@@ -360,7 +360,11 @@ def test_unexpected_engine_failure_is_rendered_in_the_transcript(monkeypatch):
             rendered = "\n".join(
                 str(entry.render()) for entry in transcript.query(Static)
             )
-            assert "The engine stopped unexpectedly." in rendered
+            # The cause by type and a next step, never the exception's own
+            # text, which can quote a request back.
+            assert "unexpected RuntimeError" in rendered
+            assert "Send your question again" in rendered
+            assert "is saved" not in rendered
             assert "backend disconnected before session start" not in rendered
 
     _run(scenario())

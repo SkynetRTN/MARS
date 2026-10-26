@@ -32,13 +32,15 @@ from tools.agent.events import (
     TurnStarted,
 )
 from tools.agent.events import UserMessage as UserMessageEvent
-from tools.agent.policy import SessionPolicy, policy_approver
+from tools.agent.policy import SessionPolicy, policy_approver, risk_tags
+from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import Message, TextBlock
 from tools.tui.backends import (
     UnknownBackendError,
     choice_for,
     describe_choices,
+    failure_message,
     offered_models,
     open_backend,
     resolve_spec,
@@ -90,7 +92,23 @@ def _current_worker() -> Worker | None:
 
 
 class ApprovalModal(ModalScreen[Decision]):
-    """Ask the UI user for one risky tool-call decision."""
+    """Ask the UI user for one risky tool-call decision.
+
+    Answerable from the keyboard: ``y`` allows, ``a`` allows always, and
+    ``n`` or Esc denies. Esc denies rather than dismissing to nothing, because
+    the worker is blocked on an answer and a call nobody approved must not run.
+    Allow has focus when the dialog opens, so Enter takes it and Tab or the
+    arrow keys move between the buttons.
+    """
+
+    BINDINGS = [
+        Binding("y", "decide('allow')", "Allow"),
+        Binding("a", "decide('allow-always')", "Allow always"),
+        Binding("n", "decide('deny')", "Deny"),
+        Binding("escape", "decide('deny')", "Deny"),
+        Binding("left", "app.focus_previous", show=False),
+        Binding("right", "app.focus_next", show=False),
+    ]
 
     CSS = """
     ApprovalModal {
@@ -125,7 +143,18 @@ class ApprovalModal(ModalScreen[Decision]):
     #approval-buttons Button {
         margin-right: 2;
     }
+
+    #approval-keys {
+        padding: 1 0 0 0;
+        color: $text-muted;
+    }
     """
+
+    _DECISIONS = {
+        "allow": Decision.ALLOW,
+        "allow-always": Decision.ALLOW_ALWAYS,
+        "deny": Decision.DENY,
+    }
 
     def __init__(self, proposed: ToolCallProposed) -> None:
         super().__init__()
@@ -143,6 +172,14 @@ class ApprovalModal(ModalScreen[Decision]):
                 yield Button("Allow", id="allow", variant="success")
                 yield Button("Allow always", id="allow-always")
                 yield Button("Deny", id="deny", variant="error")
+            yield Static(
+                "y allow · a allow always · n or esc deny",
+                id="approval-keys",
+                markup=False,
+            )
+
+    def on_mount(self) -> None:
+        self.query_one("#allow", Button).focus()
 
     def argument_text(self) -> Text:
         """The arguments this call would run with, as plain text.
@@ -162,12 +199,10 @@ class ApprovalModal(ModalScreen[Decision]):
         return Text(rendered)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        decisions = {
-            "allow": Decision.ALLOW,
-            "allow-always": Decision.ALLOW_ALWAYS,
-            "deny": Decision.DENY,
-        }
-        self.dismiss(decisions[event.button.id or "deny"])
+        self.action_decide(event.button.id or "deny")
+
+    def action_decide(self, choice: str) -> None:
+        self.dismiss(self._DECISIONS.get(choice, Decision.DENY))
 
 
 class MARSApp(App[None]):
@@ -235,9 +270,11 @@ class MARSApp(App[None]):
             super().__init__()
 
     class EngineFailed(TextualMessage):
-        """Report a worker failure that did not reach the engine event stream."""
+        """Report a worker failure, already worded for the person reading."""
 
-        pass
+        def __init__(self, text: str) -> None:
+            self.text = text
+            super().__init__()
 
     # The four handlers below are bound with @on rather than named
     # on_<app>_<message>: Textual derives that name from the app's class name
@@ -278,6 +315,10 @@ class MARSApp(App[None]):
         self._queued_input: list[str] = []
         self._stop_requested = False
         self._pending_approvals: set[MARSApp.ApprovalRequest] = set()
+        # The approval policy of the latest question. Each question gets a
+        # fresh one (run_prompt): "Allow always" is never inherited by the
+        # next question. It is kept here so /approve can show and reset it.
+        self.policy = SessionPolicy(self._request_approval)
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
@@ -348,7 +389,7 @@ class MARSApp(App[None]):
     def _handle_engine_failed(self, message: EngineFailed) -> None:
         """Make unexpected worker failures visible in the transcript."""
 
-        self._append_transcript("The engine stopped unexpectedly.")
+        self._append_transcript(message.text)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Offer the commands the line being typed could still become."""
@@ -376,8 +417,7 @@ class MARSApp(App[None]):
 
         command = resolve(parsed.name)
         if command is not None:
-            handler = getattr(self, command.handler, self._command_not_available)
-            handler(parsed.args)
+            getattr(self, command.handler)(parsed.args)
 
     def run_prompt(
         self, text: str, *, history: tuple["Message", ...] = ()
@@ -394,6 +434,7 @@ class MARSApp(App[None]):
             return self._active_worker
         self._history_ready = False
         self._stop_requested = False
+        self.policy = SessionPolicy(self._request_approval)
         worker = self._run_prompt(text, history=history)
         self._active_worker = worker
         # The status bar carries how to stop a running turn, so it has to be
@@ -407,7 +448,7 @@ class MARSApp(App[None]):
         """Run the synchronous engine in a Textual thread worker."""
 
         self.engine_starts += 1
-        policy = SessionPolicy(self._request_approval)
+        policy = self.policy
         assistant_text: list[str] = []
         manifest_path: Path | None = None
 
@@ -442,8 +483,16 @@ class MARSApp(App[None]):
         except Exception as exc:
             # The engine emits its error SessionFinished event before reraising.
             # Its saved manifest is enough to make the next prompt recoverable.
-            LOGGER.warning("Agent engine worker stopped: %s", type(exc).__name__)
-            self.post_message(self.EngineFailed())
+            LOGGER.warning(
+                "Agent engine worker stopped: %s", type(exc).__name__, exc_info=True
+            )
+            self.post_message(
+                self.EngineFailed(
+                    failure_message(
+                        exc, spec_of(self.backend), saved=manifest_path is not None
+                    )
+                )
+            )
 
         # The manifest is the faithful record -- it carries the tool calls and
         # their results, which this method never sees. The text below is the
@@ -728,13 +777,105 @@ class MARSApp(App[None]):
         self._history = history
         self.query_one("#prompt", Input).focus()
 
+    def show_status(self, args: tuple[str, ...]) -> None:
+        """Say which backend, session and approvals the console is on."""
+
+        session = (
+            str(self._artifact_directory)
+            if self._artifact_directory is not None
+            else "none yet (starts with the first question)"
+        )
+        lines = [
+            f"Backend: {spec_of(self.backend) or 'unknown'}",
+            f"Session: {session}",
+            f"Turns: {self.current_turn} of {self.max_turns} in the last run",
+            f"Artifacts this session: {self.artifact_count}",
+            "Conversation: "
+            + (
+                f"{len(self._history)} messages carried to the next question"
+                if self._history
+                else "empty"
+            ),
+            f"Always allowed (this question): {self._always_allowed_text()}",
+            f"Graphics: {self.graphics_tier.value}",
+            "Running: " + ("yes" if self._session_running() else "no"),
+        ]
+        self._append_transcript("\n".join(lines))
+
+    def show_tools(self, args: tuple[str, ...]) -> None:
+        """List the tools the model can call, or describe one of them."""
+
+        from tools.registry import TOOL_SCHEMAS
+
+        if args:
+            name = args[0]
+            for schema in TOOL_SCHEMAS:
+                if schema["name"] == name:
+                    self._append_transcript(_describe_tool(schema))
+                    return
+            self._append_transcript(f"Unknown tool: {name}. /tools lists them.")
+            return
+
+        lines = [f"{len(TOOL_SCHEMAS)} tools; * asks before running. /tools <name> describes one."]
+        for schema in TOOL_SCHEMAS:
+            marker = "*" if risk_tags(schema["name"]) else " "
+            lines.append(f"{marker} {schema['name']} — {_first_sentence(schema.get('description', ''))}")
+        self._append_transcript("\n".join(lines))
+
+    def configure_approval(self, args: tuple[str, ...]) -> None:
+        """Show which calls ask first, or forget every "Allow always"."""
+
+        if args and args[0] == "reset":
+            self.policy.reset()
+            self._append_transcript(
+                "Approvals reset: every risky call asks again."
+            )
+            return
+        if args:
+            self._append_transcript("Usage: /approve, or /approve reset")
+            return
+        self._append_transcript(
+            "Calls that are slow, need a key, or write files ask first; "
+            "the rest run without asking. /tools marks which ask.\n"
+            "Allow always lasts for the current question only; each new "
+            "question asks again.\n"
+            f"Always allowed now: {self._always_allowed_text()}\n"
+            "/approve reset makes them ask again within this question."
+        )
+
+    def show_prompt(self, args: tuple[str, ...]) -> None:
+        """Show the system prompt the model is given."""
+
+        self._append_transcript(SYSTEM_PROMPT)
+
+    def new_session(self, args: tuple[str, ...]) -> None:
+        """Start a fresh conversation without restarting the console."""
+
+        if self._session_running():
+            self._append_transcript(
+                "A session is still running. Stop it with Esc, then /new."
+            )
+            return
+        self._history = ()
+        self._artifact_directory = None
+        self.current_turn = 0
+        self.artifact_count = 0
+        self.token_usage = None
+        self.policy = SessionPolicy(self._request_approval)
+        self.query_one("#transcript", Transcript).clear()
+        self._refresh_status()
+        self._append_transcript(
+            "New conversation. Earlier sessions stay saved; /sessions reopens them."
+        )
+
+    def _always_allowed_text(self) -> str:
+        allowed = sorted({name for name, _tags in self.policy.always_allowed})
+        return ", ".join(allowed) if allowed else "none"
+
     def quit(self, args: tuple[str, ...]) -> None:
         """Exit the console through its declarative command handler."""
 
         self.exit()
-
-    def _command_not_available(self, args: tuple[str, ...]) -> None:
-        self._append_transcript("This command is not available in the current phase.")
 
     def _session_running(self) -> bool:
         """Return whether the application still owns a synchronous engine worker."""
@@ -820,6 +961,33 @@ class MARSApp(App[None]):
         if self._session_running():
             parts.append("stopping" if self._stop_requested else "esc stop")
         return " • ".join(parts)
+
+
+def _first_sentence(text: str) -> str:
+    """A tool description's opening sentence, for a one-line listing."""
+
+    first = " ".join(text.split()).split(". ", 1)[0]
+    return first if first.endswith(".") else first + "."
+
+
+def _describe_tool(schema: Mapping[str, object]) -> str:
+    """One tool's description and parameters, as /tools <name> shows them."""
+
+    lines = [str(schema["name"]), str(schema.get("description", "")).strip()]
+    parameters = schema.get("input_schema") or schema.get("parameters") or {}
+    properties = parameters.get("properties", {}) if isinstance(parameters, Mapping) else {}
+    required = set(parameters.get("required", ())) if isinstance(parameters, Mapping) else set()
+    if properties:
+        lines.append("Parameters:")
+        for name, spec in properties.items():
+            kind = spec.get("type", "") if isinstance(spec, Mapping) else ""
+            if isinstance(kind, list):
+                kind = " or ".join(str(item) for item in kind)
+            flag = " (required)" if name in required else ""
+            lines.append(f"  {name}: {kind}{flag}")
+    else:
+        lines.append("No parameters.")
+    return "\n".join(lines)
 
 
 def _model_of(spec: str | None, provider: str) -> str:

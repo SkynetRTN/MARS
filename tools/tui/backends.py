@@ -27,6 +27,7 @@ from typing import Any, Callable
 from tools.config import load_dotenv
 from tools.llm.base import BackendUnavailableError, ModelBackend
 from tools.llm.factory import build_backend
+from tools.paths import is_checkout
 
 __all__ = [
     "BackendChoice",
@@ -40,6 +41,7 @@ __all__ = [
     "open_backend",
     "describe_choices",
     "unavailable_message",
+    "failure_message",
     "spec_of",
 ]
 
@@ -254,19 +256,33 @@ def _require_model(backend: ModelBackend, spec: str) -> None:
         raise ModelNotInstalled(spec, model, installed)
 
 
-#: What to tell a person to *do*, keyed by the variable the port names. The
-#: adapters' own hints are written for a Python caller ("pass api_key=..."),
-#: which is not an option in front of a console prompt.
-_REMEDIES: dict[str, str] = {
-    "ANTHROPIC_API_KEY": (
-        "no API key. Put it in the repository's .env file or set "
-        "ANTHROPIC_API_KEY, then try again"
-    ),
-    "OLLAMA_BASE_URL": (
-        "no Ollama daemon answered. Start one with `ollama serve`, or point "
-        "OLLAMA_BASE_URL at the host running it"
-    ),
-}
+def _remedy(variable: str, *, running: bool) -> str:
+    """What to tell a person to *do* about the variable the port names.
+
+    The adapters' own hints are written for a Python caller ("pass
+    api_key=..."), which is not an option in front of a console prompt. Two
+    things change the answer. Only a checkout reads a ``.env`` file -- an
+    installed copy has no repository to keep one in -- and a running console
+    cannot take a variable set in the shell afterwards, so it is told how to
+    switch rather than how to restart.
+    """
+
+    if variable == "ANTHROPIC_API_KEY":
+        if is_checkout():
+            where = (
+                "Put ANTHROPIC_API_KEY in the repository's .env file (read again "
+                "on every /backend) or set it before starting mars"
+            )
+        else:
+            where = "Set ANTHROPIC_API_KEY in your shell before starting mars"
+        local = "/backend ollama" if running else "mars --backend ollama"
+        return f"no API key. {where}, or use a local model with `{local}`"
+    if variable == "OLLAMA_BASE_URL":
+        return (
+            "no Ollama daemon answered. Start one with `ollama serve`, or point "
+            "OLLAMA_BASE_URL at the host running it"
+        )
+    return f"set {variable}"
 
 
 def unavailable_message(
@@ -276,9 +292,11 @@ def unavailable_message(
 
     Always says what to do, and -- when the console is already running --
     which backend is still answering, so a failed switch never reads as a
-    session that has lost its model.
+    session that has lost its model. ``current_spec`` is that backend; its
+    absence is what marks the launcher's wording.
     """
 
+    running = bool(current_spec)
     if isinstance(exc, ModelNotInstalled):
         # Naming the installed models is the whole remedy: there is no
         # variable to set, and guessing a substitute would silently answer a
@@ -286,16 +304,67 @@ def unavailable_message(
         available = ", ".join(exc.installed[:8])
         if len(exc.installed) > 8:
             available += f", and {len(exc.installed) - 8} more"
+        provider = spec.partition("/")[0]
+        pick = (
+            f"/backend {provider} <model>"
+            if running
+            else f"mars --backend {provider}/<model>"
+        )
         text = (
             f"Cannot use {spec}: the service holds no model named "
-            f"{exc.model!r}. Installed: {available}."
+            f"{exc.model!r}. Installed: {available}. Choose one with `{pick}`, "
+            f"or install it with `ollama pull {exc.model}`."
         )
     else:
-        remedy = _REMEDIES.get(exc.variable, f"set {exc.variable}")
-        text = f"Cannot use {spec}: {remedy}."
+        text = f"Cannot use {spec}: {_remedy(exc.variable, running=running)}."
     if current_spec:
         text += f" Still on {current_spec}."
     return text
+
+
+def failure_message(exc: BaseException, spec: str = "", *, saved: bool = False) -> str:
+    """Name what stopped a running session, and what to try next.
+
+    Built from the exception's **type and status code only**, never its
+    message: a provider's error text can quote a request back, and the
+    transcript is not where that belongs. The full exception goes to the log.
+    ``saved`` says whether the engine got as far as saving the session, which
+    is only worth claiming when it did.
+    """
+
+    backend = spec or "the model backend"
+    retry = "Send your question again, or switch with /backend."
+    if saved:
+        retry = "The session so far is saved. " + retry
+    if isinstance(exc, BackendUnavailableError):
+        return unavailable_message(spec or "the backend", exc)
+
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+    name = type(exc).__name__
+    if isinstance(status, int):
+        if status in (401, 403):
+            cause = f"{backend} refused the request (HTTP {status}): check its API key"
+        elif status == 404:
+            cause = (
+                f"{backend} answered HTTP 404, which usually means it does not "
+                "hold that model (for Ollama: `ollama list`, then `ollama pull`)"
+            )
+        elif status == 429:
+            cause = f"{backend} is rate-limiting requests (HTTP 429): wait a moment"
+        elif status >= 500:
+            cause = f"{backend} had a server error (HTTP {status})"
+        else:
+            cause = f"{backend} rejected the request (HTTP {status}, {name})"
+    elif "Timeout" in name:
+        cause = f"{backend} did not answer in time ({name})"
+    elif "Connect" in name or isinstance(exc, ConnectionError):
+        cause = f"could not reach {backend} ({name})"
+    else:
+        cause = f"the session stopped on an unexpected {name}"
+    return f"{cause[0].upper()}{cause[1:]}. {retry}"
 
 
 def describe_choices(active_spec: str | None = None) -> str:

@@ -105,6 +105,17 @@ class SessionPolicy:
             return Decision.ALLOW
         return decision
 
+    @property
+    def always_allowed(self) -> frozenset[tuple[str, frozenset[RiskTag]]]:
+        """The (tool, risk) pairs answered "Allow always" so far."""
+
+        return frozenset(self._always_allowed)
+
+    def reset(self) -> None:
+        """Forget every "Allow always", so each risky call asks again."""
+
+        self._always_allowed.clear()
+
 
 def policy_approver(policy: SessionPolicy) -> Approver:
     """Adapt a session policy to the engine's approver callable contract."""
