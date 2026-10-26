@@ -318,10 +318,11 @@ def test_session_policy_reset_forgets_allow_always():
         ("a", Decision.ALLOW_ALWAYS),
         ("n", Decision.DENY),
         ("escape", Decision.DENY),
-        ("enter", Decision.ALLOW),
+        ("enter", Decision.DENY),
     ],
 )
-def test_the_approval_modal_answers_from_the_keyboard(key, expected):
+def test_the_approval_modal_answers_from_the_keyboard(monkeypatch, key, expected):
+    monkeypatch.setattr(ApprovalModal, "GRACE_S", 0.0)
     decisions: list[Decision | None] = []
 
     async def scenario() -> None:
@@ -330,10 +331,31 @@ def test_the_approval_modal_answers_from_the_keyboard(key, expected):
             modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
             app.push_screen(modal, decisions.append)
             await pilot.pause()
-            assert app.focused is modal.query_one("#allow", Button)
+            assert app.focused is modal.query_one("#deny", Button)
             await pilot.press(key)
             await pilot.pause()
 
     _run(scenario())
 
     assert decisions == [expected]
+
+
+def test_keys_typed_as_the_approval_opens_are_ignored():
+    """The prompt is live during a turn: a `y` or Enter meant for a note
+    must not approve a call whose dialog appeared under it."""
+
+    decisions: list[Decision | None] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
+            app.push_screen(modal, decisions.append)
+            await pilot.pause()
+            await pilot.press("y", "a", "enter")
+            await pilot.pause()
+            assert app.screen is modal
+
+    _run(scenario())
+
+    assert decisions == []

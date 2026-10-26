@@ -215,7 +215,9 @@ def test_a_second_submission_is_queued_rather_than_starting_a_second_session(
     assert drained == [("second",)]
 
 
-def test_approval_request_opens_a_modal_and_releases_the_waiting_worker():
+def test_approval_request_opens_a_modal_and_releases_the_waiting_worker(monkeypatch):
+    monkeypatch.setattr(ApprovalModal, "GRACE_S", 0.0)
+
     async def scenario() -> None:
         app = MARSApp(backend=StubBackend([]))
         proposed = ToolCallProposed("call-1", "search_ads", {})

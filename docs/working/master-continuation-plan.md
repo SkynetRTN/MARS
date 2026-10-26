@@ -271,7 +271,7 @@ Evidence: [query backends](../../algorithms/query/),
   session names its cause from the exception's type and HTTP status, never
   its text, plus a next step. `/status`, `/tools`, `/approve`, `/prompt` and
   `/new` work, and a test requires a handler for every command. Approvals
-  answer to `y`/`a`/`n`, Enter on the focused Allow, and Esc, which denies.
+  answer to `y`/`a`/`n` and Esc (deny); Deny has focus, and answers in the first half second are ignored so prompt typing cannot approve.
   "Allow always" still lasts one question, as a test pins. Remaining: the
   maintainer's decision on resume showing only assistant text.
 

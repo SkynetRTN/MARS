@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -97,9 +98,17 @@ class ApprovalModal(ModalScreen[Decision]):
     Answerable from the keyboard: ``y`` allows, ``a`` allows always, and
     ``n`` or Esc denies. Esc denies rather than dismissing to nothing, because
     the worker is blocked on an answer and a call nobody approved must not run.
-    Allow has focus when the dialog opens, so Enter takes it and Tab or the
-    arrow keys move between the buttons.
+
+    The prompt stays live during a turn, so the dialog can open under someone
+    mid-sentence. Two guards keep a keystroke meant for the prompt from
+    approving a call: **Deny** has focus when the dialog opens, so a stray
+    Enter refuses, and every answer is ignored for :attr:`GRACE_S` after it
+    appears. Tab or the arrow keys move between the buttons.
     """
+
+    #: How long after opening the dialog ignores answers. Long enough to
+    #: absorb the rest of a word being typed; short enough not to be noticed.
+    GRACE_S = 0.5
 
     BINDINGS = [
         Binding("y", "decide('allow')", "Allow"),
@@ -179,7 +188,8 @@ class ApprovalModal(ModalScreen[Decision]):
             )
 
     def on_mount(self) -> None:
-        self.query_one("#allow", Button).focus()
+        self._opened_at = time.monotonic()
+        self.query_one("#deny", Button).focus()
 
     def argument_text(self) -> Text:
         """The arguments this call would run with, as plain text.
@@ -202,6 +212,9 @@ class ApprovalModal(ModalScreen[Decision]):
         self.action_decide(event.button.id or "deny")
 
     def action_decide(self, choice: str) -> None:
+        opened = getattr(self, "_opened_at", None)
+        if opened is None or time.monotonic() - opened < self.GRACE_S:
+            return
         self.dismiss(self._DECISIONS.get(choice, Decision.DENY))
 
 
