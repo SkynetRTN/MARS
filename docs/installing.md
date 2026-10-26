@@ -88,9 +88,9 @@ claude mcp add --scope user mars -- /path/to/mars-mcp
 **Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
 installs with a double-click and needs no Python or config file, on an Apple
 Silicon Mac or x64 Windows. It always runs the newest MARS release. Download
-`mars.mcpb` from the newest
-[release](https://github.com/SkynetRTN/MARS/releases) that carries it (the
-first is the release after `0.1.0rc6`), or build it from
+`mars.mcpb` from the newest release on the
+[releases page](https://github.com/SkynetRTN/MARS/releases); how it
+is built is in
 [`installers/claude-desktop/`](../installers/claude-desktop/README.md). It is
 unsigned, so Claude Desktop says so when installing it. To register it by hand
 instead, go to Settings → Developer → Edit Config and add:

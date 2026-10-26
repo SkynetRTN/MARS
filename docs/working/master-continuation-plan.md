@@ -4,6 +4,10 @@ Updated 2026-10-20 against `main` at `a6785aa`, after pulling the latest changes
 M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
 and #123; their changes are absent from the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
+By maintainer decision (2026-10-26), it ships as soon as every gate with a
+manual step is complete; the install guides (`../installing/`) always point
+at the latest release and name none. M4's work stays on its branch, without
+a PR, until all of M4 is done.
 
 M2 is open in full. PR #120 is abandoned as an implementation path and supplies
 no closure evidence. Reassess its subjects against main along with the rest of

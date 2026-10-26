@@ -16,10 +16,8 @@ verified on [Linux](linux.md).
 
 1. Download Claude from <https://claude.com/download>, drag it to
    Applications, open it, and sign in.
-2. Download `mars.mcpb` from the newest
-   [release](https://github.com/SkynetRTN/MARS/releases) that carries it (the
-   first is the release after `0.1.0rc6`), or build it from a checkout with
-   `python3 .github/scripts/pack_extension.py installers/claude-desktop mars.mcpb`.
+2. Download `mars.mcpb` from the newest release on the
+   [releases page](https://github.com/SkynetRTN/MARS/releases).
 3. Double-click `mars.mcpb`, or use *Settings → Extensions → Advanced
    settings → Install Extension…*. Claude says the extension is unsigned;
    accept. No Python or uv is needed first.
