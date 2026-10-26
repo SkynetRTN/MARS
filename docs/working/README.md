@@ -2,17 +2,18 @@
 
 The [master continuation plan](master-continuation-plan.md) is the closure
 checklist for the next release. It describes concrete failures, required
-outcomes and questions that still need evidence. Dated reviews retain the
-original findings; implementation choices belong in subsequent work.
+outcomes and questions that still need evidence. All manual step gates,
+review-fix status and closure evidence are maintained there. Dated reviews
+retain original findings and technical analysis. Do not create separate working
+documents for individual gates.
 
 ## Index
 
 | Plan | Status |
 | --- | --- |
 | [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-26 against `main` at `9544782` (M3 PR #122). All ten M2 checkpoints and six comprehensive-review corrections complete locally on `feature/m2`, unmerged/unpublished. Remaining gates describe missing evidence and release checks. |
-| [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | M2 checkpoint complete locally on `feature/m2`; [acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md). |
-| [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | Final M2 checkpoint complete locally on `feature/m2`; [acceptance, review corrections and retained limits](../analysis/warnings-benchmark-claims.md). |
-| [m2-review-fixes.md](m2-review-fixes.md) | All six comprehensive-review findings corrected; 4,094 full-suite passes, 88 skips; [acceptance](../analysis/m2-review-fixes.md). |
+| [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | Historical implementation record; current gate status is in the master. [Acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md). |
+| [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | Historical implementation record; current gate status is in the master. [Acceptance and retained limits](../analysis/warnings-benchmark-claims.md). |
 
 ## Landed
 

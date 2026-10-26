@@ -743,7 +743,7 @@ ordinary method words and negated empirical findings remain assertions.
 Identifier association survives common scholarly abbreviations and wrapped
 prose. Structural table rows retain row-level identifiers and cell-level
 qualifications; ordinary absolute-value notation does not create a table.
-See [review corrections](../analysis/m2-review-fixes.md).
+See [the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).
 
 - `yaml.safe_load` only (S5). A Python-object construction tag raises.
 - `fixtures:` entries are **bare names**, resolved as

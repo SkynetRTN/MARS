@@ -116,4 +116,4 @@ wrapped prose while keeping independent blocks/table rows separate. It also
 found MemoryError masked by photometry's broad catch and HR warnings lost on
 artifact failure. Allocation errors retain `resource_limit`; ordinary HR write
 errors retain their extraction notices. See the
-[six-finding correction record](m2-review-fixes.md) and its validation ledger.
+[master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).

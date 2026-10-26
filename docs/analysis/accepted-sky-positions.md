@@ -87,4 +87,4 @@ The celestial matrix now needs a finite log determinant and nonzero sign before
 acceptance/header writes. Four backend/result regressions reproduce the gap
 before the fix; a valid small anisotropic matrix remains accepted. This closes
 the earlier singular-geometry acceptance claim without changing catalog or
-solver arithmetic. See [the correction record](m2-review-fixes.md).
+solver arithmetic. See [the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).

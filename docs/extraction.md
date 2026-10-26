@@ -3556,7 +3556,7 @@ observed-value offsets and the same centered sum of squares. The grid and
 conditional Gaussian model remain unchanged. Current artifacts additionally
 require `false_alarm_flux_centering=observed_offsets`; older M2 levels are
 uncalibrated until recomputed from the light curve. See
-[the correction record](analysis/m2-review-fixes.md).
+[the master plan's review corrections](working/master-continuation-plan.md#m2-review-corrections).
 
 ### 9. Remaining gaps
 

@@ -257,4 +257,4 @@ input. Safe scaling covers tiny and large finite baselines. Exact constants
 remain rejected. Earlier M2 Gaussian artifacts also need the new
 `false_alarm_flux_centering=observed_offsets` marker before plotting as current;
 otherwise their levels remain uncalibrated. See
-[the six-finding correction record](m2-review-fixes.md).
+[the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).

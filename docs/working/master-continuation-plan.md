@@ -12,6 +12,8 @@ release gates below remain open. PR #120 is abandoned as an implementation path 
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
 
+This is the working document for all manual step gates, review-fix status and
+closure evidence; keep those updates here rather than in separate gate plans.
 Each unchecked item describes a failure or a specific unanswered question.
 Close it with evidence of the required behavior, or an explicit maintainer
 decision to retain the limitation and tell users about it. Check old reports
@@ -28,7 +30,7 @@ nonzero singular WCS rejection, author-qualification/identifier association,
 memory-limit classification and HR write-failure notices. Fresh-review edge
 cases are covered by regressions. Latest validation: **4,094 passed, 88 skipped**,
 58 net added cases, compilation, schema goldens, generated guidance, repository
-shape and whitespace checks. See [corrections and limits](../analysis/m2-review-fixes.md).
+shape and whitespace checks. See [review corrections and limits](#m2-review-corrections).
 All changes remain local, unmerged and unpublished; other release gates remain open.
 
 - [x] **Pulsar channels and axes.** New spectrum artifacts retain the selected
@@ -252,6 +254,75 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
 [algorithm review](../analysis/algorithm-remediation-plan.md),
 [pulsar review](../analysis/pulsar-pipeline-review.md),
 [benchmark results](../benchmarking/results.md).
+
+### M2 review corrections
+
+**Closed 2026-10-26 in `71d3a80` on `feature/m2`.** The comprehensive audit of
+`62da5cc` found five P2 issues and one P3 even though its existing suite passed
+4,036 tests with 88 skips. All six findings and the subsequent review edge
+cases are corrected:
+
+1. **Pulsar centering:** both power and residual fitting now center and scale
+   observed-value offsets. Twenty observations near `0.1`, with one perturbed
+   by one ULP, previously reported power `9.39736` and false-alarm bound
+   `4.27e-11`; the corrected power is `0.00672267` and bound `0.99430011`, agreeing
+   with independent QR. Public/ECSV regressions cover both modes, translation
+   invariance and baselines `0.1`, `-0.1`, `1e-300` and `1e300`. Exact constants
+   remain rejected. Current plotted calibration also requires
+   `false_alarm_flux_centering=observed_offsets`; recompute older M2 spectra
+   from their light curves, since saved bounds cannot be corrected without
+   those observations. The grid and conditional Gaussian model are unchanged.
+   Evidence: [precision regressions](../../tests/test_pulsar_probability_precision.py).
+2. **Singular WCS acceptance:** the effective celestial matrix must have a
+   finite log determinant and nonzero sign before acceptance/header writes.
+   Nonzero rank-one CD/PC matrices previously passed finite forward-footprint
+   checks while their inverse returned NaN. Both native-result paths now reject
+   them and preserve the header; small valid anisotropic scales remain accepted.
+   Evidence: [acceptance regressions](../../tests/test_wcs_accepted_positions.py).
+3. **Author qualifications:** method words such as “interpolation” and
+   “training data” no longer excuse an invented author. Qualifications must
+   apply explicitly to the citation. Combined parenthetical and table-cell
+   disclaimers remain accepted; unrelated/negated qualifications and negated
+   empirical findings still assert their authors.
+4. **Bibcode association:** common scholarly abbreviations/initials and wrapped
+   prose retain the cited paper's identifier. Paragraph/list boundaries and
+   structural Markdown rows keep independent references separate. A table's
+   identifiers use row scope, while qualifications use cell scope; ordinary
+   absolute-value notation does not create a table. Evidence for both author
+   fixes: [67 attribution regressions](../../tests/test_bench_attribution.py).
+5. **Memory-limit failures:** public photometry lets MemoryError reach MCP's
+   `resource_limit` handler, including failures during fallback file metadata.
+   Ordinary computation/plot failures continue to return their collected warnings.
+6. **HR artifact failures:** ordinary construction/write errors now retain
+   notices from the completed real-frame extraction, without reporting a
+   successful artifact. OSError/ValueError cases and preserved MemoryError
+   classification are covered by [public failure regressions](../../tests/test_numerical_warnings.py).
+
+Each original failure class was reproduced before its fix. Fresh review found
+three additional attribution edge cases; failing regressions reproduced those
+before correction. Independent review's 210 QR comparisons had maximum absolute
+differences of `2.67e-15` in power and `1.12e-15` in residual fraction.
+An obsolete preservation expectation rejected `[0, 1e-300, 0]` solely because
+its unscaled variance underflowed. It now checks the independently derived
+three-sample Nyquist power `4/3` at unit, tiny and large amplitude; true
+degenerate/nonfinite inputs retain their rejection tests in
+[the limits suite](../../tests/test_pulsar_limits.py).
+
+Final validation: **4,094 passed, 88 skipped, 220 warnings in 918.18 seconds**,
+Python 3.13.15 with locked dependencies and MCP; 58 net added cases. Compilation,
+schema goldens, generated guidance, repository shape and whitespace checks pass.
+Catalog/H-alpha transforms, calibration fitting/error propagation, public inputs,
+benchmark keys and historical score data are unchanged. No paid sessions or
+historical regrade were performed; earlier model sessions must be regraded
+together before comparing verdicts from different grader implementations.
+
+The attribution grammar remains bounded rather than a general prose or
+scientific-paper-support check. Gaussian-noise exclusions and numerical-resolution
+limits remain; these corrections do not certify probability enclosures,
+arbitrary distortion invertibility or native solver convergence. Live-service,
+paid-transcript, native Windows and external solver-data checks retain their
+independent gates/skips. M2 remains complete locally, unmerged and unpublished;
+other release gates remain open.
 
 ## M3: failed inputs and services must produce usable failures
 
