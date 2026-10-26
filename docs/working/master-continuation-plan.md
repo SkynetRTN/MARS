@@ -227,11 +227,19 @@ Evidence: [query backends](../../algorithms/query/),
   Windows runners, and attaches it to the GitHub release; the install guide
   says which releases carry it. No release has shipped it yet, and the
   workflow job has not run.
-- [ ] **Configured solver success.** A blind WCS test can skip after failing
+- [x] **Configured solver success.** A blind WCS test can skip after failing
   even when resources exist, and omits configured settings. ATLAS reachability
   does not establish blind convergence. A supported known-solution fixture
   must solve within position, scale and rotation tolerances; missing data must
   be reported separately.
+  *Done 2026-10-26:* NGC 3628 V with its recorded WCS stripped is the
+  known-solution fixture. Each solve must recover it within 1 arcsec, 0.5%
+  in scale and 0.25 deg in rotation, with the configured settings passed in.
+  On this host: astrometry.net bounded in 4 s and all-sky in 148 s, ATLAS
+  bounded in 20 s, all within 0.11 arcsec. ATLAS does not search blind: with
+  no scale or pointing it refuses, so astrometry.net stays the blind route.
+  Missing data skips with its name; a miss with data present fails
+  (`tests/test_wcs_solution.py`).
 - [ ] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.

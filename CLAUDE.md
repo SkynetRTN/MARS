@@ -429,8 +429,14 @@ fixture solves: in ~14 s with explicit bounds (`solve_astrometry(...,
 search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8)`, P6) and in
 ~285 s all-sky, to the same solution. The bounds are opt-in; the default
 stays the extracted all-sky search. The
-`solver_data`-marked tests gate this path. The ATLAS backend has not been
-validated (P9). Both backends still degrade to "unavailable" when unconfigured.
+`solver_data`-marked tests gate this path. A known-solution check (M4,
+2026-10-26) strips NGC 3628 V's recorded WCS and requires each backend to
+land back on it within 1 arcsec, 0.5% in scale and 0.25 deg in rotation:
+astrometry.net bounded (~4 s) and all-sky (~150 s), and ATLAS bounded
+(~20 s). ATLAS is a pointed solver, not a blind one: with no scale or
+pointing it refuses its 2-degree footprint budget. Missing data skips by
+name; a miss with the data configured fails. Both backends still degrade to
+"unavailable" when unconfigured.
 
 ## Astromancer port boundaries
 

@@ -494,6 +494,14 @@ data installed.
   expected `no_sources` outcome after a non-empty lookup, so the check validates
   dependency loading and search configuration without claiming blind-triangle
   convergence; the tool retains astrometry.net as the blind solving route.
+- *Addendum, 2026-10-26 (M4):* ATLAS convergence, not only reachability, is
+  now checked. `test_atlas_recovers_the_known_solution_in_a_bounded_search`
+  strips NGC 3628 V's recorded WCS and, with a 1-degree, +/-10% scale window
+  around the recorded values, ATLAS recovers it in ~20 s to 0.10 arcsec,
+  0.03% in scale and 0.02 deg in rotation (UCAC5). With no scale or pointing
+  it refuses ("catalog footprint exceeds the 2-degree radius budget"), so it
+  remains a pointed solver; astrometry.net is the blind route, and its
+  all-sky solve of the same frame matches to 0.10 arcsec.
 
 #### 9. M3 setup and I/O failures (2026-10-21)
 

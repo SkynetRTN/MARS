@@ -662,45 +662,152 @@ def test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window(
     assert result.metadata.atlas_accepted is False
 
 
-@pytest.mark.solver_data
-def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_available, tmp_path):
-    """End-to-end plate solve, checked against the frame's own recorded WCS.
+# The known solution. NGC 3628's V frame carries the WCS Skynet recorded for
+# it; stripped of those keywords, a solve must land back on it. Measured on
+# the development host (2026-10-26, 4200-series + TYCHO2 + UCAC5 indexes,
+# UCAC5 for ATLAS): bounded astrometry.net 4 s, all-sky 148 s, bounded ATLAS
+# 20 s, each within 0.11 arcsec, 0.15% in scale and 0.09 deg in rotation.
+# The tolerances leave several times that margin and still catch a wrong
+# solution, which is off by arcminutes or degrees, not arcseconds.
+KNOWN_SOLUTION_FRAME = "ngc3628"
+POSITION_TOL_ARCSEC = 1.0
+SCALE_TOL = 0.005
+ROTATION_TOL_DEG = 0.25
 
-    Skipped unless a usable astrometry.net install is present *and* its index
-    files cover this field scale. The fixture frames are ~10 arcmin across,
-    which needs the 4200-series (or 4107 and below) indexes; the commonly
-    installed 4107-4119 set starts at 22 arcmin and will not solve them.
 
-    Both backends degrade to "unavailable" rather than failing, so without the
-    data this returns no solution instead of raising — which is why the skip is
-    explicit rather than relying on an exception.
+def _anet_operator_settings_or_skip():
+    """The configured astrometry.net indexes, or a skip naming what is missing.
+
+    Missing data is reported as a skip, separately from a failed solve: with
+    ``solve-field`` and usable index directories present, the tests below
+    fail on no solution rather than skipping it.
     """
-    if not anet_available:
-        pytest.skip("solve-field not on PATH")
+    from algorithms.skylib_lite.astrometry.anet.engine import (
+        find_solve_field,
+        resolve_index_dirs,
+        validate_index_dirs,
+    )
 
-    from algorithms.wcs.wcs import solve_wcs
+    if find_solve_field() is None:
+        pytest.skip("missing data: solve-field is not on PATH")
+    configured = os.environ.get("ANET_INDEX_PATH")
+    if not configured:
+        pytest.skip(
+            "missing data: set ANET_INDEX_PATH to index directories covering "
+            "a ~10 arcmin field (the 4200 series)"
+        )
+    usable, rejected = validate_index_dirs(resolve_index_dirs(configured))
+    if not usable:
+        pytest.skip("missing data: " + ("; ".join(rejected) or "no usable index directory"))
+    return SolverSettings(anet_index_path=usable)
 
-    data, header = frame_image("ngc3628")
-    expected = WCS(header)
 
+def _stripped_known_frame(frame_image):
+    data, header = frame_image(KNOWN_SOLUTION_FRAME)
     stripped = header.copy()
     for key in list(stripped.keys()):
         if WCS_REGEX.match(key):
             del stripped[key]
+    return np.array(data), header, stripped
 
-    result = solve_wcs(stripped, np.array(data), tmp_path)
-    solved = result.wcs
-    if solved is None:
-        pytest.skip("no solution — index files likely do not cover this field scale")
 
-    centre_expected = expected.all_pix2world(528, 513, 0)
-    centre_solved = solved.all_pix2world(528, 513, 0)
-    sep = _angular_sep_deg(
-        float(centre_expected[0]) % 360, float(centre_expected[1]),
-        float(centre_solved[0]) % 360, float(centre_solved[1]),
+def _bounds_from_recorded(header):
+    """A 1-degree, +/-10% search around the recorded pointing and scale."""
+    from astropy.wcs.utils import proj_plane_pixel_scales
+
+    from algorithms.wcs.config import WcsSearchBounds
+
+    scale = float(np.mean(proj_plane_pixel_scales(WCS(header)))) * 3600.0
+    return WcsSearchBounds(
+        radius_deg=1.0, min_scale_arcsec=scale * 0.9, max_scale_arcsec=scale * 1.1
     )
-    assert sep < 0.01
+
+
+def _rotation_deg(wcs: WCS) -> float:
+    matrix = wcs.pixel_scale_matrix
+    return math.degrees(math.atan2(matrix[1, 0], matrix[1, 1]))
+
+
+def _assert_matches_recorded(solved: WCS | None, header, shape, backend: str) -> None:
+    from astropy.wcs.utils import proj_plane_pixel_scales
+
+    assert solved is not None, (
+        f"{backend} found no solution for {KNOWN_SOLUTION_FRAME} although its "
+        "data is configured; this is a solver failure, not missing data"
+    )
+    expected = WCS(header)
+    ny, nx = shape
+    ra_e, dec_e = (float(v) for v in expected.all_pix2world(nx / 2, ny / 2, 0))
+    ra_s, dec_s = (float(v) for v in solved.all_pix2world(nx / 2, ny / 2, 0))
+    position = _angular_sep_deg(ra_e % 360, dec_e, ra_s % 360, dec_s) * 3600.0
+    scale_e = float(np.mean(proj_plane_pixel_scales(expected)))
+    scale_s = float(np.mean(proj_plane_pixel_scales(solved)))
+    rotation = abs(_rotation_deg(solved) - _rotation_deg(expected))
+    rotation = min(rotation, 360.0 - rotation)
+
+    assert position < POSITION_TOL_ARCSEC, f"centre off by {position:.2f} arcsec"
+    assert abs(scale_s / scale_e - 1) < SCALE_TOL, f"scale off by {scale_s / scale_e - 1:.2%}"
+    assert rotation < ROTATION_TOL_DEG, f"rotation off by {rotation:.3f} deg"
     assert _wcs_parity(solved) == _wcs_parity(expected)
+
+
+@pytest.mark.solver_data
+def test_astrometry_net_recovers_the_known_solution_in_a_bounded_search(
+    frame_image, tmp_path
+):
+    settings = _anet_operator_settings_or_skip()
+    data, header, stripped = _stripped_known_frame(frame_image)
+    attempts: list[str] = []
+
+    result = solve_wcs(
+        stripped,
+        data,
+        tmp_path,
+        solver_settings=settings,
+        search_bounds=_bounds_from_recorded(header),
+        solver_attempts=attempts,
+    )
+
+    assert attempts == ["astrometry.net"]
+    _assert_matches_recorded(result.wcs, header, data.shape, "astrometry.net")
+
+
+@pytest.mark.solver_data
+def test_atlas_recovers_the_known_solution_in_a_bounded_search(frame_image, tmp_path):
+    """Convergence, not reachability: P9's check above stops at the catalogue
+    lookup; this one has to land on the recorded solution."""
+    settings = _atlas_operator_settings_or_skip()
+    data, header, stripped = _stripped_known_frame(frame_image)
+    attempts: list[str] = []
+
+    result = solve_wcs(
+        stripped,
+        data,
+        tmp_path,
+        solver_settings=settings,
+        search_bounds=_bounds_from_recorded(header),
+        solver_attempts=attempts,
+    )
+
+    assert attempts == ["atlas"]
+    _assert_matches_recorded(result.wcs, header, data.shape, "ATLAS")
+
+
+@pytest.mark.solver_data
+def test_blind_solve_recovers_the_known_plate_solution(frame_image, tmp_path):
+    """The default all-sky search, with the configured indexes passed in.
+
+    It used to skip when no solution came back, so a broken solver with its
+    data present read as missing data; and it relied on whatever settings the
+    environment produced. Missing data still skips, by name; a miss fails.
+    About 150 s on the development host.
+    """
+    settings = _anet_operator_settings_or_skip()
+    data, header, stripped = _stripped_known_frame(frame_image)
+
+    result = solve_wcs(stripped, data, tmp_path, solver_settings=settings)
+
+    _assert_matches_recorded(result.wcs, header, data.shape, "astrometry.net")
 
 
 # ---------------------------------------------------------------------------
