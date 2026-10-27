@@ -889,6 +889,71 @@ def test_duplicate_if_needed_only_fires_for_two() -> None:
     np.testing.assert_allclose(two_y, [1.0, 2.0, 1.0, 2.0])
 
 
+@pytest.mark.parametrize("values", [
+    [0., 0., 0., 0., 1.],
+    [0., 0., 0., 0., 1e-300],
+    [0., 0., 0., 0., 1e300],
+    [1e300, 1e300, 1e300, 1e300, np.nextafter(1e300, np.inf)],
+    [-1e308, -1e308, -1e308, -1e308, 1e308],
+])
+def test_fold_snr_preserves_sparse_contrast_at_extreme_scales(values):
+    values = np.array(values)
+    profile = folding.FoldedProfile(phase_s=np.arange(values.size), source1=values)
+    # Four equal off-pulse bins and one pulse: population std = 2/5 of
+    # the peak contrast, so the standard-deviation fallback is exactly 5/2.
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() == pytest.approx(2.5, rel=1e-14)
+
+
+def test_fold_snr_uses_mad_at_extreme_scales():
+    profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.arange(5) * 1e300)
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() == pytest.approx(2 / 1.4826, rel=1e-14)
+
+
+def test_fold_snr_rejects_a_flat_extreme_profile_without_median_overflow():
+    profile = folding.FoldedProfile(phase_s=np.arange(4), source1=np.full(4, 1e308))
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() is None
+
+
+def test_fold_snr_withholds_an_unrepresentable_dynamic_range():
+    profile = folding.FoldedProfile(
+        phase_s=np.arange(5), source1=np.array([-1e308, 1e308, 1e-300, -1e-300, 0.]),
+    )
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() is None
+
+
+def test_fold_snr_does_not_depend_on_the_peak_phase():
+    values = np.array([0., 1e-17, 2e-17, 3e-17, 1.])
+    for shift in range(values.size):
+        profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.roll(values, shift))
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() == pytest.approx(1 / (1.4826e-17), rel=1e-14)
+
+
+@pytest.mark.parametrize("baseline", [1.4e307, -1.4e307])
+def test_fold_snr_preserves_off_pulse_noise_when_the_full_span_overflows(baseline):
+    step = np.spacing(abs(baseline))
+    values = np.r_[-1e308, baseline + step * np.arange(5), 1e308]
+    # Seven bins: the median is baseline + 2*step and the MAD is 2*step.
+    expected = (1e308 - (baseline + 2 * step)) / (1.4826 * 2 * step)
+    assert np.array_equal(values * .5 * 2, values)  # halving loses no input bits
+    for scale in (1., .5):
+        profile = folding.FoldedProfile(phase_s=np.arange(7), source1=values * scale)
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() == pytest.approx(expected, rel=1e-14)
+
+
+def test_fold_snr_withholds_unrepresentable_noise_at_every_peak_phase():
+    values = np.array([0., 1e-300, 2e-300, 3e-300, 1e300])
+    for shift in range(values.size):
+        profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.roll(values, shift))
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() is None
+
+
 def test_folding_a_synthetic_pulse_concentrates_it() -> None:
     period = 0.5
     t = np.arange(0, 60, 0.002)

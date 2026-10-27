@@ -1,5 +1,7 @@
 """M2 calibration selection, scatter and small-sample rejection, offline."""
 
+import warnings
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -9,6 +11,23 @@ from algorithms.fieldcal.field_cal import _match_detected_sources, perform_field
 from algorithms.fieldcal.schemas import PhotometricCalibrationSettings, PhotometryData, SourceExtractionData
 from algorithms.fieldcal.solution import calc_solution
 from tools.photometry_pipeline import _replicate_zero_point_rejection
+
+
+@pytest.mark.parametrize("step", [0., np.spacing(15.)])
+def test_rank_deficient_snr_line_keeps_zero_point_but_withholds_limiting_magnitude(step):
+    from tools.calibration import solve_zeropoint_from_measurements
+
+    rows = [{"mag": 15. + i * step, "ref_mag": 15. + i * step + offset,
+             "mag_error": .03, "ref_mag_error": .02}
+            for i, offset in enumerate([1.23, 1.24, 1.26, 1.27])]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = solve_zeropoint_from_measurements(rows, [])
+    assert result.errors == []
+    assert result.zero_point == pytest.approx(1.25)
+    assert result.zero_point_error_mag == pytest.approx(.00912870929175277)
+    assert result.limmag5 is None
+    assert "limiting_magnitude_unidentifiable" in {warning.code for warning in result.warnings}
 
 
 def _measurements(offsets, errors=0.02, reference_error=0.01):

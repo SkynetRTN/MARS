@@ -25,7 +25,7 @@ def test_empty_annulus_is_reported_even_when_the_legacy_flux_is_finite():
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData
 
-    with collect_numerical_notices() as notices:
+    with collect_numerical_notices() as notices, np.errstate(invalid="raise", divide="raise"):
         rows = run_photometry(np.full((20, 20), 10.), fits.Header({"EXPTIME": 1}),
             [SourceExtractionData(x=10, y=10)],
             PhotometrySettings(a=2, a_in_px=30, a_out_px=35, apcorr_tol=0))

@@ -1,14 +1,15 @@
 # MARS release closure gate
 
 Updated 2026-10-27 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
-closed locally on the single working branch `feature/m2`. It includes the
+implemented and reviewed on the single working branch `feature/m2`. It includes the
 channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 is complete locally; its changes remain unmerged and unpublished. Other
-release gates below remain open. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
+M2 implementation is complete locally; its changes remain unmerged and
+unpublished. The latest live revalidation has provider failures recorded below.
+Other release gates below remain open. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
 
@@ -24,8 +25,9 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-**Complete on `feature/m2`, including the comprehensive-review fixes in
-`71d3a80`.** The changes are pushed for review, unmerged and unpublished.
+**All ten checkpoints implemented and reviewed on `feature/m2`, including
+the comprehensive-review fixes in `71d3a80`.** Changes remain unmerged and
+unpublished; the verification follow-up is recorded below.
 Other release gates remain open. Technical derivations and detailed acceptance
 evidence are linked below; this section records outcomes and remaining limits.
 
@@ -76,8 +78,8 @@ evidence are linked below; this section records outcomes and remaining limits.
   reporting share production filter precedence and preserve native band
   identities. Existing transforms, including H-alpha, are unchanged. Retained
   approximations and relative narrowband references are disclosed. Live catalog
-  comparisons were recorded on 2026-10-23; the offline run below does not repeat
-  those queries.
+  comparisons were recorded on 2026-10-23 and repeated in the follow-ups below;
+  current provider failures prevent a fully passing fresh revalidation.
   [Acceptance and live evidence](../analysis/catalog-magnitudes-filters.md).
 - [x] **Catalog coverage and sufficiency.** Queries enclose and clip to detector
   footprints, including seams, poles and cache rounding. Raw response caps,
@@ -108,52 +110,64 @@ Evidence: [pulsar precision](../../tests/test_pulsar_probability_precision.py),
 [attribution](../../tests/test_bench_attribution.py),
 [public failure handling](../../tests/test_numerical_warnings.py).
 
+The subsequent warning investigation also corrected extreme-scale folded SNR
+and withheld unidentifiable limiting magnitudes. Masked catalog positions and
+empty annuli avoid invalid conversions/division while preserving their existing
+rejection or disclosure. Regression tests check SNR across pulse phases and
+lossless rescaling, retain valid recorded calibration results, and treat
+numerical warnings as errors.
+
 ### M2 validation and remaining checks
 
-Recorded full offline run, 2026-10-27: **4,103 passed, 88 skipped, 220 warnings**
-with Python 3.13.15, locked dependencies and MCP. Compilation, schema goldens,
-generated guidance, repository shape and whitespace checks passed. The following
-are Python/test warning events, separate from structured MARS tool warnings;
-repeated reads of the same fixtures account for most of the count.
+Verification follow-up, 2026-10-27, with locked dependencies:
 
-| Warnings | Count | Meaning |
-| --- | ---: | --- |
-| Astropy FITS header notices | 214 | Repeated date-to-MJD normalization notices (213), plus the textual `J2000` equinox regression (1). |
-| Poorly conditioned polynomial fits | 2 | Deliberate single-source/degenerate calibration cases. |
-| Masked value converted to NaN | 1 | A malformed provider-row regression exercises missing-position handling. |
-| Invalid division | 1 | The retained empty-background-annulus defect is deliberately exercised and disclosed by the tool. |
-| Overflow while squaring | 2 | Extreme synthetic flux tests reach the fold-SNR standard-deviation fallback. Spectral assertions pass; that auxiliary diagnostic retains an extreme-scale numerical limitation. |
+| Check | Result |
+| --- | --- |
+| Full suites with MCP and native prerequisites, Python 3.12 and 3.13 | 4,122 passed, 84 skipped on each version; all four native checks passed. |
+| SDK-free matrix, Python 3.12 and 3.13 | 229 passed, 21 expected skips on each version. |
+| All 78 network-marked cases, fresh SDK cache and ADS enabled | 63 passed, 13 failed on provider errors, 2 expected header-priority skips. |
+| Focused numerical regressions | 270 passed with runtime and polynomial-rank warnings treated as errors. |
+| Wheel/source build, strict metadata and contents checks | Passed. |
+| Installed-wheel MCP self-test, both Python versions | Passed outside the checkout. |
+| Compilation, generated guidance and whitespace checks | Passed. |
 
-| Skipped tests | Count | Reason |
-| --- | ---: | --- |
-| Live catalog/network queries | 77 | Opt-in `MARS_TEST_NETWORK` was disabled. |
-| Live ADS object-query check | 1 | Credentialed querying was not enabled in this offline run; the follow-up below verifies it. |
-| Live Ollama provider check | 1 | Opt-in `MARS_TEST_MODEL_API` was disabled. |
-| Historical benchmark falsification | 4 | Original untracked run artifacts were absent. |
-| Native Windows allocation control | 1 | Requires Windows. |
-| Native solver/catalog prerequisites | 4 | Operator paths were not supplied to the offline run. The separate configured run below passed; its blind test also needed explicit settings. |
+Native checks used astrometry.net indexes under `/srv/agents/catalogs/astrometry`
+and UCAC5 at `/srv/agents/catalogs/ATLAS/UCAC5`.
 
-The offline skips provide no passing evidence. Separate opt-in results below
-cover live services and the Linux solver/catalog setup. Model, historical-run
-and Windows checks remain unverified here; the scientific limitations stated
-above remain explicit.
+The earlier **220 warnings** comprised 214 Astropy FITS notices and six
+numerical/conversion events. Those six events are addressed by the repairs above.
+Each current full run emitted **224 FITS notices**: 218 date normalizations,
+one synthetic textual `J2000` equinox, and five header-only solver WCS notices.
+Runtime and polynomial-rank warnings were treated as errors. Sampled celestial
+coordinates and original headers were unchanged by normalization. Two original
+NGC 5286 B fixtures (`000` and `002`) nevertheless carry inconsistent
+`DATE-OBS`/`MJD-OBS` values; they are not validated timing references.
 
-Live and native follow-up, 2026-10-26: all **78 network-marked cases** were
-enabled (the 77 catalog/network cases plus credentialed ADS) with a fresh SDK
-cache. **76 distinct cases passed**, including provider magnitude/filter
-comparisons, coverage, field calibration and ADS paper metadata. Two SIMBAD
-connection failures passed on a targeted fresh-process retry. The remaining two
-zero-point comparisons skipped because the frames' header zero points correctly
-take precedence over a live field-calibration solve.
+The earlier **88 offline skips** were 78 network cases, one Ollama check,
+four historical benchmark cases, one Windows-only check and four unconfigured
+native checks. The current full runs' 84 skips exclude the four native checks;
+the network cases and Ollama were enabled separately in this follow-up.
+Ollama was explicitly attempted but its daemon is unreachable; the original
+historical runs are absent from this checkout, and Windows allocation control
+cannot run on Linux. SDK-free skips additionally cover the absent optional MCP
+package.
 
-All **four native checks passed** using the existing astrometry.net indexes
-under `/srv/agents/catalogs/astrometry` and UCAC5 at
-`/srv/agents/catalogs/ATLAS/UCAC5`. M15 solved with both default and bounded
-searches; the configured blind solve recovered NGC 3628's recorded WCS. The UCAC
-check verifies real catalog lookup and diagnostics, not blind ATLAS convergence.
-The blind test now supplies operator settings and fails a configured no-solution
-result instead of skipping it. Independent code review found no actionable
-issues in these changes.
+The live run used the responding [CDS-listed South Africa mirror](https://vizier.cds.unistra.fr/vizier/mirrors.gml)
+for configurable catalog clients. Pan-STARRS and SkyMapper returned interrupted
+query errors; UCAC requests timed out. SIMBAD was unreachable, blocking its
+three dependent checks, and default VizieR connections blocked the literature
+and radio checks. A Harvard-mirror retry also failed. These are failed checks
+and supply no passing evidence. ADS, the other live catalog/value checks and all
+eligible field-calibration comparisons passed. Only header zero points skip
+those comparisons.
+
+Earlier follow-up evidence remains distinct: on 2026-10-26, 76 network cases
+passed, with two header-priority skips, and all four configured native checks
+passed. The blind NGC 3628 test asserts recovery of its recorded WCS; the UCAC
+check exercises real catalog lookup and diagnostics without claiming blind
+ATLAS convergence. Current provider failures prevent a clean repetition of the
+entire live set. Independent review of the warning fixes found no outstanding
+actionable findings after the SNR corrections.
 
 ## M3: failed inputs and services must produce usable failures
 

@@ -457,6 +457,8 @@ def _column_spelling(name: str, present: set) -> Optional[str]:
 
 
 def _finite_position(source: CatalogSource) -> bool:
+    if any(numpy.ma.is_masked(value) for value in (source.ra_hours, source.dec_degs)):
+        return False
     try:
         return math.isfinite(float(source.ra_hours)) and math.isfinite(float(source.dec_degs))
     except (TypeError, ValueError):

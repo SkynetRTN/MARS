@@ -27,6 +27,8 @@ def capture_numerical_warnings(warnings: list[ToolWarning]):
                         warning = ToolWarning(code="saturation_count_unreliable", message=notice.message)
                     case "limiting_magnitude_unvalidated":
                         warning = ToolWarning(code="limiting_magnitude_unvalidated", message=notice.message)
+                    case "limiting_magnitude_unidentifiable":
+                        warning = ToolWarning(code="limiting_magnitude_unidentifiable", message=notice.message)
                     case "magnitude_error_snr_cut":
                         warning = ToolWarning(code="magnitude_error_snr_cut", message=notice.message)
                     case "ra_seam_matching_approximation":

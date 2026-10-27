@@ -95,6 +95,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "aperture_correction_crowding": "The enabled growth-curve correction retains an ineffective neighbour guard and can be crowding-biased.",
     "saturation_count_unreliable": "Downsampled source extraction can lose saturation counts, so zero counts and filtering are unreliable.",
     "limiting_magnitude_unvalidated": "The 5-sigma limit is an unvalidated SNR-line extrapolation and can be implausible for near-flat inputs.",
+    "limiting_magnitude_unidentifiable": "The calibration sample cannot identify a log-SNR line, so no limiting magnitude is reported.",
     "magnitude_error_snr_cut": "Calibration selection uses inverse magnitude error rather than exact flux/error SNR.",
     "ra_seam_matching_approximation": "Retained angular matching does not unwrap the 0/24-hour RA seam and can miss nearby stars.",
     "retained_catalog_uncertainty": "A retained catalog uncertainty formula uses the wrong colour-error input and can bias reported errors and fit weights.",

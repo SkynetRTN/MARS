@@ -197,9 +197,16 @@ def _calc_solution_with_mask(sources: list[PhotometryData]):
             "The retained 5-sigma limiting-magnitude estimate uses an unvalidated log-SNR line "
             "extrapolation. Near-flat fits can yield implausible limits; this is not a measured "
             "detection-completeness limit.")
-        limmag_a, limmag_b = np.polyfit(mags + m0, np.log10(snr), 1)
-        if limmag_a:
-            limmag = (np.log10(5) - limmag_b) / limmag_a
+        calibrated_mags = mags + m0
+        rank = 0
+        if len(calibrated_mags) > 1 and np.any(calibrated_mags != calibrated_mags[0]):
+            (limmag_a, limmag_b), _, rank, _, _ = np.polyfit(calibrated_mags, np.log10(snr), 1, full=True)
+            if rank == 2 and limmag_a:
+                limmag = (np.log10(5) - limmag_b) / limmag_a
+        if rank < 2:
+            note_numerical_issue("limiting_magnitude_unidentifiable",
+                "The calibration stars do not span independently resolvable magnitudes for "
+                "the log-SNR line. No limiting magnitude can be inferred from this sample.")
 
     if n:
         resid = b - m0

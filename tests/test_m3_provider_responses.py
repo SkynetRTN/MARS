@@ -11,6 +11,7 @@ contracts against the services.
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 import pytest
@@ -116,10 +117,14 @@ def test_a_band_column_found_under_an_underscore_spelling_is_read():
     assert [s.mags["V"].value for s in sources] == [pytest.approx(13.5), pytest.approx(14.6)]
 
 
-def test_a_row_without_a_finite_position_is_dropped_like_one_without_magnitudes():
+@pytest.mark.parametrize("coordinate", ["RAJ2000", "DEJ2000"])
+def test_a_row_without_a_finite_position_is_dropped_like_one_without_magnitudes(coordinate):
     # Live Tycho-2 has stars with masked mean positions (no PM solution).
-    table = _apass(RAJ2000=MaskedColumn([201.36, 201.37], mask=[True, False]))
-    sources = CATALOGS["APASS"].table_to_sources(table)
+    values = [201.36, 201.37] if coordinate == "RAJ2000" else [-43.01, -43.02]
+    table = _apass(**{coordinate: MaskedColumn(values, mask=[True, False])})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sources = CATALOGS["APASS"].table_to_sources(table)
     assert [s.ra_hours for s in sources] == [pytest.approx(201.37 / 15)]
 
 

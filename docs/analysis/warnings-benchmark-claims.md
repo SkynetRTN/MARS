@@ -20,13 +20,13 @@ failure details preserves MCP's and the agent loop's error flag.
 | Retained behavior | Condition and disclosure |
 | --- | --- |
 | PHOT-01: nonpositive aperture flux leaves a zero magnitude placeholder | `nonpositive_aperture_flux` when any measured flux is nonpositive; zero remains a placeholder, not a valid magnitude. |
-| PHOT-02: an empty background annulus can leave a misleading finite measurement | `empty_background_annulus` before the zero-area division. |
+| PHOT-02: an empty background annulus can leave a misleading finite measurement | `empty_background_annulus`; undefined background means remain NaN without dividing by zero. |
 | PHOT-06: downsampled saturation counts are unreliable | `saturation_count_unreliable` when downsampling with a saturation image; ordinary extraction is unaffected. |
 | PHOT-07: adaptive isophotal analysis has an origin mismatch | `isophotal_origin_approximation` only when the missing-shape fallback actually runs. |
 | PHOT-12: growth-curve neighbour rejection is ineffective | `aperture_correction_crowding` when aperture correction runs; it does not claim the particular field is crowded. |
 | PHOT-13: SNR selection uses inverse magnitude error | `magnitude_error_snr_cut` when those selection thresholds are enabled; they are not exact flux-SNR cuts. |
 | PHOT-18: angular matching uses unwrapped flat-sky RA | `ra_seam_matching_approximation` for a detected/catalog RA span over 12 hours; close stars across the seam can remain unmatched. |
-| Limiting magnitude extrapolates log SNR | `limiting_magnitude_unvalidated` whenever this estimate is evaluated, including near-flat fits and later no-solution results. It is not measured detection completeness. |
+| Limiting magnitude extrapolates log SNR | `limiting_magnitude_unvalidated` when the estimate is considered. Insufficient or rank-deficient samples also report `limiting_magnitude_unidentifiable` and return no limit. Full-rank extrapolations remain unvalidated for detection completeness. |
 | Landolt U uncertainty uses the wrong colour error | `retained_catalog_uncertainty` for a U-dependent reference; V and externally supplied reference magnitudes do not acquire that warning. |
 
 Landolt's warning concerns the existing synthesized uncertainty, including

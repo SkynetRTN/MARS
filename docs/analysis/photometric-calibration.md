@@ -71,6 +71,8 @@ measurement convention. This checkpoint does not change catalog transforms,
 completeness, aperture/background kernels or the SNR definition. Retained
 near-flat SNR regression can still produce an implausible finite limiting
 magnitude; no improved limiting-magnitude model is claimed.
+Insufficient or rank-deficient magnitude samples now return no limiting
+magnitude with an explicit notice while preserving their zero-point fit.
 
 ## Evidence and historical differences
 

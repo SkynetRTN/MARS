@@ -453,7 +453,7 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
             note_numerical_issue("empty_background_annulus",
                 "Some background annuli contain no usable pixels. The retained kernel can "
                 "return finite flux without sky subtraction and without a reliable failure flag.")
-        bk_mean = bk_flux/bk_area
+        bk_mean = np.divide(bk_flux, bk_area, out=np.full_like(bk_flux, np.nan), where=bk_area > 0)
 
     # Convert ADUs to electrons
     flux *= gain
