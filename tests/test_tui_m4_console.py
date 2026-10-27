@@ -99,8 +99,22 @@ def test_a_missing_default_model_names_how_to_pick_another_at_launch():
     message = backends.unavailable_message("ollama/qwen3.8:27b-mlx", exc)
 
     assert "llama3.1:8b" in message
-    assert "`mars --backend ollama/<model>`" in message
+    assert "`mars --backend ollama/llama3.1:8b`" in message
     assert "`ollama pull qwen3.8:27b-mlx`" in message
+
+
+def test_ollama_not_installed_says_where_to_get_it(monkeypatch):
+    """A daemon that does not answer may not exist: `ollama serve` alone is
+    then a command the person does not have."""
+
+    monkeypatch.setattr(backends.shutil, "which", lambda name: None)
+
+    message = backends.unavailable_message(
+        "ollama/qwen3:8b", BackendUnavailableError("OLLAMA_BASE_URL")
+    )
+
+    assert "Ollama is not installed here" in message
+    assert "https://ollama.com" in message
 
 
 # ---------------------------------------------------------------------------
@@ -431,3 +445,19 @@ def test_a_tool_listing_line_says_what_the_tool_does():
         "Search VizieR tables, e.g. a catalog by its name. More here."
     ) == "Search VizieR tables, e.g. a catalog by its name."
     assert len(_first_sentence("word " * 100)) <= 140
+
+
+def test_a_truncated_ollama_prompt_says_how_to_widen_the_window():
+    message = backends.failure_message(
+        BackendUnavailableError("OLLAMA_CONTEXT_LENGTH"), "ollama/qwen3:0.6b"
+    )
+
+    assert "OLLAMA_CONTEXT_LENGTH=32768 ollama serve" in message
+
+
+def test_an_ollama_timeout_says_what_ran_out():
+    message = backends.failure_message(
+        BackendUnavailableError("OLLAMA_TIMEOUT_S"), "ollama/qwen3:0.6b"
+    )
+
+    assert "did not finish a turn within OLLAMA_TIMEOUT_S" in message

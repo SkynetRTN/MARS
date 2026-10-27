@@ -21,6 +21,7 @@ what pays the probe.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -278,9 +279,27 @@ def _remedy(variable: str, *, running: bool) -> str:
         local = "/backend ollama" if running else "mars --backend ollama"
         return f"no API key. {where}, or use a local model with `{local}`"
     if variable == "OLLAMA_BASE_URL":
+        if shutil.which("ollama") is None:
+            return (
+                "Ollama is not installed here. Install it from https://ollama.com "
+                "and start it with `ollama serve`, or point OLLAMA_BASE_URL at a "
+                "host running it"
+            )
         return (
             "no Ollama daemon answered. Start one with `ollama serve`, or point "
             "OLLAMA_BASE_URL at the host running it"
+        )
+    if variable == "OLLAMA_TIMEOUT_S":
+        return (
+            "the model did not finish a turn within OLLAMA_TIMEOUT_S (600 s "
+            "unless set). Use a smaller model, or set OLLAMA_TIMEOUT_S higher "
+            "before starting mars"
+        )
+    if variable == "OLLAMA_CONTEXT_LENGTH":
+        return (
+            "Ollama cut the prompt to fit its context window, so the model saw "
+            "little of MARS's instructions and tools. Restart the daemon with a "
+            "larger window, such as `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`"
         )
     return f"set {variable}"
 
@@ -312,14 +331,16 @@ def unavailable_message(
         if len(exc.installed) > 8:
             available += f", and {len(exc.installed) - 8} more"
         provider = spec.partition("/")[0]
+        # An installed name makes the command one to copy, not to fill in.
+        model = exc.installed[0] if exc.installed else "<model>"
         pick = (
-            f"/backend {provider} <model>"
+            f"/backend {provider} {model}"
             if running
-            else f"mars --backend {provider}/<model>"
+            else f"mars --backend {provider}/{model}"
         )
         text = (
             f"Cannot use {spec}: the service holds no model named "
-            f"{exc.model!r}. Installed: {available}. Choose one with `{pick}`, "
+            f"{exc.model!r}. Installed: {available}. Choose one, such as `{pick}`, "
             f"or install it with `ollama pull {exc.model}`."
         )
     else:

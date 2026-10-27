@@ -167,7 +167,7 @@ mars-mcp install-skill ~/.claude/skills/mars-tools
 
 **If the server does not appear**, run `mars-mcp self-test` first. When it
 passes, the problem is the host config. Claude Desktop logs the server's
-output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
+output to `~/Library/Logs/Claude/mcp-server-MARS — MCP Astronomy Research Suite.log` on macOS, and under
 `%APPDATA%\Claude\logs\` on Windows.
 
 ## Updates, offline use and rollback
@@ -175,7 +175,7 @@ output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
 | | Claude Desktop extension, Codex plugin | `uv tool install` |
 | --- | --- | --- |
 | **New release** | Picked up at the next start: the launcher asks PyPI for the newest release each time. Nothing to do. | `uv tool upgrade skynet-mars` |
-| **No network** | Starts the newest release already in uv's cache, and says so in the app's log. Only a first start needs the network. | Runs what is installed. |
+| **No network** | Starts the newest release in uv's cache, and says so in the app's log. Only a first start needs the network. | Runs what is installed. |
 | **Roll back** | Set the extension's *MARS release* setting, or `MARS_VERSION` for Codex, to an earlier release (for example `0.1.0rc5`). Clear it to return to the newest. | `uv tool install --force --python 3.13 "skynet-mars[mcp]==<version>"` |
 | **Fails to start** | Run the self-test below; when it passes, the fault is in the app's configuration. The app's log has the server's output. | `mars-mcp self-test` |
 
@@ -203,7 +203,12 @@ model calls MARS's tools itself, with no agent host. It needs a model:
 - **A local Ollama model**, which needs no key: start `ollama serve`, then
   `mars --backend ollama/<model>` with a model from `ollama list`. The
   default, `qwen3.8:27b-mlx`, is an MLX build for Apple Silicon; on Linux
-  and Windows, name another model.
+  and Windows, name another model. MARS's instructions and tools take about
+  19,000 tokens, more than Ollama's default context window on a machine
+  with less memory, which Ollama fills by silently dropping most of the
+  prompt. Start the daemon with a larger window,
+  `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `mars` stops a turn with this
+  advice when it sees a prompt cut short.
 
 `MARS_MODEL_BACKEND=provider/model` sets the default backend, and `/backend`
 switches inside the console. If the backend it starts on cannot be used,

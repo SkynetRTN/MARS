@@ -234,8 +234,22 @@ Evidence: [query backends](../../algorithms/query/),
   - **Docs:** `../installing.md` has an updates, offline and rollback
     table; the installer READMEs explain the shared launcher and that the
     plugin's skill copy can lag the server.
+  - **Installed copy (2026-10-27):** given the bare name, uv prefers a
+    `uv tool install` of MARS, however old, over its cache, so a user with
+    rc5 installed was served rc5 after the launcher had fetched rc6. Step 1
+    now prints the release it fetched and step 2 serves exactly that one;
+    offline, step 1 runs again with `--offline`, which names the newest
+    cached release.
+  - **macOS (2026-10-27),** on the maintainer's Apple Silicon VM (macOS
+    27.0.1, Claude 3.6556.2, ChatGPT 26.1021.31345), over SSH through the
+    1.1.0 extension's own command with rc5 installed as a uv tool: online
+    served rc6, a pin served rc5, offline served rc6 (the newest cached),
+    offline with a pin served rc5, a malformed pin exited 2. The Codex
+    command, started from a folder holding a planted `re.py` and `uv.toml`,
+    used neither and served 55 tools.
   - **Remaining:** re-check the changed Codex launch in the ChatGPT app on
-    Windows and Linux, and the *MARS release* setting in Claude Desktop.
+    Windows and Linux, and the *MARS release* setting in Claude Desktop's
+    own settings screen (the launcher behind it is verified above).
 - [ ] **Installed commands and data.** `mars-bench` ships without its
   checkout-only assets. Verify its installed behavior and cross-platform bundle
   installation, interruption and recovery. Record current cold/warm startup
@@ -287,8 +301,21 @@ Evidence: [query backends](../../algorithms/query/),
   `mars --backend ollama`; a missing Ollama model lists what the daemon
   holds with the exact command to pick one or `ollama pull` it.
   `../installing.md` has a console section, including the `-mlx` default.
-  The default model is unchanged. Remaining: a clean-install run on each
-  supported OS.
+  The default model is unchanged.
+  - **macOS (2026-10-27),** installed from this branch, over SSH: with no
+    key `mars` exits 2 with the shell-variable advice; with no daemon, and
+    Ollama not installed, it now says where to get Ollama rather than only
+    `ollama serve`; with a daemon but not the default model it names an
+    installed one to copy (`mars --backend ollama/qwen3:0.6b`). With a model
+    it reaches a working session.
+  - **Ollama's context window:** MARS's prompt and tools are 18,830 tokens,
+    and on the VM Ollama's default window was 4,096, so the daemon silently
+    kept 2,050 of them and the model answered without its tools. The
+    OpenAI-compatible endpoint cannot ask for a size, so the adapter now
+    refuses a turn whose reported input is under half of what was sent,
+    naming `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `../installing.md`
+    says so. A timeout now says what ran out.
+  - **Remaining:** a clean-install run on Windows and Linux.
 - [ ] **Console terminals and long runs.** Nothing records the console in
   Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
   questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the
@@ -298,6 +325,14 @@ Evidence: [query backends](../../algorithms/query/),
   progress reads in raw milliseconds (now seconds and minutes past one
   second, 2026-10-26). Record supported terminals and the
   measured stop and quit behavior during a real solve.
+  *macOS over SSH, in tmux 3.8 (2026-10-27):* the console renders at
+  80x24 and 100x30; Esc is seen within a second (no tmux delay), but a stop
+  waits for the request in flight (188 s for a model call on the VM);
+  Ctrl+Q quits at once and Ctrl+C says to press Ctrl+Q. The graphics probe
+  reports sixel inside tmux. The status line is cut at 80 and at 100
+  columns once token counts appear, losing the stop hint, and never names
+  Ctrl+Q. `NO_COLOR` was inconclusive: the idle screen is grey either way.
+  Terminal.app and iTerm2 need a person at the Mac.
 - [ ] **Console failures and commands.** A tool that returns an error is
   marked ✓, and a backend failure mid-turn reports only "Session finished:
   error." `/status`, `/tools`, `/approve`, `/prompt` and `/new` are listed
