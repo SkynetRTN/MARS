@@ -19,9 +19,12 @@ operators (``similar(...)``, ``trending(...)``, ``topn(N, query, sort)``),
 proximity search, wildcards -- see ``algorithms.catalogs.ads`` and the ADS guide for
 the full syntax those support.
 
-Confirmed by reading astroquery.nasa_ads.core's source, not live -- no
-ADS_DEV_KEY is configured in this environment, so this module's behavior
-against the real API has not been verified end-to-end:
+Object queries need ADS's ``/v1/objects/query`` expansion service before the
+search endpoint: ``object:`` is UI syntax, not an indexed Solr field. The
+official client uses this same two-step flow. Confirmed live with an abstract
+and object-name search; grouping alone does not make ``object:`` searchable.
+
+The astroquery adapter supplies these remaining behaviors:
 
 - Default fields, sort (``'date desc'``), and row count (10) come from
   ``astroquery.nasa_ads.conf``; this module overrides ``ADS.ADS_FIELDS``/
@@ -42,6 +45,7 @@ in the ``ADS_DEV_KEY`` environment variable before relying on this module.
 
 from __future__ import annotations
 
+import re
 from typing import Optional, Union
 
 from astropy.table import Table, vstack
@@ -53,6 +57,7 @@ from algorithms.catalogs.ads import (
     flatten_value,
     format_citation,
 )
+from algorithms.query.vizier import ProviderResponseError
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
 from tools.models import ToolResult, ToolWarning
@@ -65,8 +70,8 @@ __all__ = [
 ]
 
 #: MARS-side safety ceiling on total rows fetched in one call. Not a
-#: discovered ADS server-side limit -- no token was available to confirm one
-#: -- just a bound so a very broad topic doesn't page indefinitely.
+#: discovered ADS server-side limit -- just a bound so a very broad topic
+#: doesn't page indefinitely.
 _MAX_RESULTS_CEILING = 500
 _PAGE_SIZE = 50
 
@@ -91,14 +96,8 @@ def _build_query(
     Returns ``None`` if nothing was given -- an empty/bare query would be
     exactly the unfielded search ADS's own docs warn against.
 
-    Each clause is parenthesized before joining with AND -- confirmed live
-    that combining ``abs:"..."`` with ``object:"..."`` via plain AND caused
-    ADS's parser to reject the query with a 400 error, not yet root-caused
-    (``object:`` is documented as a special SIMBAD/NED-tagged lookup, not a
-    plain text match, unlike every other field here). Explicit grouping is
-    standard practice for combining Solr-style fielded clauses and is a
-    precaution, not a confirmed fix -- it has not been verified against the
-    real API (no ADS_DEV_KEY was available while building this).
+    Each clause is parenthesized before joining with AND to preserve Boolean
+    scope. Object clauses are expanded by the provider before searching.
     """
     clauses: list[str] = []
     if query:
@@ -159,6 +158,33 @@ def _missing_token_result() -> ToolResult:
     )
 
 
+def _expand_object_query(query_string: str) -> str:
+    """Translate UI object syntax through ADS's official resolver service.
+
+    See https://github.com/adsabs/adsabs-dev-api/blob/master/openapi/services/objects.yaml.
+    A 200 response may carry an error, so only a populated query is usable.
+    """
+    response = ADS._request(
+        method="POST",
+        url=f"{ADS.SERVER}/v1/objects/query",
+        json={"query": [query_string]},
+        headers={"Authorization": "Bearer " + ADS._get_token()},
+        timeout=ADS.TIMEOUT,
+        cache=False,
+    )
+    response.raise_for_status()
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise ProviderResponseError("ADS object expansion returned invalid JSON") from exc
+    if not isinstance(body, dict) or body.get("error"):
+        raise ProviderResponseError(f"ADS object expansion returned an unusable response: {str(body)[:500]}")
+    expanded = body.get("query")
+    if not isinstance(expanded, str) or not expanded.strip():
+        raise ProviderResponseError("ADS object expansion returned no usable query")
+    return expanded
+
+
 def _paged_query(
     query_string: str, sort: str, max_results: int
 ) -> tuple[Optional[Table], Optional[ToolResult]]:
@@ -180,7 +206,14 @@ def _paged_query(
         ADS.NROWS = page_size
         ADS.NSTART = start
         try:
+            if start == 0 and re.search(r"\bobject\s*:", query_string, re.IGNORECASE):
+                query_string = _expand_object_query(query_string)
             page = ADS.query_simple(query_string)
+        except ProviderResponseError as exc:
+            return None, ToolResult(
+                status="error",
+                errors=[{"code": "unusable_response", "message": str(exc)}],
+            )
         except RuntimeError as exc:
             message = str(exc)
             if "No API token found" in message:

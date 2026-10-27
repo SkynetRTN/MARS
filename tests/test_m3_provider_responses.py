@@ -418,16 +418,88 @@ def test_calibration_reports_an_unusable_catalog_response(monkeypatch):
     assert "RAJ2000" in result.errors[0].message
 
 
-# --- ADS: the abs:/object: grouping is pinned (live check needs a key) --------
+# --- ADS: object queries require expansion before the Solr search ------------
 
 
 def test_ads_fielded_clauses_are_each_grouped():
     from tools.ads import _build_query
 
     query = _build_query(None, None, False, None, "pulsar timing", None, None, "PSR B1937+21", None)
-    # The workaround: each clause parenthesized before AND. Whether ADS needs it
-    # is confirmed only by test_m3_provider_responses_live (needs ADS_DEV_KEY).
     assert query == '(abs:"pulsar timing") AND (object:"PSR B1937+21")'
+
+
+@pytest.mark.parametrize("review", [False, True])
+@pytest.mark.parametrize("raw_query", [False, True])
+def test_ads_expands_object_queries_before_search(monkeypatch, artifact_dir, review, raw_query):
+    import json
+    from urllib.parse import parse_qs, urlsplit
+
+    from requests import Response
+    from tools import ads
+
+    original = '(abs:"millisecond pulsar" AND object:"PSR B1937+21")' if raw_query else (
+        '(abs:"millisecond pulsar") AND (object:"PSR B1937+21")'
+    )
+    expanded = '(abs:"millisecond pulsar") AND ((=abs:"PSR B1937+21" OR simbid:0) database:astronomy)'
+    monkeypatch.setattr(ads.ADS, "TOKEN", "test-token")
+
+    def request(method, url, **kwargs):
+        response = Response()
+        response.url, response.status_code = url, 200
+        if method == "POST":
+            assert url == "https://api.adsabs.harvard.edu/v1/objects/query"
+            assert kwargs["json"] == {"query": [original]}
+            assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+            assert kwargs["timeout"] == ads.ADS.TIMEOUT
+            body = {"query": expanded}
+        elif parse_qs(urlsplit(url).query)["q"] == [expanded]:
+            body = {"response": {"docs": [{
+                "bibcode": "1982Natur.300..615B", "title": ["A millisecond pulsar"],
+                "author": ["Backer, D. C."], "pub": "Nature", "volume": "300",
+                "pubdate": "1982-12-00", "page": ["615"], "citation_count": 1,
+                "abstract": "A millisecond pulsar.", "doi": ["10.1038/300615a0"],
+            }]}}
+        else:
+            response.status_code = 400
+            body = {"error": {"msg": "undefined field object"}}
+        response._content = json.dumps(body).encode()
+        return response
+
+    monkeypatch.setattr(ads.ADS, "_request", request)
+    call = ads.build_literature_review if review else ads.search_ads
+    limit = {"max_papers" if review else "max_results": 5}
+    parameters = {"query": 'abs:"millisecond pulsar" AND object:"PSR B1937+21"'} if raw_query else {
+        "abstract": "millisecond pulsar", "object_name": "PSR B1937+21",
+    }
+    result = call(**parameters, **limit)
+    assert result.status == "ok", result.errors
+    assert result.count == 1
+    assert result.preview[0]["bibcode"] == "1982Natur.300..615B"
+
+
+@pytest.mark.parametrize("body", [
+    {"error": "object resolver unavailable", "query": "abs:pulsar"},
+    {}, [], {"query": ""}, {"query": ["abs:pulsar"]},
+])
+def test_ads_unusable_object_expansion_is_an_error(monkeypatch, body):
+    import json
+
+    from requests import Response
+    from tools import ads
+
+    monkeypatch.setattr(ads.ADS, "TOKEN", "test-token")
+
+    def request(method, url, **kwargs):
+        assert method == "POST", "an unusable expansion must never reach search"
+        response = Response()
+        response.status_code = 200
+        response._content = json.dumps(body).encode()
+        return response
+
+    monkeypatch.setattr(ads.ADS, "_request", request)
+    result = ads.search_ads(object_name="M31")
+    assert result.status == "error"
+    assert [error.code for error in result.errors] == ["unusable_response"]
 
 
 # --- SDSS: a cached SkyServer error page is not a permanent failure -----------

@@ -1,6 +1,6 @@
 # MARS release closure gate
 
-Updated 2026-10-26 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
+Updated 2026-10-27 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
 closed locally on the single working branch `feature/m2`. It includes the
 channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
@@ -110,7 +110,7 @@ Evidence: [pulsar precision](../../tests/test_pulsar_probability_precision.py),
 
 ### M2 validation and remaining checks
 
-Recorded full offline run, 2026-10-26: **4,094 passed, 88 skipped, 220 warnings**
+Recorded full offline run, 2026-10-27: **4,103 passed, 88 skipped, 220 warnings**
 with Python 3.13.15, locked dependencies and MCP. Compilation, schema goldens,
 generated guidance, repository shape and whitespace checks passed. The following
 are Python/test warning events, separate from structured MARS tool warnings;
@@ -127,17 +127,33 @@ repeated reads of the same fixtures account for most of the count.
 | Skipped tests | Count | Reason |
 | --- | ---: | --- |
 | Live catalog/network queries | 77 | Opt-in `MARS_TEST_NETWORK` was disabled. |
-| Live ADS grouping check | 1 | `ADS_DEV_KEY` was unavailable; the M3 verification remains open. |
+| Live ADS object-query check | 1 | Credentialed querying was not enabled in this offline run; the follow-up below verifies it. |
 | Live Ollama provider check | 1 | Opt-in `MARS_TEST_MODEL_API` was disabled. |
 | Historical benchmark falsification | 4 | Original untracked run artifacts were absent. |
 | Native Windows allocation control | 1 | Requires Windows. |
-| Native solver/catalog prerequisites | 3 | Local UCAC configuration or astrometry.net binary/index configuration was unavailable. |
-| Blind native plate solve | 1 | Pipeline returned no WCS and the test self-skipped. The skip message suggests index coverage; this run does not establish the cause. |
+| Native solver/catalog prerequisites | 4 | Operator paths were not supplied to the offline run. The separate configured run below passed; its blind test also needed explicit settings. |
 
-Skipped tests provide no passing evidence. In particular, the blind-solve skip
-leaves native solver success unverified by this run. Live-service, native-platform
-and solver-data acceptance retain their separate gates; conditional-noise,
-sampled-distortion and catalog-sufficiency limitations remain explicit above.
+The offline skips provide no passing evidence. Separate opt-in results below
+cover live services and the Linux solver/catalog setup. Model, historical-run
+and Windows checks remain unverified here; the scientific limitations stated
+above remain explicit.
+
+Live and native follow-up, 2026-10-26: all **78 network-marked cases** were
+enabled (the 77 catalog/network cases plus credentialed ADS) with a fresh SDK
+cache. **76 distinct cases passed**, including provider magnitude/filter
+comparisons, coverage, field calibration and ADS paper metadata. Two SIMBAD
+connection failures passed on a targeted fresh-process retry. The remaining two
+zero-point comparisons skipped because the frames' header zero points correctly
+take precedence over a live field-calibration solve.
+
+All **four native checks passed** using the existing astrometry.net indexes
+under `/srv/agents/catalogs/astrometry` and UCAC5 at
+`/srv/agents/catalogs/ATLAS/UCAC5`. M15 solved with both default and bounded
+searches; the configured blind solve recovered NGC 3628's recorded WCS. The UCAC
+check verifies real catalog lookup and diagnostics, not blind ATLAS convergence.
+The blind test now supplies operator settings and fails a configured no-solution
+result instead of skipping it. Independent code review found no actionable
+issues in these changes.
 
 ## M3: failed inputs and services must produce usable failures
 
@@ -201,22 +217,25 @@ sampled-distortion and catalog-sufficiency limitations remain explicit above.
   catalog root and a full disk on every path, labelled by backend, so only an
   empty list without a WCS is `no_solution`. Evidence:
   `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
-  `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
-  because it omits configured settings, which is M4's.
-- [ ] **Provider response changes.** Renamed, missing or non-finite columns
+  `docs/extraction.md` WCS §9. The blind test now passes explicit operator
+  settings and recovers the recorded WCS; configured failure no longer skips.
+- [x] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
-  need focused contract evidence. ADS `abs:`/`object:` grouping remains an
-  unconfirmed workaround. Distinguish no matches from unusable responses.
-  *Progress 2026-10-21 (not closed):* every listed mapping and chain was
+  need focused contract evidence. ADS object searches must use the provider's
+  supported query flow. Distinguish no matches from unusable responses.
+  *Closed:* every listed mapping and chain was
   checked live and fixed where a populated response looked empty or escaped as
   an exception. Unusable responses now raise `ProviderResponseError` /
   `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
   lost every id to a column rename, B1950-only radio catalogs (3C among them)
   could never match, and cached SkyServer error pages made SDSS queries fail
   until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
-  counterpart, `docs/extraction.md` Query §5.12. **Open:** ADS `abs:`/`object:`
-  grouping still needs one live run with `ADS_DEV_KEY` (the test is in place).
+  counterpart, `docs/extraction.md` Query §5.12. Credentialed ADS verification
+  on 2026-10-26 exposed the missing object-expansion step; grouping alone was
+  insufficient. Search and literature reviews now expand object clauses through
+  ADS before searching, reject unusable expansion responses, and return paper
+  metadata in the live check. Offline transport regressions cover both callers.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.
@@ -251,11 +270,12 @@ Evidence: [query backends](../../algorithms/query/),
   installation, interruption and recovery. Record current cold/warm startup
   where host timeouts matter. Claude's MCPB is built manually and is absent
   from release assets; the advertised installation route must say so.
-- [ ] **Configured solver success.** A blind WCS test can skip after failing
-  even when resources exist, and omits configured settings. ATLAS reachability
-  does not establish blind convergence. A supported known-solution fixture
+- [ ] **Configured solver success.** A supported known-solution fixture
   must solve within position, scale and rotation tolerances; missing data must
-  be reported separately.
+  be reported separately. *Progress 2026-10-26:* operator settings now reach the
+  blind test, configured no-solution results fail, and real astrometry.net
+  recovery plus UCAC lookup passed. Stronger scale/rotation acceptance and blind
+  ATLAS convergence remain unverified by these tests.
 - [ ] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.

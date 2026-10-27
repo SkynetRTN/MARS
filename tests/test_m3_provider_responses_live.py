@@ -128,9 +128,11 @@ def test_live_ned_photometry_columns_and_spectrum():
 
 
 @pytest.mark.skipif(not os.environ.get("ADS_DEV_KEY"), reason="needs ADS_DEV_KEY to query ADS")
-def test_live_ads_accepts_grouped_abs_and_object_clauses():
+def test_live_ads_expands_object_queries_before_search():
     from tools.ads import search_ads
 
     result = search_ads(abstract="millisecond pulsar", object_name="PSR B1937+21", max_results=5)
-    assert result.status in ("ok", "not_found"), result.errors
+    assert result.status == "ok", result.errors
     assert not result.errors
+    assert result.count > 0
+    assert all(row["bibcode"] and row["title"] for row in result.preview)

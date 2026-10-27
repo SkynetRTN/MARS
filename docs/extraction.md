@@ -2008,9 +2008,11 @@ fixed where a populated response could look empty or escape as an exception:
   response missing one raises `SimbadResponseError` under `strict=True`
   (`unusable_response` from `resolve_target`). `if not ra` no longer skips an
   object at RA 0.
-* **ADS `abs:`/`object:` grouping** remains unconfirmed. No ADS key was
-  available. The grouped query string is pinned offline, and a live test runs
-  when `ADS_DEV_KEY` is set.
+* **ADS object queries** require the provider's `/v1/objects/query` expansion
+  before searching; grouping alone leaves an undefined Solr field. Both search
+  and literature reviews use the expanded query. Error-bearing or malformed
+  expansion responses become `unusable_response`, not empty results. Offline
+  transport regressions cover the flow; its live counterpart needs `ADS_DEV_KEY`.
 
 Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
 responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
