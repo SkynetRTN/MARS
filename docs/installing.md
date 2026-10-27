@@ -5,7 +5,7 @@ of this repository, and register its MCP server with an agent host. How the
 package and its data are built is `tool-architecture.md` §10.3.
 
 **For the Claude or ChatGPT desktop app**, follow the step-by-step guide for
-your platform: [Windows (x64)](installing/windows.md),
+your platform: [Windows on ARM](installing/windows.md),
 [macOS (Apple Silicon)](installing/macos.md) or
 [Linux (ARM)](installing/linux.md). This page is the reference for every
 other host and for what the guides leave out.
@@ -28,6 +28,14 @@ way a host would. If it passes, the install works. If `mars-mcp` is not
 found, uv's command directory is not on your `PATH` yet: run
 `uv tool update-shell` and open a new shell, or call it by its full path
 (below).
+
+**Windows on ARM:** `--python 3.13` picks the native ARM64 Python, for which
+`sep` and `pyerfa` have no wheels. Name the x64 build, which Windows runs
+under emulation:
+
+```powershell
+uv tool install --python cpython-3.13-windows-x86_64-none "skynet-mars[mcp]"
+```
 
 **Where it goes.** Hosts need the full path to `mars-mcp`. `uv tool dir --bin`
 prints the directory that holds it:
@@ -52,7 +60,8 @@ python3.13 -m venv ~/mars-env
 
 **Python 3.12 and 3.13** are supported, and CI tests both; the commands above
 use 3.13. On either, on x86_64 Linux, Apple Silicon macOS or x64 Windows,
-every dependency has a pre-built wheel.
+every dependency has a pre-built wheel; on Windows on ARM, use an x64 Python
+(above).
 Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
 Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
 toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about
@@ -89,7 +98,7 @@ claude mcp add --scope user mars -- /path/to/mars-mcp
 
 **Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
 installs with a double-click and needs no Python or config file, on an Apple
-Silicon Mac or x64 Windows. It always runs the newest MARS release. Download
+Silicon Mac or a Windows on ARM PC. It always runs the newest MARS release. Download
 `mars.mcpb` from the newest release on the
 [releases page](https://github.com/SkynetRTN/MARS/releases); how it
 is built is in

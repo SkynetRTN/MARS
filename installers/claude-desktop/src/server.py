@@ -39,6 +39,7 @@ from reading ``~/.ads/dev_key``. ``mars-mcp`` already treats an empty
 """
 
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -51,6 +52,11 @@ VERSION = re.compile(r"[0-9][0-9A-Za-z.!+-]*")
 
 #: The one Python every MARS dependency ships wheels for (docs/installing.md).
 PYTHON = "3.13"
+
+#: Windows on ARM runs the x64 build, under Windows' own x64 emulation:
+#: ``sep`` and ``pyerfa`` publish no Windows ARM64 wheels, so a native
+#: Python would have to compile them, and the first start would fail.
+WINDOWS_ARM_PYTHON = f"cpython-{PYTHON}-windows-x86_64-none"
 REQUIREMENT = "skynet-mars[mcp]"
 
 #: Step 1's program: print the release uv fetched, the only line on stdout.
@@ -68,6 +74,19 @@ def uv_binary(environ):
     return environ.get("UV") or shutil.which("uv") or "uv"
 
 
+def python_request(system=None, machine=None):
+    """The Python MARS runs on: 3.13, in its x64 build on Windows on ARM.
+
+    ``platform.machine()`` names the hardware, not this process's build, so
+    the answer is the same whether the host started this file on an ARM64
+    or an emulated x64 Python."""
+    system = system or sys.platform
+    machine = machine or platform.machine()
+    if system == "win32" and machine.upper() == "ARM64":
+        return WINDOWS_ARM_PYTHON
+    return PYTHON
+
+
 def requirements(pin=None):
     """What step 1 fetches and step 2 serves: the newest, or the pinned one."""
     if pin:
@@ -81,7 +100,7 @@ def refresh_command(uv, pin=None, offline=False):
     Offline it fetches nothing: ``@latest`` then names the newest release cached."""
     fetch, _ = requirements(pin)
     network = ["--offline"] if offline else []
-    return [uv, "tool", "run", "--no-config", *network, "--python", PYTHON, "--from", fetch, "python", "-I", "-c", PRINT_VERSION]
+    return [uv, "tool", "run", "--no-config", *network, "--python", python_request(), "--from", fetch, "python", "-I", "-c", PRINT_VERSION]
 
 
 def fetched_version(run, command, environ):
@@ -93,7 +112,7 @@ def fetched_version(run, command, environ):
 
 def serve_command(uv, args, pin=None):
     _, serve = requirements(pin)
-    return [uv, "tool", "run", "--no-config", "--offline", "--python", PYTHON, "--from", serve, "mars-mcp", *args]
+    return [uv, "tool", "run", "--no-config", "--offline", "--python", python_request(), "--from", serve, "mars-mcp", *args]
 
 
 def main(args, environ=os.environ, run=subprocess.run, execv=os.execv):

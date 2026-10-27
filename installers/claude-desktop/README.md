@@ -102,9 +102,11 @@ only when the extension itself changes.
 ## Platforms
 
 The manifest says macOS and Windows, but MCPB cannot name a CPU. `numba` and
-`llvmlite` publish macOS wheels for **Apple Silicon only**, and
-`sep`, `photutils` and others have no Windows-on-ARM wheels. On an Intel Mac
-or an ARM Windows machine, the first launch would have to compile them and
-fails. Supported: Apple Silicon Macs and x64 Windows, both verified in
-Claude Desktop by the maintainer on 2026-10-23. Step-by-step installs:
+`llvmlite` publish macOS wheels for **Apple Silicon only**; on an Intel Mac
+the first launch would have to compile them and fails. `sep`, `pyerfa` and
+others have no Windows ARM64 wheels, so on Windows on ARM the launcher runs
+MARS on the x64 build of Python 3.13, which Windows runs under its own
+emulation. Supported: Apple Silicon Macs (verified in Claude Desktop by the
+maintainer, 2026-10-23) and Windows on ARM (the launch verified on Windows 11
+ARM64, 2026-10-27). x64 Windows is no longer tested. Step-by-step installs:
 [macOS](../../docs/installing/macos.md), [Windows](../../docs/installing/windows.md).

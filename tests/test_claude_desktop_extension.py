@@ -248,3 +248,24 @@ def test_no_uv_call_reads_a_config_file_from_the_starting_folder():
     entry = _entry_point()
     assert "--no-config" in entry.refresh_command("uv")
     assert "--no-config" in entry.serve_command("uv", [])
+
+
+def test_windows_on_arm_runs_mars_on_the_x64_python():
+    """sep and pyerfa have no Windows ARM64 wheels; the x64 build runs under
+    Windows' own emulation (verified on Windows 11 ARM64, 2026-10-27)."""
+
+    entry = _entry_point()
+    assert entry.python_request("win32", "ARM64") == "cpython-3.13-windows-x86_64-none"
+    assert entry.python_request("win32", "AMD64") == "3.13"
+    assert entry.python_request("darwin", "arm64") == "3.13"
+    assert entry.python_request("linux", "aarch64") == "3.13"
+
+
+def test_both_steps_run_on_the_same_python(monkeypatch):
+    """uv keys a tool environment by its interpreter: a refresh on one Python
+    and a serve on another would serve a release never fetched."""
+
+    entry = _entry_point()
+    monkeypatch.setattr(entry, "python_request", lambda: "cpython-3.13-windows-x86_64-none")
+    for command in (entry.refresh_command("uv"), entry.refresh_command("uv", offline=True), entry.serve_command("uv", [])):
+        assert command[command.index("--python") + 1] == "cpython-3.13-windows-x86_64-none"

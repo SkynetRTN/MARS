@@ -1,18 +1,24 @@
-# Installing MARS on Windows (x64)
+# Installing MARS on Windows on ARM
 
 MARS in the Claude desktop app and in the ChatGPT desktop app's Codex
-threads, on x64 Windows. Both routes run the newest MARS release from PyPI
-and need no checkout of this repository. Windows on ARM is not supported:
-several dependencies publish no wheels for it. For Claude Code, Cursor,
-VS Code or a hand-written config, see [`../installing.md`](../installing.md).
+threads, on a Windows on ARM (ARM64) PC. Both routes run the newest MARS
+release from PyPI and need no checkout of this repository. MARS runs on the
+x64 build of Python 3.13, under Windows' built-in x64 emulation: `sep` and
+`pyerfa` publish no Windows ARM64 wheels. Both routes choose that Python
+themselves; nothing extra is needed. x64 Windows is no longer tested. For
+Claude Code, Cursor, VS Code or a hand-written config, see
+[`../installing.md`](../installing.md).
 
-Verified by the maintainer on 2026-10-23: Claude Desktop with the extension,
-and Codex in the ChatGPT app.
+Verified on Windows 11 ARM64 on 2026-10-27 through the routes' own launch
+command: a first start from nothing in 86 s (1.7 GB of Pythons and
+packages), an offline start and a pinned release, each serving 55 tools.
+The maintainer verified both apps on Windows on 2026-10-23, before the
+launcher chose the x64 Python.
 
 ## Claude Desktop
 
-1. Download the **x64** Claude installer from <https://claude.com/download>,
-   run it, and sign in.
+1. Download Claude for Windows from <https://claude.com/download>, run it,
+   and sign in.
 2. Download `mars.mcpb` from the newest release on the
    [releases page](https://github.com/SkynetRTN/MARS/releases).
 3. Double-click `mars.mcpb`, or use *Settings → Extensions → Advanced
@@ -70,7 +76,7 @@ The model should measure about 0.7148 s, show the plot, and offer the sound.
 MARS's own check runs the same release without either app (needs uv):
 
 ```powershell
-uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
+uvx --python cpython-3.13-windows-x86_64-none --from "skynet-mars[mcp]@latest" mars-mcp self-test
 ```
 
 ## Logs
@@ -84,5 +90,6 @@ uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
 
 - Claude: *Settings → Extensions → MARS → Uninstall*.
 - ChatGPT app: uninstall MARS from the *Plugins* tab.
-- Free the space with `uv cache clean` and `uv python uninstall 3.13`. MARS's
+- Free the space with `uv cache clean` and
+  `uv python uninstall 3.13 cpython-3.13-windows-x86_64-none`. MARS's
   own files are in `%LOCALAPPDATA%\mars`.

@@ -84,9 +84,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        include:
+          # Windows on ARM runs the x64 Python under emulation: sep and pyerfa
+          # have no Windows ARM64 wheels (docs/installing/windows.md).
+          - os: windows-11-arm
+            python: cpython-3.13-windows-x86_64-none
+          - os: macos-latest
+            python: "3.13"
     env:
-      UV_PYTHON: "3.13"
+      UV_PYTHON: ${{ matrix.python }}
       MPLBACKEND: Agg
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

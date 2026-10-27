@@ -212,6 +212,22 @@ Evidence: [query backends](../../algorithms/query/),
   the `.mcpb` manifest link to it; the guide is
   [archived](../archive/desktop-acceptance.md). No OS or app versions were
   recorded, so the guides name none.
+- [ ] **Windows on ARM.** The maintainer's decision (2026-10-27): Windows
+  support is ARM64, and x64 Windows is no longer tested. `sep` and `pyerfa`
+  publish no Windows ARM64 wheels, so MARS runs on the x64 build of
+  Python 3.13 under Windows' own emulation, which the launcher (both routes)
+  now chooses on ARM64; `uv tool install` names it
+  (`--python cpython-3.13-windows-x86_64-none`). Guides, both installer
+  READMEs, the manifest, `../releasing.md`, and the Windows jobs in
+  `ci.yml` and `release.yml` (now `windows-11-arm`) say so.
+  *Verified 2026-10-27* on Windows 11 Home ARM64 (build 26300), over SSH
+  through the Codex plugin's own command: a first start from empty uv
+  directories in 86 s (1.7 GB: the launcher's native Python and MARS's x64
+  one), an offline start serving the newest cached release, a pin to rc5,
+  and a start from a folder holding a planted `re.py` and `uv.toml`, each
+  serving 55 tools. `uv tool install` on the x64 Python: install 29 s,
+  `self-test` 113 s, passing. Remaining: both apps on the ARM64 VM, and
+  the changed CI jobs, which have not run (the Release dry run).
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
@@ -315,7 +331,18 @@ Evidence: [query backends](../../algorithms/query/),
     refuses a turn whose reported input is under half of what was sent,
     naming `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `../installing.md`
     says so. A timeout now says what ran out.
-  - **Remaining:** a clean-install run on Windows and Linux.
+  - **macOS, fresh VM (2026-10-27,** macOS 27.2): install 9 s,
+    `self-test` 44 s, both messages as above.
+  - **Windows on ARM (2026-10-27),** installed on the x64 Python: the same
+    two messages; with Ollama 0.40.12 (native ARM64) and a 32k window, the
+    console opens over SSH in 6.6 s, `/status` works, Ctrl+Q quits at once,
+    and a question reached a working session: the model called
+    `resolve_pulsar_scan` (✓, 21 ms) and listed the five bundled scans, in
+    turns of 730 s and 380 s on the VM's four CPU cores.
+  - **Linux (2026-10-27),** a fresh Fedora 44 aarch64 container with uv's
+    installer: install 14 s, `self-test` 22 s, the same two messages.
+    A model session on Linux was not rerun; the console is developed and
+    tested on this Fedora host.
 - [ ] **Console terminals and long runs.** Nothing records the console in
   Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
   questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the

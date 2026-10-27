@@ -52,7 +52,7 @@ with the build artifact, installed and self-tested.
    never produces the file users install and nothing that job writes reaches
    another job.
    **verify the extension** unpacks `mars.mcpb` on macOS (Apple Silicon) and
-   x64 Windows, the platforms it supports, and runs the manifest's own command
+   Windows on ARM, the platforms it supports, and runs the manifest's own command
    with an empty uv cache and only uv-managed Pythons, as a first launch in
    Claude Desktop would, through `mars-mcp self-test`. The extension installs
    the newest release it can find; `UV_FIND_LINKS` offers it this build, and
@@ -230,7 +230,8 @@ outside the repository, so run it by hand.
 ## Testing a release
 
 On a machine with no checkout (and a C compiler unless it is Python 3.13 on
-x86_64 Linux, Apple Silicon macOS or x64 Windows; see `installing.md`):
+x86_64 Linux, Apple Silicon macOS, or x64 Python on Windows; see
+`installing.md`):
 
 ```bash
 python3.13 -m venv mars-env

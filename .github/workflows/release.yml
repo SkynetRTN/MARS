@@ -137,7 +137,8 @@ jobs:
         run: npx --yes @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
 
   # The packed extension, run as Claude Desktop runs it, on the two platforms
-  # it supports (installers/claude-desktop/README.md, Platforms). It installs
+  # it supports (installers/claude-desktop/README.md, Platforms): Windows on
+  # ARM, where the launcher runs MARS on the x64 Python under emulation. It installs
   # the newest release it can find; UV_FIND_LINKS offers it this build, which
   # is newer than anything on PyPI on a tag. This proves the launch, not the
   # app: a real Claude Desktop install stays a manual check (M4).
@@ -148,7 +149,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            python: "3.13"
+          # What the launcher picks on Windows on ARM (src/server.py).
+          - os: windows-11-arm
+            python: cpython-3.13-windows-x86_64-none
     defaults:
       run:
         shell: bash
@@ -191,8 +197,9 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           VERSION: ${{ needs.build.outputs.version }}
+          PYTHON: ${{ matrix.python }}
         run: |
-          served=$(uv tool run --offline --python 3.13 --from "skynet-mars[mcp]" python -c "import importlib.metadata as m; print(m.version('skynet-mars'))")
+          served=$(uv tool run --offline --python "$PYTHON" --from "skynet-mars[mcp]" python -c "import importlib.metadata as m; print(m.version('skynet-mars'))")
           echo "served skynet-mars $served; built $VERSION"
           # A dry run may build a version PyPI already has, so only a tag must match.
           if [ "$EVENT" = "push" ] && [ "$served" != "$VERSION" ]; then
@@ -278,14 +285,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-11-arm]
     defaults:
       run:
         shell: bash
     steps:
+      # Windows on ARM installs the x64 Python, run under emulation: sep and
+      # pyerfa have no Windows ARM64 wheels (docs/installing/windows.md).
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
+          architecture: ${{ matrix.os == 'windows-11-arm' && 'x64' || '' }}
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
@@ -337,7 +347,7 @@ jobs:
           (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
           gh release create "$TAG" dist/*.whl dist/*.tar.gz extension/mars.mcpb dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
-            --notes "Install and register: docs/installing.md. Claude Desktop (Apple Silicon Mac, x64 Windows): double-click \`mars.mcpb\`; it is unsigned and runs the newest MARS release. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
+            --notes "Install and register: docs/installing.md. Claude Desktop (Apple Silicon Mac, Windows on ARM): double-click \`mars.mcpb\`; it is unsigned and runs the newest MARS release. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
 
   # PyPI versions are permanent -- a file, once uploaded, can never be
   # replaced -- so every release goes to TestPyPI first and is installed from
