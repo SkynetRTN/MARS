@@ -12,13 +12,16 @@ is the Claude Desktop extension's own
 runs the **newest `skynet-mars` release** on PyPI in two steps:
 
 1. `uv tool run --from "skynet-mars[mcp]@latest"` fetches the newest release
-   into uv's cache if it is not there yet: Python 3.13 and about 640 MB of
-   dependencies the first time, a quick check after that.
-2. `uv tool run --offline --from "skynet-mars[mcp]" mars-mcp` starts the
-   newest release in the cache.
+   into uv's cache if it is not there yet (Python 3.13 and about 640 MB of
+   dependencies the first time, a quick check after that) and prints its
+   version.
+2. `uv tool run --offline … mars-mcp` starts exactly that release, by its
+   version. Naming it matters: given the bare name, uv
+   prefers a `uv tool install` of MARS, however old, over the cache.
 
 So the plugin picks up a new MARS release the next time it starts, with no
-change here, and **with no network it starts the last release fetched**.
+change here, and **with no network it starts the newest release in uv's
+cache** (step 1 run offline finds it).
 `MARS_VERSION` pins one release instead (see [Settings](#settings)).
 
 The server runs from uv's cache, never from the plugin's directory. Codex

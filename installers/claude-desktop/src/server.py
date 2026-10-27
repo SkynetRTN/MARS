@@ -7,11 +7,15 @@ This file has no dependencies, so it starts instantly; it then runs
 ``mars-mcp`` through ``uv tool run`` (``uvx``), in uv's own cache:
 
 1. **Refresh**: ``--from "skynet-mars[mcp]@latest"`` asks PyPI for the newest
-   release and installs it into uv's cache if it is not there yet. Its output
-   goes to stderr, never to stdout, which is the MCP stream.
-2. **Serve**: ``--offline --from "skynet-mars[mcp]"`` starts the newest
-   release in the cache. After step 1 that is the latest; with no network,
-   step 1 fails and the last release that was fetched still starts.
+   release and installs it into uv's cache if it is not there yet, then
+   prints that release's version. Its stdout is captured here and uv's
+   output goes to stderr, so neither reaches stdout, the MCP stream.
+2. **Serve**: ``--offline``, naming that version, starts exactly that
+   release. It must name it: given the bare name, uv prefers a
+   ``uv tool install`` of MARS, however old, over the cache. With no
+   network, step 1 is repeated offline, which finds the newest release in
+   the cache; only with none cached does the bare name start whatever is
+   installed.
 
 **Rollback.** ``MARS_VERSION`` (the extension's *MARS release* setting) pins
 one release instead: both steps then name exactly that version, so a bad
@@ -49,6 +53,9 @@ VERSION = re.compile(r"[0-9][0-9A-Za-z.!+-]*")
 PYTHON = "3.13"
 REQUIREMENT = "skynet-mars[mcp]"
 
+#: Step 1's program: print the release uv fetched, the only line on stdout.
+PRINT_VERSION = "import importlib.metadata as m; print(m.version('skynet-mars'))"
+
 
 def drop_unset(environ):
     for name in OPTIONAL_SETTINGS:
@@ -68,10 +75,20 @@ def requirements(pin=None):
     return f"{REQUIREMENT}@latest", REQUIREMENT
 
 
-def refresh_command(uv, pin=None):
-    """Fetch the release into uv's cache; runs nothing of MARS's."""
+def refresh_command(uv, pin=None, offline=False):
+    """Fetch the release into uv's cache and print its version; runs nothing of MARS's.
+
+    Offline it fetches nothing: ``@latest`` then names the newest release cached."""
     fetch, _ = requirements(pin)
-    return [uv, "tool", "run", "--no-config", "--python", PYTHON, "--from", fetch, "python", "-c", "pass"]
+    network = ["--offline"] if offline else []
+    return [uv, "tool", "run", "--no-config", *network, "--python", PYTHON, "--from", fetch, "python", "-I", "-c", PRINT_VERSION]
+
+
+def fetched_version(run, command, environ):
+    """The version step 1 printed, or None when it failed."""
+    done = run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, env=environ)
+    version = (done.stdout or "").strip()
+    return version if done.returncode == 0 and VERSION.fullmatch(version) else None
 
 
 def serve_command(uv, args, pin=None):
@@ -86,12 +103,14 @@ def main(args, environ=os.environ, run=subprocess.run, execv=os.execv):
         print(f"mars: MARS_VERSION={pin!r} is not an exact release number; leave it empty for the newest.", file=sys.stderr)
         return 2
     uv = uv_binary(environ)
-    refreshed = run(refresh_command(uv, pin), stdin=subprocess.DEVNULL, stdout=sys.stderr, env=environ)
-    if refreshed.returncode != 0:
-        if pin:
-            print(f"mars: could not fetch release {pin}; starting it from uv's cache if it was fetched before.", file=sys.stderr)
-        else:
-            print("mars: could not reach PyPI for the newest release; starting the last one fetched.", file=sys.stderr)
+    fetched = fetched_version(run, refresh_command(uv, pin), environ)
+    if fetched:
+        pin = fetched
+    elif pin:
+        print(f"mars: could not fetch release {pin}; starting it from uv's cache if it was fetched before.", file=sys.stderr)
+    else:
+        print("mars: could not reach PyPI for the newest release; starting the newest one on this machine.", file=sys.stderr)
+        pin = fetched_version(run, refresh_command(uv, offline=True), environ)
     command = serve_command(uv, args, pin)
     if os.name == "posix":
         # Replace this process, so the host's signals reach mars-mcp directly.

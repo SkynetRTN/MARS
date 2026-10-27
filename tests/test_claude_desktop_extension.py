@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -135,41 +136,64 @@ def test_the_extension_names_no_mars_version():
     assert not [v for v in _VERSION.findall(server) if v != "3.13"], "only the Python version may appear"
 
 
+def _done(returncode=0, stdout=""):
+    return type("Done", (), {"returncode": returncode, "stdout": stdout})()
+
+
 def test_the_entry_point_refreshes_to_the_latest_release_then_serves_it():
-    """Step 1 asks PyPI for the newest release, with its output kept off
-    stdout (the MCP stream); step 2 starts the newest one in uv's cache."""
+    """Step 1 asks PyPI for the newest release and prints its version, with
+    uv's output kept off stdout (the MCP stream); step 2 serves exactly that
+    release, not whatever the bare name finds first."""
 
     entry = _entry_point()
     calls = []
 
     def run(command, **kwargs):
         calls.append((command, kwargs))
-        return type("Done", (), {"returncode": 0})()
+        return _done(stdout="0.1.0rc7\n")
 
     environ = {"UV": "/opt/uv/bin/uv", "ADS_DEV_KEY": ""}
     code = entry.main(["--tools", "databases"], environ=environ, run=run, execv=lambda path, argv: calls.append((argv, path)))
     refresh, _ = calls[0]
     assert refresh[:3] == ["/opt/uv/bin/uv", "tool", "run"]
     assert "skynet-mars[mcp]@latest" in refresh and "--offline" not in refresh
-    assert calls[0][1]["stdout"] is sys.stderr
+    assert calls[0][1]["stdout"] is subprocess.PIPE
+    assert refresh[refresh.index("python") + 1] == "-I"
     serve = calls[1][0]
-    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]" and "--offline" in serve
+    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc7" and "--offline" in serve
     assert serve[-3:] == ["mars-mcp", "--tools", "databases"]
     assert "ADS_DEV_KEY" not in environ
     assert code in (0, None)
 
 
-def test_without_a_network_the_last_release_fetched_still_starts(capsys):
+def test_without_a_network_the_newest_cached_release_starts(capsys):
     entry = _entry_point()
     commands = []
 
     def run(command, **kwargs):
         commands.append(command)
-        return type("Done", (), {"returncode": 2 if "skynet-mars[mcp]@latest" in command else 0})()
+        return _done(0, "0.1.0rc6\n") if "--offline" in command else _done(2)
 
     entry.main([], environ={"UV": "uv"}, run=run, execv=lambda path, argv: commands.append(argv))
-    assert "--offline" in commands[-1]
-    assert "starting the last one fetched" in capsys.readouterr().err
+    online, offline, serve = commands[:3]
+    assert "--offline" not in online and "--offline" in offline
+    assert offline[offline.index("--from") + 1] == "skynet-mars[mcp]@latest"
+    assert "--offline" in serve and serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc6"
+    assert "starting the newest one on this machine" in capsys.readouterr().err
+
+
+def test_with_nothing_cached_the_bare_name_starts_what_is_installed():
+    entry = _entry_point()
+    commands = []
+    entry.main([], environ={"UV": "uv"}, run=lambda c, **k: commands.append(c) or _done(2), execv=lambda p, a: commands.append(a))
+    assert commands[-1][commands[-1].index("--from") + 1] == "skynet-mars[mcp]"
+
+
+def test_a_refresh_that_prints_no_version_serves_the_bare_name():
+    entry = _entry_point()
+    commands = []
+    entry.main([], environ={"UV": "uv"}, run=lambda c, **k: commands.append(c) or _done(stdout="warning\n0.1"), execv=lambda p, a: commands.append(a))
+    assert commands[-1][commands[-1].index("--from") + 1] == "skynet-mars[mcp]"
 
 
 
@@ -182,7 +206,7 @@ def test_a_pinned_release_is_fetched_and_served_exactly():
 
     def run(command, **kwargs):
         calls.append(command)
-        return type("Done", (), {"returncode": 0})()
+        return _done(stdout="0.1.0rc5\n")
 
     entry.main([], environ={"UV": "uv", "MARS_VERSION": " 0.1.0rc5 "}, run=run, execv=lambda path, argv: calls.append(argv))
     refresh, serve = calls[:2]
@@ -208,7 +232,7 @@ def test_an_unfilled_release_setting_means_the_newest():
 
     def run(command, **kwargs):
         calls.append(command)
-        return type("Done", (), {"returncode": 0})()
+        return _done(stdout="0.1.0rc6\n")
 
     environ = {"UV": "uv", "MARS_VERSION": "${user_config.mars_version}"}
     entry.main([], environ=environ, run=run, execv=lambda path, argv: calls.append(argv))

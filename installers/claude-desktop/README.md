@@ -15,10 +15,11 @@ uv run --directory <unpacked extension> --locked src/server.py
 1. `--from "skynet-mars[mcp]@latest"` asks PyPI for the newest release and
    installs it into uv's cache if it is not there yet. The first launch also
    downloads Python 3.13 and the dependencies (about 700 MB); later launches
-   only check, in well under a second.
-2. `--offline --from "skynet-mars[mcp]"` starts the newest release in the
-   cache. Without a network, step 1 fails and the last release fetched still
-   starts.
+   only check, in well under a second. It prints the release's version.
+2. `--offline`, naming that version, starts exactly that release. Naming it matters: given the bare name, uv prefers a
+   `uv tool install` of MARS, however old, over the cache. Without a network,
+   step 1 runs again offline, which finds the newest release in the cache,
+   and that one starts.
 
 The *MARS release* setting (`MARS_VERSION`) pins one release instead, for
 both steps: the way to step back from a bad release. The Codex plugin runs

@@ -57,8 +57,8 @@ def test_the_plugin_names_no_mars_version():
 
 def test_the_server_is_the_newest_release_run_from_uvs_cache():
     """The plugin runs the Claude extension's launcher, so both routes behave
-    alike: refresh to the newest release, serve the newest cached one (so an
-    offline start still works), or the release ``MARS_VERSION`` pins. The
+    alike: refresh to the newest release and serve exactly it (offline, the newest
+    cached one still starts), or the release ``MARS_VERSION`` pins. The
     code goes in as ``python -c``: no ``cwd`` and no file in the plugin,
     because nothing may depend on the plugin's directory, which Codex
     replaces. ``command`` is a bare name, resolved on the PATH the app was
