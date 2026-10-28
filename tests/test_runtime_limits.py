@@ -546,3 +546,23 @@ async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
     with anyio.fail_after(5):
         while _running(pid):
             await anyio.sleep(.02)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("inherited", [None, "/opt/site"])
+async def test_a_tools_children_get_the_callers_pythonpath(tmp_path, monkeypatch, inherited):
+    """The worker imports MARS through PYTHONPATH; a solver's Python helpers
+    (astrometry.net's removelines, run by the system Python) must not, or
+    they load MARS's compiled packages for another Python and fail."""
+
+    if inherited is None:
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+    else:
+        monkeypatch.setenv("PYTHONPATH", inherited)
+    out = tmp_path / "pythonpath.txt"
+
+    result = await run_call("child", {"out": str(out)}, {"child": fake.child_pythonpath},
+                            tmp_path / "artifacts", CallLimits(timeout_s=30))
+
+    assert result["status"] == "ok"
+    assert out.read_text() == (inherited or "<unset>")

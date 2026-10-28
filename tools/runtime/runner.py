@@ -20,6 +20,7 @@ from tools.mcp.surface import error_payload
 from .limits import CallLimits
 from .storage import create_call, finish_call, managed_root, private_write, tree_size
 from .windows import OwnedJob
+from .worker import INHERITED_PYTHONPATH_ENV
 
 
 def _signal_group(pid: int, sig: int, birth: str | None = None) -> None:
@@ -184,7 +185,9 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
                "ASTROPY_CONFIG_DIR": str(work / "cache/config/astropy"),
                "NUMBA_CACHE_DIR": str(work / "cache/numba"),
                OWNED_GROUPS_ENV: str(work / "groups"),
-               "PYTHONPATH": os.pathsep.join(str(Path(path or os.curdir).resolve()) for path in sys.path)}
+               "PYTHONPATH": os.pathsep.join(str(Path(path or os.curdir).resolve()) for path in sys.path),
+               # The worker restores this before running the tool (worker.py).
+               INHERITED_PYTHONPATH_ENV: os.environ.get("PYTHONPATH", "")}
         # Bound import-time BLAS pools as well as work-time native allocations.
         for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
             env[key] = "1"
