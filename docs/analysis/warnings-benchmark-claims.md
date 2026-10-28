@@ -105,7 +105,7 @@ their skips. No new paid model sweep or historical regrade was performed.
 
 All ten M2 checkboxes are complete locally on `feature/m2`; these changes are
 unmerged and unpublished. Other release gates remain open. The
-[implementation plan](../working/warnings-benchmark-claims.md) records the work.
+[archived implementation plan](../archive/warnings-benchmark-claims.md) records the work.
 
 ## 2026-10-26 comprehensive-review corrections
 

@@ -12,8 +12,6 @@ documents for individual gates.
 | Plan | Status |
 | --- | --- |
 | [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123). M2 is closed locally on `feature/m2` after its final review corrections; M3 is closed on main. M2 remains unmerged into main and unpublished. Remaining gates describe missing evidence and release checks. |
-| [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | Historical implementation record; current gate status is in the master. [Acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md). |
-| [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | Historical implementation record; current gate status is in the master. [Acceptance and retained limits](../analysis/warnings-benchmark-claims.md). |
 
 ## Landed
 

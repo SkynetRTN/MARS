@@ -1,5 +1,13 @@
 # Warnings and benchmark claims implementation plan
 
+> [!NOTE] Archived 2026-10-28
+> This M2 checkpoint is complete on `feature/m2`. The original implementation
+> plan and validation record below are historical. Current gate status and
+> subsequent review fixes are maintained in the
+> [master continuation plan](../working/master-continuation-plan.md).
+> See the [acceptance record](../analysis/warnings-benchmark-claims.md)
+> for technical evidence and retained limits.
+
 **Goal:** Complete the final M2 checkpoint on the single `feature/m2` branch.
 Keep numerical transforms, H-alpha, error propagation and fitting arithmetic
 unchanged. Make retained limits visible and stop treating sourced numbers as

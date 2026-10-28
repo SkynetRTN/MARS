@@ -1,5 +1,13 @@
 # Catalog coverage and sufficiency implementation plan
 
+> [!NOTE] Archived 2026-10-28
+> This M2 checkpoint is complete on `feature/m2`. The original implementation
+> plan and validation record below are historical. Current gate status and
+> subsequent review fixes are maintained in the
+> [master continuation plan](../working/master-continuation-plan.md).
+> See the [acceptance record](../analysis/catalog-coverage-sufficiency.md)
+> for technical evidence and retained limits.
+
 **Goal:** Close the M2 coverage/sufficiency gate on the existing `feature/m2`
 branch while preserving reference magnitudes, transforms and solver arithmetic.
 
