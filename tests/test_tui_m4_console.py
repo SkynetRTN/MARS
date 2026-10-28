@@ -566,7 +566,7 @@ def test_the_status_line_names_quit_and_keeps_its_keys_at_80_columns():
             app._refresh_status()
             await pilot.pause()
             running = str(app.query_one("#status").render())
-            assert running.startswith("esc stop • ctrl+q quit")
+            assert running.startswith("ctrl+c stop • esc stop after step • ctrl+q quit")
             assert len(running) <= 80 - 4, "inside the line's padding"
             assert not running.endswith("•")
 
@@ -585,66 +585,58 @@ def test_counts_that_do_not_fit_are_left_out_whole():
 
 
 # ---------------------------------------------------------------------------
-# Quitting mid-step stays open until the step ends, and says so
+# Ctrl+Q quits now; Ctrl+C stops the step in flight and keeps the console
 
 
-def test_quitting_mid_step_waits_in_view_then_exits(monkeypatch):
-    """Ctrl+Q 10 s into a plate solve closed the screen, then waited 85 s
-    out of sight for the solve (2026-10-28). The console now stays open,
-    says why, stops at the next safe point, and exits when the step ends."""
-
-    import threading
+def _blocking_session(monkeypatch, started, release, seen):
+    """A fake engine run that blocks until released, recording the hooks."""
 
     from tools.tui import app as tui_app
 
-    started, release = threading.Event(), threading.Event()
-    stopped: list[bool] = []
-
     def fake_run_session(_text, **kwargs):
         started.set()
-        release.wait(timeout=5)
-        stopped.append(kwargs["should_stop"]())
+        seen.append(kwargs)
+        kwargs["interrupt"].wait(timeout=5) if release is None else release.wait(timeout=5)
         yield SessionFinished(outcome="interrupted", manifest_path="")
 
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+
+def test_ctrl_q_mid_step_stops_it_and_quits_at_once(monkeypatch):
+    import threading
+
+    started = threading.Event()
+    seen: list[dict] = []
+    _blocking_session(monkeypatch, started, None, seen)
 
     async def scenario() -> None:
         app = MARSApp(backend=object())
         exited: list[bool] = []
         app.exit = lambda *args, **kwargs: exited.append(True)
-        async with app.run_test(size=(80, 24)) as pilot:
+        async with app.run_test() as pilot:
             app.run_prompt("solve it")
             async with asyncio.timeout(2):
                 while not started.is_set():
                     await pilot.pause()
             await pilot.press("ctrl+q")
             await pilot.pause()
-            assert exited == []
-            assert "Quitting once the step in flight finishes" in _rendered(app)
-            assert str(app.query_one("#status").render()).startswith("quitting")
-            release.set()
-            async with asyncio.timeout(2):
-                while not exited:
-                    await pilot.pause()
+            assert exited == [True], "no waiting for the step"
+            assert seen[0]["interrupt"].is_set()
 
     _run(scenario())
 
-    assert stopped == [True]
 
-
-def test_quitting_with_an_approval_open_denies_it(monkeypatch):
-    """The engine is blocked on the answer, so waiting for the step would
-    wait forever; the user is leaving, so the call is denied."""
+def test_ctrl_q_with_an_approval_open_denies_it(monkeypatch):
+    """The engine is blocked on the answer; the user is leaving, so the call
+    is denied rather than left waiting."""
 
     import threading
 
     from tools.tui import app as tui_app
 
-    asked = threading.Event()
     decisions: list[Decision] = []
 
     def fake_run_session(_text, **kwargs):
-        asked.set()
         decisions.append(kwargs["approver"](ToolCallProposed("c1", "plot_pulsar", {})))
         yield SessionFinished(outcome="interrupted", manifest_path="")
 
@@ -652,8 +644,7 @@ def test_quitting_with_an_approval_open_denies_it(monkeypatch):
 
     async def scenario() -> None:
         app = MARSApp(backend=object())
-        exited: list[bool] = []
-        app.exit = lambda *args, **kwargs: exited.append(True)
+        app.exit = lambda *args, **kwargs: None
         async with app.run_test() as pilot:
             app.run_prompt("plot it")
             async with asyncio.timeout(2):
@@ -661,10 +652,89 @@ def test_quitting_with_an_approval_open_denies_it(monkeypatch):
                     await pilot.pause()
             await pilot.press("ctrl+q")
             async with asyncio.timeout(2):
-                while not exited:
+                while not decisions:
                     await pilot.pause()
             assert not isinstance(app.screen, ApprovalModal)
 
     _run(scenario())
 
     assert decisions == [Decision.DENY]
+
+
+def test_ctrl_c_stops_the_step_and_keeps_the_console(monkeypatch):
+    import threading
+
+    started = threading.Event()
+    seen: list[dict] = []
+    _blocking_session(monkeypatch, started, None, seen)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        exited: list[bool] = []
+        app.exit = lambda *args, **kwargs: exited.append(True)
+        async with app.run_test(size=(80, 24)) as pilot:
+            worker = app.run_prompt("solve it")
+            async with asyncio.timeout(2):
+                while not started.is_set():
+                    await pilot.pause()
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+            assert seen[0]["interrupt"].is_set()
+            assert "Stopped: the step in flight was ended." in _rendered(app)
+            async with asyncio.timeout(2):
+                while not worker.is_finished or app._active_worker is not None:
+                    await pilot.pause()
+            assert exited == []
+            assert not app.query_one("#prompt").disabled
+
+    _run(scenario())
+
+
+def test_ctrl_c_with_nothing_running_still_copies(monkeypatch):
+    copied: list[bool] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt")
+            monkeypatch.setattr(prompt, "action_copy", lambda: copied.append(True))
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+
+    _run(scenario())
+
+    assert copied == [True]
+
+
+def test_each_question_runs_tools_through_stoppable_workers(monkeypatch):
+    """The engine gets the interrupt and tool functions wrapped by
+    tools/tui/tool_calls.py: lookups as they are, the rest owned."""
+
+    import threading
+
+    from tools.registry import TOOL_FUNCTIONS
+    from tools.tui.tool_calls import INLINE_TOOLS
+
+    started = threading.Event()
+    seen: list[dict] = []
+    _blocking_session(monkeypatch, started, None, seen)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            worker = app.run_prompt("go")
+            async with asyncio.timeout(2):
+                while not started.is_set():
+                    await pilot.pause()
+            app._interrupt.set()
+            async with asyncio.timeout(2):
+                while not worker.is_finished or app._active_worker is not None:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    functions = seen[0]["tool_functions"]
+    assert set(functions) == set(TOOL_FUNCTIONS)
+    for name in INLINE_TOOLS:
+        assert functions[name] is TOOL_FUNCTIONS[name]
+    assert functions["solve_astrometry"] is not TOOL_FUNCTIONS["solve_astrometry"]

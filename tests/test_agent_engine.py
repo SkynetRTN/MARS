@@ -1036,3 +1036,85 @@ def test_an_identical_rejected_call_is_a_cache_hit_the_second_time():
     )
 
     assert [call["cache_hit"] for call in session.tool_calls] == [False, True]
+
+
+# --- interrupt: Ctrl+C ends the step in flight ----------------------------
+
+
+class _HangingBackend(StubBackend):
+    """A model request that streams a chunk, then blocks until released --
+    one that does not end when asked to."""
+
+    def __init__(self, release):
+        super().__init__([])
+        self.release = release
+
+    def complete(self, *, messages, on_text=None, **kwargs):
+        self.calls.append({"messages": messages, **kwargs})
+        if on_text is not None:
+            on_text("partial ")
+        self.release.wait(timeout=5)
+        if on_text is not None:
+            on_text("arrived after the interrupt")
+        return ModelResponse(stop_reason="end_turn", text="partial arrived after the interrupt")
+
+
+def test_an_interrupt_abandons_a_model_request_in_flight():
+    """The request cannot be cancelled, so the loop stops waiting for it: the
+    session ends at once, and what the reply streams afterwards is dropped."""
+
+    import threading
+    import time
+
+    release, interrupt = threading.Event(), threading.Event()
+    delivered: list[str] = []
+    threading.Timer(0.2, interrupt.set).start()
+    started = time.monotonic()
+    try:
+        stream, session = _run(
+            _HangingBackend(release),
+            interrupt=interrupt,
+            on_delta=lambda event: delivered.append(event.text),
+        )
+    finally:
+        release.set()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 2, "the loop waited for the reply"
+    assert stream[-1].outcome == "interrupted"
+    assert session.outcome == "interrupted"
+    time.sleep(0.2)  # the abandoned reply finishes on its own thread
+    assert delivered == ["partial "]
+
+
+def test_an_interrupted_conversation_takes_the_next_question_in_the_same_turn():
+    """It ends on the person's message; the next question joins it rather
+    than following it, since two user turns in a row are not a shape every
+    provider accepts."""
+
+    history = [Message(role="user", blocks=(TextBlock(text="Find M31."),))]
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="Andromeda.")])
+
+    list(run_session("And M33?", backend=backend, session=_session(), history=history,
+                     tool_schemas=[], tool_functions={}))
+
+    sent = backend.calls[0]["messages"]
+    assert [message.role for message in sent] == ["user"]
+    assert [block.text for block in sent[0].blocks] == ["Find M31.", "And M33?"]
+
+
+def test_without_an_interrupt_the_request_runs_on_the_loops_own_thread():
+    """Callers that pass no interrupt (the bench, scripts) are unchanged."""
+
+    import threading
+
+    threads: list[str] = []
+
+    class Recording(StubBackend):
+        def complete(self, **kwargs):
+            threads.append(threading.current_thread().name)
+            return super().complete(**kwargs)
+
+    _run(Recording([ModelResponse(stop_reason="end_turn", text="ok")]))
+
+    assert threads == [threading.current_thread().name]

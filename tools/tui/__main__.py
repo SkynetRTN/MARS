@@ -112,6 +112,7 @@ def main() -> int:
         backend=backend,
         max_turns=args.max_turns,
         thinking_budget=thinking_budget,
+        hard_exit_after=5.0,
     ).run()
     return 0
 

@@ -453,14 +453,15 @@ different kind of claim from its answer — it may contradict the answer — and
 consumer that rendered them alike would let a discarded hypothesis read as a
 finding.
 
-Three optional callables let an interactive caller stay in a run, and the loop
-is unchanged without them:
+Four optional hooks let an interactive caller stay in a run, and the loop is
+unchanged without them:
 
 | Hook | When | What it does |
 | --- | --- | --- |
 | `on_delta` | Inside `complete()`, per chunk | Receives `TextDelta` and `ThinkingDelta` as they stream, **instead of** their being emitted afterwards. A generator cannot yield from a callback, so without it the engine buffers and emits on return. Either way a delta is delivered exactly once. |
 | `pending_input` | Top of every turn | Drained; what it returns is merged into the **trailing user message**, which is the one carrying the tool results. Two consecutive user messages are not a shape every provider accepts, and a note is an addition to what the user last said, not a turn of its own. `UserMessage` announces the turn it landed in. |
 | `should_stop` | Top of every turn, and before each tool call | Ends the session with outcome `interrupted`. A pending tool call takes the denial path with an `interrupted` result rather than being abandoned: every `tool_use` needs a `tool_result` or the conversation cannot be sent again. A hook that raises is read as "keep going". |
+| `interrupt` | While a model request is in flight | A `threading.Event`: set, it ends the session *now*, with outcome `interrupted`. The request runs on a daemon thread the loop stops waiting for (an HTTP call cannot be cancelled from another thread); a reply that arrives later is dropped, with any text it streams after the interrupt. The conversation then ends on the person's message, and the next question joins it. A tool call honours it only through the caller's `tool_functions`: the console's run in owned workers (`tools/tui/tool_calls.py`) that it kills. |
 
 `tools/llm/` is the provider-neutral **model port**. Two rules govern it:
 
@@ -651,9 +652,10 @@ A test asserts that every registered command has a handler.
 | `Tab` | Complete the slash command being typed. |
 | `F3` / `F4` | Artifact browser · session browser. |
 | `Esc` | Stop the running turn at its next safe point; close a browser. |
+| `Ctrl+C` | Stop the step in flight now, and the turn with it; the console stays open. A tool is killed in its worker, with anything it started; a model reply is abandoned. With nothing running, copy the selection. |
 | `o` | In the artifact browser, open the selected file in the desktop handler. |
 | `Tab` / arrows, `Enter`, `n` | In an approval: move between Allow, Allow always and Deny, press the focused one; `n` or `Esc` denies. Deny has focus when it opens, no letter allows, and every key but `Esc` is held back for the first half second, so typing meant for the prompt cannot answer a call; a click acts at once. |
-| `Ctrl+Q` | Quit. During a tool call or model request, which cannot be interrupted, the console stays open, says it is quitting, stops at the next safe point and exits when the step finishes; a pending approval is denied. |
+| `Ctrl+Q` | Quit now. A running step is stopped as `Ctrl+C` stops it and a pending approval is denied; if anything in-process still holds on, `mars` ends the process after 5 s. |
 
 Everything a run writes is kept: tool artifacts land under
 `artifacts/sessions/<session_id>/`, `F3` browses them with image and waveform

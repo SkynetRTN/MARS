@@ -220,14 +220,19 @@ verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
 entry point: `mars`. The `tools/runner.py` shim and its console script were
 deleted once the console replaced them.
 
-`run_session()` also takes three optional callables for an interactive caller,
+`run_session()` also takes four optional hooks for an interactive caller,
 and behaves exactly as before without them: `on_delta` (receives `TextDelta`
 and `ThinkingDelta` live **instead of** their being emitted afterwards — a
 delta is delivered exactly once either way), `pending_input` (drained each turn
 and merged into the trailing user message, so a note typed mid-run arrives with
-the tool results), and `should_stop` (ends the session with outcome
+the tool results), `should_stop` (ends the session with outcome
 `interrupted`, refusing any pending tool call with a `tool_result` rather than
-leaving a `tool_use` unanswered).
+leaving a `tool_use` unanswered), and `interrupt`, a `threading.Event` that
+ends it *now*: the model request runs on a daemon thread the loop stops
+waiting for, and a reply that arrives later is dropped. The console's
+Ctrl+C sets it, and runs every tool but a short list of instant lookups in
+the MCP server's owned workers (`tools/tui/tool_calls.py`), which the same
+event kills.
 
 `tools/llm/` owns the provider-neutral **model port** and nothing else:
 neutral types, the `ModelBackend` protocol (`complete()` is the only required

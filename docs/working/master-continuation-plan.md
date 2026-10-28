@@ -381,10 +381,9 @@ Evidence: [query backends](../../algorithms/query/),
   the screen and then wait 85 s out of sight; now the console stays open,
   says it is quitting, stops at the next safe point and exits when the solve
   ends (78 s), denying any pending approval. No solver process outlived the
-  console either way. The status line now starts with its keys (`esc stop`,
-  `ctrl+q quit`, F3, F4) and adds counts only as they fit, so 80 columns
-  keep them. Making a tool interruptible would mean running the console's
-  calls in the MCP server's owned workers (`tools/runtime/`); not done.
+  console either way. The status line now starts with its keys and adds
+  counts only as they fit, so 80 columns keep them. Superseded by the next
+  item: Ctrl+C now stops a step, and Ctrl+Q quits at once.
   **Supported terminals (maintainer's decision, 2026-10-27):** on macOS,
   Terminal.app, the default; iTerm2 is not supported. Terminal.app needs a
   person at the Mac.
@@ -412,6 +411,33 @@ Evidence: [query backends](../../algorithms/query/),
   *Done 2026-10-27:* by the maintainer's decision, a resumed session shows
   both sides, in order: each question or mid-run note, then the model's
   answers. Tool calls and artifacts are not replayed.
+- [x] **Stop a running step; quit at once.** The maintainer's decision
+  (2026-10-28): Ctrl+C stops the step in flight -- a tool or a model reply --
+  and keeps the console open; Ctrl+Q closes it and ends the process; Esc
+  still stops after the step. *Done 2026-10-28:*
+  - **Tools** run in the MCP server's owned workers (`tools/runtime/`), which
+    Ctrl+C kills with anything they started; 14 instant local lookups stay
+    in-process (`tools/tui/tool_calls.py`, `INLINE_TOOLS`; a test keeps
+    every remote or mixed tool out). A worker costs about 2.5 s to start
+    here and brings the MCP limits (600 s, 4 GiB, disk budgets), which the
+    console had none of.
+  - **Model replies:** `run_session(interrupt=)` runs the request on a
+    daemon thread the loop stops waiting for, and drops what arrives later.
+  - **Measured** in tmux at 80x24: Ctrl+C 5 s into a bounded ATLAS solve
+    ended the session 0.27 s later, the worker gone, the console open
+    (`✗ solve_astrometry — stopped by the user`); Ctrl+Q exited in 0.78 s.
+    With a 60 s model reply in flight: 0.27 s and 0.79 s.
+  - **Runtime fix found on the way, MCP too:** a worker passed its own
+    `PYTHONPATH` to the tool's children, so astrometry.net's Python helpers
+    (Fedora's `removelines`, system Python 3.14) imported MARS's 3.13 numpy
+    and `solve-field` failed in every worker. The worker now restores the
+    caller's `PYTHONPATH` (test in `tests/test_runtime_limits.py`).
+  - **Open, for the maintainer:** the worker's 4 GiB address-space cap stops
+    astrometry.net mapping a large index set (the 4200 series is about
+    32 GB), so an opt-in user's all-sky solve fails in any worker, MCP
+    included; users without local plate solving are unaffected. And a
+    crashed `solve-field` is reported as "no solution" with status `ok`,
+    which is how the `PYTHONPATH` failure first passed as ✓.
 - [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
   other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
   documentation and behavior changes, which the repository keeps in

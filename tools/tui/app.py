@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import sys
 import threading
 import time
 from collections.abc import Mapping
@@ -53,13 +55,14 @@ from tools.tui.backends import (
 from tools.tui.commands import help_text, parse_input, resolve, suggest
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.theme import MARS_DARK, THEMES
+from tools.tui.tool_calls import owned_tool_functions, session_artifacts
 from tools.tui.widgets.artifacts import ArtifactBrowser
 from tools.tui.widgets.header import MARSHeader
 from tools.tui.widgets.models import ModelBrowser
 from tools.tui.widgets.prompt import CommandMenu, PromptInput
 from tools.tui.widgets.sessions import SessionBrowser, history_from_manifest
 from tools.tui.widgets.transcript import Transcript
-from tools.workspace import describe_session, list_artifacts, list_sessions
+from tools.workspace import describe_session, list_sessions
 
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
@@ -237,6 +240,9 @@ class MARSApp(App[None]):
         Binding("f3", "show_artifacts", "Artifacts"),
         Binding("f4", "show_sessions", "Sessions"),
         Binding("escape", "interrupt", "Stop the turn"),
+        # Priority: the prompt keeps focus during a run, and its own Ctrl+C
+        # (copy) would otherwise take the key. Idle, the action copies.
+        Binding("ctrl+c", "stop_now", "Stop now", priority=True),
     ]
 
     CSS = """
@@ -310,8 +316,13 @@ class MARSApp(App[None]):
         max_turns: int = 20,
         graphics_tier: GraphicsTier | None = None,
         thinking_budget: int | None = DEFAULT_THINKING_BUDGET,
+        hard_exit_after: float | None = None,
     ) -> None:
         super().__init__()
+        # Seconds Ctrl+Q mid-step waits for the engine's thread before ending
+        # the process outright; None never does (tests run in one process).
+        # The `mars` command sets it.
+        self.hard_exit_after = hard_exit_after
         # The Skynet palette (tools/tui/theme.py). Both are registered, so the
         # command palette's theme switcher offers the light one too.
         for theme in THEMES:
@@ -337,7 +348,12 @@ class MARSApp(App[None]):
         self._queue_lock = threading.Lock()
         self._queued_input: list[str] = []
         self._stop_requested = False
-        self._quit_requested = False
+        # Set by Ctrl+C or Ctrl+Q: ends the step in flight (run_prompt makes
+        # a fresh one for each question).
+        self._interrupt = threading.Event()
+        # Set as Ctrl+Q exits: the stopped worker's last messages arrive
+        # after the screen is gone, and are dropped rather than rendered.
+        self._quitting = False
         self._pending_approvals: set[MARSApp.ApprovalRequest] = set()
         # The approval policy of the latest question. Each question gets a
         # fresh one (run_prompt): "Allow always" is never inherited by the
@@ -380,6 +396,8 @@ class MARSApp(App[None]):
     def _handle_engine_event(self, message: EngineEvent) -> None:
         """Render each worker event on Textual's UI thread."""
 
+        if self._quitting:
+            return
         event = message.event
         self.query_one("#transcript", Transcript).handle_event(event)
         if isinstance(event, SessionStarted):
@@ -398,6 +416,10 @@ class MARSApp(App[None]):
     def _handle_approval_request(self, request: ApprovalRequest) -> None:
         """Display a modal and unblock the worker when the user answers."""
 
+        if self._quitting or request.ready.is_set():
+            # Asked as the console quit: already answered, or answered now.
+            self._resolve_approval(request, request.decision or Decision.DENY)
+            return
         self.push_screen(
             ApprovalModal(request.proposed),
             lambda decision: self._resolve_approval(request, decision),
@@ -407,6 +429,8 @@ class MARSApp(App[None]):
     def _handle_history_updated(self, message: HistoryUpdated) -> None:
         """Keep completed text exchanges available to the next prompt."""
 
+        if self._quitting:
+            return
         self._history = message.history
         self._history_ready = True
         self._finish_prompt_if_ready()
@@ -415,7 +439,8 @@ class MARSApp(App[None]):
     def _handle_engine_failed(self, message: EngineFailed) -> None:
         """Make unexpected worker failures visible in the transcript."""
 
-        self._append_transcript(message.text)
+        if not self._quitting:
+            self._append_transcript(message.text)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Offer the commands the line being typed could still become."""
@@ -460,6 +485,7 @@ class MARSApp(App[None]):
             return self._active_worker
         self._history_ready = False
         self._stop_requested = False
+        self._interrupt = threading.Event()
         self.policy = SessionPolicy(self._request_approval)
         worker = self._run_prompt(text, history=history)
         self._active_worker = worker
@@ -473,8 +499,11 @@ class MARSApp(App[None]):
     def _run_prompt(self, text: str, *, history: tuple["Message", ...] = ()) -> None:
         """Run the synchronous engine in a Textual thread worker."""
 
+        from tools.registry import TOOL_FUNCTIONS
+
         self.engine_starts += 1
         policy = self.policy
+        interrupt = self._interrupt
         assistant_text: list[str] = []
         manifest_path: Path | None = None
 
@@ -502,6 +531,8 @@ class MARSApp(App[None]):
                 on_delta=stream,
                 pending_input=self._take_queued_input,
                 should_stop=self._stop_is_requested,
+                interrupt=interrupt,
+                tool_functions=owned_tool_functions(TOOL_FUNCTIONS, interrupt),
             ):
                 if isinstance(event, SessionFinished):
                     manifest_path = Path(event.manifest_path)
@@ -549,6 +580,8 @@ class MARSApp(App[None]):
     def on_worker_state_changed(self, message: Worker.StateChanged) -> None:
         """Restore prompt input only after the active synchronous worker stops."""
 
+        if self._quitting:
+            return
         if (
             message.worker is self._active_worker
             and message.state
@@ -559,9 +592,6 @@ class MARSApp(App[None]):
             # end with it, so /status and /approve between questions speak
             # of the policy the next question will start with.
             self.policy = SessionPolicy(self._request_approval)
-            if self._quit_requested:
-                self.exit()
-                return
             self._refresh_status()
             if message.state is WorkerState.SUCCESS:
                 self._finish_prompt_if_ready()
@@ -734,7 +764,7 @@ class MARSApp(App[None]):
         artifacts = (
             None
             if self._artifact_directory is None
-            else list_artifacts(self._artifact_directory)
+            else session_artifacts(self._artifact_directory)
         )
         self.push_screen(ArtifactBrowser(artifacts, tier=self.graphics_tier))
 
@@ -911,34 +941,59 @@ class MARSApp(App[None]):
         self._quit()
 
     def _quit(self) -> None:
-        """Exit, but never silently mid-step.
+        """Quit now, whatever is running.
 
-        The engine runs in a thread, and neither a tool call nor a model
-        request can be interrupted once started; exiting closed the screen
-        and then waited out of sight (85 s, quitting 10 s into a plate
-        solve, measured 2026-10-28). So mid-step the console stays open,
-        says what it is waiting for, stops at the next safe point, and exits
-        when the worker ends. A pending approval is answered Deny: the user
-        is leaving, and a call they did not approve must not run.
+        A running step is stopped as Ctrl+C stops it -- an owned worker is
+        killed with anything it started, a model reply is abandoned -- and a
+        pending approval is answered Deny: the user is leaving, and a call
+        they did not approve must not run. The engine's thread then ends
+        promptly, and :attr:`hard_exit_after` ends the process if something
+        in-process does not.
+        """
+
+        if self._session_running():
+            self._stop_requested = True
+            self._interrupt.set()
+            self._deny_pending_approvals()
+            if self.hard_exit_after is not None:
+                _exit_after(self.hard_exit_after)
+        self._quitting = True
+        self.exit()
+
+    def action_stop_now(self) -> None:
+        """Ctrl+C: end the step in flight now, and the turn with it.
+
+        Esc waits for the step to finish; this does not. A tool running in an
+        owned worker is killed with anything it started (an instant lookup
+        runs in-process and simply ends); a model reply is abandoned, and the
+        model is not asked again. The console stays open, with the
+        conversation so far, for the next question. With nothing running,
+        Ctrl+C keeps its usual meaning: copy the selection.
         """
 
         if not self._session_running():
-            self.exit()
+            focused = self.focused
+            if callable(getattr(focused, "action_copy", None)):
+                focused.action_copy()
+            else:
+                self.screen.action_copy_text()
             return
-        if self._quit_requested:
+        if self._interrupt.is_set():
             return
-        self._quit_requested = True
         self._stop_requested = True
+        self._interrupt.set()
+        self._deny_pending_approvals()
+        self._append_transcript("Stopped: the step in flight was ended.")
+        self._refresh_status()
+
+    def _deny_pending_approvals(self) -> None:
+        """Answer every open approval Deny and close its dialog."""
+
         for request in self._release_pending_approvals():
             request.decision = Decision.DENY
             request.ready.set()
         while isinstance(self.screen, ApprovalModal):
             self.pop_screen()
-        self._append_transcript(
-            "Quitting once the step in flight finishes; a tool call or model "
-            "request cannot be interrupted."
-        )
-        self._refresh_status()
 
     def _session_running(self) -> bool:
         """Return whether the application still owns a synchronous engine worker."""
@@ -1011,40 +1066,57 @@ class MARSApp(App[None]):
         request.ready.set()
 
     def _status_text(self, width: int | None = None) -> str:
-        """The status line: the keys first, then the counts that fit.
+        """The status line: the keys first, then what fits.
 
-        The keys are what someone acts on -- how to stop a turn, how to quit
-        -- so they are never what a narrow terminal cuts: at 80 columns the
-        line used to end before the stop hint, and it never named a quit
-        key. Counts follow in order of use, each only if it still fits in
-        ``width``; with no width, all of them.
+        How to stop and how to quit are what someone acts on, so they are
+        never what a narrow terminal cuts: at 80 columns the line used to end
+        before the stop hint, and it never named a quit key. The F-keys and
+        the counts follow, each only if it still fits in ``width``; with no
+        width, all of them.
         """
 
-        if self._session_running() and self._quit_requested:
-            keys = ["quitting", "F3 artifacts", "F4 sessions"]
+        if self._session_running() and self._stop_requested:
+            keys = ["stopping", "ctrl+q quit"]
         elif self._session_running():
-            stop = "stopping" if self._stop_requested else "esc stop"
-            keys = [stop, "ctrl+q quit", "F3 artifacts", "F4 sessions"]
+            keys = ["ctrl+c stop", "esc stop after step", "ctrl+q quit"]
         else:
-            keys = ["ctrl+q quit", "F3 artifacts", "F4 sessions"]
-        counts = [f"{self.current_turn}/{self.max_turns} turns"]
+            keys = ["ctrl+q quit"]
+        extras = ["F3 artifacts", "F4 sessions", f"{self.current_turn}/{self.max_turns} turns"]
         usage = self.token_usage
         if usage is not None and usage.input_tokens is not None:
             tokens = f"{usage.input_tokens} in"
             if usage.output_tokens is not None:
                 tokens += f", {usage.output_tokens} out"
-            counts.append(f"{tokens} tokens")
-        counts.append(
+            extras.append(f"{tokens} tokens")
+        extras.append(
             f"{self.artifact_count} artifact" + ("" if self.artifact_count == 1 else "s")
         )
-        counts.append(f"{self.graphics_tier.value} graphics")
+        extras.append(f"{self.graphics_tier.value} graphics")
         if width is None:
-            return " • ".join(keys + counts)
+            return " • ".join(keys + extras)
         line = " • ".join(keys)
-        for count in counts:
-            if len(line) + len(" • ") + len(count) <= width:
-                line += " • " + count
+        for extra in extras:
+            if len(line) + len(" • ") + len(extra) <= width:
+                line += " • " + extra
         return line
+
+def _exit_after(seconds: float) -> None:
+    """End the process in ``seconds`` if it is still running.
+
+    The backstop under Ctrl+Q: a quit must quit. A stopped step ends within
+    moments, but an in-process lookup on a hung disk would not, and Python
+    waits for the engine's thread at exit. By then Textual has restored the
+    terminal; the session manifest is saved after every step.
+    """
+
+    def end() -> None:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
+
+    timer = threading.Timer(seconds, end)
+    timer.daemon = True
+    timer.start()
 
 
 def _approval_marker(name: str) -> str:

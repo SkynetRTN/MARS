@@ -29,11 +29,21 @@ the top of every turn and merged into the conversation, so a person can add
 information to a run in progress; ``should_stop`` is checked at each turn and
 before each tool call, so a person can end one. None of them is required and
 the loop is unchanged without them.
+
+``interrupt`` is a fourth hook, an event rather than a callable: set, it ends
+the session *now*. A model request cannot be cancelled from another thread,
+so with ``interrupt`` given the request runs on a helper thread and the loop
+stops waiting for it; the reply, if it ever comes, is dropped, and so is any
+text it streams after the interrupt. The conversation then ends on the
+person's message, which the next question joins rather than following. (A
+tool call honours it only if the caller's ``tool_functions`` do: the console
+runs its tools in workers it can stop.)
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -88,6 +98,7 @@ def run_session(
     on_delta: OnDelta | None = None,
     pending_input: Callable[[], Sequence[str]] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    interrupt: threading.Event | None = None,
 ) -> Iterator[events.Event]:
     """Run a bounded agent loop and yield its events.
 
@@ -96,8 +107,8 @@ def run_session(
     ``tool_schemas``/``tool_functions`` default to the live registry, read at
     call time.
 
-    ``on_delta``, ``pending_input`` and ``should_stop`` are the interactive
-    hooks described in the module docstring.
+    ``on_delta``, ``pending_input``, ``should_stop`` and ``interrupt`` are the
+    interactive hooks described in the module docstring.
     """
 
     schemas, functions = _resolve_registry(tool_schemas, tool_functions)
@@ -113,7 +124,10 @@ def run_session(
     session.backend = backend_record(backend)
 
     messages = list(history)
-    messages.append(Message(role="user", blocks=(TextBlock(text=user_message),)))
+    # Joined, not appended, after a history that ends on the person's message
+    # (an interrupted reply): two user turns in a row are not a shape every
+    # provider accepts.
+    _add_user_text(messages, user_message)
     session.history = _recorded_history(messages)
     call_cache: dict[str, dict[str, Any]] = {}
     max_tokens = backend.capabilities.max_output_tokens
@@ -148,14 +162,26 @@ def run_session(
 
                 streamed: list[str] = []
                 reasoned: list[str] = []
-                response = backend.complete(
-                    messages=messages,
+                response = _complete(
+                    backend,
+                    interrupt,
+                    messages=list(messages),
                     tools=dialect_tools,
                     system=system,
                     max_tokens=max_tokens,
-                    on_text=_collector(streamed, on_delta, events.TextDelta),
-                    on_thinking=_collector(reasoned, on_delta, events.ThinkingDelta),
+                    on_text=_collector(streamed, on_delta, events.TextDelta, interrupt),
+                    on_thinking=_collector(
+                        reasoned, on_delta, events.ThinkingDelta, interrupt
+                    ),
                 )
+                if response is None:
+                    manifest_path = session.save(
+                        outcome="interrupted", current_turn=turn_number
+                    )
+                    yield events.SessionFinished(
+                        outcome="interrupted", manifest_path=str(manifest_path)
+                    )
+                    return
                 if on_delta is None:
                     # Reasoning before the answer: that is the order it was
                     # produced in, and the order a reader needs it in.
@@ -248,12 +274,57 @@ def _assistant_blocks(
     return tuple(blocks)
 
 
+def _complete(
+    backend: ModelBackend, interrupt: threading.Event | None, **request: Any
+) -> ModelResponse | None:
+    """One model request, or ``None`` if ``interrupt`` was set before it ended.
+
+    Without ``interrupt`` this is ``backend.complete`` itself. With it, the
+    request runs on a daemon thread -- the HTTP call cannot be cancelled from
+    here, and a daemon thread cannot hold the process open -- and the loop
+    waits for whichever comes first. An error the request raises is raised
+    here, as it would have been.
+    """
+
+    if interrupt is None:
+        return backend.complete(**request)
+    if interrupt.is_set():
+        return None
+    outcome: dict[str, Any] = {}
+    done = threading.Event()
+
+    def request_reply() -> None:
+        try:
+            outcome["response"] = backend.complete(**request)
+        except BaseException as exc:  # noqa: BLE001 -- re-raised on the loop's thread
+            outcome["error"] = exc
+        finally:
+            done.set()
+
+    threading.Thread(target=request_reply, name="mars-model-request", daemon=True).start()
+    while not done.wait(0.05):
+        if interrupt.is_set():
+            return None
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["response"]
+
+
 def _collector(
-    sink: list[str], on_delta: OnDelta | None, event_type: Callable[..., events.Event]
+    sink: list[str],
+    on_delta: OnDelta | None,
+    event_type: Callable[..., events.Event],
+    interrupt: threading.Event | None = None,
 ) -> Callable[[str], None]:
-    """Build one streaming hook: buffer the chunk, and pass it on if asked."""
+    """Build one streaming hook: buffer the chunk, and pass it on if asked.
+
+    Nothing is passed on once ``interrupt`` is set: an abandoned reply keeps
+    streaming on its own thread, and none of it belongs to the conversation.
+    """
 
     def receive(chunk: str) -> None:
+        if interrupt is not None and interrupt.is_set():
+            return
         if on_delta is None:
             sink.append(chunk)
             return
@@ -522,6 +593,11 @@ def _normalize_result(name: str, value: Any) -> dict[str, Any]:
     dump = getattr(value, "model_dump", None)
     if callable(dump):
         return dump()
+    if isinstance(value, Mapping):
+        # Already serialized: a caller's tool_functions may run the call
+        # elsewhere and hand back its JSON result, as the console's owned
+        # workers do (tools/tui/tool_calls.py).
+        return dict(value)
     if isinstance(value, (list, tuple)):
         items = [
             item.model_dump() if callable(getattr(item, "model_dump", None)) else item
