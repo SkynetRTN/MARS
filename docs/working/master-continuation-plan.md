@@ -228,8 +228,9 @@ Evidence: [query backends](../../algorithms/query/),
   serving 55 tools. `uv tool install` on the x64 Python: install 29 s,
   `self-test` 113 s, passing. CI's runtime-containment job passed on
   `windows-11-arm` with the x64 Python (run 40608763583, 2026-10-27, 146 s).
-  Remaining: both apps on the ARM64 VM, and the two Release jobs moved to
-  `windows-11-arm`, which have not run (the Release dry run).
+  The Release dry run (run 40611174066) passed both jobs moved to
+  `windows-11-arm`: the extension's self-test, on the x64 Python, and the
+  bundle checks. Remaining: both apps on the ARM64 VM.
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
@@ -290,8 +291,11 @@ Evidence: [query backends](../../algorithms/query/),
     include a blind pulsar detection. The Codex plugin allows 600 s to start.
   - **MCPB:** the release workflow packs, tests and attaches `mars.mcpb`, and
     the guides point at the newest release.
-  - **Remaining:** none of these workflow jobs has run. A `workflow_dispatch`
-    dry run of Release would exercise them before the next tag.
+  - **Release dry run (2026-10-27,** run 40611174066, `workflow_dispatch`,
+    publishing skipped): every job passed: packing and validating
+    `mars.mcpb`, the extension's self-test on macOS and `windows-11-arm`
+    (which served this build), and the installed-wheel bundle checks on
+    Linux, macOS and `windows-11-arm`.
 - [x] **Configured solver success.** A blind WCS test can skip after failing
   even when resources exist, and omits configured settings. ATLAS reachability
   does not establish blind convergence. A supported known-solution fixture
