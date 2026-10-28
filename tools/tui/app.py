@@ -337,6 +337,7 @@ class MARSApp(App[None]):
         self._queue_lock = threading.Lock()
         self._queued_input: list[str] = []
         self._stop_requested = False
+        self._quit_requested = False
         self._pending_approvals: set[MARSApp.ApprovalRequest] = set()
         # The approval policy of the latest question. Each question gets a
         # fresh one (run_prompt): "Allow always" is never inherited by the
@@ -558,6 +559,9 @@ class MARSApp(App[None]):
             # end with it, so /status and /approve between questions speak
             # of the policy the next question will start with.
             self.policy = SessionPolicy(self._request_approval)
+            if self._quit_requested:
+                self.exit()
+                return
             self._refresh_status()
             if message.state is WorkerState.SUCCESS:
                 self._finish_prompt_if_ready()
@@ -899,7 +903,42 @@ class MARSApp(App[None]):
     def quit(self, args: tuple[str, ...]) -> None:
         """Exit the console through its declarative command handler."""
 
-        self.exit()
+        self._quit()
+
+    async def action_quit(self) -> None:
+        """Ctrl+Q: quit now, or once the step in flight finishes."""
+
+        self._quit()
+
+    def _quit(self) -> None:
+        """Exit, but never silently mid-step.
+
+        The engine runs in a thread, and neither a tool call nor a model
+        request can be interrupted once started; exiting closed the screen
+        and then waited out of sight (85 s, quitting 10 s into a plate
+        solve, measured 2026-10-28). So mid-step the console stays open,
+        says what it is waiting for, stops at the next safe point, and exits
+        when the worker ends. A pending approval is answered Deny: the user
+        is leaving, and a call they did not approve must not run.
+        """
+
+        if not self._session_running():
+            self.exit()
+            return
+        if self._quit_requested:
+            return
+        self._quit_requested = True
+        self._stop_requested = True
+        for request in self._release_pending_approvals():
+            request.decision = Decision.DENY
+            request.ready.set()
+        while isinstance(self.screen, ApprovalModal):
+            self.pop_screen()
+        self._append_transcript(
+            "Quitting once the step in flight finishes; a tool call or model "
+            "request cannot be interrupted."
+        )
+        self._refresh_status()
 
     def _session_running(self) -> bool:
         """Return whether the application still owns a synchronous engine worker."""
@@ -981,7 +1020,9 @@ class MARSApp(App[None]):
         ``width``; with no width, all of them.
         """
 
-        if self._session_running():
+        if self._session_running() and self._quit_requested:
+            keys = ["quitting", "F3 artifacts", "F4 sessions"]
+        elif self._session_running():
             stop = "stopping" if self._stop_requested else "esc stop"
             keys = [stop, "ctrl+q quit", "F3 artifacts", "F4 sessions"]
         else:

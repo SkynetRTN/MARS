@@ -581,3 +581,90 @@ def test_counts_that_do_not_fit_are_left_out_whole():
     assert full.startswith(narrow)
     assert len(narrow) <= 50
     assert narrow.split(" • ")[-1] in full.split(" • ")
+
+
+
+# ---------------------------------------------------------------------------
+# Quitting mid-step stays open until the step ends, and says so
+
+
+def test_quitting_mid_step_waits_in_view_then_exits(monkeypatch):
+    """Ctrl+Q 10 s into a plate solve closed the screen, then waited 85 s
+    out of sight for the solve (2026-10-28). The console now stays open,
+    says why, stops at the next safe point, and exits when the step ends."""
+
+    import threading
+
+    from tools.tui import app as tui_app
+
+    started, release = threading.Event(), threading.Event()
+    stopped: list[bool] = []
+
+    def fake_run_session(_text, **kwargs):
+        started.set()
+        release.wait(timeout=5)
+        stopped.append(kwargs["should_stop"]())
+        yield SessionFinished(outcome="interrupted", manifest_path="")
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        exited: list[bool] = []
+        app.exit = lambda *args, **kwargs: exited.append(True)
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.run_prompt("solve it")
+            async with asyncio.timeout(2):
+                while not started.is_set():
+                    await pilot.pause()
+            await pilot.press("ctrl+q")
+            await pilot.pause()
+            assert exited == []
+            assert "Quitting once the step in flight finishes" in _rendered(app)
+            assert str(app.query_one("#status").render()).startswith("quitting")
+            release.set()
+            async with asyncio.timeout(2):
+                while not exited:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    assert stopped == [True]
+
+
+def test_quitting_with_an_approval_open_denies_it(monkeypatch):
+    """The engine is blocked on the answer, so waiting for the step would
+    wait forever; the user is leaving, so the call is denied."""
+
+    import threading
+
+    from tools.tui import app as tui_app
+
+    asked = threading.Event()
+    decisions: list[Decision] = []
+
+    def fake_run_session(_text, **kwargs):
+        asked.set()
+        decisions.append(kwargs["approver"](ToolCallProposed("c1", "plot_pulsar", {})))
+        yield SessionFinished(outcome="interrupted", manifest_path="")
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        exited: list[bool] = []
+        app.exit = lambda *args, **kwargs: exited.append(True)
+        async with app.run_test() as pilot:
+            app.run_prompt("plot it")
+            async with asyncio.timeout(2):
+                while not isinstance(app.screen, ApprovalModal):
+                    await pilot.pause()
+            await pilot.press("ctrl+q")
+            async with asyncio.timeout(2):
+                while not exited:
+                    await pilot.pause()
+            assert not isinstance(app.screen, ApprovalModal)
+
+    _run(scenario())
+
+    assert decisions == [Decision.DENY]

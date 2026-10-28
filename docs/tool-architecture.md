@@ -653,7 +653,7 @@ A test asserts that every registered command has a handler.
 | `Esc` | Stop the running turn at its next safe point; close a browser. |
 | `o` | In the artifact browser, open the selected file in the desktop handler. |
 | `Tab` / arrows, `Enter`, `n` | In an approval: move between Allow, Allow always and Deny, press the focused one; `n` or `Esc` denies. Deny has focus when it opens, no letter allows, and every key but `Esc` is held back for the first half second, so typing meant for the prompt cannot answer a call; a click acts at once. |
-| `Ctrl+Q` | Quit. |
+| `Ctrl+Q` | Quit. During a tool call or model request, which cannot be interrupted, the console stays open, says it is quitting, stops at the next safe point and exits when the step finishes; a pending approval is denied. |
 
 Everything a run writes is kept: tool artifacts land under
 `artifacts/sessions/<session_id>/`, `F3` browses them with image and waveform

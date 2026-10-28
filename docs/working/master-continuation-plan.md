@@ -374,6 +374,17 @@ Evidence: [query backends](../../algorithms/query/),
   Ctrl+Q. `NO_COLOR` was inconclusive: the idle screen is grey either way.
   *Windows on ARM over SSH (2026-10-27):* renders at 80x24 and 100x34 with
   half-block graphics; Ctrl+Q quits at once.
+  *A real plate solve, in tmux at 80x24 (2026-10-28),* driven by a scripted
+  model calling `solve_astrometry` all-sky on NGC 3628 (about 80 s): Esc
+  10 s in is acknowledged at once and the session ends 71 s later, when the
+  solve does; a tool cannot be interrupted. Ctrl+Q 10 s in used to close
+  the screen and then wait 85 s out of sight; now the console stays open,
+  says it is quitting, stops at the next safe point and exits when the solve
+  ends (78 s), denying any pending approval. No solver process outlived the
+  console either way. The status line now starts with its keys (`esc stop`,
+  `ctrl+q quit`, F3, F4) and adds counts only as they fit, so 80 columns
+  keep them. Making a tool interruptible would mean running the console's
+  calls in the MCP server's owned workers (`tools/runtime/`); not done.
   **Supported terminals (maintainer's decision, 2026-10-27):** on macOS,
   Terminal.app, the default; iTerm2 is not supported. Terminal.app needs a
   person at the Mac.
