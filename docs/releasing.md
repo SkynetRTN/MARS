@@ -230,8 +230,7 @@ outside the repository, so run it by hand.
 ## Testing a release
 
 On a machine with no checkout (and a C compiler unless it is Python 3.13 on
-x86_64 Linux, Apple Silicon macOS, or x64 Python on Windows; see
-`installing.md`):
+Linux, Apple Silicon macOS, or x64 Python on Windows; see `installing.md`):
 
 ```bash
 python3.13 -m venv mars-env

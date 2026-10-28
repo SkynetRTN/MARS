@@ -55,10 +55,10 @@ The ChatGPT desktop app for Linux is in preview. OpenAI publishes `.rpm`
 packages for Fedora 43 and 44, for x86_64 and aarch64.
 
 1. Install the app from OpenAI's `.rpm` (`sudo dnf install ./<downloaded>.rpm`),
-   and install `uv`, `git` and `gcc` from Fedora:
+   and install `uv` and `git` from Fedora:
 
    ```bash
-   sudo dnf install uv git gcc
+   sudo dnf install uv git
    ```
 
    Use Fedora's `uv`, which lands in `/usr/bin`. An app started from the
@@ -66,9 +66,7 @@ packages for Fedora 43 and 44, for x86_64 and aarch64.
    Codex starts the server with the app's `PATH`. Fedora configures its `uv`
    not to download Python (`python-downloads = "manual"` in
    `/etc/uv/uv.toml`), and Fedora 44's own Python is 3.14, so the plugin sets
-   `UV_PYTHON_DOWNLOADS=automatic` for its server. `gcc` is needed on aarch64
-   only: `photutils` publishes no Python 3.13 wheel for ARM64 Linux, so the
-   first start compiles it.
+   `UV_PYTHON_DOWNLOADS=automatic` for its server.
 
 2. Add the marketplace and install the plugin. With the Codex CLI:
 
@@ -146,10 +144,9 @@ look.
   could not find `uv` on the `PATH` the app was started with. Install it with
   `sudo dnf install uv`, then restart the app.
 - **`handshaking with MCP server failed: connection closed`**: the server
-  exited before it started. Run the self-test above to see why. Two causes
+  exited before it started. Run the self-test above to see why. A cause
   seen on a clean Fedora 44: uv refusing to download Python 3.13 (the plugin
-  now allows it), and, on aarch64, no `cc` to build `photutils`
-  (`sudo dnf install gcc`).
+  now allows it).
 - **A timeout on the first start**: the dependency download outlasted the
   10-minute limit. Run the self-test above once, which installs the same
   release, then start a new thread.
@@ -189,8 +186,7 @@ maintainer in the ChatGPT app on Fedora Workstation and Windows
 (2026-10-23); the launch command, on Windows 11 ARM64 (2026-10-27). The app on macOS is untested: a macOS VM blocks Codex
 messages by workspace settings (Issue #51667). Step-by-step installs:
 [Linux](../../docs/installing/linux.md), [Windows](../../docs/installing/windows.md),
-[macOS](../../docs/installing/macos.md). On aarch64
-the first start also compiles `photutils` with `gcc`. macOS and Windows use
+[macOS](../../docs/installing/macos.md). macOS and Windows use
 the same wheels as the Claude Desktop extension, and the same limits apply.
 `numba` and `llvmlite` have no Intel Mac wheels. Several dependencies have
 none for Windows on ARM, so there the launcher runs MARS on the x64 Python

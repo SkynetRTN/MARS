@@ -22,16 +22,15 @@ Codex's app server.
    sudo dnf install ./chatgpt.aarch64.rpm
    ```
 
-2. Install uv, git and gcc **from Fedora**:
+2. Install uv and git **from Fedora**:
 
    ```bash
-   sudo dnf install uv git gcc
+   sudo dnf install uv git
    ```
 
    Fedora's `uv` is in `/usr/bin`, which an app started from the desktop
    always sees; uv's own installer puts it in `~/.local/bin`, which such an
-   app may not. `gcc` is needed on ARM: `photutils` publishes no Python 3.13
-   wheel for ARM64 Linux, so the first start compiles it.
+   app may not.
 3. Install the Codex CLI if `codex --version` does not find it, then open a
    new terminal:
 

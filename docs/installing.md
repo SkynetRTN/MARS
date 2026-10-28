@@ -59,12 +59,14 @@ python3.13 -m venv ~/mars-env
 ```
 
 **Python 3.12 and 3.13** are supported, and CI tests both; the commands above
-use 3.13. On either, on x86_64 Linux, Apple Silicon macOS or x64 Windows,
-every dependency has a pre-built wheel; on Windows on ARM, use an x64 Python
-(above).
-Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
-Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
-toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about
+use 3.13. On either, on Linux (x86_64 or ARM), Apple Silicon macOS or x64
+Windows, every dependency has a pre-built wheel; on Windows on ARM, use an
+x64 Python (above).
+Elsewhere, something builds from source: `sep` on Python 3.14, and `numba`'s
+`llvmlite` on an Intel Mac, which needs an LLVM toolchain as well as a C
+compiler (the Xcode command-line tools). A checkout on Linux ARM also
+compiles `photutils`, which `uv.lock` pins to 3.0.0, the release before its
+ARM wheels, so `uv sync` there needs `gcc`. The install takes about
 700 MB, nearly all of it dependencies.
 
 Every release is a pre-release for now, so the commands above install the
@@ -114,7 +116,7 @@ Then quit and reopen the app.
 
 **Codex CLI and the ChatGPT desktop app** share `~/.codex`. The simplest
 route is the plugin, which needs no Python and no path, only `uv` and `git`
-(on Fedora: `sudo dnf install uv git`, plus `gcc` on aarch64):
+(on Fedora: `sudo dnf install uv git`):
 
 ```bash
 codex plugin marketplace add SkynetRTN/MARS --sparse .agents/plugins --sparse installers/codex
