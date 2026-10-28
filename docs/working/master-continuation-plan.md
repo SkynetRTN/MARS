@@ -338,7 +338,9 @@ Evidence: [query backends](../../algorithms/query/),
     OpenAI-compatible endpoint cannot ask for a size, so the adapter now
     refuses a turn whose reported input is under half of what was sent,
     naming `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `../installing.md`
-    says so. A timeout now says what ran out.
+    says so. A timeout now says what ran out. The maintainer kept this
+    check (2026-10-28) over reading the model's window before sending,
+    which would need Ollama's native endpoint.
   - **macOS, fresh VM (2026-10-27,** macOS 27.2): install 9 s,
     `self-test` 44 s, both messages as above.
   - **Windows on ARM (2026-10-27),** installed on the x64 Python: the same
@@ -396,6 +398,14 @@ Evidence: [query backends](../../algorithms/query/),
   *Done 2026-10-27:* by the maintainer's decision, a resumed session shows
   both sides, in order: each question or mid-run note, then the model's
   answers. Tool calls and artifacts are not replayed.
+- [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
+  other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
+  documentation and behavior changes, which the repository keeps in
+  separate, narrow PRs (CLAUDE.md, Conventions). Split it by kind, in an
+  order each PR can merge in: behavior (launcher, console, model port,
+  skill installer, `mars-bench`), workflow (`ci.yml`, `release.yml`, the
+  packer), then documentation. Target `dev`, the repository's convention,
+  unless the maintainer names `main`.
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of
