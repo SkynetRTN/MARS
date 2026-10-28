@@ -55,6 +55,73 @@ def test_direct_calibration_respects_saturation_in_paired_catalog_rows():
     assert result.zero_point == pytest.approx(19.999333333333333)
 
 
+@pytest.mark.parametrize("catalogs, count, zero_point", [
+    ([{"id": "2", "sat_pixels": 5}], 2, 20.0),
+    ([{"id": "2", "sat_pixels": 5}, {"id": "1", "sat_pixels": 0}], 2, 20.0),
+    ([{"id": "unrelated", "sat_pixels": 5}], 3, 20.001666666666665),
+    ([{"id": "2", "sat_pixels": 5}, {"id": "1", "sat_pixels": 0},
+      {"id": "0", "sat_pixels": 0}], 2, 20.0),
+], ids=["sparse", "partial-reordered", "unrelated", "complete-reordered"])
+def test_registered_direct_calibration_does_not_inherit_unrelated_saturation(
+    catalogs, count, zero_point,
+):
+    from tools.mcp.surface import call_tool
+
+    measurements = [
+        {"id": str(i), "mag": 12.0 + i, "ref_mag": reference,
+         "mag_error": .02, "ref_mag_error": .01, "sat_pixels": 0}
+        for i, reference in enumerate([31.99, 33.01, 34.005])
+    ]
+    result = call_tool("solve_zeropoint_from_measurements", {
+        "measurements": measurements, "catalog_sources": catalogs,
+    })
+
+    assert result["errors"] == []
+    assert result["source_count"] == count
+    assert result["zero_point"] == pytest.approx(zero_point, abs=1e-10)
+    if count == 2:
+        assert result["zero_point_error_mag"] == pytest.approx(.01, abs=1e-10)
+
+
+@pytest.mark.parametrize("measurement_prefix, catalog_prefix", [
+    (None, None), ("measurement", None), (None, "catalog"),
+    ("measurement", "catalog"),
+])
+@pytest.mark.parametrize("provided_reference", [False, True])
+def test_direct_calibration_preserves_positional_reference_and_saturation(
+    measurement_prefix, catalog_prefix, provided_reference,
+):
+    from tools.calibration import solve_zeropoint_from_measurements
+
+    measurements = [
+        {"mag": 12.0 + i, "mag_error": .02, "sat_pixels": 0}
+        for i in range(3)
+    ]
+    catalogs = [
+        {"ref_mag": reference, "ref_mag_error": .01,
+         "sat_pixels": 5 if i == 2 else 0}
+        for i, reference in enumerate([31.99, 33.01, 34.005])
+    ]
+    for i, (measurement, catalog) in enumerate(zip(measurements, catalogs)):
+        if measurement_prefix is not None:
+            measurement["id"] = f"{measurement_prefix}{i}"
+        if catalog_prefix is not None:
+            catalog["id"] = f"{catalog_prefix}{i}"
+        if provided_reference:
+            measurement.update(ref_mag=catalog["ref_mag"], ref_mag_error=.01)
+
+    result = solve_zeropoint_from_measurements(measurements, catalogs)
+
+    # Different ID namespaces still support the historical positional
+    # reference lookup; already referenced rows need no such pairing.
+    unrelated = provided_reference and measurement_prefix and catalog_prefix
+    assert result.errors == []
+    assert result.source_count == (3 if unrelated else 2)
+    assert result.zero_point == pytest.approx(
+        20.001666666666665 if unrelated else 20.0, abs=1e-10,
+    )
+
+
 @pytest.mark.parametrize("step", [0., np.spacing(15.)])
 def test_rank_deficient_snr_line_keeps_zero_point_but_withholds_limiting_magnitude(step):
     from tools.calibration import solve_zeropoint_from_measurements

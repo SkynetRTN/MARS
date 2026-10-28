@@ -50,7 +50,8 @@ H-alpha, or photometric fitting equation changed. Older pulsar phase artifacts
 require recomputation for current calibrated plots.
 
 
-Final follow-up verification with locked dependencies:
+Adversarial follow-up verification with locked dependencies, before the final
+branch-review corrections below:
 
 | Check | Result |
 | --- | --- |
@@ -65,6 +66,18 @@ runtime/rank warnings were treated as errors. The 86 skips are 80 live-network
 cases, one Ollama check, four absent historical benchmark runs and one
 Windows-only allocation check. No fresh provider-availability or historical
 benchmark claim is implied; the earlier live limits remain recorded below.
+
+Final branch review corrected catalog saturation inherited through a conflicting
+positional row: already referenced measurements retain their valid ID association,
+while ID matches and positional reference lookup keep their saturation checks.
+Regressions cover partial, reordered and unrelated catalogs, missing IDs and
+different ID namespaces. The architecture documentation now describes replaying
+recorded inputs and reporting fit differences, rather than promising bit-exact
+historical results. Independent review found no remaining issue in either fix.
+After these corrections, the full native suite on Python 3.13 passed with 4,284
+tests and 86 expected skips; all 224 warnings were FITS notices. The 92 focused
+calibration tests passed on both supported Python versions; compilation,
+generated guidance and whitespace checks passed.
 
 All ten checkpoints and the four final corrections below are complete within
 the recorded limits. Changes remain unmerged into main and unpublished.

@@ -127,8 +127,9 @@ The first local, no-network tools are:
   `replay_variable_sources`) that drive a real solve against them, and the
   end-to-end selection replay that re-chooses NGC 5128 B's 35 calibration
   stars from the recorded 132-row APASS cone (45 candidates once clipped to
-  the frame, as the live query path clips) and reproduces the recorded
-  solve bit for bit.
+  the frame, as the live query path clips). The replay reports differences
+  from the recorded solve; M2's corrected scatter and rejection can change
+  the fitted result while preserving the recorded selection.
 - `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`

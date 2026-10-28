@@ -82,7 +82,12 @@ def solve_zeropoint_from_measurements(
         if source.id is not None:
             catalog_source = catalogs_by_id.get(str(source.id))
         if catalog_source is None and index < len(normalized_catalog_sources):
-            catalog_source = normalized_catalog_sources[index]
+            positional_source = normalized_catalog_sources[index]
+            # Preserve positional reference lookup, including different ID
+            # namespaces. An already referenced measurement with a conflicting
+            # ID must not inherit an unrelated row's saturation flag.
+            if source.ref_mag is None or source.id is None or positional_source.id is None:
+                catalog_source = positional_source
         if catalog_source is not None and (catalog_source.sat_pixels or 0) > 0:
             continue
 
