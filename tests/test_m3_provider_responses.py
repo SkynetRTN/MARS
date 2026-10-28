@@ -10,6 +10,7 @@ contracts against the services.
 
 from __future__ import annotations
 
+import json
 import math
 from io import BytesIO
 import warnings
@@ -580,7 +581,7 @@ def test_calibration_reports_an_unusable_catalog_response(monkeypatch):
     assert "RAJ2000" in result.errors[0].message
 
 
-# --- ADS: object queries require expansion before the Solr search ------------
+# --- ADS: object: is translated by the objects service before searching -------
 
 
 def test_ads_fielded_clauses_are_each_grouped():
@@ -662,6 +663,289 @@ def test_ads_unusable_object_expansion_is_an_error(monkeypatch, body):
     result = ads.search_ads(object_name="M31")
     assert result.status == "error"
     assert [error.code for error in result.errors] == ["unusable_response"]
+
+
+def _ads_reply(docs, status=200):
+    from requests import Response
+
+    response = Response()
+    response.status_code, response.encoding = status, "utf-8"
+    response._content = json.dumps({"response": {"numFound": len(docs), "docs": docs}}).encode()
+    return response
+
+
+_TRANSLATED = '(abs:"pulsar timing") AND (((=abs:"PSR B1937+21" OR simbid:"2789895") database:astronomy))'
+
+
+@pytest.fixture
+def ads_service(monkeypatch):
+    """Stand in for ADS's objects service and search, recording each call.
+
+    Shaped after the live 2026-10-22 responses: search rejects ``object:`` as
+    ``undefined field object``; ``POST /v1/objects/query`` rewrites it.
+    """
+    from requests import Response
+
+    import tools.ads as ads
+
+    calls = {"objects": [], "search": []}
+    service = {"status": 200, "body": {"query": _TRANSLATED}}
+
+    def request(method, url, **kwargs):
+        calls["objects"].append((method, url, kwargs.get("json"), kwargs.get("headers")))
+        response = Response()
+        response.status_code, response.encoding = service["status"], "utf-8"
+        raw = service.get("raw")
+        response._content = raw if raw is not None else json.dumps(service["body"]).encode()
+        response.headers.update(service.get("headers", {}))
+        return response
+
+    def query_simple(query_string, *, get_raw_response=False, **kwargs):
+        assert get_raw_response, "pages are parsed together, from raw replies"
+        calls["search"].append(query_string)
+        return _ads_reply([{"bibcode": ["2020ApJ...1..1A"], "title": ["A paper"]}])
+
+    monkeypatch.setattr(ads.ADS, "_request", request)
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    monkeypatch.setattr(ads.ADS, "TOKEN", "token")
+    return calls, service
+
+
+@pytest.mark.parametrize("call", [
+    lambda ads: ads.search_ads(abstract="pulsar timing", object_name="PSR B1937+21"),
+    lambda ads: ads.build_literature_review(abstract="pulsar timing", object_name="PSR B1937+21"),
+])
+def test_ads_object_name_is_translated_before_searching(ads_service, call):
+    import tools.ads as ads
+
+    calls, _ = ads_service
+    result = call(ads)
+    assert result.status == "ok", result.errors
+    method, url, payload, headers = calls["objects"][0]
+    assert (method, url) == ("POST", "https://api.adsabs.harvard.edu/v1/objects/query")
+    assert payload == {"query": ['(abs:"pulsar timing") AND (object:"PSR B1937+21")']}
+    assert headers == {"Authorization": "Bearer token"}
+    assert calls["search"] == [_TRANSLATED]
+
+
+def test_ads_raw_query_with_object_is_translated_too(ads_service):
+    from tools.ads import search_ads
+
+    calls, _ = ads_service
+    assert search_ads('object:"M31" year:2020').status == "ok"
+    assert calls["objects"][0][2] == {"query": ['(object:"M31" year:2020)']}
+
+
+def test_ads_query_without_object_skips_the_objects_service(ads_service):
+    from tools.ads import get_citing_papers, search_ads
+
+    calls, _ = ads_service
+    assert search_ads(abstract="pulsar timing").status == "ok"
+    assert get_citing_papers("1982Natur.300..615B").status == "ok"
+    assert calls["objects"] == []
+    assert calls["search"] == ['(abs:"pulsar timing")', "citations(bibcode:1982Natur.300..615B)"]
+
+
+@pytest.mark.parametrize("query", ['title:"object: a study"', 'abs:"compact object: review"'])
+def test_ads_object_inside_a_quoted_phrase_is_not_translated(ads_service, query):
+    from tools.ads import search_ads
+
+    # Live, the objects service refuses these ("No identifiers/objects
+    # found"), while the search answers them untranslated.
+    calls, _ = ads_service
+    assert search_ads(query).status == "ok"
+    assert calls["objects"] == []
+    assert calls["search"] == [f"({query})"]
+
+
+def test_ads_object_name_with_a_double_quote_is_refused(ads_service):
+    from tools.ads import build_literature_review, search_ads
+
+    # Live, the objects service splits the name at an escaped quote and
+    # returns a query the search rejects.
+    calls, _ = ads_service
+    for result in (search_ads(object_name='Foo "bar"'), build_literature_review(object_name='Foo "bar"')):
+        assert [e.code for e in result.errors] == ["invalid_input"]
+    assert calls["objects"] == [] and calls["search"] == []
+
+
+def test_ads_pages_with_differently_shaped_columns_stack(monkeypatch, ads_service):
+    import tools.ads as ads
+    from astropy.table import Table as AstropyTable
+
+    # Live 2026-10-22 (M31, year 2020, 120 rows): a field present in every row
+    # of a page is a 2-D str column; one missing from some row (astroquery
+    # fills [None]) is 1-D object. vstack refused the mix and the exception
+    # escaped the tool.
+    def query_simple(query_string, *, get_raw_response=False, **kwargs):
+        start, rows = ads.ADS.NSTART, ads.ADS.NROWS
+        docs = []
+        for i in range(start, min(start + rows, 120)):
+            doc = {"bibcode": [f"2020b{i}"], "author": ["A, B"] * (1 + i % 2)}
+            if i < 50 or i % 2 == 0:  # the first page has every page; later ones do not
+                doc["page"] = [f"L{i}"]
+            docs.append(doc)
+        return _ads_reply(docs)
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = ads.search_ads(object_name="M31", max_results=120)
+    assert result.status == "ok", result.errors
+    assert result.count == 120
+    table = AstropyTable.read(result.artifact.path)
+    assert len({ads.flatten_value(cell) for cell in table["bibcode"]}) == 120
+    assert ads.flatten_value(table["page"][0]) == "L0"
+    assert ads.flatten_value(table["page"][51]) is None
+    assert ads.flatten_value(table["author"][1]) == "A, B; A, B"
+
+
+def test_ads_unresolved_object_is_searched_with_a_warning(ads_service):
+    from tools.ads import search_ads
+
+    # Live: a typo (M311) resolves in neither SIMBAD nor NED.
+    calls, service = ads_service
+    service["body"] = {"query": '(((=abs:"M311" OR simbid:"0" OR nedid:"0") database:astronomy))'}
+    result = search_ads(object_name="M311")
+    assert result.status == "ok"
+    assert [w.code for w in result.warnings] == ["object_not_resolved"]
+    assert "simbid" in result.warnings[0].message
+
+
+def test_ads_value_ending_in_a_backslash_does_not_hide_an_object_clause(ads_service):
+    from tools.ads import _build_query, search_ads
+
+    query = _build_query(None, None, False, "foo\\", None, None, None, "M31", None)
+    assert query == '(title:"foo\\\\") AND (object:"M31")'
+    calls, _ = ads_service
+    assert search_ads(title="foo\\", object_name="M31").status == "ok"
+    assert len(calls["objects"]) == 1
+
+
+@pytest.mark.parametrize("service_update, code", [
+    ({"status": 301, "headers": {"Location": "https://api.scixplorer.org/v1/objects/query"}},
+     "provider_unavailable"),
+    ({"raw": b"<html><body>Maintenance</body></html>"}, "unusable_response"),
+])
+def test_ads_objects_redirect_or_non_json_never_searches(ads_service, service_update, code):
+    from tools.ads import search_ads
+
+    calls, service = ads_service
+    service.update(service_update)
+    result = search_ads(object_name="M31")
+    assert [e.code for e in result.errors] == [code]
+    assert calls["search"] == []
+    if service_update.get("status") == 301:
+        assert "scixplorer" in result.errors[0].message
+
+
+def test_ads_non_json_search_reply_is_unusable_response(monkeypatch, ads_service):
+    import tools.ads as ads
+    from requests import Response
+
+    def query_simple(query_string, **kwargs):
+        response = Response()
+        response.status_code, response.encoding, response._content = 200, "utf-8", b"<html>oops</html>"
+        return response
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    assert [e.code for e in ads.search_ads(abstract="pulsar").errors] == ["unusable_response"]
+
+
+# Live 2026-10-22: ADS answers each of these 200 with nothing -- an unknown
+# sort is dropped (default order), a malformed year or unknown doctype
+# matches no paper -- so only MARS can say the input was wrong.
+@pytest.mark.parametrize("kwargs", [
+    {"year": "abc"}, {"year": "15"}, {"year": "2015.5"}, {"year": "2020-2015"}, {"year": 20155},
+    {"doctype": "notatype"}, {"doctype": "intechreport"},
+    {"sort": "nonsense desc"}, {"sort": "date sideways"}, {"sort": "date"}, {"sort": "title asc"},
+    {"sort": "date desc, title asc"},
+])
+def test_ads_inputs_ads_ignores_are_invalid_input(ads_service, kwargs):
+    from tools.ads import build_literature_review, search_ads
+
+    calls, _ = ads_service
+    for result in (search_ads(abstract="pulsar", **kwargs), build_literature_review(abstract="pulsar", **kwargs)):
+        assert [e.code for e in result.errors] == ["invalid_input"], kwargs
+        assert next(iter(kwargs)) in result.errors[0].message
+    assert calls["search"] == []
+
+
+@pytest.mark.parametrize("sort", ["nonsense desc", "date"])
+def test_ads_citation_tools_refuse_an_unknown_sort(ads_service, sort):
+    from tools.ads import get_citing_papers, get_referenced_papers
+
+    calls, _ = ads_service
+    for tool in (get_citing_papers, get_referenced_papers):
+        assert [e.code for e in tool("1982Natur.300..615B", sort=sort).errors] == ["invalid_input"]
+    assert calls["search"] == []
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"year": "2017"}, {"year": 2017}, {"year": "2015-2020"}, {"year": "2015-"}, {"year": "-2015"},
+    {"year": "[2015 TO 2020]"}, {"doctype": "article"}, {"doctype": "phdthesis"},
+    {"sort": "citation_count desc"}, {"sort": "first_author asc"},
+    {"sort": "citation_count desc, bibcode asc"},
+])
+def test_ads_inputs_ads_accepts_are_searched(ads_service, kwargs):
+    from tools.ads import search_ads
+
+    calls, _ = ads_service
+    assert search_ads(abstract="pulsar", **kwargs).status == "ok", kwargs
+    assert len(calls["search"]) == 1
+
+
+def test_ads_query_syntax_error_is_invalid_input(monkeypatch, ads_service):
+    import tools.ads as ads
+    from requests import HTTPError, Response
+
+    # Live reply to abs:(pulsar -- a 400 carrying Solr's parse error.
+    def query_simple(query_string, **kwargs):
+        response = Response()
+        response.status_code, response.encoding = 400, "utf-8"
+        response._content = json.dumps({"error": {"code": 400, "msg": "org.apache.solr.search.SyntaxError: "
+                                                  "Cannot parse 'abs:(pulsar'"}}).encode()
+        raise HTTPError("400 Client Error: BAD REQUEST", response=response)
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = ads.search_ads("abs:(pulsar")
+    assert [e.code for e in result.errors] == ["invalid_input"]
+    assert "Cannot parse" in result.errors[0].message
+
+
+@pytest.mark.parametrize("status, body, code", [
+    (503, {"message": "down"}, "provider_unavailable"),
+    (500, {"message": "Internal Server Error"}, "provider_unavailable"),
+    (400, {"message": "bad request"}, "invalid_input"),
+    (200, {"Error": "Unable to get results!", "Error Info": "SIMBAD returned status 500"},
+     "provider_unavailable"),
+    # Live reply to an object: clause the service cannot parse (object:"").
+    (200, {"Error": "Unable to get results!",
+           "Error Info": "No identifiers/objects found in Solr object query"}, "invalid_input"),
+    (200, {"Error": "Unable to get results!", "query": "abs:pulsar"},
+     "provider_unavailable"),
+    (200, {"unexpected": 1}, "unusable_response"),
+    (200, {"query": ""}, "unusable_response"),
+])
+def test_ads_failed_object_translation_never_searches(ads_service, status, body, code):
+    from tools.ads import search_ads
+
+    calls, service = ads_service
+    service.update(status=status, body=body)
+    result = search_ads(object_name="PSR B1937+21")
+    assert result.status == "error"
+    assert [e.code for e in result.errors] == [code]
+    assert calls["search"] == []
+
+
+def test_ads_object_translation_without_a_token_is_dependency_missing(monkeypatch, ads_service):
+    import tools.ads as ads
+
+    calls, _ = ads_service
+    monkeypatch.setattr(ads.ADS, "TOKEN", None)
+    monkeypatch.delenv("ADS_DEV_KEY", raising=False)
+    monkeypatch.setenv("HOME", "/nonexistent")
+    result = ads.search_ads(object_name="M31")
+    assert [e.code for e in result.errors] == ["dependency_missing"]
+    assert calls["objects"] == [] and calls["search"] == []
 
 
 # --- SDSS: a cached SkyServer error page is not a permanent failure -----------
@@ -809,3 +1093,57 @@ def test_run_photometry_on_target_carries_the_failure_as_a_warning(monkeypatch):
     result = photometry.run_photometry_on_target("ngc5128_galaxy_b_001")
     assert [(w.code, w.message) for w in result.warnings] == [
         ("unusable_response", "unusable catalog response: APASS: no RAJ2000")]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("phase", ["objects", "search", "parse"])
+def test_ads_allocation_failure_reaches_resource_limit(ads_service, monkeypatch, tool, phase):
+    import tools.ads as ads
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def allocation_failure(*args, **kwargs):
+        raise MemoryError("test ADS allocation failure")
+
+    attribute = {"objects": "_request", "search": "query_simple", "parse": "_parse_response"}[phase]
+    monkeypatch.setattr(ads.ADS, attribute, allocation_failure)
+    reply = call_tool(tool, {"object_name": "M31"})
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("failure", ["runtime", "http", "malformed"])
+def test_ads_search_failures_preserve_unresolved_object_warning(ads_service, monkeypatch, tool, failure):
+    import tools.ads as ads
+    from requests import HTTPError
+
+    _, service = ads_service
+    service["body"] = {"query": '(((=abs:"M311" OR simbid:"0" OR nedid:"0") database:astronomy))'}
+
+    def query_simple(*args, **kwargs):
+        if failure == "runtime":
+            raise RuntimeError("ADS service unavailable")
+        if failure == "http":
+            raise HTTPError("503 service unavailable", response=_ads_reply([], status=503))
+        response = _ads_reply([])
+        response._content = b'{"response": {}}'
+        return response
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = getattr(ads, tool)(object_name="M311")
+    assert result.status == "error"
+    expected = "unusable_response" if failure == "malformed" else "provider_unavailable"
+    assert [error.code for error in result.errors] == [expected]
+    assert [warning.code for warning in result.warnings] == ["object_not_resolved"]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("docs", [[None], [{}], ["bad row"], [{"bibcode": "valid"}, None]])
+def test_ads_malformed_records_are_unusable_responses(ads_service, monkeypatch, tool, docs):
+    import tools.ads as ads
+    from tools.mcp.surface import call_tool, result_is_error
+
+    monkeypatch.setattr(ads.ADS, "query_simple", lambda *args, **kwargs: _ads_reply(docs))
+    result = call_tool(tool, {"abstract": "pulsar"})
+    assert result_is_error(result)
+    assert [error["code"] for error in result["errors"]] == ["unusable_response"]

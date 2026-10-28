@@ -182,14 +182,16 @@ two well-chosen fielded terms (e.g. title="Cassiopeia A" + year="2015-2020") ove
 list of keywords. `query=` is a raw ADS string for syntax the structured parameters don't \
 cover -- second-order operators (similar(bibcode:...), trending(topic)), proximity search, \
 wildcards -- and combines with the structured parameters via AND if both are given. \
-`object_name=` is the least ordinary field here: per ADS's own documentation it isn't a \
-plain text match but a special SIMBAD/NED-tagged lookup combined with a text search, and \
-combining it with other fielded terms has been observed to fail with a 400 error (query \
-rejected by ADS's parser) in a way not yet root-caused. If a search_ads/\
-build_literature_review call errors, read the error message -- it now includes ADS's own \
-response body, which names the actual problem -- and retry with a simplified query rather \
-than repeating the identical call: drop object_name first and rely on title=/abstract= for \
-the object instead, or fall back to a hand-written query= with just one or two fielded terms.
+`object_name=` is the least ordinary field here: it isn't a plain text match but a \
+SIMBAD/NED-tagged lookup, which ADS translates to the object's identifiers plus an exact \
+abstract match, within the astronomy collection, and it combines with the other fields \
+normally. An object_not_resolved warning means neither SIMBAD nor NED knew the name, so only \
+abstracts containing it matched -- check the name before trusting the result. If a \
+search_ads/build_literature_review call errors, read the error message -- it includes ADS's \
+own response body, which names the actual problem -- and correct what it names rather than \
+repeating the identical call: invalid_input names the parameter at fault (a sort, doctype or \
+year form ADS would silently ignore, or a query ADS cannot parse). Fall back to a \
+hand-written query= with one or two fielded terms only if that fails.
 
 When the user's request implies exhaustive data ("all", "every", "complete", "historical", \
 or similar), disable the cap on search_vizier's max_catalogs and/or search_mast's \

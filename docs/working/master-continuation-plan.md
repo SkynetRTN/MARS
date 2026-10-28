@@ -1,17 +1,18 @@
 # MARS release closure gate
 
-Updated 2026-10-28 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
-closed locally on the single working branch `feature/m2`. It includes the
-channels-and-axes checkpoint at `27bdceb`.
-M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
-the published `0.1.0rc6`. Publication remains deferred until the remaining
-gates below have been worked through. The next release needs a new version.
+Updated 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123), with all
+ten M2 checkpoints closed locally on the single working branch `feature/m2`.
+It includes the channels-and-axes checkpoint at `27bdceb`.
+M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
+and #123; their changes are absent from the published `0.1.0rc6`.
+Publication remains deferred until the remaining gates below have been worked
+through. The next release needs a new version.
 
 M2 is closed locally after the final review corrections and regression checks.
-Its changes remain unmerged and unpublished. Live provider failures remain
+Its changes remain unmerged into main and unpublished. Live provider failures remain
 recorded below.
-Other release gates below remain open. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
-its subjects against main along with the rest of M2; do not continue from that
+M4 and subsequent release gates remain open. PR #120 is abandoned as an
+implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
 
 This is the working document for all manual step gates, review-fix status and
@@ -28,7 +29,7 @@ the subsequent work.
 
 **Closed locally on `feature/m2` after final review and regression validation.**
 All ten checkpoints and the four final corrections below are complete within
-the recorded limits. Changes remain unmerged and unpublished.
+the recorded limits. Changes remain unmerged into main and unpublished.
 Other release gates remain open. Technical derivations and detailed acceptance
 evidence are linked below; this section records outcomes and remaining limits.
 
@@ -133,7 +134,7 @@ Regressions reproduced the failures before correction. Independent final review
 found no outstanding actionable findings. Transforms, including H-alpha,
 zero-point equations and public inputs are unchanged.
 
-Final closure verification, 2026-10-28, with locked dependencies:
+Pre-integration M2 closure verification, 2026-10-28, with locked dependencies:
 
 | Check | Result |
 | --- | --- |
@@ -182,6 +183,40 @@ Earlier evidence is retained separately: on 2026-10-26, 76 network cases passed
 with two header-priority skips. Current provider failures prevent a clean fresh
 repetition of the entire live set. They remain a service revalidation limit;
 the four implementation findings above have regression coverage and are closed.
+
+### Main reconciliation, 2026-10-28
+
+The six incoming main commits through `fb8b19e` (PR #123) were reconciled in a
+detached verification checkout before integration into `feature/m2`. Main's ADS
+object translation, page aggregation and input validation are retained alongside
+M2's scientific warnings, attribution guidance and regression coverage. Catalog
+transforms, including H-alpha, and native solver paths are unchanged.
+
+Combined tests exposed conflicting ADS test fixtures and error handling. The
+fixtures now patch the same singleton; provider errors take precedence over
+translated queries, allocation failures retain `resource_limit`, unresolved-object
+warnings survive handled search failures, and malformed records are
+`unusable_response`. Independent review found the lost-warning case; regression
+tests reproduced it and the malformed-record cases before correction.
+
+Verification completed before the branch merge, using locked dependencies:
+
+| Check | Result |
+| --- | --- |
+| Full default suites with MCP, Python 3.12 and 3.13 | 4,217 passed, 90 skipped on each version; no failures or errors. |
+| ADS/provider, guidance and code regressions after review fixes | 192 passed. |
+| Credentialed live ADS object, paging and unknown-object checks | All three passed with a fresh cache on retry; two initial service timeouts remain recorded. |
+| SDK-free CI subset, Python 3.12 and 3.13 | 229 passed, 21 expected skips on each version. |
+| Wheel/source build, strict metadata, contents, installed-wheel MCP self-tests | Passed, including both supported Python versions outside the checkout. |
+| Compilation, generated guidance and whitespace | Passed. |
+
+The integrated default runs retain the same 214 FITS notices and strict numerical
+warning checks. Their 90 skips comprise 80 live-network cases (including three
+credentialed ADS cases), one Ollama check, four historical benchmark cases, one
+Windows-only check and four native-data checks. The ADS cases passed separately;
+prior native evidence and the other live-provider limits above remain distinct.
+The tested implementation and regression files were transferred unchanged into
+the branch; M2 remains closed locally, unmerged into main and unpublished.
 
 ## M3: failed inputs and services must produce usable failures
 
@@ -252,18 +287,26 @@ the four implementation findings above have regression coverage and are closed.
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
   need focused contract evidence. ADS object searches must use the provider's
   supported query flow. Distinguish no matches from unusable responses.
-  *Closed:* every listed mapping and chain was
-  checked live and fixed where a populated response looked empty or escaped as
-  an exception. Unusable responses now raise `ProviderResponseError` /
-  `unusable_response`. Live findings fixed: Landolt crashed on every query, 2MASS
-  lost every id to a column rename, B1950-only radio catalogs (3C among them)
-  could never match, and cached SkyServer error pages made SDSS queries fail
-  until expiry. Evidence: `tests/test_m3_provider_responses.py`, its `_live`
-  counterpart, `docs/extraction.md` Query §5.12. Credentialed ADS verification
-  on 2026-10-26 exposed the missing object-expansion step; grouping alone was
-  insufficient. Search and literature reviews now expand object clauses through
-  ADS before searching, reject unusable expansion responses, and return paper
-  metadata in the live check. Offline transport regressions cover both callers.
+  *Closed:* every listed mapping and chain was checked live and fixed where a
+  populated response looked empty or escaped as an exception; unusable
+  responses raise `ProviderResponseError` / `unusable_response`. Live findings
+  fixed: Landolt crashed on every query, 2MASS lost every id to a column
+  rename, B1950-only radio catalogs (3C among them) could never match, and
+  cached SkyServer error pages made SDSS queries fail until expiry. The ADS
+  grouping was never the cause: live with a key (2026-10-22), the search
+  rejects `object:` in every form, so `object_name` never worked. `tools.ads`
+  now translates it through `POST /v1/objects/query` first, parses all result
+  pages together (any result past the first page used to crash), and refuses
+  the sorts, years, doctypes and query syntax ADS silently ignores as
+  `invalid_input`. Evidence: `tests/test_m3_provider_responses.py`, its
+  `_live` counterpart (19 passed with `ADS_DEV_KEY`), `docs/extraction.md`
+  Query §5.12, PR #123. ADS moves to Science Explorer (SciX) on 2026-11-16;
+  the API and tokens are stated to carry over, and on 2026-10-22 the same
+  token answered on `api.scixplorer.org`. By maintainer decision the item is
+  closed now, and the post-cutover rerun of the live ADS tests is tracked
+  outside this plan. The token and search-syntax links shown to users still
+  name ADS, whose links SciX will redirect; SciX's own URLs could not be
+  confirmed before the cutover.
 - [x] **Pulsar controls.** Background subtraction and plot labels, background
   and size controls exist in Python but are hidden from registered callers.
   State which are supported publicly; schemas and skill guidance must match.

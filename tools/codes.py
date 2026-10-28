@@ -143,6 +143,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "no_products_matched": "No product matched the given filters, so nothing was downloaded.",
     "no_solution": "The configured plate-solving backends returned no solution.",
     "nonstandard_passband": "The catalog's native model bandpass does not establish a standard-band or universal instrument-clear calibration.",
+    "object_not_resolved": "Neither SIMBAD nor NED resolved an ADS object: name, so only abstracts containing it matched.",
     "observations_capped": "More observations matched than products were fetched for; the cap is adjustable.",
     "false_alarm_model_assumptions": "A false-alarm bound assumes iid Gaussian noise and a fixed trial grid; correlated noise, RFI and retuning are not calibrated.",
     "false_alarm_unavailable": "Too few samples for a finite-sample Gaussian false-alarm bound; no level is reported.",
