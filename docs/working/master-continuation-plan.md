@@ -404,8 +404,8 @@ Evidence: [query backends](../../algorithms/query/),
   separate, narrow PRs (CLAUDE.md, Conventions). Split it by kind, in an
   order each PR can merge in: behavior (launcher, console, model port,
   skill installer, `mars-bench`), workflow (`ci.yml`, `release.yml`, the
-  packer), then documentation. Target `dev`, the repository's convention,
-  unless the maintainer names `main`.
+  packer), then documentation. Target `main`, by the maintainer's
+  decision (2026-10-28), not the usual `dev`.
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of
