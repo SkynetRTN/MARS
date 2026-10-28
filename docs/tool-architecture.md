@@ -297,6 +297,13 @@ class ToolResult(BaseModel):
 
 Important modeling rules:
 
+- Every result that can carry `errors` also carries `status`, because the
+  console and the MCP surface decide a failure from `status` alone. Models
+  without a `status` field derive it (`tools.models.StatusFromErrors`): no
+  errors is `ok`, only "found nothing" codes (`not_found`,
+  `target_not_found`) is `not_found`, anything else is `error`. A test
+  (`tests/test_result_status.py`) holds it for every registered tool's
+  result.
 - Coordinates serialize as decimal degrees plus frame.
 - Quantities serialize with value, unit, and uncertainty when known.
 - Times serialize as ISO strings plus scale where known.

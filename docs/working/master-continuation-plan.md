@@ -452,11 +452,18 @@ Evidence: [query backends](../../algorithms/query/),
     clients as a success. `WcsSummary.status` is now computed, `error`
     whenever `errors` is not empty; a genuine miss stays `ok` with its
     `no_solution` warning (`tests/test_m3_wcs_failures.py`).
-  - **Open, for the maintainer:** 20 other result models carry `errors` but
-    no `status` (the pulsar, variable-star, zero-point and photometry
-    results among them), so an error in any of them is shown and reported
-    the same way. Some may use `errors` alongside a usable result, so a
-    blanket "errors means failed" rule needs checking model by model.
+  - **The other result models (2026-10-28, the maintainer's decision).** 20
+    more models carried `errors` but no `status` (pulsar, variable-star,
+    zero-point, photometry, optical-frame, field-calibration and
+    reference-band results), so their failures were shown and reported as
+    successes too. Checked model by model: every place they are built with
+    errors returns no usable result alongside them (a listing that found
+    nothing, or the caller's own input echoed back), so all 20 now share
+    `StatusFromErrors`: no errors is `ok`, only `not_found`/`target_not_found`
+    is `not_found` (a lookup with no match, as elsewhere), anything else is
+    `error`. `tests/test_result_status.py` exercises real failures in each
+    family and requires a status on every registered tool's result that can
+    carry errors.
 - [x] **Plate solving is documented as a machine dependency.** The
   maintainer's request (2026-10-28): the install guides say that plate
   solving needs astrometry.net and its index files installed on the user's
