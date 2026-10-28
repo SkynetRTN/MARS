@@ -500,8 +500,8 @@ def compute_pulsar_periodogram(
     ``top_peaks`` always exposes ``period_s``, ``frequency_hz`` and ``power``.
     Fold with a candidate's ``period_s`` in either mode; check integer multiples
     and fractions for harmonics/aliases. ``peak_fold_snr`` is an empirical
-    pulse-concentration diagnostic, not a calibrated detection probability;
-    periodic interference can fold coherently too.
+    pulse-concentration diagnostic for the searched channel, not a calibrated
+    detection probability; periodic interference can fold coherently too.
 
     ``false_alarm_probability_upper_bound`` bounds noise excursions only under
     iid Gaussian errors and a fixed finite grid. Its assumptions exclude
@@ -616,7 +616,7 @@ def compute_pulsar_periodogram(
     if result.peak_period_s and result.peak_period_s > 0:
         try:
             peak_fold_snr = folding.fold_lightcurve(
-                lc.time_s, lc.source1, lc.source2, period_s=result.peak_period_s
+                lc.time_s, values, period_s=result.peak_period_s
             ).pulse_snr()
         except ValueError:
             peak_fold_snr = None

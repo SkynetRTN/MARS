@@ -250,3 +250,70 @@ def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, fram
     assert result_is_error(reply)
     assert [error["code"] for error in reply["errors"]] == ["tool_exception"]
     assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}
+
+
+@pytest.mark.parametrize("tool", ["calibrate_zeropoint", "run_photometry_on_target"])
+@pytest.mark.parametrize("phase", ["catalog", "variables", "fit"])
+def test_inner_calibration_allocation_failure_reaches_resource_limit(
+    tool, phase, frame_path, tmp_path, monkeypatch,
+):
+    from algorithms.fieldcal import field_cal
+    from algorithms.query.registry import CATALOGS
+    from tools.fieldcal_reference import replay_catalog_sources
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test inner calibration allocation failure")
+
+    if phase == "catalog":
+        monkeypatch.setattr(CATALOGS["APASS"], "query_circ", exhausted)
+    else:
+        monkeypatch.setattr(CATALOGS["APASS"], "query_circ",
+                            lambda *args, **kwargs: replay_catalog_sources("ngc5128_b_002"))
+        monkeypatch.setattr(CATALOGS["VSX"], "query_circ", exhausted if phase == "variables" else
+                            lambda *args, **kwargs: [])
+        if phase == "fit":
+            monkeypatch.setattr(field_cal, "perform_field_calibration", exhausted)
+    if tool == "calibrate_zeropoint":
+        arguments = {"path": str(frame_path("ngc5128_b")), "catalogs": ["APASS"]}
+    else:
+        arguments = {"target": str(frame_path("ngc5128_b")), "catalogs": ["APASS"],
+                     "use_field_cal": True, "output_dir": tmp_path}
+    reply = call_tool(tool, arguments)
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("phase", ["reserve", "write"])
+@pytest.mark.parametrize("failure", [OSError, MemoryError])
+def test_composite_hr_output_failure_preserves_the_failure_contract(
+    phase, failure, frame_path, tmp_path, monkeypatch,
+):
+    import pandas as pd
+    from tools import artifacts, hr_diagram
+    from tools.mcp.surface import call_tool, result_is_error
+
+    # Stub external catalog responses; keep real extraction, membership and
+    # output-path reservation so this crosses the composite tool boundary.
+    matched = pd.DataFrame({"parallax": [1.], "parallax_error": [.1], "pmra": [0.],
+                           "pmdec": [0.], "pmra_error": [.1], "pmdec_error": [.1]})
+    params = {"parallax_mas": 1., "pmra_mas_yr": 0., "pmdec_mas_yr": 0., "distance_kpc": 1.}
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", tmp_path)
+    monkeypatch.setattr(hr_diagram, "_fetch_gaia_and_match", lambda *args: matched)
+    monkeypatch.setattr(hr_diagram, "_fetch_literature_params", lambda *args: params)
+
+    def fail(*args, **kwargs):
+        raise failure("test composite HR output failure")
+
+    if phase == "reserve":
+        monkeypatch.setattr(hr_diagram, "_output_path", fail)
+    else:
+        monkeypatch.setattr(hr_diagram.isochrones, "fit_and_compare", fail)
+    reply = call_tool("run_full_hr_pipeline", {
+        "fits_path": str(frame_path("ngc5128_b")), "cluster_name": "test cluster",
+    })
+    assert result_is_error(reply)
+    expected = "resource_limit" if failure is MemoryError else "tool_exception"
+    assert [error["code"] for error in reply["errors"]] == [expected]
+    if failure is not MemoryError:
+        assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}

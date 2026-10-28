@@ -71,9 +71,10 @@ can also fold coherently, so a strong fold needs interpretation. An agent that g
 reads one off the audio, gets a plausible-looking null result with nothing
 marking it as wrong. That is why:
 
-- `fold_pulsar_lightcurve` reports `pulse_snr` and warns below 8 sigma;
-- `compute_pulsar_periodogram` folds at its own peak and reports
-  `peak_fold_snr`, warning `peak_does_not_fold` below 8 sigma. It also reports
+- `fold_pulsar_lightcurve` reports `pulse_snr` for the combined profile and warns
+  below the inherited empirical cutoff of 8;
+- `compute_pulsar_periodogram` folds the searched channel at its own peak and
+  reports `peak_fold_snr`, warning `peak_does_not_fold` below 8. It also reports
   `false_alarm_probability_upper_bound`, conditional on iid Gaussian noise
   and a fixed grid. Read its assumptions; neither that bound nor the empirical
   fold concentration establishes a pulsar or correct period;

@@ -114,6 +114,38 @@ def test_failed_variable_star_crosscheck_is_disclosed(frame_path, monkeypatch):
     assert "catalog_query_incomplete" in {warning.code for warning in result.warnings}
 
 
+def test_error_only_vsx_response_is_disclosed_through_actual_sdk_parsing(frame_path, monkeypatch):
+    from io import BytesIO
+    from astroquery.vizier import VizierClass
+    from requests import Response
+    from algorithms.query.registry import CATALOGS
+    from tools.config import BUNDLED_DATA_DIR
+    from tools.fieldcal_reference import _read_response
+    from tools.photometry import calibrate_zeropoint
+
+    directory = BUNDLED_DATA_DIR / "fieldcal" / "zp_solutions" / "ngc5128_b_002"
+    buffer = BytesIO()
+    table = _read_response(directory, "APASS")[1]
+    table.rename_columns(table.colnames, [name.replace("'", "_") for name in table.colnames])
+    table.write(buffer, format="votable")
+    reference_response = buffer.getvalue()
+    variable_error = b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/><INFO name="QUERY_STATUS" value="ERROR">(pipe) Request has been interrupted</INFO></VOTABLE>'
+
+    def transport(client, *args, **kwargs):
+        response = Response()
+        response.status_code = 200
+        catalog = client.catalog[0] if isinstance(client.catalog, list) else client.catalog
+        response._content = variable_error if catalog == CATALOGS["VSX"].vizier_catalog else reference_response
+        return response
+
+    monkeypatch.setattr(VizierClass, "_request", transport)
+    result = calibrate_zeropoint(frame_path("ngc5128_b"), catalogs=["APASS"])
+    assert result.errors == []
+    assert result.zero_point is not None
+    incomplete = [warning.message for warning in result.warnings if warning.code == "catalog_query_incomplete"]
+    assert any("VSX" in message and "interrupted" in message for message in incomplete)
+
+
 @pytest.mark.parametrize("tool", ["measurements", "replay"])
 def test_direct_and_recorded_fits_disclose_sufficiency_and_count_only_survivors(tool):
     from tools.calibration import solve_zeropoint_from_measurements

@@ -279,6 +279,8 @@ def query_catalogs(
                     note_early_stop(catalog, len(clipped), catalog_list[idx + 1:])
                     return clipped
                 sources += clipped
+        except MemoryError:
+            raise
         except Exception as exc:
             if skip_failed and idx < len(catalog_list) - 1:
                 note_query_issue("catalog_query_incomplete",

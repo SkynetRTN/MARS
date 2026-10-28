@@ -70,6 +70,16 @@ def _detector(dec, rotation, crpix):
     return wcs
 
 
+def test_allocation_failure_does_not_continue_the_catalog_fallback(monkeypatch):
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test catalog allocation failure")
+
+    monkeypatch.setattr(CATALOGS["APASS"], "query_circ", exhausted)
+    monkeypatch.setattr(CATALOGS["Stetson"], "query_circ", lambda *args, **kwargs: [])
+    with pytest.raises(MemoryError, match="catalog allocation"):
+        query_catalogs(["APASS", "Stetson"], wcs=_detector(0., 0., [10., 10.]), skip_failed=True)
+
+
 @pytest.mark.parametrize("entry", ["wcs", "image"])
 @pytest.mark.parametrize("dec,rotation,crpix", [
     (0, 0, [48, 24]), (85, 37, [48, 24]), (89.9, 0, [48, 24]),

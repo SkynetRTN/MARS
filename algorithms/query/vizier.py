@@ -28,16 +28,18 @@ which are restored here.
 from __future__ import annotations
 
 import builtins
+from io import BytesIO
 import logging
 import math
 import re
 from typing import Dict as TDict, List as TList, Optional, Union
+from xml.etree.ElementTree import ParseError, iterparse
 
 import numpy
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.units import arcmin, deg, hour
-from astroquery.vizier import Vizier
+from astroquery.vizier import VizierClass as _AstroqueryVizierClass
 
 from algorithms.catalogs.catalog import Catalog
 from algorithms.catalogs.schemas import CatalogSource, Mag
@@ -46,7 +48,7 @@ from .cache import install_cache_error_suppression
 from .config import settings
 from .coverage import note_row_limit
 
-__all__ = ["ProviderResponseError", "VizierCatalog", "build_custom_vizier_catalog"]
+__all__ = ["ProviderResponseError", "Vizier", "VizierCatalog", "build_custom_vizier_catalog"]
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +58,48 @@ class ProviderResponseError(ValueError):
 
     Raised for renamed or missing coordinate or magnitude columns, so an
     unusable response is never mistaken for a field with no stars. An empty
-    response, or well-formed rows with nothing measurable, is still ``[]``.
+    successful response, or well-formed rows with nothing measurable, is still
+    ``[]``. Explicit provider error payloads are failures even with HTTP 200.
     """
+
+
+class VizierClass(_AstroqueryVizierClass):
+    """Keep query errors that astroquery otherwise discards during parsing.
+
+    The SDK class name is retained so its cache stays in the Vizier directory
+    covered by our existing pruning policy. Other SDK behavior is inherited.
+    """
+
+    def _parse_result(self, response, **kwargs):
+        if response.content.lstrip().startswith(b"<"):
+            try:
+                # Clear parsed elements as we go; no second full table tree is
+                # needed just to check INFO elements, including trailing ones.
+                for _, element in iterparse(BytesIO(response.content), events=("end",)):
+                    if element.tag.rsplit("}", 1)[-1] == "INFO":
+                        name = element.get("name", "").casefold()
+                        value = element.get("value", "")
+                        if name == "error" or (name == "query_status" and value.casefold() == "error"):
+                            message = (element.text or "").strip()
+                            if name == "error":
+                                message = value + " " + message
+                            raise ProviderResponseError(
+                                f"VizieR query failed: {message.strip()[:500] or 'unspecified provider error'}"
+                            )
+                    element.clear()
+            except (ParseError, ProviderResponseError) as exc:
+                # The SDK caches HTTP-200 replies before parsing. Evict an
+                # explicit failure so a later query can reach the provider.
+                query = getattr(self, "_last_query", None)
+                if query is not None:
+                    query.remove_cache_file(self.cache_location)
+                if isinstance(exc, ProviderResponseError):
+                    raise
+                raise ProviderResponseError(f"VizieR returned malformed XML: {exc}") from exc
+        return super()._parse_result(response, **kwargs)
+
+
+Vizier = VizierClass()
 
 # astroquery treats cache failures as query failures; MARS does not. See
 # query/cache.py. Installed on import so that merely importing this module gives

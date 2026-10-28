@@ -111,6 +111,10 @@ used. This is a deliberate numerical correction needed for the bound.
 
 ## Acceptance evidence and limits
 
+The peak-fold diagnostic uses the same channel as the search. Selecting one
+feed excludes the other feed from both the spectrum and its fold-support
+warning; the default summed-channel behavior is retained.
+
 `tests/test_pulsar_candidates_confidence.py` compares powers with Astropy and
 tails/thresholds with SciPy's Beta distribution, exercises both coordinate
 modes and artifact handoffs, and checks gaps, stale metadata, exact/near

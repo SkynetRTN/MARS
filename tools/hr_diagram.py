@@ -525,10 +525,16 @@ def run_full_hr_pipeline(
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
         report = _fit_and_compare(members, params, cluster_name, stem)
+    except MemoryError:
+        raise
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}], warnings=warnings)
     except (ValueError, RuntimeError) as exc:
         return ToolResult(status="error", errors=[_provider_error(exc)], warnings=warnings)
+    except Exception as exc:
+        return ToolResult(status="error", warnings=warnings, errors=[{
+            "code": "tool_exception", "message": f"{type(exc).__name__}: {exc}",
+        }])
 
     png_path = Path(report.pop("png_path"))
     csv_path = Path(report.pop("members_csv_path"))

@@ -143,6 +143,8 @@ def compute_field_cal_zero_point(
             catalog_sources=catalog_sources,
             variable_sources=variable_sources,
         )
+    except MemoryError:
+        raise
     except ProviderResponseError as exc:
         return None, None, f"{UNUSABLE_RESPONSE_PREFIX}{exc}", None
     except Exception as exc:  # network failures, no catalog matches, etc.

@@ -2037,6 +2037,14 @@ list return types or attaching last-query state to shared backends. The public
 fit sample contract is in Field Calibration §5d; full evidence and retained
 limits are in [catalog coverage and sufficiency](analysis/catalog-coverage-sufficiency.md).
 
+The final M2 closure review added a first-party `VizierClass` response guard.
+It checks error `INFO`/`QUERY_STATUS` entries before the SDK discards them,
+including errors after returned rows, and rejects malformed XML. Catalog
+queries and public VizieR tools share this guard. Rejected HTTP-200 replies
+are evicted through the SDK's cache hook so later queries can recover; the
+normal cache directory/pruning, successful empty replies and row-cap behavior
+are retained. Failed VSX checks consequently reach `catalog_query_incomplete`.
+
 #### 6. External dependencies
 
 `astroquery==0.4.11` (already pinned in `pyproject.toml`; no change required),

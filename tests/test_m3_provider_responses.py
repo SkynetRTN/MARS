@@ -11,6 +11,7 @@ contracts against the services.
 from __future__ import annotations
 
 import math
+from io import BytesIO
 import warnings
 
 import numpy as np
@@ -19,6 +20,162 @@ from astropy.table import MaskedColumn, Table
 
 from algorithms.query.registry import CATALOGS
 from algorithms.query.vizier import ProviderResponseError
+
+
+def _vizier_response(contents):
+    from requests import Response
+
+    response = Response()
+    response.status_code = 200
+    response._content = contents
+    return response
+
+
+def _error_votable(*, legacy=False, populated=False):
+    # Error-only replies were observed live with HTTP 200. Also cover an
+    # explicit failure following table rows, which cannot be called complete.
+    if populated:
+        buffer = BytesIO()
+        table = _apass()
+        table.rename_columns(table.colnames, [name.replace("'", "_") for name in table.colnames])
+        table.write(buffer, format="votable")
+        document = buffer.getvalue()
+    else:
+        document = b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>'
+    info = (b'<INFO name="Error" value="(pipe) Request has been interrupted"/>' if legacy else
+            b'<INFO name="QUERY_STATUS" value="ERROR">(pipe) Request has been interrupted</INFO>')
+    return document.replace(b'</VOTABLE>', info + b'</VOTABLE>')
+
+
+@pytest.mark.parametrize("legacy,populated", [(False, False), (True, False), (False, True)])
+@pytest.mark.parametrize("mode", ["region", "objects"])
+def test_explicit_vizier_error_is_not_an_empty_or_successful_catalog(
+    legacy, populated, mode, monkeypatch,
+):
+    from astroquery.vizier import VizierClass
+
+    response = _vizier_response(_error_votable(legacy=legacy, populated=populated))
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    with pytest.raises(ProviderResponseError, match="interrupted"):
+        if mode == "objects":
+            CATALOGS["APASS"].query_objects(["test reference"])
+        else:
+            CATALOGS["APASS"].query_circ(13.42, -43.0, 3.)
+
+
+@pytest.mark.parametrize("mode", ["region", "objects", "discovery"])
+def test_public_vizier_tools_report_explicit_query_errors(mode, monkeypatch):
+    from astroquery.vizier import VizierClass
+    from tools.vizier import list_vizier_catalogs, search_vizier
+
+    response = _vizier_response(_error_votable())
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    if mode == "discovery":
+        result = list_vizier_catalogs("APASS")
+    elif mode == "objects":
+        result = search_vizier(target="M67", catalog="II/336/apass9")
+    else:
+        result = search_vizier(ra_hours=13.42, dec_degs=-43., catalog="II/336/apass9")
+    assert result.status == "error"
+    assert [error.code for error in result.errors] == ["unusable_response"]
+
+
+def test_a_successful_empty_vizier_response_remains_no_matches(monkeypatch):
+    from astroquery.vizier import VizierClass
+
+    contents = b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE><INFO name="QUERY_STATUS" value="OK"/></RESOURCE></VOTABLE>'
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: _vizier_response(contents))
+    assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
+
+
+def test_vizier_overflow_still_maps_rows_and_discloses_the_cap(monkeypatch):
+    from astroquery.vizier import VizierClass
+    from algorithms.query.coverage import collect_query_notices
+
+    buffer = BytesIO()
+    table = _apass()
+    table.rename_columns(table.colnames, [name.replace("'", "_") for name in table.colnames])
+    table.write(buffer, format="votable")
+    contents = buffer.getvalue().replace(b'</VOTABLE>', b'<INFO name="QUERY_STATUS" value="OVERFLOW"/></VOTABLE>')
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: _vizier_response(contents))
+    with collect_query_notices() as notices:
+        sources = CATALOGS["APASS"].query_circ(13.42, -43., 3., limit=2)
+    assert [source.mags["V"].value for source in sources] == [13.5, 14.6]
+    assert "catalog_rows_capped" in {notice.code for notice in notices}
+
+
+@pytest.mark.parametrize("tool,arguments", [
+    ("search_vizier", {"ra_hours": 13.42, "dec_degs": -43., "catalog": "II/336/apass9"}),
+    ("list_vizier_catalogs", {"keywords": "APASS"}),
+])
+def test_vizier_transport_allocation_failure_reaches_resource_limit(tool, arguments, monkeypatch):
+    from astroquery.vizier import VizierClass
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test VizieR transport allocation failure")
+
+    monkeypatch.setattr(VizierClass, "_request", exhausted)
+    reply = call_tool(tool, arguments)
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+def test_checked_vizier_cache_remains_covered_by_pruning(tmp_path, monkeypatch):
+    from datetime import timedelta
+    from astropy.config.paths import set_temp_cache
+    from requests import Request
+    from algorithms.query.cache import prune_vizier_cache, vizier_cache_dir
+
+    def transport(session, method, url, **kwargs):
+        response = _vizier_response(
+            b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>'
+        )
+        response.url = url
+        response.request = Request(method, url).prepare()
+        return response
+
+    monkeypatch.setattr("requests.sessions.Session.request", transport)
+    monkeypatch.setattr(CATALOGS["APASS"], "cache", True)
+    with set_temp_cache(str(tmp_path), delete=False):
+        assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
+        from pathlib import Path
+        directory = Path(vizier_cache_dir())
+        assert list(directory.glob("*.pickle"))
+        prune_vizier_cache(timedelta(seconds=0))
+        assert list(directory.glob("*.pickle")) == []
+
+
+def test_malformed_vizier_xml_is_an_unusable_response(monkeypatch):
+    from astroquery.vizier import VizierClass
+
+    response = _vizier_response(b'<?xml version="1.0"?><VOTABLE><RESOURCE>')
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    with pytest.raises(ProviderResponseError, match="malformed XML"):
+        CATALOGS["APASS"].query_circ(13.42, -43., 3.)
+
+
+def test_vizier_error_response_does_not_poison_the_next_cached_query(tmp_path, monkeypatch):
+    from astropy.config.paths import set_temp_cache
+    from requests import Request
+
+    contents = iter([
+        _error_votable(),
+        b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>',
+    ])
+
+    def transport(session, method, url, **kwargs):
+        response = _vizier_response(next(contents))
+        response.url = url
+        response.request = Request(method, url).prepare()
+        return response
+
+    monkeypatch.setattr("requests.sessions.Session.request", transport)
+    monkeypatch.setattr(CATALOGS["APASS"], "cache", True)
+    with set_temp_cache(str(tmp_path), delete=False):
+        with pytest.raises(ProviderResponseError, match="interrupted"):
+            CATALOGS["APASS"].query_circ(13.42, -43., 3.)
+        assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
 
 
 def _apass(**overrides) -> Table:

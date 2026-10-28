@@ -21,6 +21,32 @@ def _curve(tmp_path, times, *, meta=None):
     return path
 
 
+@pytest.mark.parametrize("channel", ["source1", "source2", "sum"])
+def test_peak_fold_diagnostic_uses_the_searched_channel(tmp_path, artifact_dir, channel):
+    times = np.arange(4000) * .01
+    rng = np.random.default_rng(142)
+    pulse = 8 * np.exp(-((np.mod(times, 1) - .35) / .025) ** 2) + rng.normal(0, .3, times.size)
+    noise = rng.normal(0, 300, times.size)
+    source1, source2 = (noise, pulse) if channel == "source2" else (pulse, noise)
+    path = tmp_path / "two_feeds.ecsv"
+    Table({"time_s": times, "source1": source1, "source2": source2}).write(path, format="ascii.ecsv")
+
+    result = pulsar.compute_pulsar_periodogram(
+        path, channel=channel, freq_mode=True, start=1., stop=1.001, steps=1,
+    )
+
+    assert result.errors == []
+    assert result.channel == channel
+    assert result.peak_period_s == pytest.approx(1.)
+    codes = {warning.code for warning in result.warnings}
+    if channel == "sum":
+        assert result.peak_fold_snr < 8
+        assert "peak_does_not_fold" in codes
+    else:
+        assert result.peak_fold_snr > 100
+        assert "peak_does_not_fold" not in codes
+
+
 @pytest.mark.parametrize("freq_mode, start, stop, unit", [
     (False, 0.7, 0.9, "s"),
     (True, 1 / 0.9, 1 / 0.7, "Hz"),

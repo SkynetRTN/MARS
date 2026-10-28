@@ -1,14 +1,15 @@
 # MARS release closure gate
 
-Updated 2026-10-27 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
-implemented and reviewed on the single working branch `feature/m2`. It includes the
+Updated 2026-10-28 against `main` at `9544782` (M3 PR #122), with all ten M2 checkpoints
+closed locally on the single working branch `feature/m2`. It includes the
 channels-and-axes checkpoint at `27bdceb`.
 M0 and M1 are closed. M1 merged through PR #118; its changes are absent from
 the published `0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 
-M2 implementation is complete locally; its changes remain unmerged and
-unpublished. The latest live revalidation has provider failures recorded below.
+M2 is closed locally after the final review corrections and regression checks.
+Its changes remain unmerged and unpublished. Live provider failures remain
+recorded below.
 Other release gates below remain open. PR #120 is abandoned as an implementation path and supplies no closure evidence. Reassess
 its subjects against main along with the rest of M2; do not continue from that
 branch or count its tests as acceptance.
@@ -25,9 +26,9 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-**All ten checkpoints implemented and reviewed on `feature/m2`, including
-the comprehensive-review fixes in `71d3a80`.** Changes remain unmerged and
-unpublished; the verification follow-up is recorded below.
+**Closed locally on `feature/m2` after final review and regression validation.**
+All ten checkpoints and the four final corrections below are complete within
+the recorded limits. Changes remain unmerged and unpublished.
 Other release gates remain open. Technical derivations and detailed acceptance
 evidence are linked below; this section records outcomes and remaining limits.
 
@@ -119,55 +120,68 @@ numerical warnings as errors.
 
 ### M2 validation and remaining checks
 
-Verification follow-up, 2026-10-27, with locked dependencies:
+Final closure review's four findings are resolved:
+
+- [x] Peak-fold diagnostics use the searched pulsar channel.
+- [x] Explicit VizieR errors are rejected, including failed VSX checks;
+  rejected cached replies are evicted so later queries can recover.
+- [x] Identified inner calibration and catalog-fallback handlers propagate
+  allocation failures to `resource_limit`.
+- [x] Composite HR output failures preserve extraction warnings.
+
+Regressions reproduced the failures before correction. Independent final review
+found no outstanding actionable findings. Transforms, including H-alpha,
+zero-point equations and public inputs are unchanged.
+
+Final closure verification, 2026-10-28, with locked dependencies:
 
 | Check | Result |
 | --- | --- |
-| Full suites with MCP and native prerequisites, Python 3.12 and 3.13 | 4,122 passed, 84 skipped on each version; all four native checks passed. |
-| SDK-free matrix, Python 3.12 and 3.13 | 229 passed, 21 expected skips on each version. |
-| All 78 network-marked cases, fresh SDK cache and ADS enabled | 63 passed, 13 failed on provider errors, 2 expected header-priority skips. |
-| Focused numerical regressions | 270 passed with runtime and polynomial-rank warnings treated as errors. |
+| Full default suites with MCP, Python 3.12 and 3.13 | 4,149 passed, 88 skipped on each version. |
+| Affected-area regression suite | 251 passed, 1 gated live-query skip; 31 regression/control cases added. |
+| Live M2 magnitude/filter and coverage retry, fresh cache | 10 passed; Pan-STARRS, SkyMapper and UCAC failed on provider errors. |
 | Wheel/source build, strict metadata and contents checks | Passed. |
 | Installed-wheel MCP self-test, both Python versions | Passed outside the checkout. |
 | Compilation, generated guidance and whitespace checks | Passed. |
+| Prior SDK-free matrix, 2026-10-27 | 229 passed, 21 expected skips on each version. |
+| Prior full suites with native prerequisites, 2026-10-27 | 4,122 passed, 84 skipped on each version; all four native checks passed. |
+| Prior complete network run with ADS, 2026-10-27 | 63 passed, 13 provider failures, 2 header-priority skips; ADS passed. |
 
-Native checks used astrometry.net indexes under `/srv/agents/catalogs/astrometry`
-and UCAC5 at `/srv/agents/catalogs/ATLAS/UCAC5`.
+The final runs' **214 warnings** are Astropy FITS notices: 213 repeated date
+normalizations and one synthetic textual `J2000` equinox. Runtime and
+polynomial-rank warnings were treated as errors. The earlier 220-event run's
+six numerical/conversion events were addressed by the warning repairs above;
+the 224-event native runs additionally exercised date and header-only WCS
+notices. Sampled celestial coordinates and original headers were unchanged by
+normalization. Two original NGC 5286 B fixtures (`000` and `002`) nevertheless
+carry inconsistent `DATE-OBS`/`MJD-OBS` values; they are not validated timing
+references.
 
-The earlier **220 warnings** comprised 214 Astropy FITS notices and six
-numerical/conversion events. Those six events are addressed by the repairs above.
-Each current full run emitted **224 FITS notices**: 218 date normalizations,
-one synthetic textual `J2000` equinox, and five header-only solver WCS notices.
-Runtime and polynomial-rank warnings were treated as errors. Sampled celestial
-coordinates and original headers were unchanged by normalization. Two original
-NGC 5286 B fixtures (`000` and `002`) nevertheless carry inconsistent
-`DATE-OBS`/`MJD-OBS` values; they are not validated timing references.
+The **88 default skips** are 78 network cases, one Ollama check, four historical
+benchmark cases, one Windows-only check and four native-data checks. Separate
+configured runs cover the native paths; this final patch leaves the native
+solver implementation unchanged. They used astrometry.net indexes under
+`/srv/agents/catalogs/astrometry` and UCAC5 at `/srv/agents/catalogs/ATLAS/UCAC5`.
+The blind NGC 3628 test asserts recovery of its recorded WCS; the UCAC check
+exercises real lookup and diagnostics without claiming blind ATLAS convergence.
+Ollama was explicitly attempted but unreachable, original historical runs are
+absent from this checkout, and Windows allocation control cannot run on Linux.
+SDK-free skips additionally cover the absent optional MCP package.
 
-The earlier **88 offline skips** were 78 network cases, one Ollama check,
-four historical benchmark cases, one Windows-only check and four unconfigured
-native checks. The current full runs' 84 skips exclude the four native checks;
-the network cases and Ollama were enabled separately in this follow-up.
-Ollama was explicitly attempted but its daemon is unreachable; the original
-historical runs are absent from this checkout, and Windows allocation control
-cannot run on Linux. SDK-free skips additionally cover the absent optional MCP
-package.
-
-The live run used the responding [CDS-listed South Africa mirror](https://vizier.cds.unistra.fr/vizier/mirrors.gml)
+Live queries used the responding [CDS-listed South Africa mirror](https://vizier.cds.unistra.fr/vizier/mirrors.gml)
 for configurable catalog clients. Pan-STARRS and SkyMapper returned interrupted
-query errors; UCAC requests timed out. SIMBAD was unreachable, blocking its
-three dependent checks, and default VizieR connections blocked the literature
-and radio checks. A Harvard-mirror retry also failed. These are failed checks
-and supply no passing evidence. ADS, the other live catalog/value checks and all
-eligible field-calibration comparisons passed. Only header zero points skip
-those comparisons.
+query errors; UCAC timed out. These now produce explicit provider failures,
+and failed VSX checks carry incomplete-query warnings. The complete network
+follow-up also encountered unavailable SIMBAD and default VizieR services; a
+Harvard retry failed as well. These failures remain failed checks and supply
+no passing evidence. Other available catalog/value checks and eligible
+field-calibration comparisons passed. Header zero points alone skip those
+comparisons.
 
-Earlier follow-up evidence remains distinct: on 2026-10-26, 76 network cases
-passed, with two header-priority skips, and all four configured native checks
-passed. The blind NGC 3628 test asserts recovery of its recorded WCS; the UCAC
-check exercises real catalog lookup and diagnostics without claiming blind
-ATLAS convergence. Current provider failures prevent a clean repetition of the
-entire live set. Independent review of the warning fixes found no outstanding
-actionable findings after the SNR corrections.
+Earlier evidence is retained separately: on 2026-10-26, 76 network cases passed
+with two header-priority skips. Current provider failures prevent a clean fresh
+repetition of the entire live set. They remain a service revalidation limit;
+the four implementation findings above have regression coverage and are closed.
 
 ## M3: failed inputs and services must produce usable failures
 

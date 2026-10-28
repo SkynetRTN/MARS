@@ -173,6 +173,8 @@ def _resolve_calibration_inputs(
     ):
         try:
             variable_sources = query_catalogs(["VSX"], wcs=wcs, skip_failed=True)
+        except MemoryError:
+            raise
         except Exception as exc:
             variable_sources = None
             from algorithms.query.coverage import note_query_issue
@@ -641,6 +643,8 @@ def calibrate_zeropoint(
                 catalog_sources=resolved_sources,
                 variable_sources=variable_sources,
             )
+    except MemoryError:
+        raise
     except UnsupportedFilterError as exc:
         return ZeropointComparison(
             errors=[ToolError(code="unsupported_filter", message=str(exc))],
