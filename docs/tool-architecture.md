@@ -618,9 +618,11 @@ uv run mars --max-turns 40         # with a higher ceiling than 20
   2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
 ```
 
-The header names the session's `provider/model`; the status bar counts turns
-against the ceiling, token usage once a turn reports it, the artifacts
-written, and the graphics tier detected for this terminal. It needs a backend
+The header names the session's `provider/model`; the status bar starts with
+the keys (`esc stop` while a turn runs, `ctrl+q quit`, `F3`, `F4`), so a
+narrow terminal never cuts them, then adds what fits of: turns against the
+ceiling, token usage once a turn reports it, the artifacts written, and the
+graphics tier detected for this terminal. It needs a backend
 before it will answer anything — a key for the provider it opens on, or a
 local Ollama daemon, which needs none. If the backend it starts on cannot be
 used, `mars` exits before the interface opens and names the next step: where

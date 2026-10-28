@@ -357,6 +357,8 @@ class MARSApp(App[None]):
         """Start keyboard interaction in the prompt, not the transcript."""
 
         self.query_one("#prompt", Input).focus()
+        # Composed before layout, the status line had no width to fit.
+        self.call_after_refresh(self._refresh_status)
 
     def on_unmount(self) -> None:
         """Release every worker still waiting on a decision this UI owed it.
@@ -921,7 +923,12 @@ class MARSApp(App[None]):
         prompt.focus()
 
     def _refresh_status(self) -> None:
-        self.query_one("#status", Static).update(self._status_text())
+        status = self.query_one("#status", Static)
+        # size is the content width, inside the line's padding; 0 before layout.
+        status.update(self._status_text(status.size.width or None))
+
+    def on_resize(self, event: events.Resize) -> None:
+        self._refresh_status()
 
     def _append_transcript(self, text: str) -> None:
         self.query_one("#transcript", Transcript).append_notice(text)
@@ -964,25 +971,39 @@ class MARSApp(App[None]):
         request.decision = decision or Decision.DENY
         request.ready.set()
 
-    def _status_text(self) -> str:
-        parts = [f"{self.current_turn}/{self.max_turns} turns"]
-        if self.token_usage is not None:
-            if self.token_usage.input_tokens is not None:
-                parts.append(f"{self.token_usage.input_tokens} input tokens")
-            if self.token_usage.output_tokens is not None:
-                parts.append(f"{self.token_usage.output_tokens} output tokens")
-        parts.extend(
-            [
-                f"{self.artifact_count} artifact"
-                + ("" if self.artifact_count == 1 else "s"),
-                f"{self.graphics_tier.value} graphics",
-                "F3 artifacts",
-                "F4 sessions",
-            ]
-        )
+    def _status_text(self, width: int | None = None) -> str:
+        """The status line: the keys first, then the counts that fit.
+
+        The keys are what someone acts on -- how to stop a turn, how to quit
+        -- so they are never what a narrow terminal cuts: at 80 columns the
+        line used to end before the stop hint, and it never named a quit
+        key. Counts follow in order of use, each only if it still fits in
+        ``width``; with no width, all of them.
+        """
+
         if self._session_running():
-            parts.append("stopping" if self._stop_requested else "esc stop")
-        return " • ".join(parts)
+            stop = "stopping" if self._stop_requested else "esc stop"
+            keys = [stop, "ctrl+q quit", "F3 artifacts", "F4 sessions"]
+        else:
+            keys = ["ctrl+q quit", "F3 artifacts", "F4 sessions"]
+        counts = [f"{self.current_turn}/{self.max_turns} turns"]
+        usage = self.token_usage
+        if usage is not None and usage.input_tokens is not None:
+            tokens = f"{usage.input_tokens} in"
+            if usage.output_tokens is not None:
+                tokens += f", {usage.output_tokens} out"
+            counts.append(f"{tokens} tokens")
+        counts.append(
+            f"{self.artifact_count} artifact" + ("" if self.artifact_count == 1 else "s")
+        )
+        counts.append(f"{self.graphics_tier.value} graphics")
+        if width is None:
+            return " • ".join(keys + counts)
+        line = " • ".join(keys)
+        for count in counts:
+            if len(line) + len(" • ") + len(count) <= width:
+                line += " • " + count
+        return line
 
 
 def _approval_marker(name: str) -> str:

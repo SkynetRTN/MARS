@@ -545,3 +545,39 @@ def test_an_ollama_timeout_says_what_ran_out():
     )
 
     assert "did not finish a turn within OLLAMA_TIMEOUT_S" in message
+
+
+# ---------------------------------------------------------------------------
+# The status line keeps its keys at 80 columns
+
+
+def test_the_status_line_names_quit_and_keeps_its_keys_at_80_columns():
+    from tools.llm.types import Usage
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            idle = str(app.query_one("#status").render())
+            assert idle.startswith("ctrl+q quit • F3 artifacts • F4 sessions")
+
+            app.token_usage = Usage(input_tokens=18830, output_tokens=800)
+            app._session_running = lambda: True
+            app._refresh_status()
+            await pilot.pause()
+            running = str(app.query_one("#status").render())
+            assert running.startswith("esc stop • ctrl+q quit")
+            assert len(running) <= 80 - 4, "inside the line's padding"
+            assert not running.endswith("•")
+
+    _run(scenario())
+
+
+def test_counts_that_do_not_fit_are_left_out_whole():
+    app = MARSApp(backend=object())
+    app.token_usage = None
+    full = app._status_text()
+    narrow = app._status_text(width=50)
+    assert full.startswith(narrow)
+    assert len(narrow) <= 50
+    assert narrow.split(" • ")[-1] in full.split(" • ")
