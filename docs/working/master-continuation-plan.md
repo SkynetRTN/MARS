@@ -269,12 +269,14 @@ Evidence: [query backends](../../algorithms/query/),
   - **Remaining:** re-check the changed Codex launch in the ChatGPT app on
     Windows and Linux, and the *MARS release* setting in Claude Desktop's
     own settings screen (the launcher behind it is verified above).
-- [ ] **Installed commands and data.** `mars-bench` ships without its
+- [x] **Installed commands and data.** `mars-bench` ships without its
   checkout-only assets. Verify its installed behavior and cross-platform bundle
   installation, interruption and recovery. Record current cold/warm startup
   where host timeouts matter. Claude's MCPB is built manually and is absent
   from release assets; the advertised installation route must say so.
-  *In progress (2026-10-26):*
+  *Done 2026-10-27.* At the next tag, check that the GitHub release carries
+  `mars.mcpb`: `publish` attaches it, and only a tag runs that job, so the
+  dry run below could not.
   - **`mars-bench`:** checked from a built wheel. Outside a checkout it now
     exits 2 and says the suites live in a clone, instead of a traceback. From
     a clone's root it replays the smoke suite. Its reference data now
