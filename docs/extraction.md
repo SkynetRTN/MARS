@@ -320,6 +320,21 @@ code. This covers the owned process group, not descendants that
 deliberately escape the session. The non-POSIX fallback kills only the direct
 process; no Windows process-tree validation is claimed.
 
+**The engine configuration drops `inparallel` (2026-10-28), a deliberate
+divergence.** Upstream's `_write_index_config` wrote `inparallel` before
+`autoindex`, so `astrometry-engine` mapped every configured index file before
+searching. Mapped files count in full against an address-space limit, and the
+MCP runtime runs every call under 4 GiB (`RLIMIT_AS`, inherited by
+`solve-field`): with a full narrow-field set (the 4200 series alone is about
+32 GB) the engine failed with "Failed to add index" before any search, so a
+user could not give MARS the catalogs a ~10-arcminute field needs. Without
+`inparallel` the engine maps one index at a time, and the search arithmetic is
+unchanged. Measured on the development host with all three index sets
+configured (about 77 GB), the known-solution tests still recover the recorded
+solution, all-sky in 18-19 s against 50-64 s with `inparallel` (the engine no
+longer loads every index before the one that solves), bounded in 2.6 s
+against 1.6 s.
+
 ATLAS's finite allowance still covers only the blind matcher loop, not catalog
 loading, extraction, its oriented path or all retry work. MCP dispatch additionally
 contains the complete call in an owned worker with a 600-second default and

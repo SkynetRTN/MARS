@@ -432,18 +432,22 @@ Evidence: [query backends](../../algorithms/query/),
     (Fedora's `removelines`, system Python 3.14) imported MARS's 3.13 numpy
     and `solve-field` failed in every worker. The worker now restores the
     caller's `PYTHONPATH` (test in `tests/test_runtime_limits.py`).
-  - **Open, for the maintainer:** the worker's 4 GiB address-space cap stops
-    astrometry.net mapping a large index set (the 4200 series is about
-    32 GB), so an opt-in user's all-sky solve fails in any worker, MCP
-    included; users without local plate solving are unaffected. The worker
-    reads the user's index files where they are, it copies nothing; the
-    load comes from `inparallel` in the engine config MARS writes
-    (`algorithms/skylib_lite/astrometry/anet/backend.py`, extracted from
-    Skynet), which loads every index at once. Options: drop `inparallel`
-    (one index at a time: slower, bounded), make the cap configurable, or
-    keep both and document the limit (done in `../installing.md`). And a
-    crashed `solve-field` is reported as "no solution" with status `ok`,
-    which is how the `PYTHONPATH` failure first passed as ✓.
+  - **Full catalogs (2026-10-28, the maintainer's decision):** the worker's
+    4 GiB address-space cap stopped astrometry.net loading a large index set
+    -- the worker reads the files where they are, but `inparallel`, in the
+    engine config extracted from Skynet, mapped every one before searching.
+    It is dropped (`algorithms/skylib_lite/astrometry/anet/backend.py`,
+    recorded in `../extraction.md`), so the engine maps one index at a time
+    and users can give MARS a full catalog. On this host, all three index
+    sets (about 77 GB) configured, the known-solution tests still land on
+    the recorded solution: all-sky 18-19 s, against 50-64 s with
+    `inparallel`; bounded 2.6 s, against 1.6 s. Through the MCP worker,
+    which used to fail, bounded solves in 9.2 s and all-sky in 22.0 s,
+    worker start included. Ctrl+C 10 s into a real all-sky solve stopped it
+    in 0.53 s, the solver gone and the console open; Ctrl+Q exited in 1.03 s.
+  - **Open, for the maintainer:** a crashed `solve-field` is reported as "no
+    solution" with status `ok`, which is how the `PYTHONPATH` failure first
+    passed as ✓.
 - [x] **Plate solving is documented as a machine dependency.** The
   maintainer's request (2026-10-28): the install guides say that plate
   solving needs astrometry.net and its index files installed on the user's

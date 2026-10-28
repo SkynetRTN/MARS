@@ -308,9 +308,9 @@ for `mars`, `mars-mcp` and Claude Code; the environment the ChatGPT app starts
 in for the Codex plugin, which forwards it. The Claude Desktop extension has
 no setting for it yet, so plate solving is not available there.
 
-Keep `ANET_INDEX_PATH` to the indexes your fields need. astrometry.net loads
-every index it is given at once, and MARS runs a solve under a 4 GiB memory
-limit, so a large set (the whole 4200 series is about 32 GB) fails to load.
+A full catalog is fine: MARS has astrometry.net load one index at a time,
+so a large set (the whole 4200 series is about 32 GB) fits within the 4 GiB
+memory limit MARS runs a solve under.
 
 **ATLAS** is MARS's second solver: pure Python, so it needs no program, only a
 local UCAC4 or UCAC5 catalogue (`ATLAS_CATALOG_ROOT`, and `ATLAS_CATALOG` for

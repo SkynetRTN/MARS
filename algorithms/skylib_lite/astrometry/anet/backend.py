@@ -99,7 +99,12 @@ class AstrometryNetBackend:
     @staticmethod
     def _write_index_config(index_dirs: List[str], work: Path) -> Path:
         cfg = work / "engine.cfg"
-        lines = ["inparallel", "autoindex"]
+        # MARS divergence (2026-10-28; docs/extraction.md, WCS §5): upstream
+        # wrote `inparallel` first, which maps every index file before the
+        # search. Under the MCP runtime's 4 GiB address-space limit a full
+        # narrow-field set (the 4200 series alone is about 32 GB) then fails
+        # to load at all; without it the engine maps one index at a time.
+        lines = ["autoindex"]
         for d in index_dirs:
             lines.append(f"add_path {d}")
         cfg.write_text("\n".join(lines) + "\n", encoding="ascii")
