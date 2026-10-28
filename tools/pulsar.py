@@ -666,6 +666,7 @@ def compute_pulsar_periodogram(
         "false_alarm_assumptions": list(significance.ASSUMPTIONS),
         "false_alarm_statistic": significance.STATISTIC,
         "false_alarm_flux_centering": significance.CENTERING,
+        "false_alarm_phase_model": significance.PHASE_MODEL,
         "false_alarm_resolution_limited": result.false_alarm_resolution_limited,
     })
     for key, value in {
@@ -1685,10 +1686,12 @@ def _render_plot(
         method = table.meta.get("false_alarm_method")
         statistic = table.meta.get("false_alarm_statistic")
         centering = table.meta.get("false_alarm_flux_centering")
+        phase_model = table.meta.get("false_alarm_phase_model")
         calibrated = (
             isinstance(method, str) and method == significance.METHOD
             and isinstance(statistic, str) and statistic == significance.STATISTIC
             and isinstance(centering, str) and centering == significance.CENTERING
+            and isinstance(phase_model, str) and phase_model == significance.PHASE_MODEL
         )
         limited = table.meta.get("false_alarm_resolution_limited")
         if calibrated and isinstance(limited, (bool, np.bool_)) and limited:

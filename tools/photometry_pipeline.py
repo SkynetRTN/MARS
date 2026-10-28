@@ -67,6 +67,28 @@ class ZeroPointResolution:
 UNUSABLE_RESPONSE_PREFIX = "unusable catalog response: "
 
 
+def _zero_point_warnings(zero_point: ZeroPointResolution) -> list[ToolWarning]:
+    """Completed selection/fit disclosures, before later computation or I/O."""
+    warnings = list(getattr(zero_point, "warnings", []) or [])
+    if zero_point.verified:
+        from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
+
+        warnings.extend(calibration_reference_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            getattr(zero_point, "reference_routes", None),
+        ))
+        warnings.extend(calibration_sample_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            (zero_point.diagnostics or {}).get("num_calibration_stars"),
+        ))
+    failure = getattr(zero_point, "failure", None)
+    if getattr(zero_point, "failure_code", None) == "unusable_response":
+        warnings.append(ToolWarning(code="unusable_response", message=failure))
+    elif failure:
+        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
+    return warnings
+
+
 def resolve_zero_point_mag(fits_path: Path, header: object) -> float | None:
     """Return a photometric zero point from the FITS header when available."""
     if hasattr(header, "get"):
@@ -372,11 +394,16 @@ def compute_photometry(
     *,
     use_field_cal: bool = True,
     catalogs: Sequence[str] | None = None,
+    warnings: list[ToolWarning] | None = None,
 ) -> tuple[np.ndarray, list[object], ZeroPointResolution]:
     data, header = load_fits_image(fits_path)
     zero_point = select_zero_point_mag(
         zero_point_mag, header, data, use_field_cal=use_field_cal, catalogs=catalogs
     )
+    if warnings is not None:
+        for warning in _zero_point_warnings(zero_point):
+            if warning not in warnings:
+                warnings.append(warning)
     effective_zero_point_mag = zero_point.value
     extraction_settings = SourceExtractionSettings()
     sources, background, background_rms = run_source_extraction(

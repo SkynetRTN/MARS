@@ -13,6 +13,48 @@ from algorithms.fieldcal.solution import calc_solution
 from tools.photometry_pipeline import _replicate_zero_point_rejection
 
 
+@pytest.mark.parametrize("saturated", [False, True])
+def test_registered_direct_calibration_excludes_known_saturation(saturated):
+    from tools.mcp.surface import call_tool
+
+    rows = [dict(id=str(i), mag=12+i-20+residual, ref_mag=12+i,
+                 mag_error=.02, ref_mag_error=.01, sat_pixels=count)
+            for i, (residual, count) in enumerate([
+                (-.01, 0), (.01, 0), (.002, 0), (.5, 5), (.5, 5)])]
+    selected = rows if saturated else rows[:3]
+    result = call_tool("solve_zeropoint_from_measurements", {
+        "measurements": selected, "catalog_sources": [],
+    })
+    assert result["errors"] == []
+    assert result["source_count"] == 3
+    assert result["zero_point"] == pytest.approx(19.999333333333333)
+
+
+def test_direct_calibration_with_only_saturated_rows_has_no_solution():
+    from tools.calibration import solve_zeropoint_from_measurements
+
+    result = solve_zeropoint_from_measurements([
+        {"mag": float(i), "ref_mag": i+20., "mag_error": .02, "sat_pixels": 1}
+        for i in range(3)], [])
+    assert result.zero_point is None
+    assert result.source_count == 0
+    assert [error.code for error in result.errors] == ["no_usable_sources"]
+
+
+def test_direct_calibration_respects_saturation_in_paired_catalog_rows():
+    from tools.calibration import solve_zeropoint_from_measurements
+
+    residuals = [-.01, .01, .002, .5, .5]
+    measurements = [dict(id=str(i), mag=12+i-20+r, ref_mag=12+i,
+                         mag_error=.02, ref_mag_error=.01, sat_pixels=0)
+                    for i, r in enumerate(residuals)]
+    catalogs = [dict(id=str(i), sat_pixels=0 if i < 3 else 5) for i in range(5)]
+    result = solve_zeropoint_from_measurements(measurements, catalogs)
+    assert result.errors == []
+    assert result.source_count == 3
+    assert result.zero_point == pytest.approx(19.999333333333333)
+
+
 @pytest.mark.parametrize("step", [0., np.spacing(15.)])
 def test_rank_deficient_snr_line_keeps_zero_point_but_withholds_limiting_magnitude(step):
     from tools.calibration import solve_zeropoint_from_measurements

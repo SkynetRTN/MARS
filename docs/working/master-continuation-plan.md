@@ -27,7 +27,45 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-**Closed locally on `feature/m2` after final review and regression validation.**
+**Closed locally on `feature/m2` after the adversarial follow-up and validation.**
+The independent comparison against main found seven remaining cases. Each now
+has a reproduced failure and a regression-tested correction. The follow-up added
+51 regression/control cases, including the subsequent independent review fixes.
+
+- [x] Reject singular nonlinear SIP solutions before header writes.
+- [x] Make pulsar alias powers and residuals independent of the time origin.
+- [x] Exclude explicitly saturated inputs from direct calibration.
+- [x] Preserve Astropy masks in legacy ages, membership and motion statistics.
+- [x] Preserve catalog/reference warnings when photometry computation or artifacts fail.
+- [x] Avoid treating ordinary parenthesized dates as author citations.
+- [x] Preserve `resource_limit` for WCS allocation failures.
+
+Independent review caught three further cases in the first corrections: SIP
+terms Astropy ignores must not enter the certificate; completed fit disclosures
+must survive later computation, not only output failure; and inner WCS/Atlas
+helpers must propagate allocation failures. All three were reproduced and
+corrected. SIP validation is a sufficient global certificate with conservative
+rejection of uncertifiable/unsupported maps. No filter transform, including
+H-alpha, or photometric fitting equation changed. Older pulsar phase artifacts
+require recomputation for current calibrated plots.
+
+
+Final follow-up verification with locked dependencies:
+
+| Check | Result |
+| --- | --- |
+| Full suites with MCP and native prerequisites, Python 3.12 and 3.13 | 4,272 passed, 86 skipped on each version; no failures or errors. All four configured native checks passed. |
+| SDK-free CI subset, both versions | 229 passed, 21 expected skips on each version. |
+| Wheel/source build, strict metadata and contents | Passed, including the new SIP validator. |
+| Installed-wheel MCP self-tests and SIP acceptance controls, both versions | Passed outside the checkout. |
+| Compilation, generated guidance, whitespace and frozen source/test hashes | Passed. |
+
+The 224 warnings on each native run are all Astropy FITS notices; numerical
+runtime/rank warnings were treated as errors. The 86 skips are 80 live-network
+cases, one Ollama check, four absent historical benchmark runs and one
+Windows-only allocation check. No fresh provider-availability or historical
+benchmark claim is implied; the earlier live limits remain recorded below.
+
 All ten checkpoints and the four final corrections below are complete within
 the recorded limits. Changes remain unmerged into main and unpublished.
 Other release gates remain open. Technical derivations and detailed acceptance

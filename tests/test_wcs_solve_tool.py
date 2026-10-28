@@ -31,6 +31,82 @@ solver_available = pytest.mark.skipif(
 )
 
 
+@pytest.mark.parametrize("phase", ["read", "solve", "write"])
+def test_wcs_allocation_failures_reach_resource_limit(phase, monkeypatch, tmp_path):
+    from tools import wcs as public_wcs
+    from tools.mcp.surface import call_tool
+
+    path = tmp_path / "frame.fits"
+    shutil.copyfile(SOLVED_FRAME, path)
+    solution = WCS(fits.getheader(path))
+    monkeypatch.setenv("ANET_INDEX_PATH", str(tmp_path))
+    monkeypatch.setattr(public_wcs, "_configured_backend_warnings", lambda settings: (["anet"], []))
+    monkeypatch.setattr(public_wcs, "_solve_wcs", lambda *args, **kwargs: WcsSolveResult(
+        wcs=solution, catalog_sources=(), metadata=WcsSolveMetadata(width_px=1056, height_px=1027)))
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test WCS allocation failure")
+
+    if phase == "read":
+        monkeypatch.setattr(public_wcs.fits, "open", exhausted)
+    else:
+        monkeypatch.setattr(public_wcs, "_solve_wcs" if phase == "solve" else "_write_wcs_header", exhausted)
+    result = call_tool("solve_astrometry", {"path": str(path), "force": True, "write_header": phase == "write"})
+    assert [error["code"] for error in result["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("phase", ["header_wcs", "backend", "acceptance"])
+def test_inner_wcs_allocation_failures_are_not_reported_as_solver_misses(phase, monkeypatch, tmp_path):
+    import algorithms.wcs.wcs as pipeline
+    from algorithms.skylib_lite.astrometry.types import SolveSolution
+    from tools.mcp.surface import call_tool
+
+    solution = WCS(fits.getheader(SOLVED_FRAME))
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    monkeypatch.setattr(pipeline.AstrometryNetBackend, "is_available", lambda self: True)
+    monkeypatch.setattr(pipeline, "anet_solve_field_glob",
+                        lambda *args, **kwargs: SolveSolution(wcs=solution, backend="anet"))
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test inner WCS allocation failure")
+
+    if phase == "header_wcs":
+        monkeypatch.setattr("algorithms.wcs.source_extraction.WCS", exhausted)
+    elif phase == "backend":
+        monkeypatch.setattr(pipeline, "anet_solve_field_glob", exhausted)
+    else:
+        monkeypatch.setattr(pipeline, "_solution_footprint", exhausted)
+    result = call_tool("solve_astrometry", {"path": str(SOLVED_FRAME), "force": True,
+                                          "index_path": str(index_path)})
+    assert [error["code"] for error in result["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("phase", ["header_wcs", "atlas_read", "atlas_scale", "atlas_background"])
+def test_wcs_nested_helpers_do_not_fall_back_after_allocation_failure(phase, monkeypatch, tmp_path):
+    import numpy as np
+    from algorithms.wcs import header_utils
+    from algorithms.skylib_lite.astrometry.atlas.solve import solver
+    from algorithms.skylib_lite.astrometry.atlas.extract.sources import estimate_background_2d
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test nested WCS allocation failure")
+
+    path = tmp_path / "frame.fits"
+    shutil.copyfile(SOLVED_FRAME, path)
+    if phase == "header_wcs":
+        monkeypatch.setattr(header_utils, "WCS", exhausted)
+        action = lambda: header_utils._arcsec_from_wcs(fits.Header())
+    elif phase == "atlas_background":
+        monkeypatch.setattr("photutils.background.Background2D", exhausted)
+        action = lambda: estimate_background_2d(np.ones((16, 16)), 8)
+    else:
+        monkeypatch.setattr(solver.fits if phase == "atlas_read" else solver,
+                            "open" if phase == "atlas_read" else "WCS", exhausted)
+        action = lambda: solver._estimate_fov(path, 16, 16, (.1, 60.))
+    with pytest.raises(MemoryError):
+        action()
+
+
 def _configure_fake_anet(monkeypatch, tmp_path: Path) -> Path:
     index_path = tmp_path / "indexes"
     index_path.mkdir()

@@ -267,8 +267,13 @@ def test_near_nyquist_noise_power_matches_an_orthogonal_projection(frequency):
     angles = omega * (times - tau)
     design = np.column_stack((np.cos(angles), np.sin(angles)))
     # QR is a separate reference for rank 2; exact Nyquist has only rank 1.
-    rank = np.linalg.matrix_rank(design)
-    basis = np.linalg.qr(design)[0][:, :rank]
+    if frequency <= 5 + 1e-14:
+        # These phase perturbations are below the formation-error budget.
+        # Floating trig columns used to turn roundoff into an extra regressor;
+        # use the analytic Nyquist column instead of repeating that mistake.
+        basis = ((-1.)**np.arange(len(times)) / np.sqrt(len(times)))[:, None]
+    else:
+        basis = np.linalg.qr(design)[0]
     reference = np.sum((basis.T @ (values - values.mean())) ** 2) / (2 * np.var(values))
     assert powers[0] == pytest.approx(reference, rel=1e-10, abs=1e-12)
 

@@ -10,6 +10,13 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
+
+def _missing_measurement(value: Any) -> bool:
+    """Respect both NumPy and Astropy scalar masks before numeric coercion."""
+    return value is None or bool(np.any(getattr(value, "mask", False)))
+
 # PORTED: git-history:algorithms/hrdiagram/fsr/cmd-fsr.util.ts::getCmdData
 def get_cmd_data(sources: Sequence[Mapping[str, Any]], filters: Sequence[str]) -> dict[str, Any]:
     pairs: list[tuple[str, str]] = []
@@ -129,7 +136,7 @@ def get_mwsc_age_distribution(clusters: Sequence[Mapping[str, Any]]) -> list[flo
     max_log_age = math.log10(13.8e9)
     for cluster in clusters:
         log_age = cluster.get("age")
-        if log_age is None or not math.isfinite(log_age) or log_age >= max_log_age:
+        if _missing_measurement(log_age) or not math.isfinite(log_age) or log_age >= max_log_age:
             continue
         age_myr = 10 ** (float(log_age) - 6)
         if age_myr > 0:
@@ -189,7 +196,7 @@ def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fs
         pm_ra = values.get("pm_ra") if values else None
         pm_dec = values.get("pm_dec") if values else None
         pm_ok = (
-            pm_ra is not None and pm_dec is not None
+            not _missing_measurement(pm_ra) and not _missing_measurement(pm_dec)
             and math.isfinite(pm_ra) and math.isfinite(pm_dec)
         )
         if pm_ok and not pm_global:
@@ -384,12 +391,14 @@ def get_velocity_dispersion(sources: Sequence[Mapping[str, Any]], pmra: float, p
     inference is performed. PM RA must be mu_alpha* (cos(dec)*dRA/dt), and
     PM Dec must be dDec/dt, in the same tangent-plane convention as the center.
     """
-    if not math.isfinite(pmra) or not math.isfinite(pmdec):
+    if (_missing_measurement(pmra) or _missing_measurement(pmdec)
+            or not math.isfinite(pmra) or not math.isfinite(pmdec)):
         raise ValueError("Proper-motion center must be finite.")
     offsets: list[float] = []
     for source in sources:
         motion = source.get("fsr")
-        if motion is None or motion.get("pm_ra") is None or motion.get("pm_dec") is None:
+        if (motion is None or _missing_measurement(motion.get("pm_ra"))
+                or _missing_measurement(motion.get("pm_dec"))):
             continue
         if not math.isfinite(motion["pm_ra"]) or not math.isfinite(motion["pm_dec"]):
             raise ValueError("Paired proper motions must be finite.")

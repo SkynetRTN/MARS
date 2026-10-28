@@ -104,21 +104,30 @@ class Periodogram:
         return best
 
 
-def _trial_terms(ts: np.ndarray, frequency: float) -> tuple[np.ndarray, np.ndarray]:
-    """The same tau-shifted trigonometric columns for powers and residual fits."""
+def _trial_terms(ts: np.ndarray, frequency: float) -> tuple[np.ndarray, np.ndarray, float]:
+    """Columns and an absolute phase-aware rank cutoff shared by both fits."""
     limits.finite(1 / frequency, "trial period in seconds", positive=True)
     omega = 2.0 * math.pi * frequency
     limits.finite(omega, "angular frequency", positive=True)
     with np.errstate(over="ignore", invalid="ignore"):
-        two_omega_t = 2 * omega * ts
+        relative_times = ts - ts[0]
+        two_omega_t = 2 * omega * relative_times
     if not np.isfinite(two_omega_t).all():
         raise ValueError("time-frequency products must remain finite")
     tau = math.atan2(
         float(np.sum(np.sin(two_omega_t))),
         float(np.sum(np.cos(two_omega_t))),
     ) / (2.0 * omega)
-    angles = omega * (ts - tau)
-    return np.cos(angles), np.sin(angles)
+    angles = omega * (relative_times - tau)
+    # SVD's usual relative cutoff alone treats a roundoff sine column at
+    # cadence aliases as a real regressor. Include phase-formation error on
+    # the original unit-amplitude columns, even if both singular values shrink.
+    eps = np.finfo(float).eps
+    phase_error = 8 * eps * max(1., float(np.max(np.abs(two_omega_t))))
+    if phase_error >= 1:
+        raise ValueError("time-frequency phases are numerically unresolved")
+    cutoff = (eps * ts.size + phase_error) * math.sqrt(ts.size)
+    return np.cos(angles), np.sin(angles), cutoff
 
 
 def _centered_flux(ys: np.ndarray) -> np.ndarray:
@@ -139,13 +148,14 @@ def _peak_residual_fraction(ts: np.ndarray, ys: np.ndarray, frequency: float) ->
     a standard backward-error scale, not a certified forward-error enclosure.
     """
     response = _centered_flux(ys)
-    design = np.column_stack(_trial_terms(ts, frequency))
+    cos_term, sin_term, cutoff = _trial_terms(ts, frequency)
+    design = np.column_stack((cos_term, sin_term))
     try:
         basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
     except np.linalg.LinAlgError as exc:
         raise ValueError("singular residual fit") from exc
     resolution = np.finfo(float).eps * max(design.shape)
-    retained = basis[:, singular_values > resolution * singular_values[0]]
+    retained = basis[:, singular_values > cutoff]
     residual = response - retained @ (retained.T @ response)
     relative_norm = float(np.linalg.norm(residual) / np.linalg.norm(response))
     limits.finite(relative_norm, "relative residual norm")
@@ -245,14 +255,14 @@ def lomb_scargle(
             frequency = x_val
             log_x_val = x_val
 
-        cos_term, sin_term = _trial_terms(ts, frequency)
+        cos_term, sin_term, cutoff = _trial_terms(ts, frequency)
 
         try:
             cos_norm = float(np.dot(cos_term, cos_term))
             sin_norm = float(np.dot(sin_term, sin_term))
             cross = float(np.dot(cos_term, sin_term))
             if (
-                min(cos_norm, sin_norm) <= np.finfo(float).eps * ts.size
+                min(cos_norm, sin_norm) <= max(np.finfo(float).eps * ts.size, cutoff**2)
                 or abs(cross) > 1e-10 * math.sqrt(cos_norm * sin_norm)
             ):
                 # At e.g. exact Nyquist, roundoff defeats tau's intended
@@ -262,7 +272,6 @@ def lomb_scargle(
                 # columns into artificial independent regressors.
                 design = np.column_stack((cos_term, sin_term))
                 basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
-                cutoff = np.finfo(float).eps * max(design.shape) * singular_values[0]
                 projection = basis[:, singular_values > cutoff].T @ h_residue
                 power = float(np.dot(projection, projection)) / two_var_of_y
             else:

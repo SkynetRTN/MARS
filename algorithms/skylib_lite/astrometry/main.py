@@ -159,10 +159,14 @@ def _load_wcs(path: Path) -> Optional[WCS]:
     try:
         header = fits.Header.fromtextfile(str(path))
         return WCS(header)
+    except MemoryError:
+        raise
     except Exception:
         try:
             header = fits.getheader(str(path))
             return WCS(header)
+        except MemoryError:
+            raise
         except Exception:
             return None
 

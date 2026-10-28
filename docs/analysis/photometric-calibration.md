@@ -53,6 +53,9 @@ the solver's exact input-aligned survivor mask, including pre-fit drops.
 
 Calibration excludes measurements with a known positive saturation count
 before the SNR window, reference-magnitude resolution and brightest-star cap.
+The registered direct-measurement tool applies the same exclusion to both
+measurement and paired catalog counts; an all-saturated input has no usable
+sources. Unknown counts retain their existing policy.
 Matching keeps the larger detection/catalog count, so a catalog's default zero
 cannot erase image saturation. A finite reference magnitude of zero sorts as
 a valid bright magnitude. Unknown saturation is not evidence of unsaturation;

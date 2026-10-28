@@ -69,6 +69,10 @@ def solve_zeropoint_from_measurements(
 
     for index, measurement in enumerate(normalized_measurements):
         source = measurement.model_copy(deep=True)
+        # Match the pixel calibration path: a known saturation count cannot
+        # be rescued by a finite magnitude or absorbed into fitted scatter.
+        if (source.sat_pixels or 0) > 0:
+            continue
         route = (source.catalog_name, "provided", None)
         if source.mag is None:
             warnings.append(ToolWarning(code="missing_mag", message=f"Measurement {index} has no instrumental mag."))
@@ -79,6 +83,8 @@ def solve_zeropoint_from_measurements(
             catalog_source = catalogs_by_id.get(str(source.id))
         if catalog_source is None and index < len(normalized_catalog_sources):
             catalog_source = normalized_catalog_sources[index]
+        if catalog_source is not None and (catalog_source.sat_pixels or 0) > 0:
+            continue
 
         if source.ref_mag is None and catalog_source is not None:
             if getattr(catalog_source, "ref_mag", None) is not None:
@@ -114,7 +120,7 @@ def solve_zeropoint_from_measurements(
             errors=[
                 ToolError(
                     code="no_usable_sources",
-                    message="No measurements had both instrumental and reference magnitudes.",
+                    message="No unsaturated measurements had both instrumental and reference magnitudes.",
                 )
             ],
         )

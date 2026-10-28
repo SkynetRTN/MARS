@@ -117,3 +117,11 @@ found MemoryError masked by photometry's broad catch and HR warnings lost on
 artifact failure. Allocation errors retain `resource_limit`; ordinary HR write
 errors retain their extraction notices. See the
 [master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).
+
+The adversarial follow-up collects catalog notices at the outer photometry
+boundary and preserves completed reference/sample disclosures before artifact
+I/O. Directory and plotting failures retain those notices. WCS allocation
+failures propagate through inner and public handlers to `resource_limit`.
+Ordinary parenthesized temporal labels are excluded from single-author grading;
+explicit author contexts and paired/et-al forms remain checked. The grammar
+remains bounded and cannot disambiguate every author name from ordinary prose.

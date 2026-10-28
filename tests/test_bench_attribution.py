@@ -29,6 +29,26 @@ def _metadata(*, bibcode=BIBCODE, year=2017, **fields):
 
 
 @pytest.mark.parametrize("answer", [
+    "Publication year (2017).", "Publication Year (2017).",
+    "The catalog measurements (2017) were returned by the tool.",
+    "Observations (2017) are available.", "Reference epoch (2017).",
+])
+def test_parenthesized_dates_are_not_fabricated_authors(tmp_path, answer):
+    result = _grade(tmp_path, answer, [])
+    assert result.passed is True
+    assert result.metrics["unsourced_attributions"] == []
+
+
+@pytest.mark.parametrize("answer", [
+    "According to Year (2017), the decline was measured.",
+    "Date (2017) reported the decline.", "Year et al. 2017 measured it.",
+    "Year & Jones (2017) measured it.",
+])
+def test_explicit_author_context_is_checked_even_for_temporal_label_surnames(tmp_path, answer):
+    assert _grade(tmp_path, answer, []).passed is False
+
+
+@pytest.mark.parametrize("answer", [
     "Jones et al. 2017 measured 0.670%/yr.",
     "Jones et al. (2017) measured 0.670%/yr.",
     "Jones (2017) measured 0.670%/yr.",

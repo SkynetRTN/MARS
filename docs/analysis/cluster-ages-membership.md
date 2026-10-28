@@ -119,3 +119,8 @@ dependencies and `[mcp]`: **3,514 passed, 49 skipped**, with the same 198 existi
 warnings. Compileall, schema goldens, generated-skill consistency, repository
 shape and `git diff --check` pass. The subsequent legacy checkpoint is tracked
 in the [coordinates, extinction and mass record](legacy-coordinates-extinction-mass.md).
+
+The adversarial follow-up preserves NumPy/Astropy masks before scalar numeric
+coercion. Table and QTable mixin rows with masked ages or proper motions remain
+missing; measured zero and unmasked values remain usable. The same missing-pair
+policy applies to the exported legacy observed-motion statistic.

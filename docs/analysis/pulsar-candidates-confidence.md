@@ -103,8 +103,8 @@ The proof requires an actual least-squares projection. At exact or nearly
 uniform Nyquist frequencies, roundoff can make the port's nominally orthogonal
 trigonometric columns nonorthogonal. The historical sum of quotients can then
 exceed `N/2`, or distort powers below that cap. Such trials now use a thin SVD
-projection of the same raw columns, retaining singular values above
-`eps * max(design.shape) * largest_singular_value`. Tiny/zero columns or a
+projection of the same raw columns, using an absolute cutoff that includes
+phase-formation error as well as decomposition error. Tiny/zero columns or a
 normalized cross-dot above 1e-10 trigger this fallback. Ordinary trials retain
 the port's arithmetic; no artificial column rescaling or power clipping is
 used. This is a deliberate numerical correction needed for the bound.
@@ -262,3 +262,11 @@ remain rejected. Earlier M2 Gaussian artifacts also need the new
 `false_alarm_flux_centering=observed_offsets` marker before plotting as current;
 otherwise their levels remain uncalibrated. See
 [the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).
+
+The adversarial follow-up also makes trigonometric phase formation relative
+to the first epoch. Power and residual fits share a phase-aware absolute rank
+cutoff, so cadence aliases cannot fit roundoff columns merely because the time
+origin changed. Analytic Nyquist/DC-alias regressions cover shifted epochs and
+saved powers. Current artifacts additionally carry
+`false_alarm_phase_model=relative_epoch_phase_rank_v1`; older phase calculations
+require recomputation before their levels are presented as current.

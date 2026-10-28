@@ -5,10 +5,36 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
-from astropy.table import Table
+from astropy.table import Table, QTable
 
 from algorithms.hrdiagram_py import legacy
 from tools import hr_diagram
+
+
+@pytest.mark.parametrize("table_type", [Table, QTable])
+def test_astropy_mixin_masks_are_not_ages_or_members(table_type):
+    from astropy.utils.masked import Masked
+
+    table = table_type({"age": Masked(np.array([9., 8.]), mask=[True, False]),
+                        "pm_ra": Masked(np.array([0., 3.]), mask=[True, False]),
+                        "pm_dec": [0., 4.]})
+    rows = [dict(row) for row in table]
+    assert legacy.get_mwsc_age_distribution(rows) == [100.]
+    sources = [{"fsr": row} for row in rows]
+    selected = legacy.update_cluster_field_sources(sources, {})
+    assert selected == {"fsr": sources[1:], "not_fsr": sources[:1]}
+    assert legacy.get_velocity_dispersion(sources, 0., 0.) == pytest.approx(5 / math.sqrt(2))
+
+
+@pytest.mark.parametrize("component", ["pm_ra", "pm_dec"])
+def test_masked_motion_is_missing_even_when_its_backing_value_is_finite(component):
+    from astropy.utils.masked import Masked
+
+    source = {"fsr": {"pm_ra": 0., "pm_dec": 0.}}
+    source["fsr"][component] = Masked(np.array(42.), mask=True)
+    assert legacy.update_cluster_field_sources([source], {})["fsr"] == []
+    with pytest.raises(ValueError, match="paired"):
+        legacy.get_velocity_dispersion([source], 0., 0.)
 
 
 def test_age_histogram_keeps_old_clusters_in_myr():

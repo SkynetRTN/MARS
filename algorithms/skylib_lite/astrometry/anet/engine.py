@@ -207,6 +207,8 @@ def load_ngc_globular_clusters() -> List[List[float]]:
                 dec = (1 - 2 * (dec_s == "-")) * (int(dec_d) + int(dec_m) / 60.0)
                 r = float(line[33:38]) / 2
                 globs.append([ra, dec, r / 60])
+            except MemoryError:
+                raise
             except Exception:
                 pass
     return globs

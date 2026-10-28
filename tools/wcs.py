@@ -464,6 +464,8 @@ def solve_astrometry(
             has_wcs=False,
             errors=[ToolError(code="file_changed", message=str(exc))],
         )
+    except MemoryError:
+        raise
     except Exception as exc:
         return WcsSummary(
             file=file,
@@ -563,6 +565,8 @@ def solve_astrometry(
             warnings=configuration_warnings,
             errors=[ToolError(code="search_radius_without_hint", message=str(exc))],
         )
+    except MemoryError:
+        raise
     except Exception as exc:
         return WcsSummary(
             file=file,
@@ -637,6 +641,8 @@ def solve_astrometry(
                 warnings=configuration_warnings,
                 errors=[ToolError(code="file_changed", message=str(exc))],
             )
+        except MemoryError:
+            raise
         except Exception as exc:
             return _summary_from_wcs(
                 file.path,

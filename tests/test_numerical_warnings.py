@@ -5,6 +5,42 @@ import pytest
 from astropy.io import fits
 
 
+@pytest.mark.parametrize("phase", ["directory", "plot", "extraction", "measurement"])
+def test_artifact_failure_keeps_catalog_and_sample_notices(phase, frame_path, tmp_path, monkeypatch):
+    from algorithms.query.coverage import note_query_issue
+    from tools import photometry
+    from tools.fieldcal_reference import replay_catalog_sources, replay_variable_sources
+
+    def query(names, **kwargs):
+        if names == ["VSX"]:
+            return replay_variable_sources("ngc5128_b_002")
+        note_query_issue("catalog_rows_capped", "APASS reached its cap")
+        note_query_issue("catalog_fallback_not_exhausted", "Stetson was not queried")
+        return replay_catalog_sources("ngc5128_b_002")
+
+    monkeypatch.setattr("algorithms.query.runner.query_catalogs", query)
+    output = tmp_path / "output"
+    if phase == "directory":
+        output.write_text("ordinary file")
+    elif phase == "plot":
+        def fail(*args, **kwargs):
+            raise OSError("test plot failure")
+        monkeypatch.setattr(photometry, "plot_photometry", fail)
+    else:
+        def fail(*args, **kwargs):
+            raise OSError("test computation failure after calibration")
+        monkeypatch.setattr("tools.photometry_pipeline." +
+                            ("run_source_extraction" if phase == "extraction" else "run_photometry"), fail)
+    result = photometry.run_photometry_on_target(
+        str(frame_path("ngc5128_b")), use_field_cal=True,
+        catalogs=["APASS", "Stetson"], output_dir=output,
+    )
+    assert [error.code for error in result.errors] == ["tool_exception"]
+    assert {"catalog_rows_capped", "catalog_fallback_not_exhausted",
+            "calibration_sufficiency_unverified", "magnitude_error_snr_cut"} <= {
+        warning.code for warning in result.warnings}
+
+
 def test_nonpositive_flux_placeholder_is_reported_without_changing_legacy_values():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.photometry.photometry import run_photometry

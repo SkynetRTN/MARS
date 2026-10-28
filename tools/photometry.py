@@ -272,14 +272,23 @@ def run_photometry_on_target(
     not the CLI script's own ``~/Downloads`` default), returned as
     ``artifacts``.
     """
-    numerical_warnings: list[ToolWarning] = []
+    operation_warnings: list[ToolWarning] = []
+    from algorithms.query.coverage import collect_query_notices
+    from tools.catalogs import catalog_query_warnings
+
     try:
-        with capture_numerical_warnings(numerical_warnings):
-            result = _run_photometry_on_target(
-                target, use_field_cal=use_field_cal, catalogs=catalogs,
-                zero_point_mag=zero_point_mag, output_dir=output_dir,
-                write_source_table=write_source_table,
-            )
+        with collect_query_notices() as notices:
+            try:
+                with capture_numerical_warnings(operation_warnings):
+                    result = _run_photometry_on_target(
+                        target, use_field_cal=use_field_cal, catalogs=catalogs,
+                        zero_point_mag=zero_point_mag, output_dir=output_dir,
+                        write_source_table=write_source_table, warnings=operation_warnings,
+                    )
+            finally:
+                for warning in catalog_query_warnings(notices):
+                    if warning not in operation_warnings:
+                        operation_warnings.append(warning)
     except MemoryError:
         raise
     except Exception as exc:
@@ -293,9 +302,9 @@ def run_photometry_on_target(
         return PhotometryRunResult(
             file=file,
             errors=[ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")],
-            warnings=numerical_warnings,
+            warnings=operation_warnings,
         )
-    for warning in numerical_warnings:
+    for warning in operation_warnings:
         if warning not in result.warnings:
             result.warnings.append(warning)
         if result.zero_point is not None and warning not in result.zero_point.warnings:
@@ -311,6 +320,7 @@ def _run_photometry_on_target(
     zero_point_mag: float | None,
     output_dir: str | Path | None,
     write_source_table: bool,
+    warnings: list[ToolWarning],
 ) -> PhotometryRunResult:
     try:
         fits_path = resolve_fits_path(target)
@@ -333,9 +343,16 @@ def _run_photometry_on_target(
         zero_point_mag=zero_point_mag,
         use_field_cal=use_field_cal,
         catalogs=catalogs,
+        warnings=warnings,
     )
     magnitude_label = magnitude_label_for(zero_point)
 
+    # Keep completed calibration disclosures before reserving/writing output.
+    from tools.photometry_pipeline import _zero_point_warnings
+
+    for warning in _zero_point_warnings(zero_point):
+        if warning not in warnings:
+            warnings.append(warning)
     artifact_dir = artifact_directory(output_dir) if output_dir is not None else artifact_write_directory()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -356,6 +373,7 @@ def _run_photometry_on_target(
             zero_point_slop=diagnostics.get("zero_point_slop"),
             rej_percent=diagnostics.get("rejection_percent"),
             source_count=diagnostics.get("num_calibration_stars", 0),
+            warnings=warnings,
         )
         zp_plot_path = reserve_path_in(
             artifact_dir, f"{fits_path.stem}_photometry_zeropoint", "png"
@@ -391,26 +409,6 @@ def _run_photometry_on_target(
     # PhotometryRunResult.exposure_seconds: without this, flux and mag look
     # mutually inconsistent by several magnitudes to anyone checking the math.
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
-
-    warnings = list(getattr(zero_point, "warnings", []) or [])
-    if zero_point.verified:
-        from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
-
-        warnings.extend(calibration_reference_warnings(
-            getattr(zero_point, "calibration_sources", None),
-            getattr(zero_point, "reference_routes", None),
-        ))
-        warnings.extend(calibration_sample_warnings(
-            getattr(zero_point, "calibration_sources", None),
-            (zero_point.diagnostics or {}).get("num_calibration_stars"),
-        ))
-        if zero_point_model is not None:
-            zero_point_model.warnings.extend(warnings)
-    failure = getattr(zero_point, "failure", None)  # resolutions may be duck-typed
-    if getattr(zero_point, "failure_code", None) == "unusable_response":
-        warnings.append(ToolWarning(code="unusable_response", message=failure))
-    elif failure:
-        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
 
     return PhotometryRunResult(
         file=describe_file(fits_path),

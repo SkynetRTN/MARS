@@ -21,6 +21,14 @@ _CITATIONS = (
     re.compile(rf"(?<!\w)(?P<names>{_NAME}\s+(?:&|and)\s+{_NAME})\s*,?\s*\(?(?P<year>{_YEAR})[a-z]?\)?", re.I),
     re.compile(rf"(?<!\w)(?P<names>{_NAME})\s*\(\s*(?P<year>{_YEAR})[a-z]?\s*\)", re.I),
 )
+# Temporal field labels followed by a year are not surname citations. Keep
+# explicit paired/et-al forms checked, even when a surname resembles a label.
+_DATE_LABELS = frozenset((
+    "year", "years", "date", "dates", "epoch", "epochs", "publication",
+    "measurement", "measurements", "observation", "observations",
+))
+_AUTHOR_PREFIX = re.compile(r"\b(?:according\s+to|by|authors?\s*:)\s*$", re.I)
+_AUTHOR_REPORT = re.compile(r"\s*(?:reported|reports|measured|found|showed|concluded|demonstrated)\b", re.I)
 _BIBCODE = re.compile(r"(?<!\w)[12]\d{3}[A-Za-z0-9.&]{14}[A-Za-z](?!\w)")
 _BOUNDARY = re.compile(
     r"[.!?;](?=\s|$)|\n[ \t]*\n|(?=\n[ \t]*(?:[-*+]|\d+[.)]|#{1,6})[ \t]+)"
@@ -175,6 +183,10 @@ def unsourced_attributions(answer: str, evidence: Evidence) -> list[str]:
         if claim.start() < previous_end:
             continue
         previous_end = claim.end()
+        if (claim.re is _CITATIONS[-1] and claim["names"].casefold() in _DATE_LABELS
+                and not _AUTHOR_PREFIX.search(answer[:claim.start()])
+                and not _AUTHOR_REPORT.match(answer[claim.end():])):
+            continue
         left, right = _context(answer, claim.start(), claim.end())
         if _not_asserted(answer, claim.start(), claim.end(), left, right):
             continue

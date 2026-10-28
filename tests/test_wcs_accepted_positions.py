@@ -30,6 +30,88 @@ def _wcs(ra=150.0, dec=-30.0, scale=0.6):
     return wcs
 
 
+@pytest.mark.parametrize("backend", ["anet", "atlas"])
+@pytest.mark.parametrize("coefficient", [.001, -.001, .01])
+def test_folded_sip_solution_is_rejected_before_header_writes(
+    monkeypatch, tmp_path, backend, coefficient,
+):
+    solution = _wcs()
+    solution.wcs.ctype = ["RA---TAN-SIP", "DEC--TAN-SIP"]
+    a, b = np.zeros((3, 3)), np.zeros((3, 3))
+    b[0, 2] = coefficient
+    solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
+    # dv'/dv = 1+2*b*v vanishes inside this actual detector, although CD
+    # remains nonsingular and every sampled forward coordinate is finite.
+    fold_y = -1/(2*coefficient) + solution.wcs.crpix[1]-1
+    assert -.5 < fold_y < HEIGHT-.5
+    world = solution.all_pix2world([[WIDTH/2, fold_y-1], [WIDTH/2, fold_y+1]], 0)
+    np.testing.assert_allclose(world[0], world[1], atol=1e-10, rtol=0)
+    result, header, before = _run(monkeypatch, tmp_path, solution, backend=backend)
+    assert result.wcs is None
+    assert header == before
+    assert result.catalog_sources == ()
+
+
+@pytest.mark.parametrize("coefficient", [0., 1e-5, -1e-5, .0008])
+def test_invertible_sip_solution_is_still_accepted(monkeypatch, tmp_path, coefficient):
+    solution = _wcs()
+    solution.wcs.ctype = ["RA---TAN-SIP", "DEC--TAN-SIP"]
+    a, b = np.zeros((3, 3)), np.zeros((3, 3))
+    b[0, 2] = coefficient
+    solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
+    result, header, _ = _run(monkeypatch, tmp_path, solution)
+    assert result.wcs is not None
+    assert header["CTYPE1"] == "RA---TAN-SIP"
+
+
+def test_a_narrow_sip_fold_between_sampling_points_is_rejected():
+    solution = _wcs()
+    solution.wcs.ctype = ["RA---TAN-SIP", "DEC--TAN-SIP"]
+    a, b = np.zeros((4, 4)), np.zeros((4, 4))
+    center, half_width = 100.125, .01
+    denominator = center**2-half_width**2
+    b[0, 2], b[0, 3] = -center/denominator, 1/(3*denominator)
+    solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
+    # The derivative is ((v-center)^2-half_width^2)/denominator:
+    # it is negative only within a 0.02-pixel interval, readily missed by
+    # sampling. Polynomial bounds must reject it without finding that point.
+    assert 1+2*b[0, 2]*center+3*b[0, 3]*center**2 < 0
+    accepted, reason = pipeline._accept_solution(
+        solution, expected_parity=None, ra_hint_deg=None, dec_hint_deg=None,
+        width=WIDTH, height=HEIGHT, max_sep_deg=None,
+    )
+    assert not accepted
+    assert "invertible" in reason
+
+
+def test_ignored_sip_terms_cannot_certify_a_folded_actual_mapping():
+    solution = _wcs()
+    solution.wcs.ctype = ["RA---TAN-SIP", "DEC--TAN-SIP"]
+    solution.wcs.crpix = [5., -100.]
+    a, b = np.zeros((3, 3)), np.zeros((3, 3))
+    a[2, 0], a[1, 2] = -.2, .01
+    # Astropy uses total degree <=2 for this order-2 SIP. A[1,2] is
+    # ignored by its actual transform and must not enter our certificate.
+    solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
+    world = solution.all_pix2world([[6., 5.], [7., 5.]], 0)
+    np.testing.assert_allclose(world[0], world[1], atol=1e-12, rtol=0)
+    accepted, _ = pipeline._accept_solution(
+        solution, expected_parity=None, ra_hint_deg=None, dec_hint_deg=None,
+        width=10, height=10, max_sep_deg=None,
+    )
+    assert not accepted
+
+
+def test_monotone_cubic_sip_expansion_is_not_rejected_for_large_coefficients(monkeypatch, tmp_path):
+    solution = _wcs()
+    solution.wcs.ctype = ["RA---TAN-SIP", "DEC--TAN-SIP"]
+    a, b = np.zeros((4, 4)), np.zeros((4, 4))
+    b[0, 3] = 1e-5  # dv'/dv=1+3e-5*v^2 is positive everywhere.
+    solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
+    result, _, _ = _run(monkeypatch, tmp_path, solution)
+    assert result.wcs is not None
+
+
 def _run(monkeypatch, tmp_path, solution, *, backend="anet", hint=(150.0, -30.0), scale=None,
          header_wcs=None):
     header = fits.Header({"NAXIS": 2, "NAXIS1": WIDTH, "NAXIS2": HEIGHT})
@@ -183,8 +265,8 @@ def test_reference_footprint_includes_a_distorted_edge_between_corners(monkeypat
     # its corners. A corners-only footprint would omit that edge's stars.
     a, b = np.zeros((5, 5)), np.zeros((5, 5))
     half_width = WIDTH / 2
-    b[0, 2] = 0.008
-    b[2, 2] = -0.008 / half_width**2
+    b[0, 2] = 0.0008
+    b[2, 2] = -0.0008 / half_width**2
     solution.sip = Sip(a, b, None, None, solution.wcs.crpix)
     edge = solution.pixel_to_world((WIDTH - 1) / 2, 0).icrs
     calls = []

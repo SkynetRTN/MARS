@@ -10,6 +10,53 @@ from algorithms.pulsar import periodogram, significance
 from tools import pulsar
 
 
+@pytest.mark.parametrize("origin", [0., 20., 1e6])
+def test_exact_nyquist_power_and_residual_ignore_time_origin(tmp_path, artifact_dir, origin):
+    path = tmp_path / "nyquist.ecsv"
+    values = np.arange(64.)
+    Table({"time_s": origin + np.arange(64)*.25, "source1": values}).write(path)
+    result = pulsar.compute_pulsar_periodogram(
+        path, start=.5, stop=.501, steps=1, subtract_background=False,
+    )
+    alternating = (-1.)**np.arange(64)
+    response = values-values.mean()
+    explained = (response @ alternating)**2 / (alternating @ alternating)
+    expected = explained / (2*np.var(values))
+    assert result.errors == []
+    assert result.peak_power == pytest.approx(expected, rel=1e-12)
+    assert result.peak_residual_fraction == pytest.approx(1-explained/(response @ response))
+    saved = Table.read(result.artifact.path)
+    assert saved["power"][0] == pytest.approx(expected, rel=1e-12)
+
+
+@pytest.mark.parametrize("origin", [0., 20., 1e6])
+def test_dc_sampling_aliases_cannot_fit_phase_roundoff(tmp_path, artifact_dir, origin):
+    path = tmp_path / "aliases.ecsv"
+    Table({"time_s": origin+np.arange(64)*.25, "source1": np.arange(64.)}).write(path)
+    result = pulsar.compute_pulsar_periodogram(
+        path, freq_mode=True, start=4., stop=16., steps=3, subtract_background=False,
+    )
+    assert result.errors == []
+    saved = Table.read(result.artifact.path)
+    assert list(saved["frequency_hz"]) == [4., 8., 12.]
+    np.testing.assert_allclose(saved["power"], 0., atol=1e-24)
+    assert result.peak_residual_fraction == pytest.approx(1.)
+    assert result.false_alarm_probability_upper_bound == pytest.approx(1.)
+
+
+def test_old_phase_rank_artifacts_require_recomputation(tmp_path, artifact_dir):
+    path = tmp_path / "old-phase.ecsv"
+    Table({"period_s": [1., 2.], "power": [1., 2.]}, meta={
+        "channel": "sum", "false_alarm_method": significance.METHOD,
+        "false_alarm_statistic": significance.STATISTIC,
+        "false_alarm_flux_centering": significance.CENTERING,
+        "false_alarm_thresholds": {"0.1": 1.5},
+    }).write(path)
+    result = pulsar.plot_pulsar(path)
+    assert "legacy_confidence_uncalibrated" in {warning.code for warning in result.warnings}
+    assert not any("Gaussian noise FAP" in name for name in result.series)
+
+
 @pytest.mark.parametrize("freq_mode", [False, True])
 @pytest.mark.parametrize("value", [0.0, 0.1, -0.1, 1e300])
 def test_public_constant_flux_cannot_publish_a_period_or_false_alarm_bound(

@@ -153,6 +153,8 @@ def _wcs_matrix(wcs_obj: WCS) -> np.ndarray | None:
         if wcs_p.has_cd():
             return np.array(wcs_p.cd, dtype=float)
         return wcs_p.get_pc() @ np.diag([wcs_p.cdelt[0], wcs_p.cdelt[1]])
+    except MemoryError:
+        raise
     except Exception:
         return None
 
@@ -229,6 +231,9 @@ def _solution_footprint(wcs_obj: WCS, width: int, height: int) -> tuple[float, f
     sign, log_det = np.linalg.slogdet(celestial.pixel_scale_matrix)
     if sign == 0 or not math.isfinite(log_det):
         raise ValueError("solution has a singular celestial transformation")
+    from .distortion import validate_distortion
+
+    validate_distortion(celestial, width, height)
     center = celestial.pixel_to_world((width - 1) / 2, (height - 1) / 2).icrs
     xs = np.linspace(-0.5, width - 0.5, 65)
     ys = np.linspace(-0.5, height - 0.5, 65)
@@ -263,6 +268,8 @@ def _accept_solution(
 
     try:
         ra_result, dec_result, radius = _solution_footprint(wcs_obj, width, height)
+    except MemoryError:
+        raise
     except Exception as exc:
         return False, f"invalid solution footprint: {exc}"
 
@@ -337,6 +344,8 @@ def _parse_ra_hours(val) -> float | None:
             try:
                 h, m, s = parts
                 return int(h.strip()) + int(m.strip()) / 60.0 + float(s.strip().replace(",", ".")) / 3600.0
+            except MemoryError:
+                raise
             except Exception:
                 continue
     return None
@@ -361,6 +370,8 @@ def _parse_dec_deg(val) -> float | None:
                 d = d.strip()
                 sign = -1 if d.startswith("-") else 1
                 return sign * (abs(int(d)) + int(m.strip()) / 60.0 + float(s.strip().replace(",", ".")) / 3600.0)
+            except MemoryError:
+                raise
             except Exception:
                 continue
     return None
@@ -456,6 +467,8 @@ def _load_atlas_catalog_sources(
     try:
         catalog_name, catalog_root = atlas_config.resolve_catalog()
         catalog_index = get_catalog_spec(catalog_name).index_factory(catalog_root)
+    except MemoryError:
+        raise
     except Exception:
         logger.exception("Failed to initialize Atlas catalog index")
         return []
@@ -475,6 +488,8 @@ def _load_atlas_catalog_sources(
                     for lo, hi in ra_intervals]
     except ValueError:
         raise  # Operational budgets must not masquerade as an empty catalog.
+    except MemoryError:
+        raise
     except Exception:
         logger.exception("Failed to query Atlas catalog %s", catalog_name)
         return []
@@ -628,6 +643,8 @@ def solve_wcs(
                 ra_hint_hours = float(ra_deg_g % 360) / 15.0
             if dec_deg_g is not None:
                 dec_hint_deg = float(dec_deg_g)
+        except MemoryError:
+            raise
         except Exception:
             # Was a silent pass: WCS-22's J2000 equinox lost the hint here.
             logger.warning("solve_wcs: could not read a pointing hint from the header",
@@ -732,6 +749,8 @@ def solve_wcs(
                     else:
                         try:
                             flux_values.append(float(source.flux))
+                        except MemoryError:
+                            raise
                         except Exception:
                             flux_valid = False
 
@@ -935,6 +954,8 @@ def solve_wcs(
                     "solve_wcs: Atlas no solution in %.2fs — file_id=%s", elapsed, file_id
                 )
 
+    except MemoryError:
+        raise
     except Exception as exc:
         backend = attempts[-1] if len(attempts) > first_attempt else "solver"
         failures.append(f"{backend}: {exc}")
@@ -1006,6 +1027,8 @@ def solve_wcs(
         try:
             cdelt1 = float(wcs_params.cdelt[0])
             cdelt2 = float(wcs_params.cdelt[1])
+        except MemoryError:
+            raise
         except Exception:
             cdelt1 = None
             cdelt2 = None

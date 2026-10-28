@@ -88,3 +88,13 @@ acceptance/header writes. Four backend/result regressions reproduce the gap
 before the fix; a valid small anisotropic matrix remains accepted. This closes
 the earlier singular-geometry acceptance claim without changing catalog or
 solver arithmetic. See [the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).
+
+The adversarial follow-up extends validation to the nonlinear SIP map. A fixed
+preconditioner and outward-rounded polynomial derivative bounds certify a
+positive-definite symmetric Jacobian across the detector, with bounded
+subdivision where needed. This sufficient global injectivity check rejects
+folds between sampled positions before either backend writes a header. Maps
+that cannot be certified, including lookup-table distortions, are refused;
+this is conservative acceptance, not support for every invertible distortion.
+Footprint containment between boundary samples remains an estimate. Regressions
+include narrow folds, valid monotone expansions and the curved-edge query case.
