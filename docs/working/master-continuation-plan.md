@@ -314,13 +314,16 @@ Evidence: [query backends](../../algorithms/query/),
 - [ ] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.
-- [ ] **Console first launch.** An installed `mars` with no key or reachable
+- [x] **Console first launch.** An installed `mars` with no key or reachable
   model exits before its interface opens, telling the user to edit "the
   repository's .env", which an installed copy has neither of nor reads.
   `../installing.md` does not cover the console, and the default Ollama
   model's `-mlx` tag may exist only on Apple Silicon. A clean install on
   each supported OS must reach a working session or an accurate next step.
-  *In progress (2026-10-26):* the message now depends on the install (a
+  *Done 2026-10-28:* a clean install on each supported OS (a fresh Mac,
+  Windows on ARM, a fresh Fedora 44 container) gave an accurate next step,
+  and the Mac and Windows reached working sessions; details below.
+  *2026-10-26:* the message now depends on the install (a
   checkout's `.env`, or the shell for an installed copy) and offers
   `mars --backend ollama`; a missing Ollama model lists what the daemon
   holds with the exact command to pick one or `ollama pull` it.
