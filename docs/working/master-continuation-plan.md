@@ -226,8 +226,10 @@ Evidence: [query backends](../../algorithms/query/),
   one), an offline start serving the newest cached release, a pin to rc5,
   and a start from a folder holding a planted `re.py` and `uv.toml`, each
   serving 55 tools. `uv tool install` on the x64 Python: install 29 s,
-  `self-test` 113 s, passing. Remaining: both apps on the ARM64 VM, and
-  the changed CI jobs, which have not run (the Release dry run).
+  `self-test` 113 s, passing. CI's runtime-containment job passed on
+  `windows-11-arm` with the x64 Python (run 40608763583, 2026-10-27, 146 s).
+  Remaining: both apps on the ARM64 VM, and the two Release jobs moved to
+  `windows-11-arm`, which have not run (the Release dry run).
 - [ ] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
