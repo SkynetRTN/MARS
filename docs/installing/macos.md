@@ -76,6 +76,23 @@ MARS's own check runs the same release without either app (needs uv):
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
 ```
 
+## Plate solving (optional)
+
+Solving a frame's sky position needs astrometry.net, a program installed on
+your Mac rather than part of MARS, and index files for your images' field of
+view. Without them, everything else works and plate solving reports that no
+solver is available.
+
+```bash
+brew install astrometry-net
+solve-field --help        # check it is installed
+```
+
+Then download index files and set `ANET_INDEX_PATH` to their folder, as
+described in [Plate solving](../installing.md#plate-solving). The Claude
+Desktop extension has no setting for it yet, so plate solving works through
+Codex, Claude Code or the `mars` console, not in Claude Desktop.
+
 ## Logs
 
 | App | Where |

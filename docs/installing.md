@@ -29,6 +29,11 @@ found, uv's command directory is not on your `PATH` yet: run
 `uv tool update-shell` and open a new shell, or call it by its full path
 (below).
 
+**Plate solving is a machine dependency.** It needs the astrometry.net
+solver and its index files installed on your machine, which no MARS install
+route provides; without them, every other tool works. See
+[Plate solving](#plate-solving).
+
 **Windows on ARM:** `--python 3.13` picks the native ARM64 Python, for which
 `sep` and `pyerfa` have no wheels. Name the x64 build, which Windows runs
 under emulation:
@@ -256,9 +261,61 @@ data locations at startup. After upgrading MARS, run `mars-mcp fetch-data` again
 it checks what is installed against the new release's pins, keeps a copy whose
 bytes still match, and downloads only what changed.
 
-Plate solving (`solve_astrometry`) needs astrometry.net index files
-(`ANET_INDEX_PATH`) or a local UCAC catalogue (`ATLAS_CATALOG_ROOT`), which
-you supply yourself. Without them, it reports `solver_unavailable`.
+Plate solving needs software and data of its own, installed on your machine;
+see [Plate solving](#plate-solving).
+
+## Plate solving
+
+`solve_astrometry` needs two things MARS does not ship, because they are
+installed on your machine rather than in Python: the **astrometry.net solver**
+(the `solve-field` program) and its **index files**. Without them it reports
+`solver_unavailable`, and everything else in MARS works as usual.
+
+**1. Install the solver** from your system's package manager:
+
+| System | Command |
+| --- | --- |
+| macOS (Homebrew) | `brew install astrometry-net` |
+| Fedora | `sudo dnf install astrometry` |
+| Debian, Ubuntu | `sudo apt install astrometry.net` |
+| Windows | No native build. astrometry.net runs under WSL or Cygwin, and MARS has not been run against either; on Windows, see ATLAS below. |
+
+Check it with `solve-field --help`. MARS finds `solve-field` on the `PATH`
+of whatever starts it, so install it where that program looks: a desktop app
+started from the Dock or Start menu may not see the folders your shell adds.
+
+**2. Get index files** covering your images' field of view. astrometry.net's
+rule is indexes whose sizes run from about 10% to 100% of the image's width:
+
+| Index series | Field of view it serves | Where |
+| --- | --- | --- |
+| 4107–4119 (Tycho-2) | wide: 22 arcmin and up | Fedora `astrometry-data-4107-4119` (340 MB); Debian/Ubuntu `astrometry-data-tycho2` |
+| 5200 or 4200 series | narrow: 2–22 arcmin | <http://data.astrometry.net/> (tens of GB for the smallest scales); Debian/Ubuntu `astrometry-data-2mass-*` (contrib) |
+
+The bundled frames are about 10 arcmin wide and need the narrow series; the
+4200 series solves them.
+
+**3. Point MARS at them** with `ANET_INDEX_PATH`: the folder, or folders,
+that hold the `index-*.fits` files directly (a parent folder is refused),
+joined with `:` (`;` on Windows). For example, with Fedora's package:
+
+```bash
+export ANET_INDEX_PATH=/usr/share/astrometry/data
+```
+
+Set it where the program that runs MARS reads its environment: your shell
+for `mars`, `mars-mcp` and Claude Code; the environment the ChatGPT app starts
+in for the Codex plugin, which forwards it. The Claude Desktop extension has
+no setting for it yet, so plate solving is not available there.
+
+Keep `ANET_INDEX_PATH` to the indexes your fields need. astrometry.net loads
+every index it is given at once, and MARS runs a solve under a 4 GiB memory
+limit, so a large set (the whole 4200 series is about 32 GB) fails to load.
+
+**ATLAS** is MARS's second solver: pure Python, so it needs no program, only a
+local UCAC4 or UCAC5 catalogue (`ATLAS_CATALOG_ROOT`, and `ATLAS_CATALOG` for
+UCAC4). It solves only near a known pointing and scale, never blind. It has
+not been tested on Windows.
 
 ## Where things go
 

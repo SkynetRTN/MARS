@@ -79,6 +79,16 @@ MARS's own check runs the same release without either app (needs uv):
 uvx --python cpython-3.13-windows-x86_64-none --from "skynet-mars[mcp]@latest" mars-mcp self-test
 ```
 
+## Plate solving (optional)
+
+Solving a frame's sky position uses astrometry.net, a program installed on
+the machine rather than part of MARS, and it has no native Windows build.
+MARS has not been run against it under WSL or Cygwin, so on Windows plate
+solving is limited to MARS's ATLAS solver, which needs a local UCAC4 or UCAC5
+catalogue and solves only near a known pointing; it has not been tested on
+Windows. Everything else in MARS works without either. See
+[Plate solving](../installing.md#plate-solving).
+
 ## Logs
 
 | App | Where |

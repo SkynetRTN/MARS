@@ -435,9 +435,34 @@ Evidence: [query backends](../../algorithms/query/),
   - **Open, for the maintainer:** the worker's 4 GiB address-space cap stops
     astrometry.net mapping a large index set (the 4200 series is about
     32 GB), so an opt-in user's all-sky solve fails in any worker, MCP
-    included; users without local plate solving are unaffected. And a
+    included; users without local plate solving are unaffected. The worker
+    reads the user's index files where they are, it copies nothing; the
+    load comes from `inparallel` in the engine config MARS writes
+    (`algorithms/skylib_lite/astrometry/anet/backend.py`, extracted from
+    Skynet), which loads every index at once. Options: drop `inparallel`
+    (one index at a time: slower, bounded), make the cap configurable, or
+    keep both and document the limit (done in `../installing.md`). And a
     crashed `solve-field` is reported as "no solution" with status `ok`,
     which is how the `PYTHONPATH` failure first passed as ✓.
+- [x] **Plate solving is documented as a machine dependency.** The
+  maintainer's request (2026-10-28): the install guides say that plate
+  solving needs astrometry.net and its index files installed on the user's
+  machine, which no MARS route provides. *Done 2026-10-28:* a
+  [Plate solving](../installing.md#plate-solving) section (the solver per
+  system: Homebrew `astrometry-net`, Fedora `astrometry`, Debian and Ubuntu
+  `astrometry.net`, none native on Windows; index series by field of view;
+  `ANET_INDEX_PATH`; the memory limit; ATLAS), a pointer from Install, and a
+  short section in each platform guide. Package names checked against
+  Homebrew's and Debian's package indexes and this host's Fedora packages.
+- [ ] **Catalog location setting** (deferred). One environment variable,
+  set once when MARS is installed (in the shell or a `.env`), names the
+  folder that holds the user's own catalogs -- astrometry.net index files,
+  the UCAC catalogue -- and MARS finds the solvers' data under it, instead
+  of `ANET_INDEX_PATH` and `ATLAS_CATALOG_ROOT` naming each leaf folder. On
+  the development host it is `/srv/agents/catalogs`. The install guides
+  say that catalogs are set with this variable, and the Claude Desktop
+  extension gains a setting for it: today it passes none, so plate solving
+  cannot be configured there.
 - [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
   other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
   documentation and behavior changes, which the repository keeps in

@@ -74,6 +74,24 @@ export UV_PYTHON_DOWNLOADS=automatic
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
 ```
 
+## Plate solving (optional)
+
+Solving a frame's sky position needs astrometry.net, a program installed on
+your machine rather than part of MARS, and index files for your images' field
+of view. Without them, everything else works and plate solving reports that
+no solver is available.
+
+```bash
+sudo dnf install astrometry astrometry-data-4107-4119   # Fedora; wide-field indexes
+sudo apt install astrometry.net astrometry-data-tycho2  # Debian, Ubuntu
+solve-field --help                                      # check it is installed
+export ANET_INDEX_PATH=/usr/share/astrometry/data       # Fedora's index folder
+```
+
+The packaged indexes serve fields 22 arcmin and wider; narrower fields need
+the 5200 or 4200 series. See [Plate solving](../installing.md#plate-solving)
+for which to get and how to set `ANET_INDEX_PATH` for Codex.
+
 ## Logs
 
 Codex logs to `~/.codex/log/` and keeps threads in `~/.codex/sessions/`.
