@@ -335,3 +335,37 @@ def test_one_warning_per_code_when_a_solve_skipped_a_backend(fake_anet, fake_atl
     matching = [w for w in summary.warnings if w.code == "solver_backend_unavailable"]
     assert len(matching) == 1
     assert "One index dir was ignored." in matching[0].message and "boom" in matching[0].message
+
+
+# --- a crashed solve-field is an error, everywhere it is reported -------------
+
+
+def test_a_crashed_solve_field_is_an_error_not_a_miss(fake_anet, monkeypatch, tmp_path):
+    """A solve-field that exited non-zero (seen when its Python helpers could
+    not import) used to come back with no status, so the console and the MCP
+    surface showed a success; only a search that ran may be a miss."""
+
+    from algorithms.skylib_lite.astrometry.anet.errors import SolveFieldFailed
+    from tools.mcp.surface import normalize_result, result_is_error
+
+    def crashed(request, config):
+        raise SolveFieldFailed(["solve-field"], 255, stderr="ModuleNotFoundError: numpy")
+
+    monkeypatch.setattr("algorithms.wcs.wcs.anet_solve_field_glob", crashed)
+    summary = solve_astrometry(_frame(tmp_path, "hinted"), index_path=fake_anet)
+
+    assert summary.status == "error"
+    assert [error.code for error in summary.errors] == ["solver_failed"]
+    assert "solve-field failed (exit 255)" in summary.errors[0].message
+    payload = normalize_result("solve_astrometry", summary)
+    assert payload["status"] == "error"
+    assert result_is_error(payload)
+
+
+def test_a_solve_and_a_genuine_miss_are_both_ok(fake_anet, monkeypatch, tmp_path):
+    monkeypatch.setattr("algorithms.wcs.wcs.anet_solve_field_glob",
+                        lambda request, config: SolveSolution(backend="astrometry.net"))
+    miss = solve_astrometry(_frame(tmp_path, "hinted"), index_path=fake_anet)
+
+    assert miss.status == "ok"
+    assert miss.model_dump()["status"] == "ok"

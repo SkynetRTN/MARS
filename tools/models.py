@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 __all__ = [
     "MARSToolModel",
@@ -168,6 +168,20 @@ class WcsSummary(MARSToolModel):
     search: WcsSearchSummary | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status(self) -> Literal["ok", "error"]:
+        """``error`` whenever the call failed, ``ok`` otherwise.
+
+        The console and the MCP surface decide a failure from ``status``, and
+        this model had none: a ``solve-field`` that crashed came back with a
+        ``solver_failed`` error and was still shown, and reported, as a
+        success. A genuine miss -- a search that ran and found nothing -- is
+        ``ok`` with a ``no_solution`` warning, as before.
+        """
+
+        return "error" if self.errors else "ok"
 
 
 class CatalogSummary(MARSToolModel):

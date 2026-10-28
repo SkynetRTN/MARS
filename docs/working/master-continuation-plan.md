@@ -445,9 +445,18 @@ Evidence: [query backends](../../algorithms/query/),
     which used to fail, bounded solves in 9.2 s and all-sky in 22.0 s,
     worker start included. Ctrl+C 10 s into a real all-sky solve stopped it
     in 0.53 s, the solver gone and the console open; Ctrl+Q exited in 1.03 s.
-  - **Open, for the maintainer:** a crashed `solve-field` is reported as "no
-    solution" with status `ok`, which is how the `PYTHONPATH` failure first
-    passed as ✓.
+  - **A crashed `solve-field` is an error (2026-10-28, the maintainer's
+    decision).** The `solver_failed` error was in the result all along, but
+    `WcsSummary` had no `status`, and the console and the MCP surface decide
+    a failure from `status` alone: the crash showed as ✓ and reached MCP
+    clients as a success. `WcsSummary.status` is now computed, `error`
+    whenever `errors` is not empty; a genuine miss stays `ok` with its
+    `no_solution` warning (`tests/test_m3_wcs_failures.py`).
+  - **Open, for the maintainer:** 20 other result models carry `errors` but
+    no `status` (the pulsar, variable-star, zero-point and photometry
+    results among them), so an error in any of them is shown and reported
+    the same way. Some may use `errors` alongside a usable result, so a
+    blanket "errors means failed" rule needs checking model by model.
 - [x] **Plate solving is documented as a machine dependency.** The
   maintainer's request (2026-10-28): the install guides say that plate
   solving needs astrometry.net and its index files installed on the user's
