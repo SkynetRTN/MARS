@@ -47,6 +47,27 @@ def test_packs_what_mcpb_pack_packs_and_skips_ignored_files(tmp_path):
             assert archive.read(name) == (_EXT / name).read_bytes()
 
 
+def test_what_mcpb_pack_always_leaves_out_is_never_packed(tmp_path):
+    """A local pack must not ship a key: mcpb's own excludes apply whatever
+    .mcpbignore says (EXCLUDE_PATTERNS, @anthropic-ai/mcpb 2.1.2)."""
+
+    source = _copy(tmp_path)
+    (source / ".env").write_text("ADS_DEV_KEY=not-a-real-key")
+    (source / ".env.production").write_text("x")
+    (source / ".DS_Store").write_bytes(b"x")
+    (source / "src" / ".DS_Store").write_bytes(b"x")
+    (source / "mars-old.mcpb").write_bytes(b"x")
+    (source / "debug.log").write_text("x")
+    (source / ".git").mkdir()
+    (source / ".git" / "config").write_text("x")
+    (source / "node_modules" / ".cache").mkdir(parents=True)
+    (source / "node_modules" / ".cache" / "x").write_text("x")
+
+    names = sorted(p.as_posix() for p in pack_extension.packed_files(source))
+
+    assert names == _PACKED
+
+
 def test_the_archive_is_deterministic(tmp_path):
     first, second = tmp_path / "a.mcpb", tmp_path / "b.mcpb"
     pack_extension.pack(_copy(tmp_path), first)

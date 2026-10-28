@@ -11,7 +11,7 @@ import pytest
 from textual.widgets import Button, Static
 
 from tools.agent.approval import Decision
-from tools.agent.events import ToolCallProposed
+from tools.agent.events import SessionFinished, ToolCallProposed
 from tools.agent.policy import SessionPolicy
 from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import BackendUnavailableError
@@ -108,6 +108,7 @@ def test_ollama_not_installed_says_where_to_get_it(monkeypatch):
     then a command the person does not have."""
 
     monkeypatch.setattr(backends.shutil, "which", lambda name: None)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
 
     message = backends.unavailable_message(
         "ollama/qwen3:8b", BackendUnavailableError("OLLAMA_BASE_URL")
@@ -115,6 +116,18 @@ def test_ollama_not_installed_says_where_to_get_it(monkeypatch):
 
     assert "Ollama is not installed here" in message
     assert "https://ollama.com" in message
+
+
+def test_a_remote_ollama_that_does_not_answer_is_not_called_uninstalled(monkeypatch):
+    monkeypatch.setattr(backends.shutil, "which", lambda name: None)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-box:11434/v1")
+
+    message = backends.unavailable_message(
+        "ollama/qwen3:8b", BackendUnavailableError("OLLAMA_BASE_URL")
+    )
+
+    assert "not installed" not in message
+    assert "no Ollama daemon answered" in message
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +315,32 @@ def test_approve_shows_and_resets_allow_always():
     _run(scenario())
 
 
+def test_a_finished_question_takes_its_allow_always_with_it(monkeypatch):
+    """Between questions, /status and /approve describe the policy the next
+    question starts with, not the one that just ended."""
+
+    from tools.tui import app as tui_app
+
+    def fake_run_session(_text, **_kwargs):
+        yield SessionFinished(outcome="end_turn", manifest_path="")
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            worker = app.run_prompt("plot it")
+            app.policy._always_allowed.add(("plot_pulsar", frozenset({"writes"})))
+            async with asyncio.timeout(2):
+                while not worker.is_finished or app._active_worker is not None:
+                    await pilot.pause()
+            assert app.policy.always_allowed == frozenset()
+            await _type(pilot, "/status")
+            assert "Always allowed (this question): none" in _rendered(app)
+
+    _run(scenario())
+
+
 def test_new_clears_the_conversation_without_restarting():
     async def scenario() -> None:
         app = MARSApp(backend=object())
@@ -433,6 +472,51 @@ def test_an_allow_as_the_approval_opens_is_ignored():
     _run(scenario())
 
     assert decisions == []
+
+
+def test_an_n_typed_as_the_approval_opens_does_not_deny():
+    """The `n` in "and", from a note typed for the prompt, must not refuse a
+    call whose dialog appeared under it; once the dialog has been up a
+    moment, `n` denies."""
+
+    decisions: list[Decision | None] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
+            app.push_screen(modal, decisions.append)
+            await pilot.pause()
+            await pilot.press(*"and then")
+            await pilot.pause()
+            assert app.screen is modal
+            modal._opened_at -= ApprovalModal.GRACE_S
+            await pilot.press("n")
+            await pilot.pause()
+
+    _run(scenario())
+
+    assert decisions == [Decision.DENY]
+
+
+def test_a_click_on_allow_is_never_held_back():
+    """A click cannot have been typed for the prompt, so the grace period
+    that holds back keys does not swallow it."""
+
+    decisions: list[Decision | None] = []
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            modal = ApprovalModal(ToolCallProposed("c1", "plot_pulsar", {}))
+            app.push_screen(modal, decisions.append)
+            await pilot.pause()
+            await pilot.click("#allow")
+            await pilot.pause()
+
+    _run(scenario())
+
+    assert decisions == [Decision.ALLOW]
 
 
 def test_a_tool_listing_line_says_what_the_tool_does():

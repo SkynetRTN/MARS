@@ -6,8 +6,10 @@ extension folder; ``mcpb pack`` makes the same thing, but would run npm's
 unlocked dependency tree on the bytes users install, so the release packs here
 and runs ``mcpb validate`` only in a job whose output nothing uses.
 
-Packs every file under the folder except ``.mcpbignore`` itself and what it
-lists, one pattern per line; blank lines and ``#`` comments are skipped. A
+Packs every file under the folder except what ``mcpb pack`` always leaves
+out (:data:`DEFAULT_EXCLUDES`: ``.env*``, ``.git``, ``.DS_Store``, older
+``.mcpb`` files and the like), ``.mcpbignore`` itself, and what it lists, one
+pattern per line; blank lines and ``#`` comments are skipped. A
 pattern ending in ``/`` excludes a directory: anywhere in the tree when it
 has no other slash, at that path when it does. Any other pattern is matched
 against each file's name and its path. ``!`` negations are refused rather
@@ -27,6 +29,21 @@ from pathlib import Path
 
 IGNORE_FILE = ".mcpbignore"
 TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+#: ``mcpb pack``'s own excludes, applied before ``.mcpbignore`` as it does:
+#: ``EXCLUDE_PATTERNS`` in ``@anthropic-ai/mcpb`` 2.1.2's
+#: ``dist/node/files.js``. As in a ``.gitignore``, a pattern with no slash
+#: matches a file or directory of that name at any depth.
+DEFAULT_EXCLUDES = (
+    ".DS_Store", "Thumbs.db", ".gitignore", ".git", ".mcpbignore", "*.log",
+    ".env*", ".npm", ".npmrc", ".yarnrc", ".yarn", ".eslintrc",
+    ".editorconfig", ".prettierrc", ".prettierignore", ".eslintignore",
+    ".nycrc", ".babelrc", ".pnp.*", "node_modules/.cache",
+    "node_modules/.bin", "*.map", ".env.local", ".env.*.local",
+    "npm-debug.log*", "yarn-debug.log*", "yarn-error.log*",
+    "package-lock.json", "yarn.lock", "*.mcpb", "*.d.ts", "*.tsbuildinfo",
+    "tsconfig.json",
+)
 
 
 def read_patterns(source: Path) -> list[str]:
@@ -53,6 +70,18 @@ def _directory_excluded(relative: Path, pattern: str) -> bool:
     return any(fnmatch.fnmatch(part, pattern) for part in parents)
 
 
+def _default_excluded(relative: Path) -> bool:
+    parts = relative.parts
+    for pattern in DEFAULT_EXCLUDES:
+        if "/" in pattern:
+            prefixes = ("/".join(parts[: depth + 1]) for depth in range(len(parts)))
+            if any(fnmatch.fnmatch(prefix, pattern) for prefix in prefixes):
+                return True
+        elif any(fnmatch.fnmatch(part, pattern) for part in parts):
+            return True
+    return False
+
+
 def packed_files(source: Path) -> list[Path]:
     patterns = read_patterns(source)
     directories = [p for p in patterns if p.endswith("/")]
@@ -62,7 +91,7 @@ def packed_files(source: Path) -> list[Path]:
         if not path.is_file():
             continue
         relative = path.relative_to(source)
-        if relative.as_posix() == IGNORE_FILE:
+        if _default_excluded(relative):
             continue
         if any(_directory_excluded(relative, d) for d in directories):
             continue

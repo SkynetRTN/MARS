@@ -387,9 +387,12 @@ Evidence: [query backends](../../algorithms/query/),
   its text, plus a next step. `/status`, `/tools`, `/approve`, `/prompt` and
   `/new` work, and a test requires a handler for every command. Approvals
   work from the keyboard (Tab or arrows, Enter; `n` or Esc denies). No
-  letter allows, Deny has focus, and an allow in the first half second is
-  ignored, so typing meant for the prompt cannot approve a call.
-  "Allow always" still lasts one question, as a test pins.
+  letter allows, Deny has focus, and every key but Esc is held back for
+  the first half second, so typing meant for the prompt (an Enter, or the
+  `n` in "and") cannot answer a call; a click acts at once (2026-10-28,
+  after the code review). "Allow always" still lasts one question, as a
+  test pins, and ends with it: between questions `/status` and `/approve`
+  describe the next question's fresh policy.
   *Done 2026-10-27:* by the maintainer's decision, a resumed session shows
   both sides, in order: each question or mid-run note, then the model's
   answers. Tool calls and artifacts are not replayed.

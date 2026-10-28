@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -105,13 +105,15 @@ class ApprovalModal(ModalScreen[Decision]):
     The prompt stays live during a turn, so the dialog can open under someone
     mid-sentence, and the rest of their sentence lands here. So no letter
     allows anything -- an earlier ``y``/``a`` binding approved a call on the
-    ``a`` in "galaxy" -- **Deny** has focus when the dialog opens, so a stray
-    Enter refuses, and an allow within :attr:`GRACE_S` of opening is ignored
-    (a deny never is: refusing early is always safe).
+    ``a`` in "galaxy" -- **Deny** has focus when the dialog opens, and for
+    :attr:`GRACE_S` after opening every key but Esc is held back, so neither
+    an Enter nor the ``n`` in "and" answers a call nobody has read yet. A
+    click is never held back: it cannot have been typed for the prompt.
     """
 
-    #: How long after opening the dialog ignores an allow. Long enough to
-    #: absorb an Enter typed for the prompt; short enough not to be noticed.
+    #: How long after opening the dialog holds back keys. Long enough to
+    #: absorb the tail of a sentence typed for the prompt; short enough not
+    #: to be noticed.
     GRACE_S = 0.5
 
     BINDINGS = [
@@ -210,16 +212,20 @@ class ApprovalModal(ModalScreen[Decision]):
             rendered = rendered[:_MAX_ARGUMENT_PREVIEW] + "\n… truncated"
         return Text(rendered)
 
+    def on_key(self, event: events.Key) -> None:
+        """Hold back keys typed for the prompt as the dialog opens."""
+
+        opened = getattr(self, "_opened_at", None)
+        early = opened is None or time.monotonic() - opened < self.GRACE_S
+        if early and event.key != "escape":
+            event.stop()
+            event.prevent_default()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.action_decide(event.button.id or "deny")
 
     def action_decide(self, choice: str) -> None:
-        decision = self._DECISIONS.get(choice, Decision.DENY)
-        opened = getattr(self, "_opened_at", None)
-        early = opened is None or time.monotonic() - opened < self.GRACE_S
-        if decision is not Decision.DENY and early:
-            return
-        self.dismiss(decision)
+        self.dismiss(self._DECISIONS.get(choice, Decision.DENY))
 
 
 class MARSApp(App[None]):
@@ -546,6 +552,10 @@ class MARSApp(App[None]):
             in {WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS}
         ):
             self._active_worker = None
+            # "Allow always" lasts one question: the finished one's choices
+            # end with it, so /status and /approve between questions speak
+            # of the policy the next question will start with.
+            self.policy = SessionPolicy(self._request_approval)
             self._refresh_status()
             if message.state is WorkerState.SUCCESS:
                 self._finish_prompt_if_ready()

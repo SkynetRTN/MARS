@@ -21,6 +21,7 @@ what pays the probe.
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -279,7 +280,9 @@ def _remedy(variable: str, *, running: bool) -> str:
         local = "/backend ollama" if running else "mars --backend ollama"
         return f"no API key. {where}, or use a local model with `{local}`"
     if variable == "OLLAMA_BASE_URL":
-        if shutil.which("ollama") is None:
+        # Only a local daemon needs a local install: with OLLAMA_BASE_URL set,
+        # the daemon that did not answer is wherever it points.
+        if not os.environ.get("OLLAMA_BASE_URL") and shutil.which("ollama") is None:
             return (
                 "Ollama is not installed here. Install it from https://ollama.com "
                 "and start it with `ollama serve`, or point OLLAMA_BASE_URL at a "

@@ -262,6 +262,31 @@ def test_an_edit_to_an_older_skill_is_kept_and_named(tmp_path):
     assert (target / "references" / "mine.md").read_text() == "my notes"
 
 
+def test_a_file_added_to_an_older_skill_is_kept_whatever_its_kind(tmp_path):
+    """The upgrade swaps the whole directory, so a script or note the user
+    added must stop it, not only an edited Markdown file."""
+
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    (target / "scripts").mkdir()
+    (target / "scripts" / "helper.py").write_text("print('mine')", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="scripts/helper.py"):
+        install_native_skill(target)
+    assert (target / "scripts" / "helper.py").read_text() == "print('mine')"
+
+
+def test_desktop_metadata_does_not_block_an_upgrade(tmp_path):
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    (target / ".DS_Store").write_bytes(b"x")
+
+    assert install_native_skill(target) is True
+    assert check_repository_copy(target) == []
+
+
 def test_a_copy_without_a_record_is_refused_with_how_to_proceed(tmp_path):
     from tools.skill import INSTALL_RECORD
 

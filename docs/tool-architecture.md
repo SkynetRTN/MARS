@@ -650,7 +650,7 @@ A test asserts that every registered command has a handler.
 | `F3` / `F4` | Artifact browser · session browser. |
 | `Esc` | Stop the running turn at its next safe point; close a browser. |
 | `o` | In the artifact browser, open the selected file in the desktop handler. |
-| `Tab` / arrows, `Enter`, `n` | In an approval: move between Allow, Allow always and Deny, press the focused one; `n` or `Esc` denies. Deny has focus when it opens, no letter allows, and an allow in the first half second is ignored, so typing meant for the prompt cannot approve a call. |
+| `Tab` / arrows, `Enter`, `n` | In an approval: move between Allow, Allow always and Deny, press the focused one; `n` or `Esc` denies. Deny has focus when it opens, no letter allows, and every key but `Esc` is held back for the first half second, so typing meant for the prompt cannot answer a call; a click acts at once. |
 | `Ctrl+Q` | Quit. |
 
 Everything a run writes is kept: tool artifacts land under

@@ -244,8 +244,16 @@ def _write_record(directory: Path, rendered: dict[str, str]) -> None:
     path.chmod(0o600)
 
 
+#: Files a desktop writes into any folder it shows: never the user's work, and
+#: not worth refusing an upgrade over.
+_DESKTOP_METADATA = frozenset({".DS_Store", "Thumbs.db", "desktop.ini"})
+
+
 def _edited_files(target: Path) -> list[str] | None:
-    """Files changed since the installer wrote them, or ``None`` without a record."""
+    """Files changed or added since the installer wrote them, or ``None``
+    without a record. Every file counts, not only the skill's Markdown: the
+    upgrade replaces the whole directory, so a file the user added is theirs
+    to keep."""
 
     try:
         recorded = json.loads((target / INSTALL_RECORD).read_text(encoding="utf-8"))["files"]
@@ -253,7 +261,12 @@ def _edited_files(target: Path) -> list[str] | None:
         return None
     if not isinstance(recorded, dict):
         return None
-    present = {p.relative_to(target).as_posix() for p in target.rglob("*.md")}
+    present = {
+        p.relative_to(target).as_posix()
+        for p in target.rglob("*")
+        if p.is_file() and p.name not in _DESKTOP_METADATA
+    }
+    present.discard(INSTALL_RECORD)
     edited = set(present - recorded.keys())
     for name, digest in recorded.items():
         try:

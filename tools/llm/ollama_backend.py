@@ -229,9 +229,11 @@ def _refuse_a_truncated_prompt(
     counted = response.usage.input_tokens if response.usage else None
     if not counted:
         return
+    # ensure_ascii=False: an escaped "°" is six characters, one token.
     sent = json.dumps(
         {"messages": _render_messages(messages, system), "tools": list(tools or ())},
         default=str,
+        ensure_ascii=False,
     )
     estimate = len(sent) // _CHARS_PER_TOKEN
     if counted < estimate // 2:
