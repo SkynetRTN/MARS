@@ -778,15 +778,7 @@ class MARSApp(App[None]):
         self._artifact_directory = path.expanduser().resolve().parent
         transcript = self.query_one("#transcript", Transcript)
         transcript.clear()
-        transcript.restore_assistant_text(
-            "\n\n".join(
-                block.text
-                for message in history
-                if message.role == "assistant"
-                for block in message.blocks
-                if isinstance(block, TextBlock)
-            )
-        )
+        transcript.restore_conversation(history)
         session_id = manifest.get("session_id", path.parent.name)
         transcript.append_notice(
             f"Loaded session {session_id}. Artifacts remain available by path."

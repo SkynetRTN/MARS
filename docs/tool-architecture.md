@@ -656,7 +656,9 @@ A test asserts that every registered command has a handler.
 Everything a run writes is kept: tool artifacts land under
 `artifacts/sessions/<session_id>/`, `F3` browses them with image and waveform
 previews, and the session manifest beside them is what `/sessions` and
-`/resume` read back.
+`/resume` read back. A resumed session shows the conversation's words in
+order, each question or mid-run note (`›`) and the model's answers, but not
+its tool calls or artifacts.
 
 **Threading.** The engine is synchronous, so the console runs it in a Textual
 thread worker and posts each event to the UI thread as a message. Approval runs

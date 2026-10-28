@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
@@ -22,6 +24,7 @@ from tools.agent.events import (
     TurnStarted,
     UserMessage,
 )
+from tools.llm.types import Message, TextBlock
 from tools.tui.widgets.tool_node import ToolNode
 
 __all__ = ["Transcript", "ThoughtBlock", "UserEntry"]
@@ -201,13 +204,38 @@ class Transcript(VerticalScroll):
         self._turn_text_start = 0
         self.remove_children()
 
-    def restore_assistant_text(self, text: str) -> None:
-        """Display saved assistant text without replaying tool calls or artifacts."""
+    def restore_conversation(self, history: Sequence[Message]) -> None:
+        """Display a saved conversation's words, in order: what the person
+        typed and what the model answered. Tool calls and artifacts are not
+        replayed.
 
-        self.assistant_text = text
+        Every user-role text block is the person's: the question, or a note
+        typed mid-run, which the engine joins to the message carrying tool
+        results. A message of tool results alone shows nothing, so a run's
+        answers between two of the person's messages stay one block, as they
+        were live.
+        """
+
+        answers: list[str] = []
+        run: list[str] = []
+        for message in history:
+            texts = [
+                block.text
+                for block in message.blocks
+                if isinstance(block, TextBlock) and block.text
+            ]
+            if not texts:
+                continue
+            if message.role == "user":
+                for text in texts:
+                    self.mount(UserEntry(text))
+                self._answer, run = None, []
+            else:
+                answers.extend(texts)
+                run.extend(texts)
+                self._answer_block().update("\n\n".join(run))
+        self.assistant_text = "\n\n".join(answers)
         self._turn_text_start = 0
-        if text:
-            self._answer_block().update(text)
         self.scroll_end(animate=False)
 
     def _deliver_queued(self, event: UserMessage) -> None:

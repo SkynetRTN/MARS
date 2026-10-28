@@ -175,7 +175,7 @@ def test_f4_opens_the_session_browser_without_starting_the_engine():
     _run(scenario())
 
 
-def test_resume_session_restores_assistant_text_without_starting_the_engine(
+def test_resume_session_restores_the_conversation_without_starting_the_engine(
     monkeypatch, tmp_path
 ):
     """Loading a trace prepares its context; only a later prompt may run it."""
@@ -202,12 +202,13 @@ def test_resume_session_restores_assistant_text_without_starting_the_engine(
             transcript = app.query_one("#transcript", Transcript)
             assert "I will look it up." in transcript.assistant_text
             assert "M31 is the Andromeda Galaxy." in transcript.assistant_text
+            assert "› Find M31." in _transcript_text(app)
             assert app.engine_starts == 0
 
     _run(scenario())
 
 
-def test_resume_session_with_tool_history_restores_only_assistant_text(
+def test_resume_session_with_tool_history_restores_only_the_words(
     monkeypatch, tmp_path
 ):
     """A durable tool trace must load without trying to render non-text blocks."""
@@ -266,6 +267,47 @@ def test_resume_session_with_tool_history_restores_only_assistant_text(
             assert transcript.assistant_text == "I will look it up.\n\nM31 is Andromeda."
             assert isinstance(app._history[1].blocks[1], ToolCallBlock)
             assert isinstance(app._history[2].blocks[0], ToolResultBlock)
+            rendered = _transcript_text(app)
+            assert rendered.count("›") == 1, "a tool-result message is not the person's"
+            assert '{"status": "ok"}' not in rendered
+
+    _run(scenario())
+
+
+def test_resume_shows_what_the_person_typed_between_the_answers(monkeypatch, tmp_path):
+    """The maintainer's decision (2026-10-27): a resumed session shows both
+    sides, in order -- each question or mid-run note, then what the model
+    answered to it."""
+
+    from tools.tui import app as tui_app
+
+    manifest = {
+        "session_id": "20260914T120000Z_abcdef123456",
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+            {"role": "assistant", "blocks": [{"type": "text", "text": "M31 is Andromeda."}]},
+            {"role": "user", "blocks": [{"type": "text", "text": "How far away is it?"}]},
+            {"role": "assistant", "blocks": [{"type": "text", "text": "About 2.5 million light-years."}]},
+        ],
+    }
+    monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
+
+    async def scenario() -> None:
+        app = MARSApp(backend=object())
+        async with app.run_test() as pilot:
+            app.resume_session(tmp_path / "session_manifest.json")
+            await pilot.pause()
+
+            rendered = _transcript_text(app)
+            order = [
+                rendered.index("› Find M31."),
+                rendered.index("M31 is Andromeda."),
+                rendered.index("› How far away is it?"),
+                rendered.index("About 2.5 million light-years."),
+            ]
+            assert order == sorted(order)
 
     _run(scenario())
 

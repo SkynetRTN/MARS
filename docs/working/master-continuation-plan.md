@@ -367,8 +367,12 @@ Evidence: [query backends](../../algorithms/query/),
   reports sixel inside tmux. The status line is cut at 80 and at 100
   columns once token counts appear, losing the stop hint, and never names
   Ctrl+Q. `NO_COLOR` was inconclusive: the idle screen is grey either way.
-  Terminal.app and iTerm2 need a person at the Mac.
-- [ ] **Console failures and commands.** A tool that returns an error is
+  *Windows on ARM over SSH (2026-10-27):* renders at 80x24 and 100x34 with
+  half-block graphics; Ctrl+Q quits at once.
+  **Supported terminals (maintainer's decision, 2026-10-27):** on macOS,
+  Terminal.app, the default; iTerm2 is not supported. Terminal.app needs a
+  person at the Mac.
+- [x] **Console failures and commands.** A tool that returns an error is
   marked ✓, and a backend failure mid-turn reports only "Session finished:
   error." `/status`, `/tools`, `/approve`, `/prompt` and `/new` are listed
   in the menu and `/help` but have no handler, so context can be cleared
@@ -385,8 +389,10 @@ Evidence: [query backends](../../algorithms/query/),
   work from the keyboard (Tab or arrows, Enter; `n` or Esc denies). No
   letter allows, Deny has focus, and an allow in the first half second is
   ignored, so typing meant for the prompt cannot approve a call.
-  "Allow always" still lasts one question, as a test pins. Remaining: the
-  maintainer's decision on resume showing only assistant text.
+  "Allow always" still lasts one question, as a test pins.
+  *Done 2026-10-27:* by the maintainer's decision, a resumed session shows
+  both sides, in order: each question or mid-run note, then the model's
+  answers. Tool calls and artifacts are not replayed.
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of
