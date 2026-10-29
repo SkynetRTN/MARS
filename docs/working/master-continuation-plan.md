@@ -79,6 +79,14 @@ tests and 86 expected skips; all 224 warnings were FITS notices. The 92 focused
 calibration tests passed on both supported Python versions; compilation,
 generated guidance and whitespace checks passed.
 
+PR #124's original macOS containment run failed when the call following
+cancellation returned an error; the next run passed. That assertion omitted
+the error details. Investigation separately reproduced healthy workers being
+stopped when temporary cache files disappeared during runtime budget scans.
+Scans now tolerate vanished files/directories while retaining
+entry limits and access-error rejection. Deterministic regressions cover both
+races, and the cancellation assertion now includes the returned error details.
+
 All ten checkpoints and the four final corrections below are complete within
 the recorded limits. Changes remain unmerged into main and unpublished.
 Other release gates remain open. Technical derivations and detailed acceptance
