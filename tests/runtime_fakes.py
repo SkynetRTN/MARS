@@ -77,9 +77,17 @@ def identity():
     return ToolResult(status="ok", preview=[{"pid": os.getpid(), "prefix": sys.prefix}])
 
 
-def leave_child():
+def leave_child(ready, resume):
     from tools.models import ToolResult
-    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    # Observe the interpreter rather than Windows's short-lived venv launcher.
+    executable = sys._base_executable if os.name == "nt" else sys.executable
+    child = subprocess.Popen([executable, "-c", "import time; time.sleep(60)"])
+    stage = Path(ready).with_suffix(".part")
+    stage.write_text(str(child.pid))
+    stage.replace(ready)
+    # Let the test retain the live process identity before job cleanup starts.
+    while not Path(resume).exists():
+        time.sleep(.02)
     return ToolResult(status="ok", preview=[{"child": child.pid}])
 
 

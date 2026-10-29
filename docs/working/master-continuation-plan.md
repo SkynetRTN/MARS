@@ -86,6 +86,9 @@ stopped when temporary cache files disappeared during runtime budget scans.
 Scans now tolerate vanished files/directories while retaining
 entry limits and access-error rejection. Deterministic regressions cover both
 races, and the cancellation assertion now includes the returned error details.
+The Windows follow-up failed a helper-PID assertion. That probe now retains
+the actual helper interpreter's process handle before cleanup and checks its
+termination immediately after return, avoiding launcher/PID reuse ambiguity.
 
 All ten checkpoints and the four final corrections below are complete within
 the recorded limits. Changes remain unmerged into main and unpublished.

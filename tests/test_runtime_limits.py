@@ -596,12 +596,43 @@ async def test_scientific_caches_stay_inside_managed_work(tmp_path):
 
 @pytest.mark.anyio
 async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
-    result = await run_call("child", {}, {"child": fake.leave_child}, tmp_path / "artifacts", CallLimits(timeout_s=10))
-    assert result["status"] == "ok"
-    pid = result["preview"][0]["child"]
-    if os.name == "nt":
-        # Job accounting, not a delay in the test, must establish this boundary.
-        assert not _running(pid)
-    with anyio.fail_after(5):
-        while _running(pid):
-            await anyio.sleep(.02)
+    ready, resume = tmp_path / "child-ready", tmp_path / "resume"
+    result = None
+    handle = None
+
+    async def call():
+        nonlocal result
+        result = await run_call(
+            "child", {"ready": str(ready), "resume": str(resume)},
+            {"child": fake.leave_child}, tmp_path / "artifacts", CallLimits(timeout_s=10),
+        )
+
+    try:
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(call)
+            pid = await _ready(ready)
+            if os.name == "nt":
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+                kernel.OpenProcess.restype = ctypes.c_void_p
+                kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+                kernel.WaitForSingleObject.restype = ctypes.c_uint32
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                kernel.CloseHandle.restype = ctypes.c_int
+                handle = kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+                assert handle, ctypes.WinError(ctypes.get_last_error())
+                assert kernel.WaitForSingleObject(handle, 0) == 0x102  # Still alive.
+            resume.touch()
+        assert result["status"] == "ok", result
+        assert result["preview"][0]["child"] == pid
+        if os.name == "nt":
+            # Check the retained helper handle immediately: no reused PID and
+            # no extra grace period can disguise an incomplete job cleanup.
+            assert kernel.WaitForSingleObject(handle, 0) == 0
+        else:
+            with anyio.fail_after(5):
+                while _running(pid):
+                    await anyio.sleep(.02)
+    finally:
+        if handle is not None:
+            kernel.CloseHandle(handle)
