@@ -68,6 +68,7 @@ from tools import artifacts, config
 from tools.config import PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
 from tools.vizier import search_vizier
+from tools.science_warnings import capture_numerical_warnings
 
 __all__ = [
     "extract_photometry_from_fits",
@@ -291,20 +292,30 @@ def extract_photometry_from_fits(fits_path: str, threshold: float = 2.5) -> Tool
     is fetched. For a scientifically calibrated photometry report of a frame on
     its own, use ``tools.photometry.run_photometry_on_target`` instead.
     """
+    warnings = []
     try:
-        df = observations.extract_photometry_from_fits(fits_path, threshold=threshold)
+        with capture_numerical_warnings(warnings):
+            df = observations.extract_photometry_from_fits(fits_path, threshold=threshold)
     except ValueError as exc:
-        return ToolResult(status="error", errors=[{"code": "invalid_input", "message": str(exc)}])
+        return ToolResult(status="error", errors=[{"code": "invalid_input", "message": str(exc)}], warnings=warnings)
     except RuntimeError as exc:
-        return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
+        return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}], warnings=warnings)
 
-    artifact = _write_df_artifact(df, f"{Path(fits_path).stem}_photometry")
+    try:
+        artifact = _write_df_artifact(df, f"{Path(fits_path).stem}_photometry")
+    except MemoryError:
+        raise
+    except Exception as exc:
+        return ToolResult(status="error", warnings=warnings, errors=[{
+            "code": "tool_exception", "message": f"{type(exc).__name__}: {exc}",
+        }])
     return ToolResult(
         status="ok",
         count=len(df),
         preview=_preview(df),
         columns=list(df.columns),
         artifact=artifact,
+        warnings=warnings,
     )
 
 
@@ -503,8 +514,10 @@ def run_full_hr_pipeline(
     ``select_cluster_members`` for what ``pm_sigma``/``pm_dispersion_km_s`` mean.
     """
     stem = _safe_stem(cluster_name)
+    warnings = []
     try:
-        detected = observations.extract_photometry_from_fits(fits_path)
+        with capture_numerical_warnings(warnings):
+            detected = observations.extract_photometry_from_fits(fits_path)
         matched = _fetch_gaia_and_match(detected, gaia_match_radius_arcsec, gaia_mag_limit)
         params = _fetch_literature_params(cluster_name)
         members = membership.select_cluster_members(
@@ -512,10 +525,16 @@ def run_full_hr_pipeline(
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
         report = _fit_and_compare(members, params, cluster_name, stem)
+    except MemoryError:
+        raise
     except _NotFound as exc:
-        return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
+        return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}], warnings=warnings)
     except (ValueError, RuntimeError) as exc:
-        return ToolResult(status="error", errors=[_provider_error(exc)])
+        return ToolResult(status="error", errors=[_provider_error(exc)], warnings=warnings)
+    except Exception as exc:
+        return ToolResult(status="error", warnings=warnings, errors=[{
+            "code": "tool_exception", "message": f"{type(exc).__name__}: {exc}",
+        }])
 
     png_path = Path(report.pop("png_path"))
     csv_path = Path(report.pop("members_csv_path"))
@@ -524,6 +543,7 @@ def run_full_hr_pipeline(
     report["n_members"] = len(members)
     return ToolResult(
         status="ok",
+        warnings=warnings,
         count=1,
         preview=[report],
         artifacts=[

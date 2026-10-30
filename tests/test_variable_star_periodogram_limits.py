@@ -1,4 +1,4 @@
-"""ALG-02: guard direct weighted-spectrum work without replacing its math."""
+"""ALG-02: guard direct weighted-spectrum work around the M2 correction."""
 
 from __future__ import annotations
 
@@ -111,8 +111,7 @@ def test_runtime_grid_guards_remain_when_preflight_is_bypassed(monkeypatch, step
 
 @pytest.mark.parametrize("times, values, start, stop", [
     ([0., 1e308, 2.], [0., 1., 0.], .1, 1.),
-    ([0., 1., 2.], [0., 1e200, 0.], .1, 1.),
-    ([0., 1., 2.], [1e308] * 3, .1, 1.),
+    ([0., 1., 2.], [-1.7e308, 1.7e308, 0.], .1, 1.),
     ([0., 1., 2.], [0., 1., 0.], 1e-308, 2e-308),
 ])
 def test_unrepresentable_weighted_intermediates_raise_validation_errors(times, values, start, stop):

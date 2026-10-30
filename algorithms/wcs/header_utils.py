@@ -37,6 +37,8 @@ def _binning_from_header(header):
     try:
         xb = int(xb)
         yb = int(yb)
+    except MemoryError:
+        raise
     except Exception:
         xb = yb = 1
     # Some cameras store a single BINNING like "2 2" or "2x2"
@@ -46,6 +48,8 @@ def _binning_from_header(header):
         if len(s) == 2:
             try:
                 xb, yb = int(s[0]), int(s[1])
+            except MemoryError:
+                raise
             except Exception:
                 pass
     return max(1, xb), max(1, yb)
@@ -63,6 +67,8 @@ def _arcsec_from_wcs(header):
             sx, sy = float(scales_arcsec[0]), float(scales_arcsec[1])
             if sx > 0 and sy > 0:
                 return (sx, sy, 0.5 * (sx + sy))
+    except MemoryError:
+        raise
     except Exception:
         pass
     # Manual CD/CDELT fallback if WCS init fails
@@ -75,6 +81,8 @@ def _arcsec_from_wcs(header):
         sy = (cd21**2 + cd22**2) ** 0.5 * 3600.0
         if sx > 0 and sy > 0:
             return (sx, sy, 0.5 * (sx + sy))
+    except MemoryError:
+        raise
     except Exception:
         pass
     try:
@@ -85,6 +93,8 @@ def _arcsec_from_wcs(header):
         sy = abs(cdelt2) * 3600.0
         if sx > 0 and sy > 0:
             return (sx, sy, 0.5 * (sx + sy))
+    except MemoryError:
+        raise
     except Exception:
         pass
     return None
@@ -103,6 +113,8 @@ def _arcsec_from_direct_keywords(header, xbin: int, ybin: int):
             val = float(single)
             if val > 0:
                 return (val, val, val)
+        except MemoryError:
+            raise
         except Exception:
             pass
 
@@ -114,6 +126,8 @@ def _arcsec_from_direct_keywords(header, xbin: int, ybin: int):
             sy = abs(float(yk))
             if sx > 0 and sy > 0:
                 return (sx, sy, 0.5 * (sx + sy))
+    except MemoryError:
+        raise
     except Exception:
         pass
 
@@ -132,6 +146,8 @@ def _arcsec_from_optics(header, xbin: int, ybin: int):
     def _as_um(v):
         try:
             v = float(v)
+        except MemoryError:
+            raise
         except Exception:
             return None
         # Heuristic sanity: 2–30 µm typical. Leave as-is; user headers usually µm.
@@ -144,6 +160,8 @@ def _arcsec_from_optics(header, xbin: int, ybin: int):
     f_mm = _get_any(header, ["FOCALLEN", "FOCALLENGTH", "FOCAL"], None)
     try:
         f_mm = float(f_mm) if f_mm is not None else None
+    except MemoryError:
+        raise
     except Exception:
         f_mm = None
 
@@ -224,6 +242,8 @@ def _parse_ra_dec_values(ra_val, dec_val):
     try:
         ra_f = float(ra_val)
         dec_f = float(dec_val)
+    except MemoryError:
+        raise
     except Exception:
         return None, None
 
@@ -315,6 +335,8 @@ def guess_icrs_radec_from_header(header) -> tuple[float | None, float | None]:
                 sc = SkyCoord(float(crval1) * u.deg, float(crval2) * u.deg, frame=frame)
                 sc_icrs = sc.icrs
                 return sc_icrs.ra.deg, sc_icrs.dec.deg
+            except MemoryError:
+                raise
             except Exception:
                 pass  # fallthrough to non-WCS hints
 
@@ -335,6 +357,8 @@ def guess_icrs_radec_from_header(header) -> tuple[float | None, float | None]:
                 sc = SkyCoord(ra_deg * u.deg, dec_deg * u.deg, frame=frame)
                 sc_icrs = sc.icrs
                 return sc_icrs.ra.deg, sc_icrs.dec.deg
+            except MemoryError:
+                raise
             except Exception:
                 # If frame transform fails, just return raw degrees
                 return ra_deg, dec_deg

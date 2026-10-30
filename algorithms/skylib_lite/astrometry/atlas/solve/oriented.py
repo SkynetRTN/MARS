@@ -46,6 +46,8 @@ from .solver import (
 
 try:  # pragma: no cover - optional dependency
     from scipy.spatial import cKDTree
+except MemoryError:
+    raise
 except Exception:  # pragma: no cover
     from ..match.triangles import cKDTree
 

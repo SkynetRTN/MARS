@@ -9,6 +9,7 @@ from numpy.lib.recfunctions import append_fields
 from numpy.ma import MaskedArray
 from scipy.optimize import minimize
 from numba import njit, prange
+from algorithms.diagnostics import note_numerical_issue
 
 from algorithms.skylib_lite.calibration.background import estimate_background, sep_compatible
 from algorithms.skylib_lite.util.stats import weighted_median
@@ -330,6 +331,9 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         flux = sources['flux']
         bad = (a <= 0) | (b <= 0) | (flux <= 0)
         if bad.any():
+            note_numerical_issue("isophotal_origin_approximation",
+                "Adaptive aperture remeasurement retains a one-pixel coordinate-origin mismatch; "
+                "its sizes, orientation and flux can be biased.")
             # Do isophotal analysis to compute ellipse parameters if missing
             a[bad], b[bad], theta[bad], flux[bad] = isophotal_analysis(
                 img_back, sources['x'][bad], sources['y'][bad], radius)
@@ -445,7 +449,11 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         bk_mean = bk_flux/area
     else:
         # Background already subtracted; background area equals annulus area
-        bk_mean = bk_flux/bk_area
+        if np.any(bk_area <= 0):
+            note_numerical_issue("empty_background_annulus",
+                "Some background annuli contain no usable pixels. The retained kernel can "
+                "return finite flux without sky subtraction and without a reliable failure flag.")
+        bk_mean = np.divide(bk_flux, bk_area, out=np.full_like(bk_flux, np.nan), where=bk_area > 0)
 
     # Convert ADUs to electrons
     flux *= gain
@@ -455,6 +463,9 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     # Calculate aperture correction for all aperture sizes from the brightest source
     aper_corr = {}
     if apcorr_tol > 0:
+        note_numerical_issue("aperture_correction_crowding",
+            "Growth-curve aperture correction is enabled; its retained neighbour-rejection "
+            "guard is ineffective, so crowding can bias the correction applied to the field.")
         aper_circle = np.empty(1, np.float64)
         aper_ellipse = np.empty(4, np.float64)
         aper_ellipse[3] = 1
@@ -576,6 +587,10 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
             sources = append_fields(sources, name, z, usemask=False)
 
     good = (flux > 0).nonzero()
+    if np.any(flux <= 0):
+        note_numerical_issue("nonpositive_aperture_flux",
+            "Some apertures have nonpositive net flux. Their retained finite magnitude/error "
+            "placeholders are not valid magnitudes or detections, even when flags are zero.")
     if len(good[0]):
         sources['mag'][good] = -2.5*np.log10(flux[good]/texp)
         sources['mag_err'][good] = 2.5*np.log10(1 + flux_err[good]/flux[good])

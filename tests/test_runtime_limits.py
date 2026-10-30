@@ -1,6 +1,7 @@
 """Offline real-worker bounds, cancellation, ownership and retention probes."""
 
 import ctypes
+from contextlib import contextmanager
 from dataclasses import replace
 import json
 import os
@@ -101,7 +102,7 @@ async def test_cancel_stops_writer_and_next_call_can_run(tmp_path, keep_windows_
     await anyio.sleep(.1)
     assert tree_size(calls[0], max_files=100) == size
     result = await run_call("next", {}, {"next": fake.noisy}, root, CallLimits(timeout_s=10))
-    assert result["status"] == "ok"
+    assert result["status"] == "ok", result
 
 
 @pytest.mark.anyio
@@ -199,6 +200,64 @@ def test_cleanup_dry_run_does_not_create_a_namespace(tmp_path):
     root = tmp_path / "unused"
     assert cleanup(root) == []
     assert not root.exists()
+
+
+def test_tree_size_tolerates_a_file_renamed_after_inventory(tmp_path, monkeypatch):
+    from tools.runtime import storage
+
+    stage = tmp_path / "reply.part"
+    stage.write_bytes(b"pending")
+    (tmp_path / "stable").write_bytes(b"ready")
+    original = storage.os.scandir
+
+    @contextmanager
+    def rename_after_inventory(path):
+        with original(path) as entries:
+            inventory = list(entries)
+            if stage.exists():
+                stage.replace(tmp_path / "reply.json")
+            yield iter(inventory)
+
+    monkeypatch.setattr(storage.os, "scandir", rename_after_inventory)
+
+    # POSIX skips the vanished entry; Windows can retain its enumeration-time
+    # metadata. Either snapshot is valid, and the next scan counts the new name.
+    # https://docs.python.org/3/library/os.html#os.DirEntry.stat
+    assert tree_size(tmp_path, max_files=2) in {5, 12}
+    assert tree_size(tmp_path, max_files=2) == 12
+    with pytest.raises(ValueError, match="file/entry budget"):
+        tree_size(tmp_path, max_files=1)
+
+
+def test_tree_size_tolerates_a_directory_removed_before_traversal(tmp_path, monkeypatch):
+    from tools.runtime import storage
+
+    directory = tmp_path / "temporary-cache"
+    directory.mkdir()
+    (tmp_path / "stable").write_bytes(b"ready")
+    original = storage.os.scandir
+
+    @contextmanager
+    def remove_before_traversal(path):
+        if Path(path) == directory:
+            directory.rmdir()
+        with original(path) as entries:
+            yield entries
+
+    monkeypatch.setattr(storage.os, "scandir", remove_before_traversal)
+
+    assert tree_size(tmp_path, max_files=2) == 5
+
+
+def test_tree_size_does_not_ignore_access_errors(tmp_path, monkeypatch):
+    from tools.runtime import storage
+
+    def inaccessible(path):
+        raise PermissionError("cache cannot be inspected")
+
+    monkeypatch.setattr(storage.os, "scandir", inaccessible)
+    with pytest.raises(PermissionError, match="cannot be inspected"):
+        tree_size(tmp_path, max_files=2)
 
 
 def test_cleanup_removes_only_expired_owned_finished_calls(tmp_path):
@@ -537,15 +596,46 @@ async def test_scientific_caches_stay_inside_managed_work(tmp_path):
 
 @pytest.mark.anyio
 async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
-    result = await run_call("child", {}, {"child": fake.leave_child}, tmp_path / "artifacts", CallLimits(timeout_s=10))
-    assert result["status"] == "ok"
-    pid = result["preview"][0]["child"]
-    if os.name == "nt":
-        # Job accounting, not a delay in the test, must establish this boundary.
-        assert not _running(pid)
-    with anyio.fail_after(5):
-        while _running(pid):
-            await anyio.sleep(.02)
+    ready, resume = tmp_path / "child-ready", tmp_path / "resume"
+    result = None
+    handle = None
+
+    async def call():
+        nonlocal result
+        result = await run_call(
+            "child", {"ready": str(ready), "resume": str(resume)},
+            {"child": fake.leave_child}, tmp_path / "artifacts", CallLimits(timeout_s=10),
+        )
+
+    try:
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(call)
+            pid = await _ready(ready)
+            if os.name == "nt":
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+                kernel.OpenProcess.restype = ctypes.c_void_p
+                kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+                kernel.WaitForSingleObject.restype = ctypes.c_uint32
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                kernel.CloseHandle.restype = ctypes.c_int
+                handle = kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+                assert handle, ctypes.WinError(ctypes.get_last_error())
+                assert kernel.WaitForSingleObject(handle, 0) == 0x102  # Still alive.
+            resume.touch()
+        assert result["status"] == "ok", result
+        assert result["preview"][0]["child"] == pid
+        if os.name == "nt":
+            # Check the retained helper handle immediately: no reused PID and
+            # no extra grace period can disguise an incomplete job cleanup.
+            assert kernel.WaitForSingleObject(handle, 0) == 0
+        else:
+            with anyio.fail_after(5):
+                while _running(pid):
+                    await anyio.sleep(.02)
+    finally:
+        if handle is not None:
+            kernel.CloseHandle(handle)
 
 
 @pytest.mark.anyio

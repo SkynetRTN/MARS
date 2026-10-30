@@ -24,10 +24,10 @@ class UCAC5Catalog(Catalog):
     vizier_catalog = 'I/340'
     row_limit = 5000
     mags = {
-        'Open': ['f.mag'], 'G': ['Gmag'], 'R': ['Rmag'], 'J': ['Jmag'],
+        'Open': ['f.mag'], 'G': ['Gmag'], 'Rphot': ['Rmag'], 'J': ['Jmag'],
         'H': ['Hmag'], 'K': ['Kmag'],
     }
-    filter_lookup = {'*': 'Open'}  # map all unknown mags to integral bandpass
+    filter_lookup = {}  # The native integral bandpass serves Open only.
     col_mapping = {
         'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }

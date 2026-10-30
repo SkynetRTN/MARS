@@ -1,13 +1,10 @@
 """``tools.calibration.solve_zeropoint_from_measurements`` -- the tools-layer wrapper.
 
-``algorithms.fieldcal.solution.calc_solution`` itself is pinned against real
-recorded Skynet solves in ``test_fieldcal_solution.py``. This file covers the
+``algorithms.fieldcal.solution.calc_solution`` is checked against independent
+scientific fits on recorded Skynet inputs in ``test_fieldcal_solution.py``. This file covers the
 thin wrapper around it: field normalization/aliasing, and the requirement
 that the tool never raises -- it must return an ``errors``-populated
-``ZeropointSolution`` even when the solver itself does (confirmed live:
-``calc_solution`` can raise ``ValueError: math domain error`` on near-zero-
-scatter input; see
-``test_fieldcal_solution.py::test_zero_scatter_input_is_a_known_failure_mode``).
+``ZeropointSolution`` even when the solver itself raises on unusable variances.
 
 BL-5: the result field was named ``zero_point_corr`` while holding an
 *absolute* zero point. Afterglow fixes ``zero_point = 20`` and reports a
@@ -28,12 +25,12 @@ import pytest
 
 from tools.calibration import solve_zeropoint_from_measurements
 
+from .fieldcal_oracle import scientific_solution
+
 ROOT = Path(__file__).resolve().parents[1]
 SOLVE = ROOT / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002"
 
-# Real scatter around a zero point near 2.1 (not an exact constant offset) --
-# a constant offset reproduces the zero-scatter domain-error edge case this
-# test is deliberately *not* about; see the dedicated test below for that.
+# Real scatter around a zero point near 2.1.
 MEASUREMENTS = [
     {"id": "s1", "mag": 15.0, "mag_error": 0.02},
     {"id": "s2", "mag": 14.5, "mag_error": 0.02},
@@ -83,7 +80,7 @@ def test_a_normal_solve_reports_a_zero_point_and_its_error():
 
 def test_a_calc_solution_domain_error_returns_an_error_not_a_crash():
     with patch(
-        "tools.calibration.calc_solution",
+        "tools.calibration._calc_solution_with_mask",
         side_effect=ValueError("math domain error"),
     ):
         result = solve_zeropoint_from_measurements(MEASUREMENTS, CATALOG_SOURCES)
@@ -94,21 +91,22 @@ def test_a_calc_solution_domain_error_returns_an_error_not_a_crash():
 
 
 def test_result_reports_an_absolute_zero_point_under_an_unambiguous_name():
-    solution = solve_zeropoint_from_measurements(_calibration_rows(), [])
+    rows = _calibration_rows()
+    solution = solve_zeropoint_from_measurements(rows, [])
 
-    assert solution.source_count == 35
+    assert solution.source_count == 29
     assert solution.errors == []
-    # The absolute zero point Skynet recorded, bit for bit.
-    assert solution.zero_point == 21.147659857998637
+    expected, _ = scientific_solution(rows)
+    assert solution.zero_point == pytest.approx(expected[0], rel=0, abs=1e-7)
+    assert solution.zero_point > 20
     # The old name held this same absolute value and must not survive.
     assert not hasattr(solution, "zero_point_corr")
 
 
-def test_the_absolute_zero_point_is_afterglows_base_plus_correction():
-    """Afterglow reports 20.0 + correction; MARS reports the sum directly."""
+def test_recorded_absolute_zero_point_is_base_plus_correction():
+    """The historical summary's correction uses base 20, unchanged by M2."""
     summary = json.loads((SOLVE / "fit_summary.json").read_text())
-    solution = solve_zeropoint_from_measurements(_calibration_rows(), [])
 
     assert summary["field_cal_zero_point_corr"] == pytest.approx(
-        solution.zero_point - 20.0, abs=1e-12
+        summary["production_calc_solution"]["zero_point"] - 20.0, abs=1e-12
     )

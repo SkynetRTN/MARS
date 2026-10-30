@@ -3,7 +3,7 @@
 VizieR hosts roughly 20,000 tables across every wavelength, not just the
 eleven photometric catalogs ``tools/`` declares for MARS's own
 zero-point calibration path (a different consumer -- see ``fieldcal``). This
-tool goes straight to ``astroquery.vizier.Vizier`` instead, so it can reach
+tool uses the checked astroquery adapter instead, so it can reach
 any catalog by ID or by VizieR's own spectrum category, with no curated list
 in between.
 
@@ -27,7 +27,7 @@ from typing import Optional, Union
 
 import astropy.units as u
 from astropy.coordinates import SkyCoord
-from astroquery.vizier import Vizier
+from algorithms.query.vizier import ProviderResponseError, Vizier
 
 from tools import artifacts
 from tools.config import DEFAULT_MAX_CATALOGS, PREVIEW_ROWS
@@ -52,6 +52,10 @@ def list_vizier_catalogs(keywords: str, max_catalogs: int = 50) -> ToolResult:
 
     try:
         found = Vizier.find_catalogs(keywords, max_catalogs=max_catalogs)
+    except MemoryError:
+        raise
+    except ProviderResponseError as exc:
+        return ToolResult(status="error", errors=[{"code": "unusable_response", "message": str(exc)}])
     except Exception as exc:
         return ToolResult(
             status="error",
@@ -189,6 +193,10 @@ def search_vizier(
             result = vizier.query_region(
                 coord, radius=radius_arcmin * u.arcmin, catalog=catalog
             )
+    except MemoryError:
+        raise
+    except ProviderResponseError as exc:
+        return ToolResult(status="error", errors=[{"code": "unusable_response", "message": str(exc)}])
     except Exception as exc:
         return ToolResult(
             status="error",

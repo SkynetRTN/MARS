@@ -45,9 +45,8 @@ from astropy.wcs import WCS
 from algorithms.catalogs.schemas import CatalogSource
 
 from .geometry import (
-    boxes_from_wcs,
+    cone_from_wcs,
     clip_sources_to_wcs,
-    image_boxes_from_wcs,
     infer_image_shape,
     normalize_wcs_list,
     remove_duplicate_sources,
@@ -55,6 +54,7 @@ from .geometry import (
 from .registry import CATALOGS, UnknownCatalogError
 from .selection import select_catalogs_for_filter
 from .vizier import ProviderResponseError
+from .coverage import note_early_stop, note_query_issue
 
 __all__ = ["query_catalogs", "query_catalogs_for_image"]
 
@@ -193,7 +193,7 @@ def query_catalogs(
 
     if source_ids_list:
         logger.info("Querying catalogs by source IDs (%d IDs)", len(source_ids_list))
-        for catalog in catalog_list:
+        for idx, catalog in enumerate(catalog_list):
             try:
                 catalog_sources = CATALOGS[catalog].query_objects(source_ids_list)
             except ProviderResponseError as exc:
@@ -204,6 +204,7 @@ def query_catalogs(
                     "Catalog %s returned %d sources by ID", catalog, len(catalog_sources)
                 )
                 if stop_on_success:
+                    note_early_stop(catalog, len(catalog_sources), catalog_list[idx + 1:])
                     return list(catalog_sources)
                 sources += list(catalog_sources)
         return _sources_or_unusable(sources, unusable)
@@ -214,7 +215,7 @@ def query_catalogs(
             ra_hours,
             dec_degs,
         )
-        for catalog in catalog_list:
+        for idx, catalog in enumerate(catalog_list):
             try:
                 if radius_arcmins is None:
                     catalog_sources = CATALOGS[catalog].query_box(
@@ -237,32 +238,30 @@ def query_catalogs(
                     shape,
                 )
                 if stop_on_success:
+                    note_early_stop(catalog, len(catalog_sources), catalog_list[idx + 1:])
                     return catalog_sources
                 sources += catalog_sources
         return _sources_or_unusable(sources, unusable)
 
     # WCS footprint mode.
-    boxes: list[tuple[float, float, float, float]] = []
-    for wcs_item in wcs_list:
-        boxes += boxes_from_wcs(wcs_item)
+    cones = [cone_from_wcs(wcs_item) for wcs_item in wcs_list]
 
-    if not boxes:
+    if not cones:
         return []
 
-    logger.info("Catalog query using %d WCS box(es)", len(boxes))
+    logger.info("Catalog query using %d WCS cone(s)", len(cones))
 
     for idx, catalog in enumerate(catalog_list):
         try:
             catalog_sources: list[CatalogSource] = []
-            for ra_deg, dec_deg, width_deg, height_deg in boxes:
-                catalog_sources += CATALOGS[catalog].query_box(
+            for ra_deg, dec_deg, radius_deg in cones:
+                catalog_sources += CATALOGS[catalog].query_circ(
                     ra_deg / 15.0,
                     dec_deg,
-                    width_deg * 60.0,
-                    height_deg * 60.0,
+                    radius_deg * 60.0,
                     constraints,
                 )
-            if len(boxes) > 1 and catalog_sources:
+            if len(cones) > 1 and catalog_sources:
                 catalog_sources = remove_duplicate_sources(catalog_sources)
             logger.info(
                 "Catalog %s returned %d sources for WCS query",
@@ -277,10 +276,15 @@ def query_catalogs(
             )
             if clipped:
                 if stop_on_success:
+                    note_early_stop(catalog, len(clipped), catalog_list[idx + 1:])
                     return clipped
                 sources += clipped
-        except Exception:
+        except MemoryError:
+            raise
+        except Exception as exc:
             if skip_failed and idx < len(catalog_list) - 1:
+                note_query_issue("catalog_query_incomplete",
+                                 f"{catalog} failed and was skipped: {exc}. Its coverage is absent.")
                 logger.warning("Catalog %s failed; trying the next", catalog, exc_info=True)
                 continue
             raise
@@ -292,6 +296,8 @@ def _note_unusable(catalog: str, exc: ProviderResponseError, unusable: list) -> 
     # M3: one catalog's unusable response no longer aborts the rest of the
     # list; it is kept so a wholly unusable query still fails by name.
     logger.warning("Catalog %s returned an unusable response; trying the next: %s", catalog, exc)
+    note_query_issue("catalog_query_incomplete",
+                     f"{catalog} returned an unusable response and was skipped: {exc}")
     unusable.append(exc)
 
 
@@ -316,14 +322,9 @@ def query_catalogs_for_image(
 ) -> list[CatalogSource]:
     """Query catalogs over one image's field of view.
 
-    The lenient counterpart to ``query_catalogs``'s WCS mode: it derives the
-    footprint from pixel scales via ``image_boxes_from_wcs``, so it works when
-    the WCS has no ``array_shape`` and the caller supplies a header or the data
-    array instead.
-
-    That leniency costs accuracy — the pixel-scale footprint ignores rotation
-    and the cos(dec) narrowing. Prefer ``query_catalogs(wcs=...)`` when the WCS
-    carries its shape.
+    The lenient counterpart to ``query_catalogs``'s WCS mode: it infers the
+    detector shape from the supplied shape, WCS, header or data array. Both
+    entry points use an enclosing cone followed by detector clipping.
 
     Unlike ``query_catalogs`` this merges every catalog's results without
     filter-aware narrowing or ``stop_on_success``; upstream kept it as the
@@ -336,19 +337,19 @@ def query_catalogs_for_image(
         if catalog not in CATALOGS:
             raise UnknownCatalogError(catalog)
 
-    boxes = image_boxes_from_wcs(wcs, shape=shape, header=header, data=data)
+    height, width = infer_image_shape(wcs, shape=shape, header=header, data=data)
+    cones = [cone_from_wcs(wcs, shape=(height, width))]
 
     sources: list[CatalogSource] = []
     unusable: list[ProviderResponseError] = []
     for catalog in catalogs:
         try:
             catalog_sources: list[CatalogSource] = []
-            for ra_deg, dec_deg, width_deg, height_deg in boxes:
-                catalog_sources += CATALOGS[catalog].query_box(
+            for ra_deg, dec_deg, radius_deg in cones:
+                catalog_sources += CATALOGS[catalog].query_circ(
                     ra_deg / 15.0,
                     dec_deg,
-                    width_deg * 60.0,
-                    height_deg * 60.0,
+                    radius_deg * 60.0,
                     constraints or {},
                 )
         except ProviderResponseError as exc:

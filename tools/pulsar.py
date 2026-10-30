@@ -35,7 +35,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 from astropy.table import Table
 
-from algorithms.pulsar import charts, folding, ingest, limits, periodogram, sonification
+from algorithms.pulsar import charts, folding, ingest, limits, periodogram, sampling, significance, sonification
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
 from tools.models import (
@@ -47,6 +47,7 @@ from tools.models import (
     PulsarFoldedProfile,
     PulsarLightCurve,
     PulsarPeriodogram,
+    PulsarCandidate,
     PulsarSonification,
     ToolError,
     ToolWarning,
@@ -89,7 +90,13 @@ class _LightCurve:
         self.time_s = time_s
         self.source1 = source1
         self.source2 = source2
-        self.meta = meta
+        try:
+            self.sampling = sampling.summarize(time_s)
+        except ValueError as exc:
+            raise _LoadError("invalid_input", str(exc)) from exc
+        # Derive sampling for every consumer, including failed searches and
+        # folds loaded from old artifacts. Saved policy labels are not evidence.
+        self.meta = {**meta, **self.sampling.metadata()}
 
     @property
     def total(self) -> np.ndarray:
@@ -127,6 +134,9 @@ class _LightCurve:
             "time_span_s": self.meta.get("time_span_s"),
             "mean_sample_interval_s": self.meta.get("mean_sample_interval_s"),
             "sample_cadence_s": self.meta.get("sample_cadence_s"),
+            "sampling_policy": self.meta.get("sampling_policy"),
+            "suggested_min_period_s": self.meta.get("suggested_min_period_s"),
+            "nyquist_period_s": self.meta.get("nyquist_period_s"),
             "background_subtracted": bool(self.meta.get("background_subtracted", False)),
             "back_scale_s": self.meta.get("back_scale_s"),
         }
@@ -349,6 +359,17 @@ def _label(lc: _LightCurve, file: FileMetadata, override: Optional[str]) -> str:
     return override or lc.meta.get("source_name") or Path(file.path).stem
 
 
+def _sampling_warning(observed: sampling.Sampling, warnings: list[ToolWarning]) -> None:
+    if observed.median_spacing_s is not None and not observed.uniform:
+        warnings.append(ToolWarning(
+            code="sampling_limit_heuristic",
+            message="Sampling has gaps, jitter or duplicate epochs. Twice the median "
+            "positive spacing is only a default search suggestion, not a hard Nyquist "
+            "limit. Use explicit bounds when instrument cadence or integration time "
+            "supports a different band; aliases and shorter periods may be missed.",
+        ))
+
+
 # ---------------------------------------------------------------------------
 # Stage 1 — light curve
 # ---------------------------------------------------------------------------
@@ -390,6 +411,7 @@ def load_pulsar_lightcurve(
         return PulsarLightCurve(
             file=file, errors=[ToolError(code=exc.code, message=exc.message)]
         )
+    _sampling_warning(lc.sampling, warnings)
 
     columns = {"time_s": lc.time_s, "source1": lc.source1}
     if lc.source2 is not None:
@@ -401,10 +423,6 @@ def load_pulsar_lightcurve(
         table, _label(lc, file, output_name) + "_lightcurve", subdir=subdir, fmt="ecsv"
     )
 
-    nyquist = None
-    if lc.meta.get("mean_sample_interval_s"):
-        nyquist = 2 * lc.meta["mean_sample_interval_s"]
-
     return PulsarLightCurve(
         file=file,
         artifact=artifact,
@@ -413,7 +431,6 @@ def load_pulsar_lightcurve(
         obs_freq_mhz=lc.meta.get("obs_freq_mhz"),
         ra_deg=lc.meta.get("ra_deg"),
         dec_deg=lc.meta.get("dec_deg"),
-        nyquist_period_s=nyquist,
         warnings=warnings,
         **lc.info_fields(),
     )
@@ -424,26 +441,33 @@ def load_pulsar_lightcurve(
 # ---------------------------------------------------------------------------
 
 def _top_peaks(
-    x: np.ndarray, power: np.ndarray, count: int, min_separation: float
-) -> list[dict[str, Any]]:
+    x: np.ndarray, power: np.ndarray, count: int, min_separation: float,
+    *, freq_mode: bool = False,
+) -> list[PulsarCandidate]:
     """Best-separated candidates, strongest first.
 
     Not upstream — astromancer marks only the global maximum. A tool needs
     more, because the global peak is often a harmonic of the true period, and
     a caller that only ever sees one number has no way to notice.
     """
-    peaks: list[dict[str, Any]] = []
+    peaks: list[PulsarCandidate] = []
+    selected: list[float] = []
     for index in np.argsort(power)[::-1]:
         # argsort places NaN last, so reversed it would rank NaN first.
         if not np.isfinite(power[index]):
             continue
         value = float(x[index])
         if any(
-            abs(value - peak["x"]) < min_separation * max(value, peak["x"])
-            for peak in peaks
+            abs(value - previous) < min_separation * max(value, previous)
+            for previous in selected
         ):
             continue
-        peaks.append({"x": value, "power": float(power[index])})
+        selected.append(value)
+        peaks.append(PulsarCandidate(
+            period_s=1 / value if freq_mode else value,
+            frequency_hz=value if freq_mode else 1 / value,
+            power=float(power[index]),
+        ))
         if len(peaks) >= count:
             break
     return peaks
@@ -462,32 +486,37 @@ def compute_pulsar_periodogram(
     output_name: Optional[str] = None,
     subdir: Optional[str] = "pulsar",
 ) -> PulsarPeriodogram:
-    """Stage 2. Lomb-Scargle the light curve to find the pulsar's period.
+    """Stage 2. Search a light curve for candidate periodicities.
 
-    This is the stage that produces the period the fold and the folded
-    sonification need. ``start``/``stop`` default to the observation's own
-    Nyquist bounds — twice the mean sample interval, up to 3 s — which is what
-    astromancer seeds its form with.
+    ``start``/``stop`` are seconds in period mode and Hz in frequency mode;
+    ``search_unit`` records that choice. Defaults span twice median positive
+    sample spacing through 3 s, or the reciprocal frequency band. For irregular
+    sampling this is a search heuristic, not a universal Nyquist cutoff.
 
     ``channel`` selects what to search: ``"sum"`` (both polarizations added,
     the default and usually the most sensitive), ``"source1"`` or
     ``"source2"``.
 
-    **Read ``peak_fold_snr`` before trusting ``peak_period_s``.** It folds the
-    data at the peak and measures the pulse: above ~8 the peak is real, near 1
-    it is not. ``peak_confidence`` is *not* that check — its false-alarm
-    threshold assumes white noise, and mains interference and baseline red
-    noise both clear 3 sigma while folding to nothing. On four of the five
-    bundled scans the strongest peak is exactly that: a confident artifact.
+    ``top_peaks`` always exposes ``period_s``, ``frequency_hz`` and ``power``.
+    Fold with a candidate's ``period_s`` in either mode; check integer multiples
+    and fractions for harmonics/aliases. ``peak_fold_snr`` is an empirical
+    pulse-concentration diagnostic for the searched channel, not a calibrated
+    detection probability; periodic interference can fold coherently too.
 
-    Check ``top_peaks`` too — a strong peak at twice or half the listed period
-    means the fundamental may be the other one.
+    ``false_alarm_probability_upper_bound`` bounds noise excursions only under
+    iid Gaussian errors and a fixed finite grid. Its assumptions exclude
+    baseline filtering, correlated noise, RFI and repeated retuning. It is not
+    a probability of a pulsar or correct period. Legacy ``peak_confidence`` and
+    ``confidence_thresholds`` return null and an empty map.
 
-    Run this before consulting any reference period. A fold at a measured
-    period is a detection; a fold at a literature period is a fit to a known
-    answer, and the two are not interchangeable. Compare the result against a
-    reference afterwards — a bundled scan's ``curated_period_s``, or
-    ``search_atnf`` — as a check on the measurement.
+    The peak bound uses directly fitted ``peak_residual_fraction`` (RSS/TSS),
+    since rounded maximum power can lose that residual. Below estimated solver
+    resolution it returns null; unrepresentable threshold levels are omitted.
+    ``false_alarm_resolution_limited`` and its warning disclose either case.
+
+    Search before consulting a reference period. Compare afterwards against
+    ``curated_period_s`` or ``search_atnf`` and report both provenances. A
+    reference-seeded fold does not independently measure the period.
 
     A blind search on one 60-second scan only works for a bright source. If it
     fails, or disagrees with the reference, retry: rerun
@@ -538,6 +567,18 @@ def compute_pulsar_periodogram(
             **info,
         )
 
+    lc.meta.update(result.sampling.metadata())
+    info = lc.info_fields()
+    _sampling_warning(result.sampling, warnings)
+    if result.sampling.uniform:
+        shortest = 1 / result.stop if freq_mode else result.start
+        if shortest < result.sampling.suggested_min_period_s * (1 - 1e-7):
+            warnings.append(ToolWarning(
+                code="search_above_nyquist",
+                message="The requested search extends above the uniformly sampled "
+                "Nyquist frequency. Peaks there can be aliases of lower frequencies.",
+            ))
+
     if not info["background_subtracted"]:
         warnings.append(
             ToolWarning(
@@ -546,26 +587,36 @@ def compute_pulsar_periodogram(
                 "continuum dominates the spectrum at long periods.",
             )
         )
-    if result.peak_confidence_level is None:
-        warnings.append(
-            ToolWarning(
-                code="peak_below_confidence",
-                message="The peak clears no false-alarm threshold; treat the "
-                "period as a non-detection rather than a measurement.",
-            )
-        )
+    if result.false_alarm_method is None:
+        warnings.append(ToolWarning(
+            code="false_alarm_unavailable",
+            message="At least four samples are required for the sample-variance "
+            "Gaussian false-alarm bound; no calibrated level is reported.",
+        ))
+    else:
+        warnings.append(ToolWarning(
+            code="false_alarm_model_assumptions",
+            message="The false-alarm bound assumes iid Gaussian noise and a trial "
+            "grid fixed before examining fluxes. It covers this search only, not "
+            "retuning, correlated/filtered noise or RFI, and is not a probability "
+            "that the peak is a pulsar or the correct period. Check the fold and aliases.",
+        ))
+    if result.false_alarm_resolution_limited:
+        warnings.append(ToolWarning(
+            code="false_alarm_resolution_limited",
+            message="The peak probability is null when its fitted residual is below "
+            "estimated solver resolution; unrepresentable power thresholds are "
+            "omitted. Use the returned residual-based bound when available, rather "
+            "than deriving a probability from rounded spectral power.",
+        ))
 
-    # Fold at the peak and see whether it concentrates flux. This is the check
-    # that actually discriminates: the false-alarm threshold above assumes
-    # white noise, and radio data is not white. Mains interference and the red
-    # noise left by baseline subtraction both clear 3 sigma comfortably while
-    # folding to nothing. Measured on the bundled scans, four of five have a
-    # strongest peak that reads "99.73% Confidence" and is not the pulsar.
+    # Empirical concentration check, retained from the earlier tool. The cutoff
+    # is a diagnostic convention, not a calibrated test or source classifier.
     peak_fold_snr: Optional[float] = None
     if result.peak_period_s and result.peak_period_s > 0:
         try:
             peak_fold_snr = folding.fold_lightcurve(
-                lc.time_s, lc.source1, lc.source2, period_s=result.peak_period_s
+                lc.time_s, values, period_s=result.peak_period_s
             ).pulse_snr()
         except ValueError:
             peak_fold_snr = None
@@ -575,12 +626,13 @@ def compute_pulsar_periodogram(
             ToolWarning(
                 code="peak_does_not_fold",
                 message=(
-                    f"The strongest peak folds to only {peak_fold_snr:.1f} sigma, so it "
-                    f"is probably interference or baseline residual rather than a "
-                    f"pulsar -- regardless of its false-alarm confidence. Rerun "
-                    f"load_pulsar_lightcurve with a different back_scale, narrow "
-                    f"the search away from the "
-                    f"suspect period, or get the period from search_atnf."
+                    f"The strongest peak has a fold concentration of only "
+                    f"{peak_fold_snr:.1f}; the fold does not strongly support this "
+                    f"candidate. It may be noise, interference, a wrong period or "
+                    f"a faint source. Inspect aliases and the profile, vary "
+                    f"back_scale by rerunning load_pulsar_lightcurve, change "
+                    f"search bounds, or compare with search_atnf. "
+                    f"Retuned searches are outside the single-search noise bound."
                 ),
             )
         )
@@ -591,15 +643,42 @@ def compute_pulsar_periodogram(
             "power": result.power,
         }
     )
+    table["frequency_hz" if freq_mode else "period_s"].unit = "Hz" if freq_mode else "s"
     # Carried in the artifact so plot_pulsar can draw the peak marker and the
-    # confidence lines without recomputing the spectrum.
+    # conditional false-alarm lines without recomputing the spectrum.
     table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
     table.meta["freq_mode"] = bool(freq_mode)
+    table.meta["channel"] = channel
     table.meta["steps"] = int(result.steps)
     if result.peak_x is not None:
         table.meta["peak_x"] = float(result.peak_x)
         table.meta["peak_power"] = float(result.peak_power)
-    table.meta["confidence"] = {k: float(v) for k, v in result.confidence.items()}
+    candidates = _top_peaks(result.x, result.power, 5, 0.02, freq_mode=freq_mode)
+    # Remove inherited legacy calibration; it cannot describe this new search.
+    table.meta.pop("confidence", None)
+    table.meta.update({
+        "search_start": result.start,
+        "search_stop": result.stop,
+        "search_unit": "Hz" if freq_mode else "s",
+        "evaluated_trials": result.evaluated_trials,
+        "top_peaks": [candidate.model_dump(mode="json") for candidate in candidates],
+        "false_alarm_thresholds": result.false_alarm_thresholds,
+        "false_alarm_assumptions": list(significance.ASSUMPTIONS),
+        "false_alarm_statistic": significance.STATISTIC,
+        "false_alarm_flux_centering": significance.CENTERING,
+        "false_alarm_phase_model": significance.PHASE_MODEL,
+        "false_alarm_resolution_limited": result.false_alarm_resolution_limited,
+    })
+    for key, value in {
+        "peak_period_s": result.peak_period_s,
+        "peak_frequency_hz": result.peak_frequency_hz,
+        "false_alarm_method": result.false_alarm_method,
+        "false_alarm_probability_upper_bound": result.false_alarm_probability_upper_bound,
+        "peak_residual_fraction": result.peak_residual_fraction,
+    }.items():
+        table.meta.pop(key, None)
+        if value is not None:
+            table.meta[key] = value
     artifact = artifacts.write_table(
         table, _label(lc, file, output_name) + "_periodogram", subdir=subdir, fmt="ecsv"
     )
@@ -610,14 +689,23 @@ def compute_pulsar_periodogram(
         mode="frequency" if freq_mode else "period",
         search_start=result.start,
         search_stop=result.stop,
+        search_unit="Hz" if freq_mode else "s",
         steps=result.steps,
+        evaluated_trials=result.evaluated_trials,
         channel=channel,
         peak_period_s=result.peak_period_s,
+        peak_frequency_hz=result.peak_frequency_hz,
         peak_power=result.peak_power,
         peak_confidence=result.peak_confidence_level,
         peak_fold_snr=peak_fold_snr,
         confidence_thresholds=result.confidence,
-        top_peaks=_top_peaks(result.x, result.power, 5, 0.02),
+        false_alarm_method=result.false_alarm_method,
+        false_alarm_probability_upper_bound=result.false_alarm_probability_upper_bound,
+        peak_residual_fraction=result.peak_residual_fraction,
+        false_alarm_resolution_limited=result.false_alarm_resolution_limited,
+        false_alarm_thresholds=result.false_alarm_thresholds,
+        false_alarm_assumptions=list(significance.ASSUMPTIONS),
+        top_peaks=candidates,
         warnings=warnings,
         **info,
     )
@@ -650,10 +738,10 @@ def fold_pulsar_lightcurve(
     independent detection: it is a fit to a number that came from outside the
     data, and should be reported as such.
 
-    ``pulse_snr`` on the result is how you tell whether the period was right:
-    above ~8 is a real detection, near 1 means a wrong period or a source too
-    faint in this scan. **Folding at the wrong period produces a flat profile,
-    not an error.**
+    ``pulse_snr`` is an empirical pulse-concentration diagnostic, with a
+    conventional warning cutoff of 8. It is not a calibrated probability or
+    source classifier: periodic interference can fold coherently too. A weak
+    fold can mean a wrong period or a faint source; it need not raise an error.
 
     ``bins`` is samples per period (100 upstream), ``phase`` shifts the profile
     by that fraction of a period, and ``display_period=2`` emits two cycles
@@ -1229,9 +1317,9 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
 
     Each bundled scan comes back with the curated literature period for its
     source. That is a reference to check a measurement against, not a period to
-    feed the pipeline: the scans carry none of their own, so a fold at a
-    measured period is a detection while a fold at this one is a fit to a known
-    answer.
+    feed the pipeline. A fold at this reference does not independently
+    measure the period; a data-derived candidate still needs profile and
+    alias checks before interpretation.
     """
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
     errors: list[ToolError] = []
@@ -1410,14 +1498,17 @@ def plot_pulsar(
     """Plot a pulsar artifact as a PNG, the way Astromancer draws it.
 
     ``kind`` defaults to ``"auto"``, which reads the columns and picks the
-    chart: a light curve (``time_s``), a periodogram (``period_s``/``power``)
-    or a folded profile (``phase_s``). So any stage's artifact can be passed
+    chart: a light curve (``time_s``), a periodogram (``period_s`` or
+    ``frequency_hz``, plus ``power``), or a folded profile (``phase_s``).
+    So any stage's artifact can be passed
     straight in, and a raw scan is ingested first and drawn as a light curve.
 
-    Axis labels, series names, the logarithmic periodogram x axis, the
-    "Global Maxima" peak marker, the dashed false-alarm lines and the folded
-    plot's x extent are all carried from upstream rather than chosen here --
-    see ``algorithms/pulsar/charts.py``.
+    Period spectra use a logarithmic seconds axis; frequency spectra use a
+    linear hertz axis. The saved channel labels the spectrum; older artifacts
+    without it are labelled "Unknown channel" with a warning. The peak marker,
+    folded extent and peak styling follow the upstream chart defaults. Current
+    false-alarm lines name the Gaussian noise model; legacy levels are labelled
+    uncalibrated. See ``algorithms/pulsar/charts.py``.
 
     ``show_hidden_series`` draws the folded plot's Difference and Sum series,
     which upstream adds with ``visible: false`` -- present in the legend but
@@ -1476,6 +1567,27 @@ def plot_pulsar(
         )
 
     spec = _CHART_FOR_KIND[resolved_kind]
+    spectrum_channel = None
+    spectrum_mode = None
+    if resolved_kind == "periodogram":
+        saved_channel = table.meta.get("channel")
+        if isinstance(saved_channel, str) and saved_channel in ("sum", "source1", "source2"):
+            spectrum_channel = saved_channel
+        else:
+            warnings.append(ToolWarning(
+                code="unknown_spectrum_channel",
+                message="Spectrum artifact has no recognized channel metadata; "
+                "the searched channel is unknown. Recompute the spectrum to record it.",
+            ))
+        # Column names describe the saved coordinates, including old artifacts
+        # without freq_mode or with a stale flag. Never reinterpret the values.
+        freq_mode = "frequency_hz" in table.colnames
+        spectrum_mode = "frequency" if freq_mode else "period"
+        flavour = table.meta.get("flavour")
+        spec = charts.periodogram_chart(
+            freq_mode=freq_mode, channel=spectrum_channel,
+            single_source=isinstance(flavour, str) and flavour == "standard",
+        )
     label = output_name or (
         f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
     )
@@ -1512,6 +1624,8 @@ def plot_pulsar(
         file=file,
         artifact=ArtifactRef(path=str(output_path), format="png", row_count=len(table)),
         kind=resolved_kind,
+        mode=spectrum_mode,
+        channel=spectrum_channel,
         title=drawn["title"],
         x_axis_label=drawn["x_label"],
         y_axis_label=drawn["y_label"],
@@ -1562,20 +1676,62 @@ def _render_plot(
         peak_power = table.meta.get("peak_power")
         if peak_x is not None and peak_power is not None:
             marker = charts.PERIODOGRAM_PEAK_SERIES
+            unit = "Hz" if x_column == "frequency_hz" else "s"
             axes.scatter(
                 [peak_x], [peak_power], color=marker.color, zorder=marker.z_index or 10,
-                s=40, label=f"{marker.name} ({peak_x:.6g})",
+                s=40, label=f"{marker.name} ({peak_x:.6g} {unit})",
             )
             plotted.append(marker.name)
 
-        confidence = table.meta.get("confidence") or {}
-        for line in charts.CONFIDENCE_LINES:
-            level = confidence.get(line.column)
+        method = table.meta.get("false_alarm_method")
+        statistic = table.meta.get("false_alarm_statistic")
+        centering = table.meta.get("false_alarm_flux_centering")
+        phase_model = table.meta.get("false_alarm_phase_model")
+        calibrated = (
+            isinstance(method, str) and method == significance.METHOD
+            and isinstance(statistic, str) and statistic == significance.STATISTIC
+            and isinstance(centering, str) and centering == significance.CENTERING
+            and isinstance(phase_model, str) and phase_model == significance.PHASE_MODEL
+        )
+        limited = table.meta.get("false_alarm_resolution_limited")
+        if calibrated and isinstance(limited, (bool, np.bool_)) and limited:
+            warnings.append(ToolWarning(
+                code="false_alarm_resolution_limited",
+                message="This spectrum has an unresolved peak probability or omitted "
+                "power levels. Drawn levels are the representable Gaussian-noise "
+                "thresholds only; rounded maximum power does not imply a tiny probability.",
+            ))
+        if calibrated:
+            thresholds = table.meta.get("false_alarm_thresholds") or {}
+            lines = charts.FALSE_ALARM_LINES
+        else:
+            thresholds = table.meta.get("confidence") or {}
+            lines = charts.CONFIDENCE_LINES
+            if not thresholds:
+                thresholds = table.meta.get("false_alarm_thresholds") or {}
+                lines = charts.FALSE_ALARM_LINES
+            if thresholds:
+                warnings.append(ToolWarning(
+                    code="legacy_confidence_uncalibrated",
+                    message="Artifact thresholds lack current residual-based calibration metadata. "
+                    "They are drawn as uncalibrated legacy levels, not confidence. "
+                    "Recompute from the light curve for current bounds and assumptions.",
+                ))
+        if calibrated and thresholds:
+            warnings.append(ToolWarning(
+                code="false_alarm_model_assumptions",
+                message="Drawn levels bound iid Gaussian noise on this fixed trial "
+                "grid only. They do not calibrate filtered/correlated noise, RFI "
+                "or retuned searches, and are not pulsar detection probabilities.",
+            ))
+        for number, line in enumerate(lines, 1):
+            level = thresholds.get(line.column)
             if level is None:
                 continue
             # ShortDash, carried from the Highcharts literal.
-            axes.axhline(level, color=line.color, ls=(0, (4, 2)), lw=1.0, label=line.name)
-            plotted.append(line.name)
+            name = line.name if calibrated else f"Legacy threshold {number} (uncalibrated)"
+            axes.axhline(level, color=line.color, ls=(0, (4, 2)), lw=1.0, label=name)
+            plotted.append(name)
 
         if spec.x_axis_type == "logarithmic":
             axes.set_xscale("log")

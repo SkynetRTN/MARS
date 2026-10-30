@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
@@ -11,7 +12,7 @@ import numpy as np
 from astropy.table import MaskedColumn, Table
 
 from algorithms.variable_star.folding import fold_with_error, validate_fold_work
-from algorithms.variable_star.lightcurve import VariableDataRow, merge_sources_by_mjd, with_error_mse
+from algorithms.variable_star.lightcurve import VariableDataRow, error_mse, merge_sources_by_mjd, with_error_mse
 from algorithms.variable_star.periodogram import validate_periodogram_grid, variable_periodogram
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
@@ -39,6 +40,7 @@ _MAX_INPUT_BYTES = 5 * 1024 * 1024
 _MAX_ROWS = 2_000
 _MAX_FIXTURES = 100
 _MAX_SOURCE_ID_LENGTH = 128
+_UNCERTAINTY_METHOD = "independent_quadrature"
 
 
 def _fixture_dir() -> Path:
@@ -202,7 +204,16 @@ def _rows_from_artifact(file: FileMetadata) -> list[VariableDataRow]:
         for name, value in (("mjd", row.jd), ("source1", row.source1), ("source2", row.source2), ("error1", row.error1), ("error2", row.error2), ("error_mse", row.error_mse)):
             if value is not None:
                 _finite(value, name, positive=name.startswith("error"))
-    return rows
+        if row.jd is not None and row.source1 is not None and row.source2 is not None and row.error_mse is not None:
+            if row.error1 is None or row.error2 is None:
+                raise ValueError("Paired observations require both source uncertainties; re-ingest the source CSV.")
+    # Re-derive cached errors, including pre-M2 artifacts with halved values.
+    # M3 folds mask missing combined errors; weighted spectra still reject them.
+    return [
+        replace(row, error_mse=error_mse(row.error1, row.error2))
+        if row.error_mse is not None else row
+        for row in rows
+    ]
 
 
 def _error(file: FileMetadata, code: str, message: str, result_type):
@@ -227,9 +238,9 @@ def load_variable_star_lightcurve(
         return _error(file, "invalid_schema", "CSV must contain exactly two source IDs.", VariableStarLightCurve)
     try:
         subdir = _validated_subdir(subdir)
+        merged = with_error_mse(merge_sources_by_mjd(raw_rows))
     except ValueError as exc:
         return _error(file, "invalid_input", str(exc), VariableStarLightCurve)
-    merged = with_error_mse(merge_sources_by_mjd(raw_rows))
     table = Table(
         {
             "mjd": [row.jd for row in merged], "source1": [row.source1 for row in merged],
@@ -238,10 +249,15 @@ def load_variable_star_lightcurve(
         }
     )
     table.meta["source_ids"] = source_ids[:2]
+    table.meta["uncertainty_method"] = _UNCERTAINTY_METHOD
+    table["mjd"].unit = "d"
+    for name in ("source1", "source2", "error1", "error2", "error_mse"):
+        table[name].unit = "mag"
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_lightcurve", subdir=subdir)
     return VariableStarLightCurve(
         file=file, artifact=artifact, rows_read=len(raw_rows), rows_merged=len(merged),
-        source_ids=source_ids[:2], preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+        source_ids=source_ids[:2], uncertainty_method=_UNCERTAINTY_METHOD,
+        preview=artifacts.preview_rows(table, PREVIEW_ROWS),
     )
 
 
@@ -250,7 +266,12 @@ def compute_variable_star_periodogram(
     start_period: float = 0.1, end_period: float = 1.0, output_name: str | None = None,
     subdir: str = "variable_star",
 ) -> VariableStarPeriodogram:
-    """Stage 2. Write the extracted 2,000-point weighted periodogram."""
+    """Stage 2. Weighted floating-mean LS, standard power in [0, 1], periods in days.
+
+    Power is fractional weighted chi-square improvement, not a detection
+    probability. Source magnitude errors are independent standard uncertainties;
+    source covariance and reference-magnitude uncertainty are not modeled.
+    """
     file = _describe(path)
     try:
         if variable_star not in {"source1", "source2"}:
@@ -270,6 +291,10 @@ def compute_variable_star_periodogram(
     except (OSError, ValueError, ZeroDivisionError) as exc:
         return _error(file, "invalid_input", str(exc), VariableStarPeriodogram)
     table = Table({"period": [row[0] for row in samples], "power": [row[1] for row in samples]})
+    table["period"].unit = "d"
+    table["power"].description = "Dimensionless fractional reduction in weighted chi-square."
+    table.meta.update(power_normalization="standard", fit_mean=True, period_unit="d",
+                      uncertainty_method=_UNCERTAINTY_METHOD)
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_periodogram", subdir=subdir)
     skipped = sum(row.jd is None or row.source1 is None or row.source2 is None for row in rows)
     warnings = [ToolWarning(
@@ -279,6 +304,8 @@ def compute_variable_star_periodogram(
     return VariableStarPeriodogram(
         file=file, artifact=artifact, samples=len(samples), start_period=start_period, end_period=end_period,
         variable_star=variable_star, preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+        power_normalization="standard", fit_mean=True, period_unit="d",
+        uncertainty_method=_UNCERTAINTY_METHOD,
         warnings=warnings,
     )
 
@@ -288,7 +315,11 @@ def fold_variable_star_lightcurve(
     phase: float = 0.0, display_periods: int = 2, output_name: str | None = None,
     subdir: str = "variable_star",
 ) -> VariableStarFoldedLightCurve:
-    """Stage 3. Fold a variable-star artifact at an explicit period."""
+    """Stage 3. Fold at a period in days with independent quadrature error bars.
+
+    The reference magnitude is fixed; covariance and shared calibration errors
+    are not included in the supplied one-sigma source errors.
+    """
     file = _describe(path)
     try:
         if variable_star not in {"source1", "source2"} or display_periods not in {1, 2}:
@@ -302,6 +333,10 @@ def fold_variable_star_lightcurve(
             rows, variable_star, reference_star_magnitude, period=period,
             phase=phase, display_periods=display_periods,
         )
+        # M3 represents unavailable error bounds as None. Keep those masked,
+        # while M2 still rejects any nonfinite calculated coordinate or bound.
+        if any(value is not None and not math.isfinite(value) for row in (*data, *errors) for value in row):
+            raise ValueError("Folded coordinates, magnitudes and error bounds must remain finite.")
     except FileNotFoundError as exc:
         return _error(file, "file_not_found", str(exc), VariableStarFoldedLightCurve)
     except (OSError, ValueError, IndexError) as exc:
@@ -313,6 +348,10 @@ def fold_variable_star_lightcurve(
         "error_low": MaskedColumn([row[1] or 0.0 for row in errors], mask=unbounded),
         "error_high": MaskedColumn([row[2] or 0.0 for row in errors], mask=unbounded),
     })
+    table["phase"].unit = "d"
+    for name in ("magnitude", "error_low", "error_high"):
+        table[name].unit = "mag"
+    table.meta.update(period_unit="d", uncertainty_method=_UNCERTAINTY_METHOD)
     artifact = artifacts.write_table(table, (output_name or Path(file.path).stem) + "_folded", subdir=subdir)
     unbounded_rows = sum(
         row.jd is not None and row.source1 is not None and row.source2 is not None
@@ -327,5 +366,6 @@ def fold_variable_star_lightcurve(
     return VariableStarFoldedLightCurve(
         file=file, artifact=artifact, period=period, phase=phase, display_periods=display_periods,
         rows_folded=len(data), preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+        period_unit="d", uncertainty_method=_UNCERTAINTY_METHOD,
         warnings=warnings,
     )

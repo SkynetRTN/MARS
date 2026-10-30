@@ -13,6 +13,7 @@ import math
 
 import numpy as np
 import pytest
+from astropy.timeseries import LombScargle
 
 from algorithms.hrdiagram_py import legacy
 from algorithms.pulsar.periodogram import find_global_max
@@ -126,11 +127,15 @@ def test_a_constant_differential_light_curve_is_rejected_by_the_periodogram():
         variable_periodogram(rows, "source1", 12.0, 0.5, 2.0)
 
 
-def test_an_ordinary_weighted_spectrum_is_unchanged():
+def test_an_ordinary_weighted_spectrum_preserves_the_m2_standard_power_contract():
+    times, values, errors = [0., 1., 2., 3.], [1., 2., 1., 0.], [.1, .2, .1, .3]
     samples = lomb_scargle_with_error(
-        [0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 1.0, 0.0], [0.1, 0.2, 0.1, 0.3], 0.1, 1.0, 4
+        times, values, errors, .1, 1., 4
     )
-    assert samples[0] == pytest.approx((0.10000000000000002, 0.0024349304797532984))
+    # The first trial aliases with the cadence: M2 does not fit phase roundoff.
+    assert samples[0] == pytest.approx((.10000000000000002, 0.))
+    expected = LombScargle(times, values, errors).power(1 / np.array(samples[1:])[:, 0], method="slow")
+    np.testing.assert_allclose(np.array(samples[1:])[:, 1], expected, atol=1e-12)
     assert all(math.isfinite(power) for _, power in samples)
 
 
@@ -161,7 +166,9 @@ def test_global_max_rejects_mismatched_arrays():
 
 def test_top_peaks_skip_non_finite_power():
     peaks = _top_peaks(np.array([1.0, 2.0, 3.0]), np.array([0.2, np.nan, 0.9]), 3, 0.02)
-    assert peaks == [{"x": 3.0, "power": 0.9}, {"x": 1.0, "power": 0.2}]
+    assert [(peak.period_s, peak.frequency_hz, peak.power) for peak in peaks] == [
+        (3., 1 / 3, .9), (1., 1., .2),
+    ]
 
 
 def test_top_peaks_of_nothing_are_empty():
@@ -208,7 +215,7 @@ def test_histogram_extremes_are_unchanged_from_two_points_up(n):
 # --- the registered fold tool -------------------------------------------------
 
 
-def test_the_fold_tool_masks_bounds_for_a_row_without_a_combined_error(artifact_dir):
+def test_fold_masks_missing_bounds_and_rederives_legacy_quadrature_errors(artifact_dir):
     from astropy.table import Table
 
     from tools.variable_star import (
@@ -219,6 +226,7 @@ def test_the_fold_tool_masks_bounds_for_a_row_without_a_combined_error(artifact_
 
     lightcurve = load_variable_star_lightcurve(resolve_variable_star_fixture("two_source_parity").path)
     table = Table.read(lightcurve.artifact.path, format="ascii.ecsv")
+    table["error_mse"] /= 2  # Pre-M2 caches used half the independent uncertainty.
     table["error_mse"] = Table.MaskedColumn(table["error_mse"], mask=[False, True, False, False])
     table.write(lightcurve.artifact.path, format="ascii.ecsv", overwrite=True)
 
@@ -237,6 +245,10 @@ def test_the_fold_tool_masks_bounds_for_a_row_without_a_combined_error(artifact_
     assert 0.0 not in {value for pair in previewed for value in pair}
 
     stage3 = Table.read(folded.artifact.path, format="ascii.ecsv")
+    assert stage3.meta["uncertainty_method"] == "independent_quadrature"
+    assert folded.uncertainty_method == "independent_quadrature"
+    assert str(stage3["phase"].unit) == "d"
+    assert str(stage3["error_low"].unit) == "mag"
     masked = list(stage3["error_low"].mask)
     assert masked == list(stage3["error_high"].mask)
     assert sum(masked) == 2
@@ -244,3 +256,5 @@ def test_the_fold_tool_masks_bounds_for_a_row_without_a_combined_error(artifact_
                                                stage3["error_high"], masked):
         if not is_masked:
             assert low < magnitude < high
+            assert magnitude - low == pytest.approx(.0223606797749979)
+            assert high - magnitude == pytest.approx(.0223606797749979)

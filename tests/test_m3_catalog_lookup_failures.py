@@ -347,7 +347,7 @@ def test_calibration_against_a_catalog_that_cannot_supply_the_filter_fails_by_na
     # UCAC's '*' wildcard, and not catalogs reached only through the
     # preferred-band fallback, which substitutes a different band.
     assert error.message.endswith(
-        "Catalogs that can calibrate 'U': SDSS, SkyMapper, Landolt, Stetson."
+        "Catalogs that can calibrate 'U': SDSS, Landolt, Stetson."
     )
     assert result.zero_point is None
 

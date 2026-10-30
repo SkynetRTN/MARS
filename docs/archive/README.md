@@ -25,6 +25,8 @@ archive completion date applies to its original implementation track.
 | [desktop-acceptance.md](desktop-acceptance.md) | M4's real desktop use: installing MARS into the Claude and ChatGPT desktop apps on macOS, Windows and Linux, and what to check. | 2026-10-23 | `../installing/` (per-platform guides); the master plan's M4 |
 | [optical-tools.md](optical-tools.md) | Thirteen broken links between the tool surface and the bundled data, and the stateless architecture underneath them. Baseline 1–4, stateless S0–S6, closure P1–P9. | 2026-09-16 | `../tool-architecture.md`; `../extraction.md`; `CLAUDE.md`'s *Python domain boundaries* |
 | [model-backends.md](model-backends.md) | The provider-neutral model port: `tools/llm/`, the four adapters, schema translation, argument validation, and the headless engine in `tools/agent/`. Phases −1–3. | 2026-09-09 | `../tool-architecture.md` section 10 |
+| [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | M2 detector coverage, catalog-query notices and calibration-sample disclosures. Completed on `feature/m2`; merged through PR #124. | 2026-10-23 | [Acceptance and retained limits](../analysis/catalog-coverage-sufficiency.md); [current gate status](../working/master-continuation-plan.md) |
+| [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | M2 numerical disclosures and metadata-grounded author attribution grading. Completed on `feature/m2`; merged through PR #124. | 2026-10-23 | [Acceptance and retained limits](../analysis/warnings-benchmark-claims.md); [current gate status](../working/master-continuation-plan.md) |
 
 Two completed tracks are not filed here.
 
@@ -43,7 +45,7 @@ remains as a completed record with a completion annotation.
 
 `docs/README.md`'s lifecycle used to say to delete a plan once its work landed,
 on the grounds that git history preserves it. It does, but only for someone who
-already knows the document existed and what it was called. These three carry a
+already knows the document existed and what it was called. These records carry a
 lot of reasoning that no reference document has room for — measured findings
 that overturned a design guess, the reason a quirk is deliberate, the
 alternatives that were rejected and why — and that reasoning is what gets

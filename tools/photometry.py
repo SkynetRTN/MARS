@@ -35,6 +35,7 @@ import math
 from pathlib import Path
 
 import pandas as pd
+from tools.science_warnings import capture_numerical_warnings
 
 from tools.artifacts import artifact_write_directory, describe_file, discard_placeholder, reserve_path_in
 from tools.photometry_pipeline import (
@@ -172,8 +173,14 @@ def _resolve_calibration_inputs(
     ):
         try:
             variable_sources = query_catalogs(["VSX"], wcs=wcs, skip_failed=True)
-        except Exception:
+        except MemoryError:
+            raise
+        except Exception as exc:
             variable_sources = None
+            from algorithms.query.coverage import note_query_issue
+
+            note_query_issue("catalog_query_incomplete",
+                             f"VSX variable-star cross-check failed: {exc}. Known variables may remain.")
     return list(catalog_sources), variable_sources, selected_catalogs
 
 
@@ -265,6 +272,56 @@ def run_photometry_on_target(
     not the CLI script's own ``~/Downloads`` default), returned as
     ``artifacts``.
     """
+    operation_warnings: list[ToolWarning] = []
+    from algorithms.query.coverage import collect_query_notices
+    from tools.catalogs import catalog_query_warnings
+
+    try:
+        with collect_query_notices() as notices:
+            try:
+                with capture_numerical_warnings(operation_warnings):
+                    result = _run_photometry_on_target(
+                        target, use_field_cal=use_field_cal, catalogs=catalogs,
+                        zero_point_mag=zero_point_mag, output_dir=output_dir,
+                        write_source_table=write_source_table, warnings=operation_warnings,
+                    )
+            finally:
+                for warning in catalog_query_warnings(notices):
+                    if warning not in operation_warnings:
+                        operation_warnings.append(warning)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        # A compute or artifact failure must retain notices already emitted.
+        try:
+            file = describe_file(resolve_fits_path(target))
+        except MemoryError:
+            raise
+        except Exception:
+            file = FileMetadata(path=str(target), exists=False)
+        return PhotometryRunResult(
+            file=file,
+            errors=[ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")],
+            warnings=operation_warnings,
+        )
+    for warning in operation_warnings:
+        if warning not in result.warnings:
+            result.warnings.append(warning)
+        if result.zero_point is not None and warning not in result.zero_point.warnings:
+            result.zero_point.warnings.append(warning)
+    return result
+
+
+def _run_photometry_on_target(
+    target: str,
+    *,
+    use_field_cal: bool,
+    catalogs: list[str] | None,
+    zero_point_mag: float | None,
+    output_dir: str | Path | None,
+    write_source_table: bool,
+    warnings: list[ToolWarning],
+) -> PhotometryRunResult:
     try:
         fits_path = resolve_fits_path(target)
     except FileNotFoundError:
@@ -286,9 +343,16 @@ def run_photometry_on_target(
         zero_point_mag=zero_point_mag,
         use_field_cal=use_field_cal,
         catalogs=catalogs,
+        warnings=warnings,
     )
     magnitude_label = magnitude_label_for(zero_point)
 
+    # Keep completed calibration disclosures before reserving/writing output.
+    from tools.photometry_pipeline import _zero_point_warnings
+
+    for warning in _zero_point_warnings(zero_point):
+        if warning not in warnings:
+            warnings.append(warning)
     artifact_dir = artifact_directory(output_dir) if output_dir is not None else artifact_write_directory()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -309,6 +373,7 @@ def run_photometry_on_target(
             zero_point_slop=diagnostics.get("zero_point_slop"),
             rej_percent=diagnostics.get("rejection_percent"),
             source_count=diagnostics.get("num_calibration_stars", 0),
+            warnings=warnings,
         )
         zp_plot_path = reserve_path_in(
             artifact_dir, f"{fits_path.stem}_photometry_zeropoint", "png"
@@ -344,13 +409,6 @@ def run_photometry_on_target(
     # PhotometryRunResult.exposure_seconds: without this, flux and mag look
     # mutually inconsistent by several magnitudes to anyone checking the math.
     exposure_seconds = getattr(results[0], "exp_length", None) if results else None
-
-    warnings = []
-    failure = getattr(zero_point, "failure", None)  # resolutions may be duck-typed
-    if getattr(zero_point, "failure_code", None) == "unusable_response":
-        warnings.append(ToolWarning(code="unusable_response", message=failure))
-    elif failure:
-        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
 
     return PhotometryRunResult(
         file=describe_file(fits_path),
@@ -412,8 +470,9 @@ def calibrate_zeropoint(
     ``ngc5128_b_002`` has a recorded full response, so ``"full_response"``
     remains limited to it while ``"selected_rows"`` works for all four. This
     path re-measures the photometry from pixels, so it is a real solve, not a
-    bit-exact one; ``tools.fieldcal_reference.replay_field_calibration`` is
-    the bit-exact selection replay over the recorded detections.
+    recorded-row replay; ``tools.fieldcal_reference.replay_field_calibration``
+    instead selects from the recorded detections and catalog response. Both
+    use M2's corrected solver, which can differ from the historical fit.
 
     ``compare_to`` handles the two fixture families' differing
     instrumental-magnitude scales: the solved value is put on the reference's
@@ -556,24 +615,34 @@ def calibrate_zeropoint(
             catalog_sources = clip_sources_to_wcs(catalog_sources, [wcs])
             if variable_sources is not None:
                 variable_sources = clip_sources_to_wcs(variable_sources, [wcs])
-        resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
-            header,
-            wcs,
-            catalog_sources=catalog_sources,
-            catalogs=selected_catalogs,
-            variable_check_tol=field_cal_settings.variable_check_tol,
-            variable_sources=variable_sources,
-        )
-        outcome = perform_field_calibration(
-            header.copy(),
-            data,
-            wcs=wcs,
-            field_cal_settings=field_cal_settings,
-            photometry_settings=photometry_settings,
-            extraction_settings=SourceExtractionSettings(),
-            catalog_sources=resolved_sources,
-            variable_sources=variable_sources,
-        )
+        from algorithms.query.coverage import collect_query_notices
+        from tools.catalogs import catalog_query_warnings
+
+        with collect_query_notices() as notices:
+            try:
+                resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
+                    header,
+                    wcs,
+                    catalog_sources=catalog_sources,
+                    catalogs=selected_catalogs,
+                    variable_check_tol=field_cal_settings.variable_check_tol,
+                    variable_sources=variable_sources,
+                )
+            finally:
+                warnings.extend(catalog_query_warnings(notices))
+        with capture_numerical_warnings(warnings):
+            outcome = perform_field_calibration(
+                header.copy(),
+                data,
+                wcs=wcs,
+                field_cal_settings=field_cal_settings,
+                photometry_settings=photometry_settings,
+                extraction_settings=SourceExtractionSettings(),
+                catalog_sources=resolved_sources,
+                variable_sources=variable_sources,
+            )
+    except MemoryError:
+        raise
     except UnsupportedFilterError as exc:
         return ZeropointComparison(
             errors=[ToolError(code="unsupported_filter", message=str(exc))],
@@ -607,6 +676,15 @@ def calibrate_zeropoint(
             warnings=warnings,
         )
     zero_point = float(zero_point)
+
+    from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
+
+    warnings.extend(calibration_reference_warnings(
+        getattr(_result, "phot_results", None), getattr(_result, "_reference_routes", None),
+    ))
+    warnings.extend(calibration_sample_warnings(
+        getattr(_result, "phot_results", None), getattr(_result, "_num_calibration_stars", None),
+    ))
 
     if compare_to is not None:
         # The solve above measures on MARS's own instrumental scale, whose

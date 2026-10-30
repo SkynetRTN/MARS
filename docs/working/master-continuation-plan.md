@@ -1,18 +1,24 @@
 # MARS release closure gate
 
-Updated 2026-10-20 against `main` at `a6785aa`, after pulling the latest changes.
-M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
-and #123; their changes are absent from the published `0.1.0rc6`. Publication remains deferred until the remaining
+Updated 2026-10-30 against `main` at `e1ad8b0` (M2, PR #124), merged into
+M4's branch `docs/m4-desktop-acceptance`.
+M0, M1, M2 and M3 are closed. M1 merged through PR #118, M3 through PRs #122
+and #123, and M2 through PR #124; their changes are absent from the published
+`0.1.0rc6`. Publication remains deferred until the remaining
 gates below have been worked through. The next release needs a new version.
 By maintainer decision (2026-10-26), it ships as soon as every gate with a
 manual step is complete; the install guides (`../installing/`) always point
 at the latest release and name none. M4's work stays on its branch, without
 a PR, until all of M4 is done.
 
-M2 is open in full. PR #120 is abandoned as an implementation path and supplies
-no closure evidence. Reassess its subjects against main along with the rest of
-M2; do not continue from that branch or count its tests as acceptance.
+M2 is closed and merged into main (PR #124, 2026-10-30), unpublished. Live
+provider failures remain recorded below.
+M4 and subsequent release gates remain open. PR #120 is abandoned as an
+implementation path and supplies no closure evidence; do not continue from that
+branch or count its tests as acceptance.
 
+This is the working document for all manual step gates, review-fix status and
+closure evidence; keep those updates here rather than in separate gate plans.
 Each unchecked item describes a failure or a specific unanswered question.
 Close it with evidence of the required behavior, or an explicit maintainer
 decision to retain the limitation and tell users about it. Check old reports
@@ -23,63 +29,258 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-- [ ] **Pulsar channels and axes.** Sum and YY spectra are plotted as
-  "Polarization XX" because saved spectra omit the selected channel. Frequency
-  spectra use the period chart's label and logarithmic axis. Artifacts, plots
-  and metadata must identify the actual channel and distinguish seconds from
-  hertz, including older artifacts whose channel is unknown.
-- [ ] **Pulsar candidates and confidence.** `top_peaks.x` changes units by
-  mode, so callers can fold at the wrong period. Candidate and search-bound
-  units must be unambiguous. Confidence counts grid points as independent
-  trials; the search limit uses mean spacing despite gaps. Their scientific
-  meaning still needs validation.
-- [ ] **Variable-star powers and errors.** Weighted spectra mix weighted and
-  unweighted normalization, changing the reported strength of periodic signals;
-  differential errors are divided by two. Powers and uncertainties need
-  independent scientific checks before being presented as reliable measurements.
-- [ ] **Cluster ages and membership.** Legacy HR helpers discard ages above
-  13.8 million years, can miss ID `10` when joining IDs in numerical versus
-  alphabetical order, and exclude exactly zero proper motion. Supported
-  results must retain valid old clusters, matching sources and zero motions.
-- [ ] **Legacy coordinates, extinction and mass.** Negative sexagesimal
-  coordinates lose their sign; W1 extinction returns zero outside the
-  implemented law; the extinction multiplier ignores a non-default `rv`.
-  The V-band wavelength and velocity-dispersion statistic also need scientific
-  checks. Establish which current results use these helpers and which values
-  are valid. The newer HR fitter's corrections do not close these legacy
-  issues. The cancelling mass/radius unit factors are not a separate bug.
-- [ ] **Accepted sky positions and reference stars.** Without a scale hint,
-  the WCS position check can admit a distant solution. After an ATLAS solve,
-  reference stars are queried around the original hint rather than the solved
-  field. The southern-declination fallback returns zero. Accepted positions
-  and reference-star coverage must describe the actual image.
-- [ ] **Photometric calibration.** Outlier rejection does not run for ten
-  or fewer calibration stars; brightness trimming can retain saturated stars
-  and mishandle magnitude zero. The fit reports extra scatter even when
-  measurement errors explain the residuals, and explicit gain `1` can be
-  replaced by the FITS header. Selection, uncertainties and the gain used must
-  agree with the requested measurement.
-- [ ] **Catalog magnitudes and filters.** Photographic B/R and Tycho BT/VT
-  are offered under standard band names; UCAC's Open magnitude can satisfy
-  every filter; catalog-name mismatches prevent some transform lookups.
-  Catalog selection and magnitude calculation disagree on H-alpha values.
-  Establish the supported bands and validity of J-K, APASS I and SkyMapper
-  conversions and narrowband zero points.
-- [ ] **Catalog coverage and sufficiency.** Polar footprints can omit stars;
-  brightness-limited responses and stopping at the first nonempty catalog can
-  leave a biased or insufficient calibration sample. SkyMapper also changes
-  caller constraints. Results must disclose incomplete coverage and inadequate
-  calibration, and one query must not change later queries.
-- [ ] **Warnings and benchmark claims.** Reachable retained numerical bugs
-  are not consistently disclosed in tool results. The answer grader can accept
-  invented author attribution when numbers are sourced. Users need relevant
-  limitations, and benchmark conclusions must account for attribution errors.
+**Closed after the adversarial follow-up and validation; merged into main through PR #124.**
+The independent comparison against main found seven remaining cases. Each now
+has a reproduced failure and a regression-tested correction. The follow-up added
+51 regression/control cases, including the subsequent independent review fixes.
 
-Evidence: [pulsar tool](../../tools/pulsar.py),
-[legacy HR helpers](../../algorithms/hrdiagram_py/legacy.py),
-[algorithm review](../analysis/algorithm-remediation-plan.md),
-[pulsar review](../analysis/pulsar-pipeline-review.md),
-[benchmark results](../benchmarking/results.md).
+- [x] Reject singular nonlinear SIP solutions before header writes.
+- [x] Make pulsar alias powers and residuals independent of the time origin.
+- [x] Exclude explicitly saturated inputs from direct calibration.
+- [x] Preserve Astropy masks in legacy ages, membership and motion statistics.
+- [x] Preserve catalog/reference warnings when photometry computation or artifacts fail.
+- [x] Avoid treating ordinary parenthesized dates as author citations.
+- [x] Preserve `resource_limit` for WCS allocation failures.
+
+Independent review caught three further cases in the first corrections: SIP
+terms Astropy ignores must not enter the certificate; completed fit disclosures
+must survive later computation, not only output failure; and inner WCS/Atlas
+helpers must propagate allocation failures. All three were reproduced and
+corrected. SIP validation is a sufficient global certificate with conservative
+rejection of uncertifiable/unsupported maps. No filter transform, including
+H-alpha, or photometric fitting equation changed. Older pulsar phase artifacts
+require recomputation for current calibrated plots.
+
+
+Adversarial follow-up verification with locked dependencies, before the final
+branch-review corrections below:
+
+| Check | Result |
+| --- | --- |
+| Full suites with MCP and native prerequisites, Python 3.12 and 3.13 | 4,272 passed, 86 skipped on each version; no failures or errors. All four configured native checks passed. |
+| SDK-free CI subset, both versions | 229 passed, 21 expected skips on each version. |
+| Wheel/source build, strict metadata and contents | Passed, including the new SIP validator. |
+| Installed-wheel MCP self-tests and SIP acceptance controls, both versions | Passed outside the checkout. |
+| Compilation, generated guidance, whitespace and frozen source/test hashes | Passed. |
+
+The 224 warnings on each native run are all Astropy FITS notices; numerical
+runtime/rank warnings were treated as errors. The 86 skips are 80 live-network
+cases, one Ollama check, four absent historical benchmark runs and one
+Windows-only allocation check. No fresh provider-availability or historical
+benchmark claim is implied; the earlier live limits remain recorded below.
+
+Final branch review corrected catalog saturation inherited through a conflicting
+positional row: already referenced measurements retain their valid ID association,
+while ID matches and positional reference lookup keep their saturation checks.
+Regressions cover partial, reordered and unrelated catalogs, missing IDs and
+different ID namespaces. The architecture documentation now describes replaying
+recorded inputs and reporting fit differences, rather than promising bit-exact
+historical results. Independent review found no remaining issue in either fix.
+After these corrections, the full native suite on Python 3.13 passed with 4,284
+tests and 86 expected skips; all 224 warnings were FITS notices. The 92 focused
+calibration tests passed on both supported Python versions; compilation,
+generated guidance and whitespace checks passed.
+
+PR #124's original macOS containment run failed when the call following
+cancellation returned an error; the next run passed. That assertion omitted
+the error details. Investigation separately reproduced healthy workers being
+stopped when temporary cache files disappeared during runtime budget scans.
+Scans now tolerate vanished files/directories while retaining
+entry limits and access-error rejection. Deterministic regressions cover both
+races, and the cancellation assertion now includes the returned error details.
+The Windows follow-up failed a helper-PID assertion. That probe now retains
+the actual helper interpreter's process handle before cleanup and checks its
+termination immediately after return, avoiding launcher/PID reuse ambiguity.
+
+All ten checkpoints and the four final corrections below are complete within
+the recorded limits. Merged into main through PR #124; unpublished.
+Other release gates remain open. Technical derivations and detailed acceptance
+evidence are linked below; this section records outcomes and remaining limits.
+
+- [x] **Pulsar channels and axes.** Results, saved spectra and plots preserve
+  the selected channel and consistently identify periods in seconds and
+  frequencies in hertz. Legacy artifacts warn when channel metadata is missing
+  or confidence levels are uncalibrated.
+  [Evidence](../../tests/test_pulsar_spectrum_semantics.py).
+- [x] **Pulsar candidates and confidence.** Candidates expose both period and
+  frequency; bounds and evaluated trial counts describe the actual search.
+  Sampling heuristics and conditional Gaussian false-alarm assumptions are
+  explicit. Stable centering and residual fitting handle representable variation;
+  constants are rejected and unresolved bounds warn. Older M2 spectra require
+  recomputation before their thresholds are treated as current. The bound and
+  empirical fold SNR are not pulsar probabilities; correlated noise, interference
+  and repeated retuning remain outside the calibration.
+  [Acceptance and limits](../analysis/pulsar-candidates-confidence.md).
+- [x] **Variable-star powers and errors.** Weighted powers use consistent
+  floating-mean least squares and remain stable across response amplitudes.
+  Differential errors use independent quadrature; old cached errors are
+  rederived. Results identify units, normalization and excluded uncertainty
+  sources. Invalid or degenerate inputs have defined failures.
+  [Acceptance and limits](../analysis/variable-star-powers-errors.md).
+- [x] **Cluster ages and membership.** Legacy ages use the correct units and
+  source joins use exact identifiers. Selection accepts measured zero motion,
+  rejects missing/nonfinite components and handles degenerate boundaries.
+  These legacy helpers remain distinct from registered membership tools; no
+  membership probability is claimed.
+  [Acceptance and scope](../analysis/cluster-ages-membership.md).
+- [x] **Legacy coordinates, extinction and mass.** Sexagesimal signs, including
+  negative zero, are preserved. Extinction honors its supported domain and
+  supplied parameters. Motion scatter, radius and mass outputs identify their
+  units and proxy assumptions. Protected radius/mass conversions are unchanged.
+  [Acceptance and limits](../analysis/legacy-coordinates-extinction-mass.md).
+- [x] **Accepted sky positions and reference stars.** Position checks and
+  reference queries use solved WCS geometry in a consistent sky frame. Invalid
+  and singular solutions are rejected before header writes. Footprints account
+  for rotation, displaced reference pixels, seams and poles; sampled distortion
+  coverage remains an estimate. Southern fallback coordinates retain their sign.
+  [Acceptance and scope](../analysis/accepted-sky-positions.md).
+- [x] **Photometric calibration.** Small-sample rejection, heterogeneous errors
+  and fitted scatter are handled consistently. Saturation/brightness selection,
+  zero magnitudes and explicit gain settings are respected. Solver and plots
+  share the surviving rows; empirical errors avoid cancellation. Differences
+  from historical fits are disclosed rather than hidden by changed fixtures.
+  [Acceptance and limits](../analysis/photometric-calibration.md).
+- [x] **Catalog magnitudes and filters.** Selection, numeric resolution and
+  reporting share production filter precedence and preserve native band
+  identities. Existing transforms, including H-alpha, are unchanged. Retained
+  approximations and relative narrowband references are disclosed. Live catalog
+  comparisons were recorded on 2026-10-23 and repeated in the follow-ups below;
+  current provider failures prevent a fully passing fresh revalidation.
+  [Acceptance and live evidence](../analysis/catalog-magnitudes-filters.md).
+- [x] **Catalog coverage and sufficiency.** Queries enclose and clip to detector
+  footprints, including seams, poles and cache rounding. Raw response caps,
+  unqueried fallback catalogs and failed variable-star checks remain visible.
+  Fits report actual survivors and disclose unverified sample sufficiency;
+  distorted-footprint coverage is not guaranteed complete.
+  [Acceptance and limits](../analysis/catalog-coverage-sufficiency.md).
+- [x] **Warnings and benchmark claims.** Tool results disclose retained numerical
+  and calibration limits, including through handled failures. Memory failures
+  retain `resource_limit`; HR artifact failures retain extraction notices.
+  Author citations require matching returned metadata and preserve bibcode
+  association across supported prose/table forms. The grammar is bounded and
+  does not verify every factual claim. Historical benchmark scores remain
+  attribution-unchecked until the original sessions can be regraded together.
+  [Acceptance and limits](../analysis/warnings-benchmark-claims.md).
+
+### M2 review corrections
+
+The comprehensive audit's six findings are resolved: pulsar centering, singular
+WCS acceptance, author-qualification scope, bibcode association, memory-error
+classification and HR warnings after artifact failure. Regression tests cover
+those failures and the subsequent review cases, including genuine disclaimers,
+wrapped citations and table boundaries. No catalog/H-alpha transform,
+calibration equation, public input or historical benchmark score was changed.
+
+Evidence: [pulsar precision](../../tests/test_pulsar_probability_precision.py),
+[WCS acceptance](../../tests/test_wcs_accepted_positions.py),
+[attribution](../../tests/test_bench_attribution.py),
+[public failure handling](../../tests/test_numerical_warnings.py).
+
+The subsequent warning investigation also corrected extreme-scale folded SNR
+and withheld unidentifiable limiting magnitudes. Masked catalog positions and
+empty annuli avoid invalid conversions/division while preserving their existing
+rejection or disclosure. Regression tests check SNR across pulse phases and
+lossless rescaling, retain valid recorded calibration results, and treat
+numerical warnings as errors.
+
+### M2 validation and remaining checks
+
+Final closure review's four findings are resolved:
+
+- [x] Peak-fold diagnostics use the searched pulsar channel.
+- [x] Explicit VizieR errors are rejected, including failed VSX checks;
+  rejected cached replies are evicted so later queries can recover.
+- [x] Identified inner calibration and catalog-fallback handlers propagate
+  allocation failures to `resource_limit`.
+- [x] Composite HR output failures preserve extraction warnings.
+
+Regressions reproduced the failures before correction. Independent final review
+found no outstanding actionable findings. Transforms, including H-alpha,
+zero-point equations and public inputs are unchanged.
+
+Pre-integration M2 closure verification, 2026-10-28, with locked dependencies:
+
+| Check | Result |
+| --- | --- |
+| Full default suites with MCP, Python 3.12 and 3.13 | 4,149 passed, 88 skipped on each version. |
+| Affected-area regression suite | 251 passed, 1 gated live-query skip; 31 regression/control cases added. |
+| Live M2 magnitude/filter and coverage retry, fresh cache | 10 passed; Pan-STARRS, SkyMapper and UCAC failed on provider errors. |
+| Wheel/source build, strict metadata and contents checks | Passed. |
+| Installed-wheel MCP self-test, both Python versions | Passed outside the checkout. |
+| Compilation, generated guidance and whitespace checks | Passed. |
+| Prior SDK-free matrix, 2026-10-27 | 229 passed, 21 expected skips on each version. |
+| Prior full suites with native prerequisites, 2026-10-27 | 4,122 passed, 84 skipped on each version; all four native checks passed. |
+| Prior complete network run with ADS, 2026-10-27 | 63 passed, 13 provider failures, 2 header-priority skips; ADS passed. |
+
+The final runs' **214 warnings** are Astropy FITS notices: 213 repeated date
+normalizations and one synthetic textual `J2000` equinox. Runtime and
+polynomial-rank warnings were treated as errors. The earlier 220-event run's
+six numerical/conversion events were addressed by the warning repairs above;
+the 224-event native runs additionally exercised date and header-only WCS
+notices. Sampled celestial coordinates and original headers were unchanged by
+normalization. Two original NGC 5286 B fixtures (`000` and `002`) nevertheless
+carry inconsistent `DATE-OBS`/`MJD-OBS` values; they are not validated timing
+references.
+
+The **88 default skips** are 78 network cases, one Ollama check, four historical
+benchmark cases, one Windows-only check and four native-data checks. Separate
+configured runs cover the native paths; this final patch leaves the native
+solver implementation unchanged. They used astrometry.net indexes under
+`/srv/agents/catalogs/astrometry` and UCAC5 at `/srv/agents/catalogs/ATLAS/UCAC5`.
+The blind NGC 3628 test asserts recovery of its recorded WCS; the UCAC check
+exercises real lookup and diagnostics without claiming blind ATLAS convergence.
+Ollama was explicitly attempted but unreachable, original historical runs are
+absent from this checkout, and Windows allocation control cannot run on Linux.
+SDK-free skips additionally cover the absent optional MCP package.
+
+Live queries used the responding [CDS-listed South Africa mirror](https://vizier.cds.unistra.fr/vizier/mirrors.gml)
+for configurable catalog clients. Pan-STARRS and SkyMapper returned interrupted
+query errors; UCAC timed out. These now produce explicit provider failures,
+and failed VSX checks carry incomplete-query warnings. The complete network
+follow-up also encountered unavailable SIMBAD and default VizieR services; a
+Harvard retry failed as well. These failures remain failed checks and supply
+no passing evidence. Other available catalog/value checks and eligible
+field-calibration comparisons passed. Header zero points alone skip those
+comparisons.
+
+Earlier evidence is retained separately: on 2026-10-26, 76 network cases passed
+with two header-priority skips. Current provider failures prevent a clean fresh
+repetition of the entire live set. They remain a service revalidation limit;
+the four implementation findings above have regression coverage and are closed.
+
+### Main reconciliation, 2026-10-28
+
+The six incoming main commits through `fb8b19e` (PR #123) were reconciled in a
+detached verification checkout before integration into `feature/m2`. Main's ADS
+object translation, page aggregation and input validation are retained alongside
+M2's scientific warnings, attribution guidance and regression coverage. Catalog
+transforms, including H-alpha, and native solver paths are unchanged.
+
+Combined tests exposed conflicting ADS test fixtures and error handling. The
+fixtures now patch the same singleton; provider errors take precedence over
+translated queries, allocation failures retain `resource_limit`, unresolved-object
+warnings survive handled search failures, and malformed records are
+`unusable_response`. Independent review found the lost-warning case; regression
+tests reproduced it and the malformed-record cases before correction.
+
+Verification completed before the branch merge, using locked dependencies:
+
+| Check | Result |
+| --- | --- |
+| Full default suites with MCP, Python 3.12 and 3.13 | 4,217 passed, 90 skipped on each version; no failures or errors. |
+| ADS/provider, guidance and code regressions after review fixes | 192 passed. |
+| Credentialed live ADS object, paging and unknown-object checks | All three passed with a fresh cache on retry; two initial service timeouts remain recorded. |
+| SDK-free CI subset, Python 3.12 and 3.13 | 229 passed, 21 expected skips on each version. |
+| Wheel/source build, strict metadata, contents, installed-wheel MCP self-tests | Passed, including both supported Python versions outside the checkout. |
+| Compilation, generated guidance and whitespace | Passed. |
+
+The integrated default runs retain the same 214 FITS notices and strict numerical
+warning checks. Their 90 skips comprise 80 live-network cases (including three
+credentialed ADS cases), one Ollama check, four historical benchmark cases, one
+Windows-only check and four native-data checks. The ADS cases passed separately;
+prior native evidence and the other live-provider limits above remain distinct.
+The tested implementation and regression files were transferred unchanged into
+the branch, which then merged into main through PR #124 (2026-10-30).
 
 ## M3: failed inputs and services must produce usable failures
 
@@ -131,7 +332,7 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   or non-finite weighted spectra raise `ValueError`, matching the pulsar
   helpers. Peak selection ignores non-finite power. Singleton/tied histograms
   return one bin, Sturges' rule or the value itself. Ordinary results are
-  unchanged. Evidence: `tests/test_m3_lightcurve_helpers.py`, the updated
+  consistent with M2's corrected scientific contracts. Evidence: `tests/test_m3_lightcurve_helpers.py`, the updated
   pinned tests, and `docs/extraction.md` (Python M3 direct-helper contracts).
 - [x] **WCS setup and I/O failures.** Recheck no-hint ATLAS input and textual
   equinoxes such as `J2000`. Missing binaries, bad catalog roots and a full
@@ -143,13 +344,13 @@ Evidence: [pulsar tool](../../tools/pulsar.py),
   catalog root and a full disk on every path, labelled by backend, so only an
   empty list without a WCS is `no_solution`. Evidence:
   `tests/test_m3_wcs_failures.py`, live runs with the operator solver data,
-  `docs/extraction.md` WCS §9. The `solver_data` blind test still skips
-  because it omits configured settings, which is M4's.
+  `docs/extraction.md` WCS §9. The blind test now passes explicit operator
+  settings and recovers the recorded WCS; configured failure no longer skips.
 - [x] **Provider response changes.** Renamed, missing or non-finite columns
   can make populated responses look empty. Landolt/USNO, SDSS, SkyMapper and
   SIMBAD mappings, Gaia/literature cluster steps and radio VizieR/NED chains
-  need focused contract evidence. ADS `abs:`/`object:` grouping remains an
-  unconfirmed workaround. Distinguish no matches from unusable responses.
+  need focused contract evidence. ADS object searches must use the provider's
+  supported query flow. Distinguish no matches from unusable responses.
   *Closed:* every listed mapping and chain was checked live and fixed where a
   populated response looked empty or escaped as an exception; unusable
   responses raise `ProviderResponseError` / `unusable_response`. Live findings

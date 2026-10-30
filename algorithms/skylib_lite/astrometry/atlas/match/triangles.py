@@ -9,6 +9,8 @@ import numpy as np
 
 try:  # pragma: no cover - optional dependency
     from scipy.spatial import cKDTree
+except MemoryError:
+    raise
 except Exception:  # pragma: no cover - fallback implementation
 
     class cKDTree:  # type: ignore[no-redef]

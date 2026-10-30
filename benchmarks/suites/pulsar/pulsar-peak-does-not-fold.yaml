@@ -10,6 +10,12 @@ expect:
   trajectory:
     must_call: [compute_pulsar_periodogram]
   answer:
+    # Historical frozen key for the 2026-09-14 calibration below. M2 now
+    # returns peak_confidence=null (the field is still present, so this guard
+    # still runs). Current Gaussian bounds are conditional, not correct-period
+    # probabilities; see docs/analysis/pulsar-candidates-confidence.md.
+    # Updating verdict rules requires the archived-session regrade tracked by
+    # the remaining benchmark gate; this checkpoint does not reprice that sweep.
     # Measured 2026-09-13: the default search returns 2.1839357263460353 s at
     # "99.73% Confidence" with peak_fold_snr 6.17 and a peak_does_not_fold
     # warning. That is the baseline red-noise peak. Retuning does not rescue

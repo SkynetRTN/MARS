@@ -11,17 +11,12 @@ by field calibration and query orchestration. Provider-specific helpers for
 database tools live in direct submodules such as ``algorithms.catalogs.ads``,
 ``algorithms.catalogs.atnf``, and ``algorithms.catalogs.ned``.
 
-Two registries live here, and the difference between them is load-bearing:
-
-``CATALOGS``
-    All 11 catalogs, keyed by MARS catalog name. Read by filter-aware catalog
-    selection (``algorithms.query.selection``) and by the query runner.
-``CATALOG_OPTIONS``
-    A two-catalog (APASS, PanSTARRS) subset in ``catalog_options.py``, read only
-    by reference-magnitude resolution. It carries narrowband aliases —
-    ``H_alpha``, ``H_beta`` — that ``CATALOGS['APASS']`` does not. Collapsing the
-    two would silently change which reference band a narrowband image resolves
-    to. See ``catalog_options.py`` for the full reasoning.
+``CATALOGS`` holds the eleven current declarations. Selection, numeric
+reference resolution and tool reporting share its effective maps through
+``catalogs.filters``. ``CATALOG_OPTIONS`` retains the two original upstream
+records as a compatibility/provenance export; it no longer controls resolution.
+APASS H-alpha keeps the production Lupton R expression, including normalized
+underscored spellings. All numerical transform coefficients are retained.
 
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
 observation_asset_processing/optical_data_processing/catalogs/__init__.py
@@ -118,6 +113,7 @@ CATALOGS: dict[str, Catalog] = {
     ),
     "PanSTARRS": PanSTARRSCatalog(
         filter_lookup={
+            **NARROWBAND_FILTER_LOOKUP,
             # naming
             "g'": "gprime",
             "r'": "rprime",
@@ -134,7 +130,7 @@ CATALOGS: dict[str, Catalog] = {
     "Landolt": LandoltCatalog(filter_lookup=_OCL_TO_V),
     "Stetson": StetsonGlobsCatalog(filter_lookup=_OCL_TO_V),
     "2MASS": TwoMASSCatalog(),
-    "Tycho": Tycho2Catalog(filter_lookup=_OCL_TO_V),
+    "Tycho": Tycho2Catalog(),
     "UCAC": UCAC5Catalog(),
     "USNO": USNOB1Catalog(),
     "VSX": VSXCatalog(),

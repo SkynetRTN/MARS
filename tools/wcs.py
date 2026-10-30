@@ -35,6 +35,7 @@ from tools.astrometry import (
 )
 from tools.config import BUNDLED_DATA_DIR
 from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
+from tools.science_warnings import capture_numerical_warnings
 
 
 #: The committed fixture tree, and the subtrees under it that hold fixtures.
@@ -463,6 +464,8 @@ def solve_astrometry(
             has_wcs=False,
             errors=[ToolError(code="file_changed", message=str(exc))],
         )
+    except MemoryError:
+        raise
     except Exception as exc:
         return WcsSummary(
             file=file,
@@ -542,7 +545,7 @@ def solve_astrometry(
     attempted_backends: list[str] = []
     solver_failures: list[str] = []
     try:
-        with TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
+        with capture_numerical_warnings(configuration_warnings), TemporaryDirectory(prefix="mars-wcs-") as tmpdir:
             solve_result = _solve_wcs(
                 header,
                 data,
@@ -562,6 +565,8 @@ def solve_astrometry(
             warnings=configuration_warnings,
             errors=[ToolError(code="search_radius_without_hint", message=str(exc))],
         )
+    except MemoryError:
+        raise
     except Exception as exc:
         return WcsSummary(
             file=file,
@@ -636,6 +641,8 @@ def solve_astrometry(
                 warnings=configuration_warnings,
                 errors=[ToolError(code="file_changed", message=str(exc))],
             )
+        except MemoryError:
+            raise
         except Exception as exc:
             return _summary_from_wcs(
                 file.path,

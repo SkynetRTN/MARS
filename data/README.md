@@ -164,11 +164,13 @@ Four complete Skynet field calibrations, each a matched pair:
 - `fit_summary.json` — run metadata and, under `production_calc_solution`, the
   five numbers `calc_solution` returned for those rows.
 
-This pair is what makes `tests/test_fieldcal_solution.py` a genuine parity test
-rather than a self-consistency check: inputs and expected outputs were both
-recorded upstream, before the extraction. MARS reproduces all four to the last
-float bit — the only value with any drift is `limmag5`, which goes through
-`np.polyfit`.
+These inputs and outputs were recorded upstream before extraction, and the
+original extracted solver reproduced all four to the last float bit apart
+from `limmag5`'s `np.polyfit` drift. M2 intentionally corrects the scatter and
+rejection policy. `tests/test_fieldcal_solution.py` now checks these same inputs
+against an independent scientific fit while preserving all recorded outputs.
+See [the M2 acceptance record](../docs/analysis/photometric-calibration.md)
+for current behavior, differences and validation limits.
 
 | Directory | Upstream source | Field | Frame |
 | --- | --- | --- | --- |
@@ -218,7 +220,7 @@ result and Afterglow's, and declares them within a 5e-4 mag tolerance. The full
 chain, all offline:
 
 ```
-MARS calc_solution        21.147659857998637   (bit-exact)
+Original extracted MARS fit 21.147659857998637   (historical bit-exact parity)
 Skynet recorded local fit   21.147659857998637
 Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
 Afterglow web table         21.147                (3 dp, recorded by hand)
@@ -227,7 +229,7 @@ Afterglow web table         21.147                (3 dp, recorded by hand)
 ### `ngc5128_b_002/apass_response.json` and `vsx_response.json` — the recorded catalog responses
 
 `fit_data.csv` records the 35 APASS rows that *matched* a detection, not the
-rows that did not, so on its own it can reproduce the solve but not the
+rows that did not, so on its own it can replay the solve inputs but not the
 **selection** — `fit_summary.json`'s `num_not_selected_by_field_cal: 263`
 was unreachable. These two files close that gap. They are VizieR responses,
 retrieved once (2026-09-13) with the same column request the live tool path

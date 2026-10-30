@@ -96,13 +96,16 @@ def test_live_field_cal_zero_point_matches_afterglow_web_value(target, tmp_path)
 
     result = run_photometry_on_target(target, use_field_cal=True, output_dir=tmp_path)
 
-    if result.zero_point_source != "field-cal":
+    if result.zero_point_source == "header":
         pytest.skip(
-            f"{target}: zero point came from {result.zero_point_source!r}, not a "
-            "live field-cal solve (e.g. a header-stamped value took priority) -- "
+            f"{target}: a header-stamped zero point took priority over field-cal; "
             "nothing to compare against the web table here."
         )
 
+    assert result.zero_point_source == "field-cal", (
+        f"{target}: live field calibration did not supply a zero point; "
+        f"source={result.zero_point_source!r}, warnings={result.warnings}"
+    )
     assert result.zero_point is not None
     mars_zero_point = result.zero_point.zero_point
     mars_error = result.zero_point.zero_point_error_mag or 0.0

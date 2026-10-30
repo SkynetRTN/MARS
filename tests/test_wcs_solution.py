@@ -287,14 +287,16 @@ def test_a_matching_parity_is_accepted(frame_header):
     assert _accept(wcs, expected_parity=True)[0] is True
 
 
-def test_parity_is_not_checked_when_the_solution_is_degenerate():
-    """Unknown parity must not be treated as a mismatch."""
+def test_a_degenerate_solution_is_rejected_for_its_invalid_footprint():
+    """M2: unknown parity does not excuse a non-projectable solution."""
     wcs = WCS(naxis=2)
     wcs.wcs.crval = [180.0, 10.0]
     wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
     wcs.wcs.cd = np.zeros((2, 2))
 
-    assert _accept(wcs, expected_parity=True)[0] is True
+    accepted, reason = _accept(wcs, expected_parity=True)
+    assert accepted is False
+    assert "footprint" in reason
 
 
 def test_a_solution_pointing_at_the_hint_is_accepted(frame_header):

@@ -7,10 +7,8 @@ band, explicit ``filter_lookup`` entry, ``'*'`` wildcard, then a gated
 preferred-band fallback — and states which steps are legacy-Afterglow parity and
 which are Skynet extensions. Those distinctions are what the tests below pin.
 
-Note that this reads ``algorithms.catalogs.CATALOG_OPTIONS``, the two-catalog registry, not
-``CATALOGS``. That divergence is deliberate and is tested in
-``test_catalogs_registries.py``; here it just means the APASS lookup in play is
-the one carrying narrowband aliases.
+M2 reads the same canonical catalog mapping as selection and tool reporting;
+the historical CATALOG_OPTIONS export remains covered separately.
 
 Modelled on ``skynet .../tests/runners/test_catalog_query.py``'s
 ``TestResolveRefMagBandParity`` / ``TestResolveRefMagStrictParity``.
@@ -97,17 +95,9 @@ def test_lupton_i_transform_matches_the_declared_expression():
     assert value == pytest.approx(expected, rel=1e-12)
 
 
-def test_narrowband_aliases_come_from_catalog_options_only():
-    """``Halpha`` -> ``rprime`` and ``OIII`` -> ``gprime`` via NARROWBAND_FILTER_LOOKUP.
-
-    These aliases live in ``CATALOG_OPTIONS['APASS']`` and *not* in
-    ``CATALOGS['APASS']`` — the documented reason the two registries are kept
-    apart. If reference-magnitude resolution were ever repointed at ``CATALOGS``,
-    a narrowband frame would fall through to the preferred-band fallback and
-    calibrate against V instead.
-    """
-    assert _resolve("Halpha", APASS_FULL)[0] == pytest.approx(14.40)
-    assert _resolve("H_alpha", APASS_FULL)[0] == pytest.approx(14.40)
+def test_narrowband_uses_the_production_mapping_with_unchanged_expressions():
+    assert _resolve("Halpha", APASS_FULL)[0] == pytest.approx(14.21206)
+    assert _resolve("H_alpha", APASS_FULL)[0] == pytest.approx(14.21206)
     assert _resolve("OIII", APASS_FULL)[0] == pytest.approx(14.90)
     assert _resolve("Hbeta", APASS_FULL)[0] == pytest.approx(14.90)
 
@@ -127,8 +117,7 @@ def test_astrophotography_and_curriculum_filter_names(image_filter, expected_ban
     """The Red/Green/Blue and ``X+Y``/``X,Y`` curriculum spellings all map.
 
     These entries exist because student-submitted frames spell their filters
-    that way; they are the reason ``CATALOG_OPTIONS['APASS']`` has 20-odd more
-    lookup keys than the catalog declaration does.
+    that way; the canonical APASS declaration carries the explicit aliases.
     """
     assert _resolve(image_filter, APASS_FULL)[0] == pytest.approx(
         APASS_FULL[expected_band].value
@@ -231,7 +220,7 @@ def test_empty_mags_returns_none_without_consulting_the_catalog():
 def test_unknown_catalog_name_still_resolves_a_direct_band():
     """Step 1 does not need a catalog: it reads the image filter against mags.
 
-    Only the lookup-driven steps consult ``CATALOG_OPTIONS``, so an unknown name
+    Only the lookup-driven steps consult catalog metadata, so an unknown name
     degrades to "no transforms available" rather than failing.
     """
     value, _ = resolve_ref_mag_for_filter(
@@ -358,10 +347,10 @@ def test_ref_mag_and_selection_token_candidates_agree():
 # The registry this module actually reads
 # ---------------------------------------------------------------------------
 
-def test_resolution_reads_catalog_options_not_catalogs():
-    """Proven by a key that only exists in one of the two registries."""
+def test_historical_options_do_not_override_the_production_map():
+    """The historical export is preserved, while normalized aliases use production."""
     from algorithms.catalogs import CATALOGS
 
     assert "H_alpha" in CATALOG_OPTIONS["APASS"].filter_lookup
     assert "H_alpha" not in CATALOGS["APASS"].filter_lookup
-    assert _resolve("H_alpha", APASS_FULL)[0] == pytest.approx(14.40)
+    assert _resolve("H_alpha", APASS_FULL)[0] == pytest.approx(14.21206)

@@ -1,6 +1,7 @@
 # The Pulsar Tool Pipeline
 
 Date: 2026-08-11
+Updated: 2026-10-21 (M2 candidate units, sampling and conditional noise bounds)
 Status: active architecture
 
 Four tools, one per stage, in the order they must run. This document is the
@@ -63,17 +64,20 @@ data. So the sequence is forced, and it is the same sequence the Astromancer
 tool's tabs impose on a student: **light curve → periodogram → period folding**,
 with sonification hanging off the folding form.
 
-The failure this ordering prevents is specific and quiet. **Folding at the
-wrong period does not raise an error — it returns a flat profile**, which looks
-like a faint source rather than a mistake. An agent that guesses a period, or
+The failure this ordering prevents is specific and quiet. **Folding at a
+wrong period can return a flat profile without an error**, which looks
+like a faint source rather than a mistake. Harmonics and periodic interference
+can also fold coherently, so a strong fold needs interpretation. An agent that guesses a period, or
 reads one off the audio, gets a plausible-looking null result with nothing
 marking it as wrong. That is why:
 
-- `fold_pulsar_lightcurve` reports `pulse_snr` and warns below 8 sigma;
-- `compute_pulsar_periodogram` folds at its own peak and reports
-  `peak_fold_snr`, warning `peak_does_not_fold` below 8 sigma. It also reports
-  `peak_confidence`, but that is **not** the validity check — see §4, where
-  four of five bundled scans return a confident artifact;
+- `fold_pulsar_lightcurve` reports `pulse_snr` for the combined profile and warns
+  below the inherited empirical cutoff of 8;
+- `compute_pulsar_periodogram` folds the searched channel at its own peak and
+  reports `peak_fold_snr`, warning `peak_does_not_fold` below 8. It also reports
+  `false_alarm_probability_upper_bound`, conditional on iid Gaussian noise
+  and a fixed grid. Read its assumptions; neither that bound nor the empirical
+  fold concentration establishes a pulsar or correct period;
 - `sonify_pulsar` warns (`unfolded_rendering`) when called without a period;
 - every stage's schema says to compare the measured period against a reference —
   stage 0's `curated_period_s` for a bundled scan, `search_atnf` for anything
@@ -145,57 +149,98 @@ fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
 wav  = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
 ```
 
-On the B0329+54 fixture that yields a peak at **0.714790 s** against ATNF's
-0.714519699725801 s (0.04%), at power 399 versus a 12.8 three-sigma threshold,
-folding to a **204 sigma** profile.
+With the M2 defaults, B0329+54 peaks at **0.714622 s** against the recorded
+ATNF reference 0.714519699725801 s (0.0143%), power 400.74, and fold
+concentration **231.15**. Its Gaussian-noise FAP bound is 2.69e-177, conditional
+on assumptions that the baseline-subtracted radio data does not establish.
 
-Note `pg.top_peaks` on that run: `0.7148, 0.1429, 0.1785, 0.2378, 0.1192` —
-after the fundamental, every entry is a harmonic (P/5, P/4, P/3, P/6). That is
-normal for a pulsar and is why the field exists.
+Each `pg.top_peaks` entry now has `period_s`, `frequency_hz` and `power`;
+there is no mode-dependent `x`. The periods are approximately
+`0.7146, 0.3571, 0.2380, 0.1021, 0.1784` — the fundamental and P/2, P/3, P/7,
+P/4 harmonics. In either mode, pass a candidate's `period_s` to the fold.
+`peak_frequency_hz` is also explicit, and `search_unit` identifies
+`search_start`/`search_stop`. The ECSV coordinate column carries seconds or Hz.
+
+Defaults span twice median positive spacing through 3 s, or the reciprocal
+band in frequency mode. Irregular data reports `nyquist_period_s=null`,
+`sampling_policy=median_spacing_heuristic`, and `suggested_min_period_s` with
+a warning: that suggestion is not a universal Nyquist cutoff. Explicit bounds
+can use instrument cadence/integration information. Only uniform epochs within
+relative tolerance 1e-7 establish the reported Nyquist period; searches above
+that frequency warn about aliases. Sampling is rederived on every load rather
+than trusted from saved metadata.
+
+The bound uses a finite-sample Beta tail and Bonferroni union inequality over
+`evaluated_trials`; frequencies need not be independent. It describes one
+fixed finite grid under iid Gaussian errors, not baseline filtering, correlated
+noise, RFI, repeated retuning, peaks between trials, or the probability of a
+pulsar/correct period. Results state these assumptions. Legacy
+`peak_confidence` is null and `confidence_thresholds` empty; use
+`false_alarm_method`, `false_alarm_probability_upper_bound` and
+`false_alarm_thresholds`. Fewer than four samples gives no bound. The
+[M2 acceptance record](analysis/pulsar-candidates-confidence.md) gives the
+derivation, independent checks and numerical Nyquist correction.
+
+Peak probabilities use directly fitted `peak_residual_fraction` (RSS/TSS),
+which avoids losing the residual when power rounds to its maximum. If that
+residual falls below estimated solver resolution the probability is null;
+power thresholds that cannot be represented below the maximum are omitted.
+`false_alarm_resolution_limited` and its warning disclose either case. This
+is a numerical resolution policy, not certified floating-point interval
+arithmetic. Read the returned bound rather than deriving one from rounded
+power. New artifacts identify `false_alarm_statistic=residual_fraction` and
+`false_alarm_flux_centering=observed_offsets`; both are required for current
+calibration after the 2026-10-26 translation-invariance correction. Powers and
+residual fits now share observed-value offset centering and safe scaling;
+earlier Gaussian-bound artifacts need recomputation, and their saved levels
+are drawn as uncalibrated legacy thresholds.
 
 ### What a blind search actually achieves
 
 B0329+54 is the **only** one of the five bundled scans where this works with
-default settings. Verified against the curated periods in
-`data/pulsar/Curated pulsars.docx`, cross-checked against live ATNF:
+default settings (remeasured 2026-10-21). Compared against the curated periods
+and the recorded ATNF values beside the scans; no new live ATNF query was
+needed for this check:
 
 | Scan | Curated difficulty | `S1400` | Blind search result | Fold at curated `P0` |
 | --- | --- | --- | --- |
-| B0329+54 | Easy | 203 mJy | **the pulsar**, 0.04% | 316σ |
-| B1133+16 | Lightly Challenging | 20 mJy | 0.016665 s — **60.006 Hz mains** | 17.7σ |
+| B0329+54 | Easy | 203 mJy | matches reference within 0.015% | 316σ |
+| B1133+16 | Lightly Challenging | 20 mJy | ~2.18 s — baseline candidate | 17.7σ |
 | B1933+16 | More Challenging | 58 mJy | ~2.18 s — baseline red noise | 7.5σ |
-| B2021+51 | Lightly Challenging | 27 mJy | ~2.14 s — baseline red noise | 4.9σ |
-| B2045−16 | Most Challenging | 22 mJy | 0.016665 s — **60.006 Hz mains** | 5.4σ |
+| B2021+51 | Lightly Challenging | 27 mJy | ~2.13 s — baseline candidate | 4.9σ |
+| B2045−16 | Most Challenging | 22 mJy | ~1.98 s — unsupported candidate | 5.4σ |
 
-That is the expected outcome for 60 seconds on a 20 m dish, not a defect: only
-the bright source has the signal-to-noise for a blind period search, and the
-curator's difficulty ratings — assigned before any of this code ran — say the
-same thing. The
-consequences for tool design are the load-bearing part:
+Only the bright source matches at these defaults. This is a result for these
+scans and grids, not a general instrument sensitivity limit. The new lower
+bound changes which trial periods are sampled; the old mean-spacing grid
+landed on 60 Hz for B1133 and B2045. Consequences for callers:
 
-1. **`peak_confidence` does not detect this.** All four failures clear the
-   three-sigma false-alarm line, because that threshold assumes white noise and
-   radio data has mains interference and red noise. A caller trusting it would
-   confidently fold on 60 Hz.
-2. **`peak_fold_snr` does.** Folding at the candidate and measuring the pulse
-   separates all five correctly, which is why `compute_pulsar_periodogram`
-   computes it and warns `peak_does_not_fold` below 8σ.
+1. **Conditional noise bounds do not classify pulsars.** All five peaks have
+   small Gaussian-noise bounds, including the four wrong periods. The legacy
+   confidence labels are retired; real radio noise still violates the model.
+2. **Inspect `peak_fold_snr` and the profile.** Its inherited cutoff of 8
+   separates these five defaults empirically, and produces `peak_does_not_fold`
+   below that cutoff. It is not a calibrated probability; periodic RFI can
+   fold coherently too.
 3. **Red-noise peaks move with `back_scale`; real periodicities do not.** On
    B1133+16 the spurious ~2.18 s peak appears at `back_scale` 3, 12 and 30 but
-   the true 1.19 s period wins at 1 and 6. Varying it (by rerunning
-   `load_pulsar_lightcurve`, the one stage that takes it) is the cheapest
-   diagnostic available.
+   the true 1.19 s period wins at 1 and 6. Varying it by rerunning
+   `load_pulsar_lightcurve`, the stage that takes it, is the cheapest
+   diagnostic available. These historical tuning observations used the earlier
+   grid. Data-dependent retuning is outside the single-search noise bound.
 4. **A reference period rescues a failed search, and costs the detection
    claim.** A catalogued period turns four of these five scans from failures
    into usable folds — offline for these five, via `curated_periods.json`, and
    through `search_atnf` for any other source. What it cannot do is stand in for
    the measurement.
 
-B1933+16 resists even a tuned search, for a physical reason worth recording:
+B1933+16 resisted the recorded tuned searches. One possible limitation is
+dispersion:
 `DM = 158.6` smears its pulse across ~11% of its 359 ms period over the 80 MHz
 effective band. It is the brightest of the four faint scans and still the
-hardest, and no amount of tuning fixes it — **dedispersion would**, and this
-pipeline has none.
+hardest in those tests. This does not prove that every search must fail or
+that dedispersion would guarantee recovery. This pipeline has neither
+dedispersion nor channelized intensity data with which to perform it.
 
 ### Measure first, check second
 
@@ -206,8 +251,8 @@ not inputs to the pipeline. The ordering the tools and the system prompt state:
    `top_peaks`. This is the only evidence that does not depend on already
    knowing the answer.
 2. **Compare.** Against stage 0's `curated_period_s`, or `search_atnf` for a
-   source the curation does not cover. Agreement confirms the measurement, and
-   both numbers get reported with their provenance.
+   source the curation does not cover. Agreement provides a cross-check; still
+   inspect the fold and aliases. Report both numbers with their provenance.
 3. **Retune, do not substitute.** On a disagreement, a low `peak_fold_snr`, or a
    `peak_does_not_fold` warning: rerun `load_pulsar_lightcurve` with a
    different `back_scale`, narrow `start`/`stop` away
@@ -215,16 +260,12 @@ not inputs to the pipeline. The ordering the tools and the system prompt state:
    0.016665 s (60.006 Hz mains) and a 2.1–2.2 s red-noise peak.
 4. **Fall back, and say so.** Only once a retuned search has failed, fold at the
    reference period — and report that the period came from outside the data, so
-   that profile's `pulse_snr` is not an independent detection.
+   that profile's `pulse_snr` is not an independent period measurement.
 
-The distinction is the whole reason the fixtures are usable as verification.
-`data/README.md`: the scans carry no period in-file, so **a successful fold
-is a real detection rather than a fit to a known answer** — which holds only
-while the period being folded at was measured. Seeding the fold from the
-literature by default would quietly convert every `pulse_snr` in the pipeline
-from evidence into a restatement of the input, and `peak_fold_snr` — which folds
-at the periodogram's *own* peak — would be the only number left that still meant
-anything.
+The scans carry no period in-file, so a search without reference seeding
+provides an independent period candidate. Neither a strong fold at that
+candidate nor a reference-seeded fold alone proves a pulsar detection. Record
+the period's origin, profile, alias checks and noise-model limitations.
 
 Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
 60 seconds on a 20 m dish, and reporting it plainly is the point.
@@ -234,19 +275,37 @@ Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
 ## 4b. Plotting
 
 `plot_pulsar` renders any stage's artifact as a PNG, choosing the chart from
-the columns it finds (`time_s` → light curve, `period_s`/`power` → periodogram,
+the columns it finds (`time_s` → light curve, `period_s` or `frequency_hz` plus
+`power` → periodogram,
 `phase_s` → folded). It sits beside the pipeline rather than in it: nothing
 downstream consumes a plot.
 
 | Chart | Axes | Series |
 | --- | --- | --- |
 | Light curve | Time (s) / Intensity, linear | Polarization XX, Polarization YY |
-| Periodogram | Period (s) / Intensity, **logarithmic** | the spectrum, "Global Maxima" peak marker, three dashed false-alarm lines |
+| Period spectrum | Period (s) / Power, **logarithmic** | selected channel, "Global Maxima" marker in seconds, three dashed false-alarm lines |
+| Frequency spectrum | Frequency (Hz) / Power, **linear** | selected channel, "Global Maxima" marker in hertz, three dashed false-alarm lines |
 | Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
 
-All of that — labels, series names, the log axis, the hidden series, the
-folded x extent — is Astromancer's own chart configuration, ported to
-`algorithms/pulsar/charts.py`. It is not styling chosen here. The
+The base chart configuration is ported from Astromancer to
+`algorithms/pulsar/charts.py`. MARS adapts the spectrum labels and axis to the
+saved data: `channel=sum` is **Sum**, `source1` is **Polarization XX**, and
+`source2` is **Polarization YY**. New spectrum ECSV artifacts record `channel`
+alongside `freq_mode`, and their coordinate column carries an Astropy unit
+(`s` or `Hz`). Standard-format single-flux spectra use **Data** for either
+permitted selection (`sum` or `source1`), preserving that selection in metadata
+without claiming an XX/YY polarization. Plot results report `channel` and `mode`;
+the saved column name determines the coordinate even when an older artifact
+lacks `freq_mode` or contains a stale flag. Missing, non-string or unrecognized
+channel metadata produces an **Unknown channel** legend and
+`unknown_spectrum_channel` warning. Recompute an older spectrum to recover its
+channel identity; it cannot be inferred from the saved powers.
+
+The hidden folded series, folded x extent and peak styling retain the ported
+defaults. Current false-alarm lines name the Gaussian noise model and its bound;
+historical confidence levels are drawn as uncalibrated legacy thresholds with
+`legacy_confidence_uncalibrated`. M2 also corrects candidate units, sampling
+defaults and significance as described in §4. The
 `docs/extraction.md` entry that listed the Highcharts components as "left
 behind as UI" is superseded for the parts that decide *what* is drawn; the
 widget plumbing (boost thresholds, tooltips, export buttons) was not ported.

@@ -39,14 +39,10 @@ class SkyMapperQueryBackend(VizierCatalog):
         ``setdefault`` rather than assignment: a caller that explicitly passes
         ``flags`` — including a wider filter like ``'<4'`` — keeps it.
 
-        PRESERVED BEHAVIOUR: when the caller supplies a ``constraints`` dict,
-        this mutates it in place. A caller reusing one dict across catalogs will
-        find ``flags`` added to it after querying SkyMapper. Upstream did the
-        same, and MARS's query runner passes a fresh dict per call, so nothing
-        in-tree is affected.
+        Work on a copy: defaults must not alter later queries or the caller's
+        constraints (M2, CAT-08).
         """
-        if constraints is None:
-            constraints = {}
+        constraints = dict(constraints or {})
         constraints.setdefault('flags', '0')
         return super().query_region(
             ra_hours, dec_degs, constraints, limit, **region)

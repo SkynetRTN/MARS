@@ -21,6 +21,7 @@ from numbers import Integral
 from typing import Iterable, Mapping
 
 import numpy as np
+from algorithms.diagnostics import note_numerical_issue
 from astropy.wcs import WCS
 from scipy.spatial import cKDTree
 
@@ -43,8 +44,8 @@ from .schemas import (
 # EXTRACTED: was `from skynet_db.runners.utils import calc_solution,
 # resolve_ref_mag_for_filter` (907-line grab-bag module; the two field-cal
 # functions now live in fieldcal/solution.py and fieldcal/ref_mag.py).
-from .solution import calc_solution
-from .ref_mag import resolve_ref_mag_for_filter
+from .solution import _calc_solution_with_mask
+from .ref_mag import _resolve_ref_mag_for_filter_with_route
 # Catalog metadata (band tables and colour transforms) is pure local data.
 from algorithms.catalogs import CATALOGS
 from algorithms.photometry.photometry import run_photometry
@@ -156,12 +157,9 @@ def _image_filter_from_header(header) -> str | None:
 
 
 def _catalog_filter_lookup(catalog_name: str | None) -> dict[str, str]:
-    if not catalog_name:
-        return {}
-    catalog = CATALOGS.get(catalog_name)
-    if catalog is None:
-        return {}
-    return getattr(catalog, "filter_lookup", {}) or {}
+    from algorithms.catalogs.filters import catalog_filter_lookup
+
+    return catalog_filter_lookup(catalog_name)
 
 
 def _catalog_filter_lookup_map(
@@ -258,6 +256,14 @@ def _match_detected_sources(
     det_ra_h = [getattr(s, "ra_hours", None) for s in detected_sources]
     det_dec_d = [getattr(s, "dec_degs", None) for s in detected_sources]
     use_angular = all(v is not None for v in det_ra_h) and all(v is not None for v in det_dec_d)
+    if use_angular:
+        longitudes = [float(v) for v in det_ra_h if v is not None and np.isfinite(v)]
+        longitudes += [float(s.ra_hours) for s in catalog_sources
+                       if s.ra_hours is not None and np.isfinite(s.ra_hours)]
+        if longitudes and max(longitudes) - min(longitudes) > 12:
+            note_numerical_issue("ra_seam_matching_approximation",
+                "Angular source matching retains an unwrapped flat-sky RA approximation "
+                "across the 0/24-hour seam; nearby catalog stars can fail to match.")
 
     if not use_angular and wcs is None:
         raise ValueError("Missing WCS for catalog source matching")
@@ -467,11 +473,16 @@ def _match_detected_sources(
             "pm_pixel",
             "pm_pos_angle_pixel",
             "pm_epoch",
-            "sat_pixels",
         ):
             val = getattr(catalog_source, attr, None)
             if val is not None:
                 source_map[attr] = val
+
+        # A catalog's default zero must not erase saturation measured in the
+        # image. Keep the most restrictive supplied pixel count.
+        saturation = [s.sat_pixels for s in (source, catalog_source) if s.sat_pixels is not None]
+        if saturation:
+            source_map["sat_pixels"] = max(saturation)
 
         matched_sources.append(CatalogSource(**source_map))
         if matched_shapes is not None:
@@ -499,7 +510,9 @@ def _collect_calibration_sources(
     catalog_filter_lookup: dict[str, dict[str, str]] | None,
     custom_filter_lookup: dict[str, dict[str, str]] | None,
     allow_preferred_band_fallback: bool = True,
+    reference_routes: dict[str, tuple[str, str | None]] | None = None,
 ) -> list[PhotometryData]:
+    from algorithms.catalogs.filters import catalog_filter_lookup as filter_lookup_for
     sources: list[PhotometryData] = []
     catalogs_by_id = {source.id: source for source in catalog_sources if source.id is not None}
     inferred_catalog_name = None
@@ -521,17 +534,23 @@ def _collect_calibration_sources(
             # M3: a non-finite supplied ref_mag is unusable, like an absent one.
             ref_mag = ref_err = None
         if ref_mag is None:
-            lookup = dict(catalog_filter_lookup or {})
-            if custom_filter_lookup:
-                for custom_catalog_name, filters in custom_filter_lookup.items():
-                    lookup.setdefault(custom_catalog_name, {}).update(filters)
-            ref_mag, ref_err = resolve_ref_mag_for_filter(
+            # Apply metadata and custom maps separately so custom entries win
+            # across both identities, with source-name priority independent of
+            # dictionary order. The helper copies all maps before overlaying.
+            lookup = filter_lookup_for(
+                catalog_name, custom_filter_lookup, base_filter_lookup=catalog_filter_lookup,
+            )
+            resolved = _resolve_ref_mag_for_filter_with_route(
                 image_filter=getattr(source, "filter", None),
                 catalog_name=catalog_name,
                 cs_mags=catalog_source.mags,
-                custom_filter_lookup=lookup or None,
+                custom_filter_lookup={catalog_name: lookup} if catalog_name else None,
                 allow_preferred_band_fallback=allow_preferred_band_fallback,
             )
+            ref_mag, ref_err = resolved.value, resolved.error
+            route = (resolved.kind, resolved.reference)
+        else:
+            route = ("provided", None)
         if ref_mag is None or not math.isfinite(ref_mag):
             continue
         if ref_err is not None and not math.isfinite(ref_err):
@@ -544,6 +563,8 @@ def _collect_calibration_sources(
         if ref_err is not None:
             source.ref_mag_error = ref_err
         source.catalog_name = catalog_name
+        if reference_routes is not None and source.id is not None:
+            reference_routes[source.id] = route
         sources.append(source)
 
     return sources
@@ -685,6 +706,7 @@ def perform_field_calibration(
         source for source in photometry_results
         if source.mag is not None and math.isfinite(source.mag)
         and (source.mag_error is None or math.isfinite(source.mag_error))
+        and not (getattr(source, "sat_pixels", None) or 0) > 0
     ]
 
     if not photometry_results:
@@ -694,6 +716,9 @@ def perform_field_calibration(
     min_snr = settings.min_snr or 0
     max_snr = settings.max_snr or np.inf
     if settings.min_snr or settings.max_snr:
+        note_numerical_issue("magnitude_error_snr_cut",
+            "Calibration SNR selection uses the retained inverse-magnitude-error proxy, "
+            "which differs from flux/error SNR. Thresholds are not exact flux-SNR cuts.")
         photometry_results = [
             source
             for source in photometry_results
@@ -704,12 +729,14 @@ def perform_field_calibration(
         if not photometry_results:
             raise RuntimeError("All sources violate SNR constraints")
 
+    reference_routes: dict[str, tuple[str, str | None]] = {}
     calibration_sources = _collect_calibration_sources(
         photometry_results,
         sources,
         catalog_filter_lookup=_catalog_filter_lookup_map(sources, configured_catalogs),
         custom_filter_lookup=settings.custom_filter_lookup or None,
         allow_preferred_band_fallback=not settings.strict_filter_parity,
+        reference_routes=reference_routes,
     )
     logger.info("Calibration sources after ref-mag resolution: %d", len(calibration_sources))
 
@@ -721,7 +748,7 @@ def perform_field_calibration(
     if max_stars and len(calibration_sources) > max_stars:
         calibration_sources = sorted(
             calibration_sources,
-            key=lambda s: getattr(s, "ref_mag", np.inf) or np.inf,
+            key=lambda s: s.ref_mag if s.ref_mag is not None else np.inf,
         )[:max_stars]
         logger.info("Calibration sources after max_stars=%d limit: %d", max_stars, len(calibration_sources))
 
@@ -731,7 +758,8 @@ def perform_field_calibration(
         ", ".join(_catalogs_from_sources(sources)) or "unknown",
     )
 
-    m0, m0_error, slop, limmag, rej_percent = calc_solution(calibration_sources)
+    solution, survivor_mask = _calc_solution_with_mask(calibration_sources)
+    m0, m0_error, slop, limmag, rej_percent = solution
     logger.info(
         "Field calibration solution: m0=%.4f m0_err=%s slop=%s limmag=%s rej=%.1f%%",
         m0,
@@ -746,8 +774,7 @@ def perform_field_calibration(
     # solve without a finite zero point and a finite, positive uncertainty is
     # refused here, before the header is touched.
     num_stars = len(calibration_sources)
-    # calc_solution reports rejection only as a percentage of its input.
-    survivors = int(round(num_stars * (100 - rej_percent) / 100)) if np.isfinite(rej_percent) else num_stars
+    survivors = int(np.count_nonzero(survivor_mask))
     if not np.isfinite(m0):
         raise DegenerateCalibrationError(
             f"The solve over {num_stars} calibration star(s) produced a non-finite zero point.",
@@ -792,4 +819,10 @@ def perform_field_calibration(
         limmag5=limmag,
         rej_percent=rej_percent,
     )
+    result._reference_routes = {
+        source.id: reference_routes[source.id]
+        for source, survived in zip(result.phot_results, survivor_mask)
+        if survived and source.id in reference_routes
+    }
+    result._num_calibration_stars = survivors
     return result.zero_point_corr, result

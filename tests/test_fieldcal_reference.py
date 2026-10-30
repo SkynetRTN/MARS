@@ -6,17 +6,22 @@ nothing outside tests/ could read any of it.
 
 The chain, all offline (data/README.md):
 
-    MARS calc_solution        21.147659857998637   (bit-exact)
     Skynet recorded local fit   21.147659857998637
     Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
     Afterglow web table         21.147                (3 dp, recorded by hand)
+
+M2 corrects the solver; current replays are checked against an independent
+scientific fit and report their differences from these historical references.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+
+from .fieldcal_oracle import scientific_solution
 
 from tools.fieldcal_reference import (
     CATALOG_FIXTURES,
@@ -33,7 +38,7 @@ from tools.fieldcal_reference import (
 #: The upstream diagnostic's own declared agreement threshold, in magnitudes.
 PARITY_ZP_TOLERANCE = 0.0005
 
-#: The number every step of the chain has to reproduce.
+#: Historical values, retained as comparison targets.
 SKYNET_ZERO_POINT = 21.147659857998637
 AFTERGLOW_ZERO_POINT = 21.14747923526837
 
@@ -72,12 +77,13 @@ def test_the_reference_names_the_bundled_frame_it_describes():
     "field",
     ["ngc5128_b_002", "ngc5286_b_000", "ngc5286_b_001", "ngc5286_b_002"],
 )
-def test_solving_from_the_recorded_rows_reproduces_the_recorded_solve(field):
-    """PARITY: bit-exact against what Skynet returned for these exact rows."""
+def test_solving_from_recorded_rows_matches_the_independent_scientific_fit(field):
     reference = load_zeropoint_reference(field)
     solution = solve_zeropoint_from_reference(field)
     assert solution.errors == []
-    assert solution.zero_point == reference.skynet_zero_point
+    expected, _ = scientific_solution(reference.measurements)
+    assert solution.zero_point == pytest.approx(expected[0], abs=1e-7)
+    assert solution.zero_point_slop == pytest.approx(expected[2], abs=1e-7)
 
 
 def test_comparison_places_a_zero_point_against_both_implementations():
@@ -269,20 +275,29 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     used = _recorded_used_rows()
     assert [m.detected_id for m in replay.matches] == [r["id"] for r in used]
     assert [m.ref_mag for m in replay.matches] == [float(r["local_ref_mag"]) for r in used]
-    assert [m.ref_mag_error for m in replay.matches] == [
-        float(r["local_ref_mag_error"]) if r["local_ref_mag_error"] else None for r in used
-    ]
+    # The historical CSV left three zero uncertainties blank. M2 preserves
+    # those measured zeroes: compare with the independent raw response, whose
+    # stored columns retain the distinction between 0.0 and missing.
+    payload = json.loads(Path(load_catalog_response("ngc5128_b_002").path).read_text())
+    columns = [column["name"] for column in payload["columns"]]
+    for match in replay.matches:
+        raw = next(row for row in payload["rows"]
+                   if abs(row[columns.index("RAJ2000")] - match.catalog_ra_deg) < 1e-10
+                   and abs(row[columns.index("DEJ2000")] - match.catalog_dec_deg) < 1e-10)
+        assert match.ref_mag_error == raw[columns.index("e_Bmag")]
     assert [m.mag for m in replay.matches] == [float(r["mag"]) for r in used]
     assert all(0.0 <= m.separation_arcsec < 3.06 for m in replay.matches)
     assert len({m.catalog_index for m in replay.matches}) == RECORDED_NUM_MATCHED
 
-    # The existing recorded solution, bit for bit.
+    # Corrected fit over the same selected rows; historical comparison stays
+    # honest even though the selected catalog identities still match exactly.
     reference = load_zeropoint_reference("ngc5128_b_002")
-    assert replay.solution.zero_point == reference.skynet_zero_point
-    assert replay.solution.source_count == RECORDED_NUM_MATCHED
-    assert replay.solution.rej_percent == pytest.approx(25.71428571428571, abs=1e-12)
-    assert replay.comparison.delta_vs_skynet == 0.0
-    assert replay.comparison.within_tolerance is True
+    expected, _ = scientific_solution(replay.matches)
+    assert replay.solution.zero_point == pytest.approx(expected[0], abs=1e-7)
+    assert replay.solution.source_count == 29
+    assert replay.solution.rej_percent == pytest.approx(expected[4], abs=1e-12)
+    assert replay.comparison.delta_vs_skynet == replay.solution.zero_point - reference.skynet_zero_point
+    assert replay.comparison.within_tolerance is False
 
 
 @float32_mag_errors
@@ -307,15 +322,19 @@ def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
     replay = replay_field_calibration("ngc5128_b_002", tmp_path)
     assert replay.errors == []
     assert (replay.num_variable_rows, replay.num_variable_sources) == (0, 0)
-    assert [w.code for w in replay.warnings] == ["variable_sources_not_recorded"]
+    assert [w.code for w in replay.warnings] == [
+        "variable_sources_not_recorded", "magnitude_error_snr_cut",
+        "limiting_magnitude_unvalidated", "calibration_sufficiency_unverified",
+    ]
     assert "No recorded VSX response" in replay.warnings[0].message
     assert replay.num_matched == 36
     assert replay.selection_matches_recorded is False
     assert "SRC467" in [m.detected_id for m in replay.matches]
-    # The extra star is rejected by the solve, so the zero point barely moves --
-    # which is exactly why a count check matters and a tolerance check does not.
-    assert abs(replay.comparison.delta_vs_skynet) < 1e-9
-    assert replay.solution.zero_point != load_zeropoint_reference("ngc5128_b_002").skynet_zero_point
+    expected, keep = scientific_solution(replay.matches)
+    assert keep[[m.detected_id for m in replay.matches].index("SRC467")]
+    assert replay.solution.zero_point == pytest.approx(expected[0], abs=1e-7)
+    normal = replay_field_calibration("ngc5128_b_002")
+    assert abs(replay.solution.zero_point - normal.solution.zero_point) > 0.001
 
 
 @float32_mag_errors
@@ -520,8 +539,8 @@ def test_offline_field_calibration_lands_inside_the_afterglow_tolerance():
     assert comparison.errors == []
     # A loose bound, deliberately: this re-measures photometry from pixels
     # rather than replaying the recorded instrumental magnitudes, so it will
-    # not be bit-exact. test_solving_from_the_recorded_rows_reproduces_the_
-    # recorded_solve is the bit-exact check.
+    # not reproduce a recorded-row solve. The independent scientific reference
+    # above checks the solver separately from pixel measurement.
     assert abs(comparison.delta_vs_afterglow) < 0.1
 
 

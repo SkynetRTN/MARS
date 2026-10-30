@@ -18,7 +18,7 @@ RxJS form subscriptions. A plot needs the spec, not the chart object.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 __all__ = [
@@ -26,8 +26,10 @@ __all__ = [
     "ChartSpec",
     "LIGHT_CURVE_CHART",
     "PERIODOGRAM_CHART",
+    "periodogram_chart",
     "PERIODOGRAM_PEAK_SERIES",
     "CONFIDENCE_LINES",
+    "FALSE_ALARM_LINES",
     "FOLDED_CHART",
     "FOLDED_SINGLE_SOURCE_NAME",
     "folded_x_axis_maximum",
@@ -83,10 +85,9 @@ LIGHT_CURVE_CHART = ChartSpec(
     ),
 )
 
-#: ``PulsarPeriodogram.getDefaultPeriodogram()``. The **logarithmic** x axis is
-#: load-bearing, not cosmetic: ``lomb_scargle`` evaluates a logarithmic period
-#: grid in period mode, so a linear axis misrepresents where it actually
-#: sampled.
+#: ``PulsarPeriodogram.getDefaultPeriodogram()``. The logarithmic x axis
+#: matches the grid in period mode. This is the historical default;
+#: MARS resolves the saved channel and coordinate with ``periodogram_chart``.
 PERIODOGRAM_CHART = ChartSpec(
     title="Title",
     x_axis_label="Period (s)",
@@ -97,6 +98,33 @@ PERIODOGRAM_CHART = ChartSpec(
         SeriesSpec("Polarization XX", "power", marker="circle", marker_radius=3),
     ),
 )
+
+
+def periodogram_chart(
+    *, freq_mode: bool, channel: Optional[str], single_source: bool = False,
+) -> ChartSpec:
+    """Describe MARS's saved spectrum rather than upstream's fixed XX series.
+
+    Frequency mode samples a linear grid in Hz; period mode samples a
+    logarithmic grid in seconds. A legacy artifact without a known channel
+    must not acquire an XX identity just by being plotted. Standard files
+    carry one generic flux column, labelled Data rather than a polarization.
+    """
+    name = {
+        "sum": "Sum",
+        "source1": "Polarization XX",
+        "source2": "Polarization YY",
+    }.get(channel, "Unknown channel")
+    if single_source and channel in ("sum", "source1"):
+        name = "Data"
+    return replace(
+        PERIODOGRAM_CHART,
+        x_axis_label="Frequency (Hz)" if freq_mode else "Period (s)",
+        x_axis_type="linear" if freq_mode else "logarithmic",
+        y_axis_label="Power",
+        series=(replace(PERIODOGRAM_CHART.series[0], name=name),),
+    )
+
 
 #: Upstream names the peak marker "Global Maxima" although ``find_global_max``
 #: returns one point.
@@ -114,6 +142,14 @@ CONFIDENCE_LINES = (
     SeriesSpec("67.3% Confidence", "conf-1-sigma", color="red", dash_style="ShortDash"),
     SeriesSpec("95.4% Confidence", "conf-2-sigma", color="orange", dash_style="ShortDash"),
     SeriesSpec("99.73% Confidence", "conf-3-sigma", color="green", dash_style="ShortDash"),
+)
+
+# First-party M2 labels: these bound a Gaussian-noise event on the tested
+# grid; they are not posterior confidence or a calibrated pulsar detection.
+FALSE_ALARM_LINES = (
+    SeriesSpec("Gaussian noise FAP <= 10%", "0.1", color="red", dash_style="ShortDash"),
+    SeriesSpec("Gaussian noise FAP <= 1%", "0.01", color="orange", dash_style="ShortDash"),
+    SeriesSpec("Gaussian noise FAP <= 0.1%", "0.001", color="green", dash_style="ShortDash"),
 )
 
 #: ``PulsarPeriodFolding`` defaults. Note the x axis is "Time (s)", not

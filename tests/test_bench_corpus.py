@@ -395,13 +395,30 @@ def test_a_rate_read_out_of_the_abstract_passes(artifact_root):
                 [("get_paper_abstract", {"bibcode": "2017MNRAS.469.1299T"})],
             ),
             _turn(
-                "Trotter et al. 2017 measure 0.670 +/- 0.019 %/yr at 1.4 GHz, "
+                "The abstract of 2017MNRAS.469.1299T reports 0.670 +/- 0.019 %/yr at 1.4 GHz, "
                 "averaged over six decades, and state that the decline is not "
                 "constant."
             ),
         ],
     )
     assert entry["answer"]["passed"] is True
+
+
+@pytest.mark.parametrize("fetch_authors", [False, True])
+def test_an_abstracts_rate_does_not_establish_the_author(artifact_root, fetch_authors):
+    calls = [("get_paper_abstract", {"bibcode": "2017MNRAS.469.1299T"})]
+    if fetch_authors:
+        calls.insert(0, ("search_ads", {"query": "cas a"}))
+    entry = _grade_one(
+        artifact_root, "core", "abstract-before-attribution", [
+            _turn("Fetching the paper.", calls),
+            _turn("Trotter et al. 2017 measure 0.670 +/- 0.019 %/yr at 1.4 GHz, "
+                  "averaged over six decades, and state that the decline is not constant."),
+        ],
+    )
+    assert entry["answer"]["passed"] is fetch_authors
+    if not fetch_authors:
+        assert "must_source_attribution" in _failed_checks(entry)
 
 
 def test_a_wrong_period_fails_the_pulsar_task(artifact_root):

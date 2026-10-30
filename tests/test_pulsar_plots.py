@@ -1,13 +1,16 @@
 """Pulsar chart rendering.
 
-These do not check that a plot *looks* right — that is not a thing a test can
-assert. They check the two things that are assertable and that matter:
+These check the ported defaults and the renderer's basic output:
 
 1. **The chart spec matches Astromancer.** Axis labels, series names, the
    logarithmic periodogram axis, which series are hidden by default, and the
    folded x-axis ladder are all upstream's, and a "tidy-up" that renames a
    series or linearises an axis should fail here.
-2. **The renderer honours the spec** and writes a real PNG.
+2. **The renderer writes a real PNG** with the applicable default labels.
+
+MARS resolves spectrum channels and period/frequency axes from artifacts.
+``test_pulsar_spectrum_semantics.py`` checks those adaptations on the actual
+matplotlib traces, peak markers, confidence lines, labels and scales.
 
 The spec constants are the port's contract with
 `git-history:algorithms/lightcurve/pulsar/pulsar-charts.spec.ts`; the line numbers behind
@@ -202,22 +205,19 @@ def test_a_raw_scan_is_ingested_and_drawn_as_a_light_curve(
     assert _png_size(Path(result.artifact.path))[0] > 100
 
 
-def test_each_plot_writes_a_real_png_with_upstream_labels(staged, artifact_dir) -> None:
+def test_each_plot_writes_a_real_png_with_default_labels(staged, artifact_dir) -> None:
     lightcurve, spectrum, profile = staged
     expected = {
-        "lightcurve": charts.LIGHT_CURVE_CHART,
-        "periodogram": charts.PERIODOGRAM_CHART,
-        "folded": charts.FOLDED_CHART,
+        "lightcurve": ("Time (s)", "Intensity", "linear"),
+        "periodogram": ("Period (s)", "Power", "logarithmic"),
+        "folded": ("Time (s)", "Intensity", "linear"),
     }
 
     for source in (lightcurve, spectrum, profile):
         result = plot_pulsar(source.artifact.path)
         assert result.errors == []
 
-        spec = expected[result.kind]
-        assert result.x_axis_label == spec.x_axis_label
-        assert result.y_axis_label == spec.y_axis_label
-        assert result.x_axis_type == spec.x_axis_type
+        assert (result.x_axis_label, result.y_axis_label, result.x_axis_type) == expected[result.kind]
 
         path = Path(result.artifact.path)
         assert path.is_absolute() and path.suffix == ".png"
@@ -237,7 +237,7 @@ def test_periodogram_plot_draws_the_peak_and_confidence_lines(staged) -> None:
     result = plot_pulsar(spectrum.artifact.path)
 
     assert "Global Maxima" in result.series
-    for line in charts.CONFIDENCE_LINES:
+    for line in charts.FALSE_ALARM_LINES:
         assert line.name in result.series
 
 

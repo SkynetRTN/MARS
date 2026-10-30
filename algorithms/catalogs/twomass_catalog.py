@@ -23,9 +23,11 @@ class TwoMASSCatalog(Catalog):
     num_sources = 470992970
     vizier_catalog = 'II/246'
     row_limit = 5000
+    # Associated optical counterparts may be USNO or Tycho (the provider opt
+    # flag); these are not native 2MASS or guaranteed Johnson magnitudes.
     mags = {
         'J': ['Jmag', 'e_Jmag'], 'H': ['Hmag', 'e_Hmag'],
-        'K': ['Kmag', 'e_Kmag'], 'B': ['Bmag'], 'R': ['Rmag'],
+        'K': ['Kmag', 'e_Kmag'], 'Bopt': ['Bmag'], 'Ropt': ['Rmag'],
     }
     col_mapping = {
         'id': '_2MASS', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',

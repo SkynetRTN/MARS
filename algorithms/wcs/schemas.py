@@ -148,6 +148,8 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
         data["flux"] = float(row["flux"])
         try:
             data["sat_pixels"] = int(row["saturated"])
+        except MemoryError:
+            raise
         except Exception:
             pass
         if wcs is not None and data.get("x") is not None and data.get("y") is not None:

@@ -23,7 +23,8 @@ class Tycho2Catalog(Catalog):
     num_sources = 2539913
     vizier_catalog = 'I/259'
     row_limit = 1000
-    mags = {'B': ['BTmag', 'e_BTmag'], 'V': ['VTmag', 'e_VTmag']}
+    # Native Tycho photometry; no Johnson conversion is implied or added.
+    mags = {'BT': ['BTmag', 'e_BTmag'], 'VT': ['VTmag', 'e_VTmag']}
     col_mapping = {
         'id': '"{:04d}-{:05d}-{}".format(TYC1,TYC2,TYC3)',
         'ra_hours': 'RAmdeg/15', 'dec_degs': 'DEmdeg',

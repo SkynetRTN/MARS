@@ -6,10 +6,8 @@ The tests here guard three things:
 * the **no-network guarantee**: importing ``catalogs`` must not pull in
   astroquery or open anything. This is what lets filter matching and the whole
   zero-point solve run with no network stack installed;
-* the **two-registry divergence**: ``CATALOGS`` (11 catalogs) and
-  ``CATALOG_OPTIONS`` (APASS + PanSTARRS) disagree deliberately, and merging
-  them would silently change which reference band a narrowband image calibrates
-  against (``docs/extraction.md``, Catalogs §4);
+* the **historical secondary export**: ``CATALOG_OPTIONS`` retains the old
+  APASS/PanSTARRS records. Runtime routing uses ``CATALOGS`` consistently;
 * the **colour transforms themselves**, which are numeric calibration behaviour
   copied verbatim from upstream, not style.
 """
@@ -208,12 +206,7 @@ def test_the_two_apass_declarations_are_different_classes():
 
 
 def test_narrowband_aliases_exist_only_in_catalog_options():
-    """The load-bearing difference, stated as an assertion.
-
-    ``resolve_ref_mag_for_filter`` reads ``CATALOG_OPTIONS``. If the registries
-    were merged, an ``H_alpha`` frame would stop resolving to r' and fall
-    through to the preferred-band fallback — calibrating against V instead, with
-    no error raised.
+    """Historical underscore aliases remain exported, without runtime priority.
     """
     options_lookup = CATALOG_OPTIONS["APASS"].filter_lookup
     catalogs_lookup = CATALOGS["APASS"].filter_lookup
@@ -239,12 +232,12 @@ def test_narrowband_lookup_maps_hydrogen_to_r_and_oxygen_to_g():
     }
 
 
-def test_halpha_resolves_differently_between_the_two_registries():
+def test_historical_halpha_record_is_distinct_from_current_production_mapping():
     """Not just a missing key — the same key resolves to different things.
 
     ``CATALOGS['APASS']`` maps ``Halpha`` through the Lupton R transform;
-    ``CATALOG_OPTIONS['APASS']`` maps it to plain r'. Merging the registries
-    would pick one and change the other's frames by ~0.15 mag.
+    The historical ``CATALOG_OPTIONS`` export still records bare rprime, but
+    current resolution uses the canonical production expression.
     """
     assert CATALOGS["APASS"].filter_lookup["Halpha"].startswith("rprime - 0.2936")
     assert CATALOG_OPTIONS["APASS"].filter_lookup["Halpha"] == "rprime"
@@ -328,20 +321,20 @@ def test_plugins_declaring_no_transforms_genuinely_have_no_attribute():
 def test_ocl_filters_map_to_v_wherever_they_are_declared():
     """Open/Clear/Lum are unfiltered broadband passes; V is the closest band.
 
-    Declared on four catalogs — the V-capable ones. A catalog without V must not
+    Declared on three catalogs — the ones with standard V. A catalog without V must not
     claim to serve an unfiltered frame.
     """
-    for name in ("APASS", "Landolt", "Stetson", "Tycho"):
+    for name in ("APASS", "Landolt", "Stetson"):
         lookup = CATALOGS[name].filter_lookup
         for ocl in ("Open", "Clear", "Lum"):
             assert lookup[ocl] == "V", f"{name}.{ocl}"
         assert "V" in CATALOGS[name].mags
 
 
-def test_lupton_transforms_are_verbatim():
-    """The published coefficients, pinned exactly.
+def test_retained_apass_r_i_expressions_are_unchanged():
+    """The retained coefficients, pinned exactly (I is a locus approximation).
 
-    Lupton (2005) for R and I. These are numeric calibration behaviour; a typo
+    These are numeric calibration behaviour; a typo
     in the fourth decimal moves every R-band zero point.
     """
     lookup = CATALOGS["APASS"].filter_lookup
@@ -383,12 +376,11 @@ UNSATISFIABLE_LOOKUPS = {
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_CATALOGS))
-def test_every_transform_resolves_within_one_alias_hop(name):
+def test_every_shipped_transform_resolves_within_the_shared_alias_bound(name):
     """No lookup entry may need more indirection than resolution provides.
 
-    Both ``algorithms.query.selection`` and ``algorithms.fieldcal.ref_mag`` follow two levels: a band,
-    an alias to another entry, or an expression over bands. An entry needing
-    three hops would pass review and then fail at calibration time.
+    Selection and numeric resolution share the bounded alias traversal; every
+    shipped entry must bottom out in bands or an expression over bands.
 
     ``UNSATISFIABLE_LOOKUPS`` records the entries that genuinely cannot resolve.
     They are preserved, not bugs to fix — APASS's Jester/Jordi U transform needs

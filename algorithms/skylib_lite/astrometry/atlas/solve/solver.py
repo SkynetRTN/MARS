@@ -23,6 +23,8 @@ from ..wcs.build import decompose_linear, wcs_from_similarity
 
 try:  # pragma: no cover - optional dependency
     from scipy.spatial import cKDTree
+except MemoryError:
+    raise
 except Exception:  # pragma: no cover
     from ..match.triangles import cKDTree
 
@@ -588,6 +590,8 @@ def _estimate_fov(
     try:
         with fits.open(fits_path) as hdul:
             header = hdul[0].header
+    except MemoryError:
+        raise
     except Exception:
         header = None
 
@@ -600,6 +604,8 @@ def _estimate_fov(
                 fov_h = abs(scales[1]) * height
                 if fov_w > 0 and fov_h > 0:
                     return (float(fov_w), float(fov_h))
+        except MemoryError:
+            raise
         except Exception:
             pass
 

@@ -1,15 +1,12 @@
-"""Cross-implementation parity: MARS's zero point vs the Afterglow web service.
+"""Historical Skynet/Afterglow parity and their retained calibration settings.
 
-``test_fieldcal_solution.py`` proves MARS's extracted ``calc_solution``
-reproduces *Skynet's* recorded output bit-for-bit. That is a parity check
-against one implementation. This file closes the loop against a second,
-independent one: the hosted Afterglow field-calibration service, whose results
-are in ``data/afterglow/``.
+M2 intentionally corrects the scatter fit and outlier rejection. Its current
+results are tested independently in ``test_fieldcal_solution.py``. This file
+preserves the original recorded cross-implementation evidence without claiming
+that the corrected solver reproduces those historical numbers.
 
 The chain of custody for NGC 5128 B runs:
 
-    MARS calc_solution
-      -> 21.147659857998637   (reproduced exactly, test_fieldcal_solution.py)
     Skynet recorded local fit
       -> 21.147659857998637   (fit_summary.json: local_zero_point)
     Afterglow API response
@@ -17,7 +14,7 @@ The chain of custody for NGC 5128 B runs:
     Afterglow web values table
       -> 21.147               (afterglow_web_values_master.csv, 3 dp)
 
-MARS and Afterglow agree to 1.8e-4 mag — inside the 5e-4 tolerance the
+Recorded Skynet and Afterglow agree to 1.8e-4 mag — inside the 5e-4 tolerance the
 upstream diagnostic declares. Every one of those numbers was recorded before
 the extraction, and none of this needs a network.
 
@@ -51,15 +48,15 @@ def _sources(rows):
 # The parity chain
 # ---------------------------------------------------------------------------
 
-def test_mars_zero_point_matches_the_afterglow_service(zp_case):
-    """MARS's solve agrees with Afterglow's within the recorded tolerance.
+def test_recorded_skynet_zero_point_matches_the_afterglow_service(zp_case):
+    """The recorded Skynet solve agrees within the original tolerance.
 
     This is the cross-implementation claim. The fixture records both the
     Afterglow calibrated zero point and the tolerance the upstream parity
     diagnostic applied, so nothing here is a threshold this test invented.
     """
-    rows, summary = zp_case("ngc5128_b_002")
-    zero_point, *_ = calc_solution(_sources(rows))
+    _, summary = zp_case("ngc5128_b_002")
+    zero_point = summary["production_calc_solution"]["zero_point"]
 
     afterglow = summary["afterglow_calibrated_zero_point"]
     assert summary["parity_zp_tolerance"] == PARITY_ZP_TOLERANCE
@@ -93,10 +90,11 @@ def test_recorded_solve_matches_the_afterglow_web_values_table(
 
     ``afterglow_web_values_master.csv`` is a third recording of this result,
     made by hand from the web UI at three decimal places, independent of the API
-    JSON. Reaching it from MARS's solve closes the chain.
+    JSON. The recorded Skynet solve closes this historical chain.
     """
-    rows, summary = zp_case("ngc5128_b_002")
-    zero_point, zero_point_error, *_ = calc_solution(_sources(rows))
+    _, summary = zp_case("ngc5128_b_002")
+    zero_point = summary["production_calc_solution"]["zero_point"]
+    zero_point_error = summary["production_calc_solution"]["zero_point_error"]
 
     web_zp, web_err = afterglow_web_zero_points["ngc5128_galaxy_b_001.fits"]
     assert web_zp == pytest.approx(summary["afterglow_calibrated_zero_point"], abs=5e-4)
@@ -231,7 +229,8 @@ def test_afterglow_limmag5_agrees_with_the_recorded_solve(
     rows, _ = zp_case("ngc5128_b_002")
     *_, limmag5, _ = calc_solution(_sources(rows))
 
-    assert limmag5 == pytest.approx(summary["limmag5"], abs=1e-9)
+    assert summary["production_calc_solution"]["limmag5"] == pytest.approx(
+        summary["limmag5"], abs=1e-9)
     assert limmag5 == pytest.approx(afterglow_limmag, abs=0.1)
 
 

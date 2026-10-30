@@ -148,15 +148,16 @@ see below. Ownership is strict:
   bundled scans carry `curated_period_s` (from `data/pulsar/curated_periods.json`,
   reported by `resolve_pulsar_scan`/`list_pulsar_scans` with a `period_source`);
   `tools.atnf.search_atnf` covers sources the curation does not. Neither is
-  where a period comes from. A fold at a *measured* period is a detection; a
-  fold at a *literature* period is a fit to a known answer, and the two must
-  never be reported as each other. The order is fixed: **measure** with
-  `compute_pulsar_periodogram` (read `peak_fold_snr`, not `peak_confidence` —
-  the confidence threshold assumes white noise and mains interference reads
-  "99.73%" while folding to nothing) → **compare** against the curated or
+  where a period comes from. A fold at a measured period is a diagnostic;
+  periodic interference can fold coherently. A literature-seeded fold must be
+  identified as such. The order is fixed: **measure** with
+  `compute_pulsar_periodogram` (inspect `peak_fold_snr`, the profile and
+  `false_alarm_assumptions`; legacy `peak_confidence` is null, and the
+  Gaussian-noise bound is not a pulsar probability) → **compare** against the curated or
   ATNF value → on disagreement **retune** (`back_scale` by rerunning
   `load_pulsar_lightcurve`, then `start`/`stop`, `steps`; 0.016665 s is 60 Hz
-  mains, a 2.1–2.2 s peak is baseline red noise)
+  mains, a 2.1–2.2 s peak is baseline red noise; repeated retuning is outside
+  the single-search noise bound)
   → only then **fall back** to folding at the reference, and say so — that
   fold's `pulse_snr` is not an independent detection. A blind search succeeds
   on one of the five bundled scans, so reaching the fallback on the faint ones
