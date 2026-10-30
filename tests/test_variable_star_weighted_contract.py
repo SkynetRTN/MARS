@@ -14,7 +14,7 @@ from tools import variable_star
 
 
 def _paired_rows():
-    return [VariableDataRow(float(i), value, 12., .1, .1, .070710678)
+    return [VariableDataRow(float(i), value, 12., .1, .1, .1414213562373095)
             for i, value in enumerate([14., 14.1, 13.9, 14.2])]
 
 

@@ -2,24 +2,23 @@
 
 Before querying anything, narrow the configured catalog list to catalogs that
 can actually produce a reference magnitude for the image's filter. Querying
-2MASS for a V-band image wastes a round trip and returns sources the zero-point
-solve will discard.
+2MASS for a prime-band image wastes a round trip and returns sources the
+zero-point solve will discard.
 
 "Can produce" is not just "has that band". A catalog supports a filter if the
 filter names one of its bands directly, or if its ``filter_lookup`` maps the
 filter to a band, or to an *expression* over bands it has — APASS answers an
 R-band image through ``rprime - 0.2936*(rprime - iprime) - 0.1439`` without
 carrying R at all. Aliases chain: ``g'`` -> ``gprime`` -> an expression over
-``g`` and ``r``. Resolution follows two levels of indirection, matching
-``fieldcal.ref_mag.resolve_ref_mag_for_filter`` — go deeper here and selection
-would accept catalogs that reference-magnitude resolution then rejects.
+``g`` and ``r``. Resolution follows the same bounded alias chains and effective filter map as
+``fieldcal.ref_mag.resolve_ref_mag_for_filter`` (up to 32 visited targets).
 
 This module reads declarations only. It imports ``catalogs``, not
 ``query.registry``, so filter matching costs no astroquery import.
 
 EXTRACTED FROM:
 ``skynet/.../optical_data_processing/catalog_query.py`` (lines 20-191 of 436),
-verbatim apart from the registry import. The WCS and orchestration halves of
+with intentional M2 shared-routing and band-identity corrections. The WCS and orchestration halves of
 that file are now ``query/geometry.py`` and ``query/runner.py``.
 """
 
@@ -29,7 +28,9 @@ import logging
 from typing import Optional, Sequence
 
 from algorithms.catalogs import CATALOGS
-from algorithms.catalogs.filters import filter_token_candidates
+from algorithms.catalogs.filters import (
+    catalog_filter_lookup, catalog_key, filter_token_candidates, reference_routes,
+)
 
 __all__ = [
     "catalog_supports_filter",
@@ -92,24 +93,18 @@ def _lookup_resolves(
     """Return whether ``target`` bottoms out in bands the catalog has.
 
     ``target`` is the right-hand side of a ``filter_lookup`` entry: a band, an
-    alias for another entry, or an expression. Checked in that order, one alias
-    deep, then as an expression.
+    alias for another entry, or an expression. Alias traversal has the same
+    cycle detection and 32-target bound as numeric resolution.
     """
-    # Direct band alias
-    if target in catalog_mags:
-        return True
-    # One more level: target is itself a lookup key (alias-of-alias)
-    target2 = effective_lookup.get(target)
-    if target2 is not None:
-        if target2 in catalog_mags:
+    seen: set[str] = set()
+    while target and target not in seen and len(seen) < 32:
+        seen.add(target)
+        if target in catalog_mags:
             return True
-        deps2 = _expression_deps(target2)
-        if deps2 and all(d in catalog_mags for d in deps2):
+        deps = _expression_deps(target)
+        if deps and deps <= catalog_mags:
             return True
-    # Expression at this level — all referenced bands must exist in catalog mags
-    deps = _expression_deps(target)
-    if deps and all(d in catalog_mags for d in deps):
-        return True
+        target = effective_lookup.get(target)
     return False
 
 
@@ -128,7 +123,7 @@ def catalog_supports_filter(
     Unknown catalog names return ``False`` rather than raising: selection is
     advisory, and the query runner validates names separately with a clear error.
     """
-    catalog = CATALOGS.get(catalog_name)
+    catalog = CATALOGS.get(catalog_key(catalog_name))
     if catalog is None:
         return False
 
@@ -138,24 +133,9 @@ def catalog_supports_filter(
 
     # Effective lookup: the instance's filter_lookup already merges the class
     # declaration with whatever the registry overlaid at construction.
-    effective_lookup: dict[str, str] = dict(getattr(catalog, "filter_lookup", {}) or {})
-    if custom_filter_lookup and catalog_name in custom_filter_lookup:
-        effective_lookup.update(custom_filter_lookup[catalog_name])
-
-    # '*' means "use this for any filter not named explicitly" — UCAC maps
-    # everything to its single integral bandpass that way.
-    wildcard_target = effective_lookup.get("*")
-
-    for token in _filter_token_candidates(image_filter):
-        # 1. Direct band key in catalog mags
-        if token in catalog_mags:
-            return True
-        # 2. Explicit filter_lookup match, plus wildcard fallback
-        target = effective_lookup.get(token) or wildcard_target
-        if target is not None and _lookup_resolves(target, catalog_mags, effective_lookup):
-            return True
-
-    return False
+    effective_lookup = catalog_filter_lookup(catalog_name, custom_filter_lookup)
+    return any(_lookup_resolves(target, catalog_mags, effective_lookup)
+               for target, _kind in reference_routes(image_filter, catalog_mags, effective_lookup))
 
 
 def select_catalogs_for_filter(

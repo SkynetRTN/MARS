@@ -70,6 +70,8 @@ def build_wcs_from_header(header) -> WCS | None:
         _strip_orphan_sip(tmp)
         wcs = WCS(tmp, relax=True)
         return wcs if wcs.has_celestial else None
+    except MemoryError:
+        raise
     except Exception:
         return None
 
@@ -96,6 +98,8 @@ def _crop_data(
     try:
         x0 = int(settings.x)
         y0 = int(settings.y)
+    except MemoryError:
+        raise
     except Exception as exc:
         raise ValueError("Source extraction region coordinates must be integers") from exc
 
@@ -275,12 +279,16 @@ def run_source_extraction(
     try:
         flux_values = source_table["flux"]
         total_flux= float(np.nansum(flux_values))
+    except MemoryError:
+        raise
     except Exception:
         #Fallback to iterate through rows
         total_flux = 0.0
         for row in source_table:
             try:
                 total_flux += float(row["flux"])
+            except MemoryError:
+                raise
             except Exception:
                 continue
     if total_flux > 0.0:

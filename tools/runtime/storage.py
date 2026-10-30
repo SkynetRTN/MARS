@@ -44,7 +44,7 @@ def managed_root(root: Path, *, create: bool = True) -> Path:
 
 
 def tree_size(root: Path, *, max_files: int) -> int:
-    """Bounded traversal of an owned tree; reject links and special files."""
+    """Bounded traversal; tolerate vanished entries, reject links/special files."""
     total = count = 0
     if not root.exists():
         return 0
@@ -52,18 +52,27 @@ def tree_size(root: Path, *, max_files: int) -> int:
         raise ValueError("Runtime tree contains a symlink.")
     pending = [root]
     while pending:
-        with os.scandir(pending.pop()) as entries:
-            for entry in entries:
-                count += 1
-                if count > max_files:
-                    raise ValueError("Runtime tree exceeds its file/entry budget.")
-                info = entry.stat(follow_symlinks=False)
-                if stat.S_ISDIR(info.st_mode):
-                    pending.append(Path(entry.path))
-                elif stat.S_ISREG(info.st_mode):
-                    total += info.st_size
-                else:
-                    raise ValueError("Runtime tree contains a link or special file.")
+        try:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    count += 1
+                    if count > max_files:
+                        raise ValueError("Runtime tree exceeds its file/entry budget.")
+                    try:
+                        info = entry.stat(follow_symlinks=False)
+                    except FileNotFoundError:
+                        # Workers atomically replace replies and cache files.
+                        # A later scan accounts for the replacement's name.
+                        continue
+                    if stat.S_ISDIR(info.st_mode):
+                        pending.append(Path(entry.path))
+                    elif stat.S_ISREG(info.st_mode):
+                        total += info.st_size
+                    else:
+                        raise ValueError("Runtime tree contains a link or special file.")
+        except FileNotFoundError:
+            # A queued temporary directory can also disappear before descent.
+            continue
     return total
 
 

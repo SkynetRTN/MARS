@@ -725,6 +725,26 @@ is enforced by the loader.
 
 ### 6.1 Loader rules
 
+**M2 addition (2026-10-23):** `must_source_attribution: [{because: ...}]` is an
+optional hard answer check. It checks supported author/year citation forms
+against author metadata in successful/partial returned bibliography records,
+matching the year and nearest explicit bibcode within a sentence/table row.
+Numbers, bibcodes alone, query echoes and abstract mentions do not establish
+authorship. Explicit disclaimers are scoped to their clause. It is enabled on
+the two relevant core tasks; other tasks receive diagnostic unsupported-claim
+metrics. Generated reports show hard-check coverage. Passing this bounded
+grammar does not verify paper support, nicknames, titles or all factual prose.
+Historical reports without the new checks remain attribution-unchecked until
+all original transcripts are regraded together. See
+[acceptance and examples](../analysis/warnings-benchmark-claims.md).
+
+The 2026-10-26 correction anchors provenance qualifications to the cited author;
+ordinary method words and negated empirical findings remain assertions.
+Identifier association survives common scholarly abbreviations and wrapped
+prose. Structural table rows retain row-level identifiers and cell-level
+qualifications; ordinary absolute-value notation does not create a table.
+See [the master plan's review corrections](../working/master-continuation-plan.md#m2-review-corrections).
+
 - `yaml.safe_load` only (S5). A Python-object construction tag raises.
 - `fixtures:` entries are **bare names**, resolved as
   `<fixture-root>/<name>.yaml`. Anything containing a path separator, a `..`

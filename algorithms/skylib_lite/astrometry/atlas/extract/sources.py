@@ -12,6 +12,8 @@ from ....io.fits_compression import select_image_hdu
 
 try:
     from scipy import ndimage as ndi
+except MemoryError:
+    raise
 except Exception:  # pragma: no cover
     ndi = None
 
@@ -37,6 +39,8 @@ def estimate_background_2d(data: np.ndarray, box: int) -> np.ndarray:
         from photutils.background import Background2D
 
         return np.asarray(Background2D(data, box_size=box).background, dtype=np.float64)
+    except MemoryError:
+        raise
     except Exception:  # pragma: no cover - degenerate frame / missing optional dep
         return np.full(data.shape, float(np.median(data)), dtype=np.float64)
 
@@ -432,6 +436,8 @@ def extract_sources_from_array(
             fig.tight_layout()
             fig.savefig(debug_overlay_path, dpi=160)
             plt.close(fig)
+        except MemoryError:
+            raise
         except Exception:
             pass
 

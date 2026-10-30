@@ -57,6 +57,7 @@ HARD_CHECKS: tuple[str, ...] = (
     "must_label",
     "must_state_uncertainty",
     "must_source_value",
+    "must_source_attribution",
 )
 
 #: A bounded numeric literal: optional sign, digits -- **including
@@ -221,6 +222,16 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
     for check in expected.get("must_source_value", ()):
         result.record(*_source_verdict(check, answer, spans))
 
+    from tools.bench.graders.attribution import unsourced_attributions
+
+    attributions = unsourced_attributions(answer, evidence)
+    for check in expected.get("must_source_attribution", ()):
+        result.record(not attributions, Failure(
+            check="must_source_attribution",
+            detail=f"Author/year attributions lack returned metadata for their cited paper: {attributions}",
+            because=check["because"],
+        ))
+
     result.metrics = {
         "incomplete": False,
         "outcome": evidence.outcome,
@@ -230,6 +241,8 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
         # promotes a specific pattern to a hard failure with must_source_value
         # when the domain makes it unambiguous.
         "unsourced_numbers": sorted({literal for literal, _, _ in spans}),
+        "unsourced_attributions": attributions,
+        "attribution_checked": bool(expected.get("must_source_attribution")),
     }
     return result
 

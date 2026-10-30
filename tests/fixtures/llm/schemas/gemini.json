@@ -720,7 +720,7 @@
       },
       {
         "name": "compute_pulsar_periodogram",
-        "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light curve to FIND ITS PERIOD. This is the only tool that produces a period from data, so it comes before folding and before folded sonification. Defaults search the observation's own Nyquist bounds (twice the mean sample interval, up to 3 s). Local only -- no network. IMPORTANT: check 'peak_fold_snr' before using 'peak_period_s'. It folds the data at the peak and measures the resulting pulse -- above ~8 the peak is real, near 1 it is not. Do NOT rely on 'peak_confidence' for this: its false-alarm threshold assumes white noise, so mains interference and baseline red noise routinely read '99.73% Confidence' while folding to nothing. Also check 'top_peaks': pulsars produce strong harmonics, so a peak at an integer multiple or fraction of the reported period may be the real fundamental. Run this BEFORE consulting any reference period: a fold at a measured period is a detection, a fold at a literature period is a fit to a known answer. Compare the result against a reference afterwards (a bundled scan's 'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind search on a single 60-second scan only succeeds for a bright source; if it fails or disagrees with the reference, retry -- rerun load_pulsar_lightcurve with a different back_scale and search the new light curve (a red-noise peak moves with it, a real periodicity does not), narrow start/stop away from the artifact, raise steps. Fold at the reference period only after a retuned search has still failed, and say so when you do.",
+        "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light curve to FIND ITS PERIOD. This is the only tool that produces a period from data, so it comes before folding and before folded sonification. Default period bounds are twice median positive spacing through 3 s; frequency mode uses the reciprocal band. Irregular sampling makes this a search heuristic, not a hard Nyquist limit. Local only. Every 'top_peaks' entry has period_s, frequency_hz and power in either mode: fold with period_s. search_unit identifies search_start/stop. false_alarm_probability_upper_bound is a conservative fixed-grid Gaussian-noise bound, not the probability of a pulsar or correct period. Read false_alarm_assumptions and warnings: correlated noise, baseline filtering, RFI and repeated retuning are not calibrated. Peak bounds use fitted residuals. false_alarm_resolution_limited warns about null probabilities or omitted power levels at numerical limits; do not derive probabilities from rounded spectral power. Recompute older spectra for current residual-based evaluation. Legacy peak_confidence is null and confidence_thresholds is empty. Check 'peak_fold_snr' and the profile: the cutoff of 8 is an empirical diagnostic, not a detection probability; periodic RFI can fold too. Also check 'top_peaks': pulsars produce strong harmonics, so a peak at an integer multiple or fraction of the reported period may be the real fundamental. Run this BEFORE consulting any reference period: a reference-seeded fold does not independently measure the period. Compare the result against a reference afterwards (a bundled scan's 'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind search on a single 60-second scan only succeeds for a bright source; if it fails or disagrees with the reference, retry -- rerun load_pulsar_lightcurve with a different back_scale and search the new light curve (a red-noise peak moves with it, a real periodicity does not), narrow start/stop away from the artifact, raise steps. Fold at the reference period only after a retuned search has still failed, and say so when you do.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -730,11 +730,11 @@
             },
             "start": {
               "type": "NUMBER",
-              "description": "Shortest trial period in seconds (or lowest frequency in Hz when freq_mode). Defaults to the Nyquist limit."
+              "description": "Shortest trial period in seconds (or lowest frequency in Hz when freq_mode=true). Default: twice median positive spacing in seconds, or 1/3 Hz in frequency mode."
             },
             "stop": {
               "type": "NUMBER",
-              "description": "Longest trial period in seconds. Defaults to 3.0."
+              "description": "Upper search bound: seconds in period mode (default 3.0), Hz when freq_mode=true (default reciprocal of twice median positive spacing). Actual tested coordinates are in the artifact; the preserved grid can omit the endpoint."
             },
             "steps": {
               "type": "INTEGER",
@@ -760,7 +760,7 @@
       },
       {
         "name": "fold_pulsar_lightcurve",
-        "description": "PULSAR PIPELINE STAGE 3 of 4. Fold a pulsar light curve at a period into a pulse profile: every rotation is stacked on the others, so a real pulse adds up while noise averages down. This is what makes a pulsar that is invisible in the raw scan clearly visible. Needs a period -- measure it with compute_pulsar_periodogram first. A literature period (a scan's 'curated_period_s', or search_atnf) is the fallback for when a retuned search has still failed, and a fold at one is not an independent detection: report which kind of period you folded at. Local only -- no network. IMPORTANT: folding at the WRONG period returns a flat profile, not an error. Read 'pulse_snr' to judge: above ~8 is a real detection, near 1 means the period is wrong or the source is too faint in this scan.",
+        "description": "PULSAR PIPELINE STAGE 3 of 4. Fold a pulsar light curve at a period into a pulse profile: every rotation is stacked on the others, so a real pulse adds up while noise averages down. This is what makes a pulsar that is invisible in the raw scan clearly visible. Needs a period -- measure it with compute_pulsar_periodogram first. A literature period (a scan's 'curated_period_s', or search_atnf) is the fallback for when a retuned search has still failed, and a fold at one is not an independent detection: report which kind of period you folded at. Local only -- no network. IMPORTANT: folding at the WRONG period can return a flat profile without an error. Read 'pulse_snr' as an empirical concentration diagnostic; the cutoff of 8 is not a calibrated detection probability. Periodic RFI can fold coherently too. A weak fold may mean a wrong period or a source too faint in this scan.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -797,7 +797,7 @@
       },
       {
         "name": "plot_pulsar",
-        "description": "Plot a pulsar artifact as a PNG image: the light curve, the periodogram, or the folded pulse profile. Pass any artifact from the pulsar pipeline (or a raw scan) and the chart is chosen from its columns. Local only -- no network. The periodogram plot is the most informative of the three when a period looks wrong: it shows the whole spectrum on a log axis with the peak marked and the false-alarm lines drawn, so interference and harmonic combs are visible immediately in a way the numbers alone do not convey. Axis labels, series names and styling come from Astromancer's own chart configuration, not from this tool.",
+        "description": "Plot a pulsar artifact as a PNG image: the light curve, the periodogram, or the folded pulse profile. Pass any artifact from the pulsar pipeline (or a raw scan) and the chart is chosen from its columns. Local only -- no network. The periodogram plot is the most informative of the three when a period looks wrong: it shows the saved channel's spectrum with the peak marked and the false-alarm lines drawn. Period spectra use a logarithmic seconds axis; frequency spectra use a linear hertz axis. Older spectra without channel metadata are labelled unknown with a warning. Interference and harmonic combs are visible immediately in a way the numbers alone do not convey. Chart defaults come from Astromancer, adapted to the saved spectrum's channel and coordinate.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -1251,7 +1251,7 @@
       },
       {
         "name": "replay_field_calibration",
-        "description": "Re-run a recorded field calibration end to end, catalog selection included, with no network: the recorded detections and the recorded full APASS response -- clipped to the frame as the live query path clips it, with the VSX variables the run filtered out -- go through perform_field_calibration, so the calibration stars are CHOSEN here (for NGC 5128 B: 35 of the 45 candidates on the frame, from a 132-row cone) and the result reports cone/candidate/matched/not-selected counts, each match with its reference magnitude, the ABSOLUTE zero point, and whether the selection and the solve reproduce what fit_summary.json recorded (they do, bit for bit). Only ngc5128_b_002 has the recorded response and a bundled frame; other fields return the errors that stop them.",
+        "description": "Re-run a recorded field calibration end to end, catalog selection included, with no network: the recorded detections and the recorded full APASS response -- clipped to the frame as the live query path clips it, with the VSX variables the run filtered out -- go through perform_field_calibration, so the calibration stars are CHOSEN here (for NGC 5128 B: 35 of the 45 candidates on the frame, from a 132-row cone) and the result reports cone/candidate/matched/not-selected counts, each match with its reference magnitude, the ABSOLUTE zero point, and selection agreement plus numerical differences from fit_summary.json. M2's corrected scatter and rejection can change the historical fit even when selected identities match exactly. Only ngc5128_b_002 has the recorded response and a bundled frame; other fields return the errors that stop them.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -1312,7 +1312,7 @@
       },
       {
         "name": "load_variable_star_lightcurve",
-        "description": "Validate and merge a paired-source variable-star CSV into an ECSV artifact.",
+        "description": "Validate and merge a paired-source variable-star CSV into an ECSV artifact. Source magnitude errors are independent standard uncertainties combined in quadrature; error_mse retains its historical name but is a standard deviation, not a variance.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -1328,7 +1328,7 @@
       },
       {
         "name": "compute_variable_star_periodogram",
-        "description": "Compute the extracted error-weighted variable-star periodogram from a light-curve artifact.",
+        "description": "Compute a weighted floating-mean Lomb-Scargle periodogram from a light-curve artifact. Periods are in days. Standard power in [0, 1] is fractional weighted chi-square improvement over a constant model, not a detection probability. Cached uncertainties are rederived from independent source magnitude errors in quadrature; source covariance and uncertainty in the fixed reference magnitude are not included. Recompute older spectra for corrected normalization.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -1344,15 +1344,18 @@
               ]
             },
             "reference_star_magnitude": {
-              "type": "NUMBER"
+              "type": "NUMBER",
+              "description": "Fixed comparison-star magnitude; its uncertainty is not propagated."
             },
             "start_period": {
               "type": "NUMBER",
-              "default": 0.1
+              "default": 0.1,
+              "description": "Minimum trial period in days."
             },
             "end_period": {
               "type": "NUMBER",
-              "default": 1.0
+              "default": 1.0,
+              "description": "Maximum trial period in days."
             }
           },
           "required": [
@@ -1364,7 +1367,7 @@
       },
       {
         "name": "fold_variable_star_lightcurve",
-        "description": "Fold a variable-star light-curve artifact at an explicit period.",
+        "description": "Fold a variable-star light-curve artifact at an explicit period in days. Error bars are independent source standard uncertainties combined in quadrature; source covariance and uncertainty in the fixed reference magnitude are not included.",
         "parameters": {
           "type": "OBJECT",
           "properties": {
@@ -1380,11 +1383,13 @@
               ]
             },
             "reference_star_magnitude": {
-              "type": "NUMBER"
+              "type": "NUMBER",
+              "description": "Fixed comparison-star magnitude; its uncertainty is not propagated."
             },
             "period": {
               "type": "NUMBER",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Folding period in days."
             },
             "phase": {
               "type": "NUMBER",
@@ -1434,7 +1439,7 @@
                 "selected_rows",
                 "full_response"
               ],
-              "description": "Solve offline from the catalog rows recorded for the solve named by compare_to (required with this). 'selected_rows': the 35 APASS rows Skynet actually matched -- the small bit-exact regression case; every row is known to match, so catalog selection is not exercised. 'full_response': the end-to-end selection replay -- the recorded APASS response for the whole field (a 132-row cone), clipped to the frame as the live path clips it and with the recorded VSX variables filtered out, so the matches are chosen as a live solve chooses them. Neither opens a socket."
+              "description": "Solve offline from the catalog rows recorded for the solve named by compare_to (required with this). 'selected_rows': the 35 APASS rows Skynet actually matched -- the small recorded-row regression case; every row is known to match, so catalog selection is not exercised. 'full_response': the end-to-end selection replay -- the recorded APASS response for the whole field (a 132-row cone), clipped to the frame as the live path clips it and with the recorded VSX variables filtered out, so the matches are chosen as a live solve chooses them. Neither opens a socket."
             }
           },
           "required": [

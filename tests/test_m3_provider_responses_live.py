@@ -29,7 +29,7 @@ FIELDS = {
     "UCAC": (*NGC5128, 3.0, {"Open"}),
     "2MASS": (*NGC5128, 2.0, {"J", "H", "K"}),
     "USNO": (*NGC5128, 2.0, set()),
-    "Tycho": (*NGC5128, 30.0, {"B", "V"}),
+    "Tycho": (*NGC5128, 30.0, {"BT", "VT"}),
     "SDSS": (*STRIPE82, 2.0, {"u", "g", "r", "i", "z"}),
     "PanSTARRS": (*STRIPE82, 2.0, set()),
     "Landolt": (6.8667, -0.33, 30.0, {"V"}),      # SA 98
@@ -135,6 +135,7 @@ def test_live_ads_object_name_is_translated_and_searched():
     result = search_ads(abstract="millisecond pulsar", object_name="PSR B1937+21", max_results=5)
     assert result.status == "ok", result.errors
     assert result.count == 5
+    assert all(row["bibcode"] and row["title"] for row in result.preview)
 
 
 @pytest.mark.skipif(not os.environ.get("ADS_DEV_KEY"), reason="needs ADS_DEV_KEY to query ADS")

@@ -6,14 +6,16 @@
 
 from __future__ import annotations
 
-from math import atan2, cos, exp, inf, isfinite, log, nan, pi, sin
+from math import exp, isfinite, log, pi
 from numbers import Integral
 from typing import Sequence
+
+import numpy as np
 
 from algorithms.variable_star.lightcurve import VariableDataRow, differential_data
 
 
-# First-party acceptance bounds; the extracted weighted formula stays unchanged.
+# First-party acceptance bounds around the M2 weighted least-squares correction.
 DEFAULT_STEPS = 2_000
 MAX_PERIODOGRAM_SAMPLES = 2_000
 MAX_PERIODOGRAM_STEPS = 200_000
@@ -62,7 +64,7 @@ def validate_periodogram_grid(start: float, stop: float, steps: int = DEFAULT_ST
     raise ValueError("period range exceeds the bounded grid iteration count.")
 
 
-def _validate_weights(errors: Sequence[float]) -> None:
+def _validate_weights(errors: Sequence[float]) -> np.ndarray:
     weights = []
     for error in errors:
         _finite(error, "uncertainty", positive=True)
@@ -73,35 +75,12 @@ def _validate_weights(errors: Sequence[float]) -> None:
         _finite(weight, "uncertainty weight", positive=True)
         weights.append(weight)
     _finite(sum(weights), "total uncertainty weight", positive=True)
-
-
-def _mean(values: Sequence[float]) -> float:
-    return sum(values) / len(values)
-
-
-def _variance(values: Sequence[float]) -> float:
-    mean = _mean(values)
-    return sum((value - mean) ** 2 for value in values) / len(values)
+    return np.asarray(weights) / sum(weights)
 
 
 def _error_mean(values: Sequence[float], errors: Sequence[float]) -> float:
     weights = [1 / error**2 for error in errors]
     return sum(value * weight for value, weight in zip(values, weights, strict=True)) / sum(weights)
-
-
-def _error_dot(left: Sequence[float], errors: Sequence[float], right: Sequence[float]) -> float:
-    weights = [1 / error**2 for error in errors]
-    products = [a * b for a, b in zip(left, right, strict=True)]
-    return sum(value * weight for value, weight in zip(products, weights, strict=True)) / sum(weights)
-
-
-def _ieee_divide(numerator: float, denominator: float) -> float:
-    """Match JavaScript number division where Python would raise on zero."""
-    if denominator != 0:
-        return numerator / denominator
-    if numerator == 0:
-        return nan
-    return inf if numerator > 0 else -inf
 
 
 def lomb_scargle_with_error(
@@ -112,16 +91,12 @@ def lomb_scargle_with_error(
     stop: float,
     steps: int = 1000,
 ) -> list[tuple[float, float]]:
-    """Return the exact error-weighted, logarithmic-period spectrum.
+    """Weighted floating-mean LS with standard dimensionless power in [0, 1].
 
     Finite, aligned inputs must fit the bounded sample/grid work budget.
-    Accepted inputs retain TypeScript arithmetic.
-
-    M3 (TS-17): a constant series has zero variance, so every trial power is
-    0/0 and upstream returned a spectrum of NaN (or inf, when the weighted
-    mean's rounding leaves tiny residues). It now raises ``ValueError``, as
-    the pulsar periodogram does for the same input, and so does any trial
-    whose power is not finite.
+    M2 corrects the weighted formula; the accumulating logarithmic-period grid
+    is preserved. M3 rejects constant series and nonfinite trial powers with
+    ValueError rather than returning undefined spectra.
     """
     if len(times) != len(values) or len(times) != len(errors):
         raise ValueError("Dimension mismatch between time, value and uncertainty arrays.")
@@ -130,21 +105,38 @@ def lomb_scargle_with_error(
     for time, value in zip(times, values, strict=True):
         _finite(time, "time")
         _finite(value, "value")
-    _validate_weights(errors)
+    weights = _validate_weights(errors)
     try:
-        residue_mean = _error_mean(values, errors)
+        # Center relative to an observed value before averaging. This avoids
+        # inventing variance in exact constants or losing a small signal to a
+        # rounded large absolute weighted mean.
+        offsets = [float(value) - float(values[0]) for value in values]
+        for offset in offsets:
+            _finite(offset, "value offset")
+        # Standard power is a ratio: remove a common amplitude before means
+        # and squared energies, avoiding both subnormal loss and overflow.
+        amplitude = max(abs(offset) for offset in offsets)
+        if amplitude:
+            offsets = [offset / amplitude for offset in offsets]
+        residue_mean = _error_mean(offsets, errors)
         _finite(residue_mean, "weighted mean")
-        residues = [value - residue_mean for value in values]
+        residues = [value - residue_mean for value in offsets]
         for residue in residues:
             _finite(residue, "residue")
-        two_variance = 2 * _variance(values)
-        _finite(two_variance, "twice the variance")
+        variance = sum(float(weight) * residue**2 for weight, residue in zip(weights, residues, strict=True))
+        _finite(variance, "weighted variance")
+        if variance == 0 and any(residue != 0 for residue in residues):
+            raise ValueError("weighted variance is not representable.")
     except (OverflowError, ZeroDivisionError) as exc:
         raise ValueError("weighted normalization is not representable.") from exc
-    # Tested on the values: summing a constant can leave a rounding residue,
-    # so its computed variance need not be exactly zero (e.g. 24 x 0.1).
-    if two_variance == 0 or min(values) == max(values):
+    if variance == 0:
         raise ValueError("A constant series has no variance; its periodogram is undefined.")
+    root_weights = np.sqrt(weights)
+    response = root_weights * residues
+    with np.errstate(over="ignore", invalid="ignore"):
+        relative_times = np.asarray(times, dtype=float) - times[0]
+    if not np.isfinite(relative_times).all():
+        raise ValueError("relative times must remain finite.")
     result: list[tuple[float, float]] = []
     x_value = start
     index = 0
@@ -155,31 +147,29 @@ def lomb_scargle_with_error(
         _finite(period, "trial period", positive=True)
         omega = 2 * pi / period
         _finite(2 * omega, "trial angular frequency", positive=True)
-        two_omega_times = [2 * omega * value for value in times]
-        for value in two_omega_times:
-            _finite(value, "trial frequency-time product")
-        tau = atan2(sum(sin(value) for value in two_omega_times), sum(cos(value) for value in two_omega_times)) / (2 * omega)
-        shifted = [omega * (value - tau) for value in times]
-        for value in shifted:
-            _finite(value, "shifted trial time")
-        cos_values = [cos(value) for value in shifted]
-        sin_values = [sin(value) for value in shifted]
+        with np.errstate(over="ignore", invalid="ignore"):
+            angles = omega * relative_times
+        if not np.isfinite(angles).all():
+            raise ValueError("trial frequency-time products must remain finite.")
+        columns = np.column_stack((np.cos(angles), np.sin(angles)))
+        # Weighted centering eliminates the fitted offset. Use the same weights
+        # for response, model columns and reference variance.
+        columns -= weights @ columns
+        design = root_weights[:, None] * columns
         try:
-            power = _ieee_divide(
-                _ieee_divide(
-                    _error_dot(residues, errors, cos_values) ** 2,
-                    sum(value * value for value in cos_values),
-                )
-                + _ieee_divide(
-                    _error_dot(residues, errors, sin_values) ** 2,
-                    sum(value * value for value in sin_values),
-                ),
-                two_variance,
-            )
-        except OverflowError as exc:
+            basis, singular_values, _ = np.linalg.svd(design, full_matrices=False)
+            # The uncentered intercept has norm one. Include the phase-formation
+            # error scale as well as the SVD backward-error scale, so collapsed
+            # aliases are not fitted through phase-roundoff columns. This is an
+            # estimated resolution policy, not a certified error enclosure.
+            cutoff = np.finfo(float).eps * (max(len(times), 3) + float(np.max(np.abs(angles))))
+            projection = basis[:, singular_values > cutoff].T @ response
+            power = float(projection @ projection) / variance
+        except (OverflowError, np.linalg.LinAlgError) as exc:
             raise ValueError("weighted trial power is not representable.") from exc
         if not isfinite(power):
             raise ValueError(f"weighted trial power at period {period!r} is not finite.")
+        power = min(1., max(0., power))
         result.append((period, power))
         next_value = x_value + step
         if not isfinite(next_value) or next_value <= x_value:

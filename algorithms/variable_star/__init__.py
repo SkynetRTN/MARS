@@ -1,1 +1,1 @@
-"""Exact-parity Python ports of Astromancer variable-star computations."""
+"""Astromancer variable-star ports with M2 weighted-power and error corrections."""

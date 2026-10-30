@@ -18,6 +18,33 @@ from tools.bench.report import (
 )
 
 
+def test_old_grades_are_labeled_as_attribution_unchecked_without_changing_scores():
+    report = build_report([{"record": _record(), "grades": {"grades": [_entry()]}}])
+    coverage = report["header"]["attribution_coverage"]
+    assert coverage["checked"] == 0 and coverage["scored"] == 1
+    assert report["matrix"]["anthropic/claude-opus-5"]["passed"] == 1
+    text = render_markdown(report)
+    assert "attribution" in text.lower() and "0 of 1" in text
+
+
+def test_report_counts_enabled_attribution_checks_and_flagged_claims():
+    checked, unchecked = _entry(), _entry(task_id="t2")
+    checked["answer"]["metrics"] = {"attribution_checked": True, "unsourced_attributions": []}
+    unchecked["answer"]["metrics"] = {"attribution_checked": False, "unsourced_attributions": ["Jones et al. 2017"]}
+    report = build_report([{"record": _record(), "grades": {"grades": [checked, unchecked]}}])
+    coverage = report["header"]["attribution_coverage"]
+    assert coverage == {"checked": 1, "scored": 2, "flagged_claims": 1}
+    assert "1 of 2" in render_markdown(report)
+
+
+def test_rendering_an_archived_report_without_coverage_marks_it_unchecked():
+    report = build_report([{"record": _record(), "grades": {"grades": [_entry()]}}])
+    del report["header"]["attribution_coverage"]
+    text = render_markdown(report)
+    assert "Author attribution checks: unavailable" in text
+    assert "have not been regraded" in text
+
+
 def _record(**kwargs):
     base = {
         "run_id": "2026-09-13-core",

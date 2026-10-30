@@ -155,7 +155,7 @@ def _input_error(
     return None
 
 
-def _http_failure(exc: Exception) -> ToolResult:
+def _http_failure(exc: Exception, *, warnings: Optional[list[ToolWarning]] = None) -> ToolResult:
     """A failed ADS request: a 400 is the query's fault, anything else ADS's.
 
     Confirmed live (2026-10-22): a query ADS cannot parse (``abs:(pulsar``) is
@@ -163,13 +163,19 @@ def _http_failure(exc: Exception) -> ToolResult:
     """
     response = getattr(exc, "response", None)
     code = "invalid_input" if getattr(response, "status_code", None) == 400 else "provider_unavailable"
-    return ToolResult(status="error", errors=[{"code": code, "message": _describe_error(exc)}])
+    return ToolResult(
+        status="error", errors=[{"code": code, "message": _describe_error(exc)}],
+        warnings=warnings or [],
+    )
 
 
-def _unusable(what: str, body: Any) -> ToolResult:
+def _unusable(
+    what: str, body: Any, *, warnings: Optional[list[ToolWarning]] = None,
+) -> ToolResult:
     return ToolResult(
         status="error",
         errors=[{"code": "unusable_response", "message": f"{what}: {str(body)[:500]}"}],
+        warnings=warnings or [],
     )
 
 
@@ -242,12 +248,14 @@ def _describe_error(exc: Exception) -> str:
         return message
     try:
         body = response.json()
+    except MemoryError:
+        raise
     except Exception:
         body = response.text[:500] if getattr(response, "text", None) else None
     return f"{message} | ADS response body: {body}" if body else message
 
 
-def _missing_token_result() -> ToolResult:
+def _missing_token_result(*, warnings: Optional[list[ToolWarning]] = None) -> ToolResult:
     return ToolResult(
         status="error",
         errors=[
@@ -258,6 +266,7 @@ def _missing_token_result() -> ToolResult:
                 "in the ADS_DEV_KEY environment variable.",
             }
         ],
+        warnings=warnings or [],
     )
 
 
@@ -307,6 +316,8 @@ def _translate_objects(
                 }],
             )
         response.raise_for_status()
+    except MemoryError:
+        raise
     except Exception as exc:
         return None, [], _http_failure(exc)
     try:
@@ -314,16 +325,6 @@ def _translate_objects(
     except ValueError:
         return None, [], _unusable("ADS objects service returned a reply that is not JSON", response.text)
 
-    translated = body.get("query") if isinstance(body, dict) else None
-    if isinstance(translated, str) and translated.strip():
-        warnings = []
-        if _UNRESOLVED_OBJECT.search(translated):
-            warnings.append(ToolWarning(
-                code="object_not_resolved",
-                message="SIMBAD and NED resolved no object for an object: clause, so "
-                f"it matched only abstracts containing the name; searched {translated!r}",
-            ))
-        return translated, warnings, None
     if isinstance(body, dict) and _NO_OBJECTS_FOUND in str(body.get("Error Info", "")):
         return None, [], _invalid_input(
             f"ADS found no object: clause it could translate in {query_string!r} -- "
@@ -337,6 +338,18 @@ def _translate_objects(
                 "message": f"ADS objects service could not translate object: -- {body}",
             }],
         )
+    if isinstance(body, dict) and body.get("error"):
+        return None, [], _unusable("ADS objects service returned an error", body)
+    translated = body.get("query") if isinstance(body, dict) else None
+    if isinstance(translated, str) and translated.strip():
+        warnings = []
+        if _UNRESOLVED_OBJECT.search(translated):
+            warnings.append(ToolWarning(
+                code="object_not_resolved",
+                message="SIMBAD and NED resolved no object for an object: clause, so "
+                f"it matched only abstracts containing the name; searched {translated!r}",
+            ))
+        return translated, warnings, None
     return None, [], _unusable("ADS objects service returned no translated query", body)
 
 
@@ -374,19 +387,26 @@ def _paged_query(
         except RuntimeError as exc:
             message = str(exc)
             if "No API token found" in message:
-                return None, [], _missing_token_result()
+                return None, [], _missing_token_result(warnings=warnings)
             return None, [], ToolResult(
                 status="error",
                 errors=[{"code": "provider_unavailable", "message": message}],
+                warnings=warnings,
             )
+        except MemoryError:
+            raise
         except Exception as exc:
-            return None, [], _http_failure(exc)
+            return None, [], _http_failure(exc, warnings=warnings)
         try:
             page = response.json()["response"]["docs"]
-            if not isinstance(page, list):
-                raise TypeError(type(page).__name__)
+            if not isinstance(page, list) or any(
+                not isinstance(doc, dict) or not doc.get("bibcode") for doc in page
+            ):
+                raise TypeError("ADS docs must be records with bibcodes")
         except (ValueError, KeyError, TypeError):
-            return None, [], _unusable("ADS search returned a reply MARS cannot read", response.text)
+            return None, [], _unusable(
+                "ADS search returned a reply MARS cannot read", response.text, warnings=warnings,
+            )
 
         docs.extend(page)
         remaining -= len(page)

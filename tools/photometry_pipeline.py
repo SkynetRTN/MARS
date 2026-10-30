@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -30,6 +30,7 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
 from algorithms.photometry.photometry import PhotometrySettings, run_photometry
 from algorithms.photometry.schemas import SourceExtractionSettings
 from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
+from tools.models import ToolWarning
 
 
 @dataclass
@@ -57,11 +58,35 @@ class ZeroPointResolution:
     # the warning code the tool reports it under (M3); None otherwise.
     failure: str | None = None
     failure_code: str | None = None
+    reference_routes: dict[str, tuple[str, str | None]] | None = None
+    warnings: list[ToolWarning] = field(default_factory=list)
 
 
 #: compute_field_cal_zero_point's message prefix for an unusable catalog
 #: response, so select_zero_point_mag can report it under its own code.
 UNUSABLE_RESPONSE_PREFIX = "unusable catalog response: "
+
+
+def _zero_point_warnings(zero_point: ZeroPointResolution) -> list[ToolWarning]:
+    """Completed selection/fit disclosures, before later computation or I/O."""
+    warnings = list(getattr(zero_point, "warnings", []) or [])
+    if zero_point.verified:
+        from tools.catalogs import calibration_reference_warnings, calibration_sample_warnings
+
+        warnings.extend(calibration_reference_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            getattr(zero_point, "reference_routes", None),
+        ))
+        warnings.extend(calibration_sample_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            (zero_point.diagnostics or {}).get("num_calibration_stars"),
+        ))
+    failure = getattr(zero_point, "failure", None)
+    if getattr(zero_point, "failure_code", None) == "unusable_response":
+        warnings.append(ToolWarning(code="unusable_response", message=failure))
+    elif failure:
+        warnings.append(ToolWarning(code="field_calibration_failed", message=failure))
+    return warnings
 
 
 def resolve_zero_point_mag(fits_path: Path, header: object) -> float | None:
@@ -140,6 +165,8 @@ def compute_field_cal_zero_point(
             catalog_sources=catalog_sources,
             variable_sources=variable_sources,
         )
+    except MemoryError:
+        raise
     except ProviderResponseError as exc:
         return None, None, f"{UNUSABLE_RESPONSE_PREFIX}{exc}", None
     except Exception as exc:  # network failures, no catalog matches, etc.
@@ -155,8 +182,9 @@ def compute_field_cal_zero_point(
         "zero_point_error_mag": result.zero_point_error_mag,
         "zero_point_slop": result.zero_point_slop,
         "rejection_percent": result.rej_percent,
-        "num_calibration_stars": len(result.phot_results),
-        "catalogs_queried": ", ".join(selected_catalogs),
+        "num_calibration_stars": result._num_calibration_stars,
+        "num_calibration_candidates": len(result.phot_results),
+        "catalogs_requested": ", ".join(selected_catalogs),
     }
     return float(zero_point_mag), diagnostics, None, result
 
@@ -322,9 +350,14 @@ def select_zero_point_mag(
         return ZeroPointResolution(header_zero_point, "header", verified=False)
 
     if use_field_cal and data is not None:
-        zero_point_mag, diagnostics, error, field_cal_result = compute_field_cal_zero_point(
-            header, data, catalogs=catalogs
-        )
+        from algorithms.query.coverage import collect_query_notices
+        from tools.catalogs import catalog_query_warnings
+
+        with collect_query_notices() as notices:
+            zero_point_mag, diagnostics, error, field_cal_result = compute_field_cal_zero_point(
+                header, data, catalogs=catalogs
+            )
+        warnings = catalog_query_warnings(notices)
         if zero_point_mag is not None:
             return ZeroPointResolution(
                 zero_point_mag,
@@ -332,11 +365,14 @@ def select_zero_point_mag(
                 verified=True,
                 diagnostics=diagnostics,
                 calibration_sources=field_cal_result.phot_results if field_cal_result else None,
+                reference_routes=getattr(field_cal_result, "_reference_routes", None),
+                warnings=warnings,
             )
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
         # M3: the reason used to reach only stderr; the tool now reports it.
         code = "unusable_response" if str(error).startswith(UNUSABLE_RESPONSE_PREFIX) else "field_calibration_failed"
-        return ZeroPointResolution(None, "none", verified=False, failure=error, failure_code=code)
+        return ZeroPointResolution(None, "none", verified=False, failure=error, failure_code=code,
+                                   warnings=warnings)
 
     return ZeroPointResolution(None, "none", verified=False)
 
@@ -358,11 +394,16 @@ def compute_photometry(
     *,
     use_field_cal: bool = True,
     catalogs: Sequence[str] | None = None,
+    warnings: list[ToolWarning] | None = None,
 ) -> tuple[np.ndarray, list[object], ZeroPointResolution]:
     data, header = load_fits_image(fits_path)
     zero_point = select_zero_point_mag(
         zero_point_mag, header, data, use_field_cal=use_field_cal, catalogs=catalogs
     )
+    if warnings is not None:
+        for warning in _zero_point_warnings(zero_point):
+            if warning not in warnings:
+                warnings.append(warning)
     effective_zero_point_mag = zero_point.value
     extraction_settings = SourceExtractionSettings()
     sources, background, background_rms = run_source_extraction(
@@ -575,111 +616,14 @@ def plot_photometry(
 
 
 def _replicate_zero_point_rejection(sources: Sequence[object]) -> np.ndarray:
-    """Recover which calibration sources the zero-point solve's Chauvenet loop kept.
+    """Read the solver's own surviving-row mask for the diagnostic plot.
 
-    ``algorithms.fieldcal.solution.calc_solution`` is a byte-preserved
-    extraction from Skynet (see CLAUDE.md, "The extraction contract") and its
-    public return is aggregate-only -- zero point, its error, scatter, limiting
-    magnitude, and an overall rejection percentage. It never reports *which*
-    sources survived, so there is nothing to read off for per-star plotting.
-
-    Rather than change that extracted function's signature, this mirrors its
-    iterative weighted-mean-plus-Chauvenet-rejection loop line for line (down
-    to reusing its private `_sigma_eq` helper), adding only index bookkeeping
-    to track which sources survive each round. Keep this in sync by hand if
-    `calc_solution` ever changes.
-
-    Returns a boolean array the same length as ``sources``, True where the
-    source survived to the final solution.
+    M2 shares the fit implementation so plotted rejections and the returned
+    zero point cannot diverge when the numerical/rejection policy changes.
     """
-    from math import sqrt
+    from algorithms.fieldcal.solution import _calc_solution_with_mask
 
-    from scipy.optimize import brenth
-
-    from algorithms.fieldcal.solution import _sigma_eq
-    from algorithms.skylib_lite.util.stats import chauvenet
-
-    n_total = len(sources)
-    kept = np.ones(n_total, dtype=bool)
-    if n_total == 0:
-        return kept
-
-    mag_arr, mag_error_arr, ref_mag_arr, ref_mag_error_arr = np.transpose([
-        (
-            source.mag,
-            getattr(source, "mag_error", None) or 0,
-            source.ref_mag,
-            getattr(source, "ref_mag_error", None) or 0,
-        )
-        for source in sources
-    ])
-    orig_idx = np.arange(n_total)
-
-    if mag_error_arr.any():
-        good = mag_error_arr > 0
-        mag_error_arr, ref_mag_error_arr = mag_error_arr[good], ref_mag_error_arr[good]
-        ref_mag_arr = ref_mag_arr[good]
-        orig_idx = orig_idx[good]
-        b = ref_mag_arr - mag_arr[good]
-    else:
-        b = ref_mag_arr - mag_arr
-
-    sigmas2 = mag_error_arr**2 + ref_mag_error_arr**2
-    no_errors = not sigmas2.any()
-    if no_errors:
-        sigmas2 = 0
-    sigma2 = 0
-    weights = None
-
-    while True:
-        for _ in range(100):
-            if no_errors:
-                m0 = b.mean()
-            else:
-                m0 = (b / (sigmas2 + sigma2)).sum() / (1 / (sigmas2 + sigma2)).sum()
-
-            prev_sigma2 = sigma2
-            sigma2 = ((b - m0) ** 2).sum() / len(b)
-            left, right = 0.9 * sigma2, 1.1 * sigma2
-            for __ in range(100):
-                if _sigma_eq(left, sigmas2, b, m0) * _sigma_eq(right, sigmas2, b, m0) < 0:
-                    break
-                left *= 0.9
-                right *= 1.1
-            try:
-                sigma2 = brenth(_sigma_eq, left, right, (sigmas2, b, m0))
-            except Exception:
-                pass
-
-            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
-                break
-
-        if no_errors:
-            denom = len(b) - 1
-            sigma_override = sqrt(((b - m0) ** 2).sum() / denom) if denom > 0 else float("inf")
-            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
-        else:
-            weights = 1 / (sigmas2 + sigma2)
-            sum_weights = weights.sum()
-            sigma_override = sqrt(
-                (weights * (b - m0) ** 2).sum() / (sum_weights - (weights**2).sum() / sum_weights)
-            )
-            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
-
-        if not rejected.any():
-            break
-
-        good = ~rejected
-        b = b[good]
-        orig_idx = orig_idx[good]
-        if weights is not None:
-            weights = weights[good]
-        if not no_errors:
-            sigmas2 = sigmas2[good]
-
-    kept[:] = False
-    kept[orig_idx] = True
-    return kept
+    return _calc_solution_with_mask(sources)[1]
 
 
 def plot_zero_point_solution(
@@ -811,6 +755,14 @@ def magnitude_label_for(zero_point: ZeroPointResolution) -> str:
     if zero_point.value is None:
         return "instrumental magnitude"
     if zero_point.verified:
+        from tools.catalogs import calibration_reference_warnings
+
+        warnings = calibration_reference_warnings(
+            getattr(zero_point, "calibration_sources", None),
+            getattr(zero_point, "reference_routes", None),
+        )
+        if any(warning.code == "broadband_reference" for warning in warnings):
+            return "relative magnitude (broadband reference)"
         return "calibrated magnitude"
     return "magnitude (unverified zero point applied)"
 

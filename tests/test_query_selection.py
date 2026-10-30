@@ -4,10 +4,8 @@ Selection narrows the configured catalog list to catalogs that can actually
 produce a reference magnitude for the image's filter, before anything is
 queried. Two properties matter and both are asserted here:
 
-* it must follow **exactly two levels** of indirection — the same depth
-  ``algorithms.fieldcal.ref_mag.resolve_ref_mag_for_filter`` follows. Go deeper
-  and selection keeps catalogs that reference-magnitude resolution then rejects,
-  and the frame fails calibration with no diagnostic pointing at the mismatch;
+* it must share effective mappings, spelling and bounded alias traversal with
+  reference-magnitude calculation;
 * it must **never return an empty list**. A blank filter or a wholly
   incompatible configuration returns the input unchanged, because dropping every
   catalog turns a recoverable situation into a failed calibration.
@@ -22,7 +20,7 @@ import logging
 
 import pytest
 
-from algorithms.catalogs import CATALOG_OPTIONS, CATALOGS
+from algorithms.catalogs import CATALOGS
 from algorithms.query.selection import (
     _expression_deps,
     _filter_token_candidates,
@@ -126,19 +124,11 @@ def test_lookup_resolves_an_alias_to_an_expression():
     assert _lookup_resolves("gprime", {"g", "r"}, lookup)
 
 
-def test_lookup_allows_exactly_one_hop_past_its_argument():
-    """The depth boundary, stated as the two cases either side of it.
-
-    From a given target, resolution accepts a band, an expression, or *one*
-    lookup hop to a band or expression. It does not chase a second hop. That is
-    not an accident: selection and reference-magnitude resolution have to agree
-    on depth, and going deeper here would keep catalogs that
-    ``resolve_ref_mag_for_filter`` cannot actually serve.
-    """
+def test_lookup_chains_match_numeric_resolution_and_detect_cycles():
     lookup = {"a": "b", "b": "c", "c": "V"}
-    assert _lookup_resolves("c", {"V"}, lookup)        # one hop: c -> V
-    assert not _lookup_resolves("b", {"V"}, lookup)    # two hops: b -> c -> V
-    assert not _lookup_resolves("a", {"V"}, lookup)    # three hops
+    assert _lookup_resolves("a", {"V"}, lookup)
+    assert not _lookup_resolves("a", {"V"}, {"a": "b", "b": "a"})
+    assert not _lookup_resolves("a", {"V"}, {"a": "missing"})
 
 
 def test_expression_needs_every_referenced_band():
@@ -160,15 +150,14 @@ def test_support_via_a_colour_transform():
     assert catalog_supports_filter("APASS", "R")
 
 
-def test_support_via_the_wildcard_entry():
-    """UCAC maps every filter to its single integral bandpass through ``'*'``."""
-    assert CATALOGS["UCAC"].filter_lookup.get("*")
-    assert catalog_supports_filter("UCAC", "V")
-    assert catalog_supports_filter("UCAC", "SomeFilterNobodyHasHeardOf")
+def test_ucac_native_open_does_not_substitute_for_other_filters():
+    assert catalog_supports_filter("UCAC", "Open")
+    assert not catalog_supports_filter("UCAC", "V")
+    assert not catalog_supports_filter("UCAC", "SomeFilterNobodyHasHeardOf")
 
 
 def test_ocl_filters_are_supported_by_the_v_capable_catalogs():
-    for name in ("APASS", "Landolt", "Stetson", "Tycho"):
+    for name in ("APASS", "Landolt", "Stetson"):
         for ocl in ("Open", "Clear", "Lum"):
             assert catalog_supports_filter(name, ocl), f"{name}/{ocl}"
 
@@ -267,10 +256,6 @@ def test_unknown_names_in_the_configured_list_are_dropped_not_fatal():
 # Agreement with reference-magnitude resolution
 # ---------------------------------------------------------------------------
 
-#: Filters where selection keeps APASS but strict resolution declines it,
-#: because the two modules read different registries. See the test below.
-OCL_STRICT_DIVERGENCE = ("Open", "Clear", "Lum")
-
 APASS_MAGS = {band: {"value": 15.0, "error": 0.02} for band in CATALOGS["APASS"].mags}
 
 
@@ -281,15 +266,12 @@ APASS_MAGS = {band: {"value": 15.0, "error": 0.02} for band in CATALOGS["APASS"]
 def test_selection_agrees_with_ref_mag_resolution_for_apass(image_filter):
     """Anything selection keeps APASS for, strict resolution must also serve.
 
-    The two modules carry separate copies of the resolution logic, reading
-    separate registries — ``CATALOGS`` here, ``CATALOG_OPTIONS`` in
-    ``ref_mag``. This sweep is what catches them drifting further apart: a
+    Both modules read the same effective ``CATALOGS`` mapping. This sweep is what catches them drifting further apart: a
     catalog kept by selection but rejected by resolution produces a frame that
     fails calibration with the unhelpful message "No calibration sources matched
     catalog magnitudes".
 
-    The OCL filters are excluded and pinned separately below — they are the one
-    place the two registries already disagree.
+    OCL spellings are also checked in the dedicated test below.
     """
     from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 
@@ -306,49 +288,17 @@ def test_selection_agrees_with_ref_mag_resolution_for_apass(image_filter):
     )
 
 
-@pytest.mark.parametrize("image_filter", OCL_STRICT_DIVERGENCE)
-def test_ocl_filters_are_the_one_place_the_two_registries_disagree(image_filter):
-    """KNOWN DIVERGENCE: OCL resolves for selection but not for strict ref-mag.
-
-    ``CATALOGS['APASS']`` carries ``_OCL_TO_V`` (``Open``/``Clear``/``Lum`` ->
-    ``V``), so selection keeps APASS for an unfiltered frame — correctly, since
-    V is the right reference band. ``CATALOG_OPTIONS['APASS']``, which
-    ``resolve_ref_mag_for_filter`` reads, has no OCL entries at all.
-
-    In practice unfiltered frames still calibrate against V, but by a different
-    route: the non-legacy preferred-band fallback, whose first choice is V. So
-    the answer is right and the mechanism is not the declared one. Two
-    consequences worth knowing:
-
-    * a caller passing ``strict_filter_parity=True`` gets ``(None, None)`` for
-      every OCL frame and calibrates nothing;
-    * the OCL substitution recorded in
-      ``data/fieldcal/ocl_filter_report.json`` trials V, r' and R and picks
-      the lowest slop — a policy the fallback's fixed V-first order cannot
-      express.
-
-    Pinned rather than fixed: closing it means editing a registry whose
-    divergence from the other is itself deliberate, which is a decision for a
-    maintainer, not a side effect of writing tests.
-    """
+@pytest.mark.parametrize("image_filter", ("Open", "Clear", "Lum"))
+def test_unfiltered_selection_and_strict_resolution_use_the_same_map(image_filter):
     from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 
     assert catalog_supports_filter("APASS", image_filter)
-    assert CATALOGS["APASS"].filter_lookup[image_filter] == "V"
-    assert image_filter not in CATALOG_OPTIONS["APASS"].filter_lookup
-
-    strict, _ = resolve_ref_mag_for_filter(
-        image_filter=image_filter, catalog_name="APASS", cs_mags=APASS_MAGS,
-        allow_preferred_band_fallback=False,
-    )
-    assert strict is None
-
-    # With the fallback enabled — the default — it lands on V after all.
-    lenient, _ = resolve_ref_mag_for_filter(
-        image_filter=image_filter, catalog_name="APASS", cs_mags=APASS_MAGS,
-        allow_preferred_band_fallback=True,
-    )
-    assert lenient == pytest.approx(APASS_MAGS["V"]["value"])
+    for fallback in (False, True):
+        value, _ = resolve_ref_mag_for_filter(
+            image_filter=image_filter, catalog_name="APASS", cs_mags=APASS_MAGS,
+            allow_preferred_band_fallback=fallback,
+        )
+        assert value == pytest.approx(15.0)
 
 
 def test_ocl_report_trials_more_filters_than_the_fallback_can_reach(ocl_filter_report):

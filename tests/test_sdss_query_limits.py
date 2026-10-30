@@ -216,9 +216,11 @@ def test_cached_invalid_dimensions_fail_before_rounding_or_rpc(monkeypatch, valu
         backend.query_circ(12., 20., value)
 
 
-def test_unrepresentable_polar_box_is_rejected_not_sent_as_nan_sql():
-    with pytest.raises(ValueError, match="RA span"):
-        _payload(coordinates=SkyCoord(180., 89.9, unit=deg), radius=(120 * arcmin, 1 * arcmin))
+def test_wide_polar_box_uses_a_finite_full_ra_declination_band():
+    sql = _payload(coordinates=SkyCoord(180., 89.9, unit=deg), radius=(120 * arcmin, 1 * arcmin))["cmd"]
+    assert "nan" not in sql.lower()
+    assert "s.ra BETWEEN" not in sql
+    assert "s.dec BETWEEN" in sql
 
 
 @pytest.mark.parametrize("ra, radius", [(1e308, 1.), (12., 1e308)])

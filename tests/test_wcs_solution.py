@@ -287,14 +287,16 @@ def test_a_matching_parity_is_accepted(frame_header):
     assert _accept(wcs, expected_parity=True)[0] is True
 
 
-def test_parity_is_not_checked_when_the_solution_is_degenerate():
-    """Unknown parity must not be treated as a mismatch."""
+def test_a_degenerate_solution_is_rejected_for_its_invalid_footprint():
+    """M2: unknown parity does not excuse a non-projectable solution."""
     wcs = WCS(naxis=2)
     wcs.wcs.crval = [180.0, 10.0]
     wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
     wcs.wcs.cd = np.zeros((2, 2))
 
-    assert _accept(wcs, expected_parity=True)[0] is True
+    accepted, reason = _accept(wcs, expected_parity=True)
+    assert accepted is False
+    assert "footprint" in reason
 
 
 def test_a_solution_pointing_at_the_hint_is_accepted(frame_header):
@@ -666,17 +668,15 @@ def test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window(
 def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_available, tmp_path):
     """End-to-end plate solve, checked against the frame's own recorded WCS.
 
-    Skipped unless a usable astrometry.net install is present *and* its index
-    files cover this field scale. The fixture frames are ~10 arcmin across,
-    which needs the 4200-series (or 4107 and below) indexes; the commonly
-    installed 4107-4119 set starts at 22 arcmin and will not solve them.
-
-    Both backends degrade to "unavailable" rather than failing, so without the
-    data this returns no solution instead of raising — which is why the skip is
-    explicit rather than relying on an exception.
+    Skipped unless solve-field and ANET_INDEX_PATH are configured. The supplied
+    indexes must cover the fixture's ~10 arcmin field. A configured run that
+    fails to recover its recorded solution is a failure, not passing evidence.
     """
     if not anet_available:
         pytest.skip("solve-field not on PATH")
+    index_path = os.environ.get("ANET_INDEX_PATH")
+    if not index_path:
+        pytest.skip("set ANET_INDEX_PATH to indexes covering this field scale")
 
     from algorithms.wcs.wcs import solve_wcs
 
@@ -688,10 +688,10 @@ def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_availab
         if WCS_REGEX.match(key):
             del stripped[key]
 
-    result = solve_wcs(stripped, np.array(data), tmp_path)
+    settings = SolverSettings(anet_index_path=index_path, anet_timeout_s=300)
+    result = solve_wcs(stripped, np.array(data), tmp_path, solver_settings=settings)
     solved = result.wcs
-    if solved is None:
-        pytest.skip("no solution — index files likely do not cover this field scale")
+    assert solved is not None, result.metadata
 
     centre_expected = expected.all_pix2world(528, 513, 0)
     centre_solved = solved.all_pix2world(528, 513, 0)

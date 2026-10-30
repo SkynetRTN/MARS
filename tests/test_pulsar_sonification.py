@@ -600,7 +600,8 @@ def test_lomb_scargle_recovers_a_known_sine_period() -> None:
     result = periodogram.compute_periodogram(t, y, start=0.5, stop=6.0, steps=3000)
 
     assert result.peak_period_s == pytest.approx(2.5, rel=0.01)
-    assert result.peak_confidence_level == "99.73% Confidence"
+    assert result.peak_confidence_level is None
+    assert result.false_alarm_probability_upper_bound < 0.001
 
 
 def test_confidence_threshold_matches_the_typescript() -> None:
@@ -644,16 +645,17 @@ def test_periodogram_tool_finds_the_pulsar(pulsar_path, artifact_dir) -> None:
 
     assert result.errors == []
     assert result.peak_period_s == pytest.approx(PULSAR_PERIODS_S["b0329"], rel=0.002)
-    assert result.peak_confidence == "99.73% Confidence"
-    assert result.peak_power > result.confidence_thresholds["conf-3-sigma"]
+    assert result.peak_confidence is None
+    assert result.confidence_thresholds == {}
+    assert result.peak_power > result.false_alarm_thresholds["0.001"]
     assert result.peak_fold_snr > 100
     assert "peak_does_not_fold" not in [w.code for w in result.warnings]
     assert result.artifact is not None
 
 
 #: What a default blind search actually returns for each bundled scan, measured
-#: 2026-08-11. Only the bright source works; the rest land on interference or
-#: baseline residual. Recorded so a change in that outcome is visible rather
+#: 2026-10-21 with M2 median-spacing defaults. Only the bright source matches;
+#: the others land on unsupported/baseline candidates. Recorded so a change in that outcome is visible rather
 #: than silent -- if a future edit makes b1133/b1933/b2021/b2045 succeed, this
 #: test fails and the improvement gets written down.
 _BLIND_SEARCH_SUCCEEDS = {"b0329": True, "b1133": False, "b1933": False,
@@ -667,13 +669,10 @@ def test_blind_search_only_succeeds_on_the_bright_source(
     """The honest state of stage 2 on 60-second scans.
 
     B0329+54 is ~200 mJy at 1400 MHz; the other four are 20-58 mJy. On a single
-    60 s scan only the bright one survives a blind search. The others peak on
-    60 Hz mains interference (b1133, b2045 both land on 0.016665 s = 60.006 Hz)
-    or on red noise left by the baseline subtraction (~2.1-2.2 s).
-
-    Crucially all four **still report "99.73% Confidence"**, because that
-    threshold assumes white noise. ``peak_fold_snr`` is what separates them,
-    and this test pins that it does.
+    60 s scan only the bright one matches its reference at these defaults.
+    M2 median-spacing bounds move the sampled grid: b1133/b1933 peak near
+    2.18 s, b2021 near 2.13 s, b2045 near 1.98 s. The conditional Gaussian
+    bound is not a source classifier; fold concentration is empirical too.
     """
     result = compute_pulsar_periodogram(pulsar_path(scan))
     assert result.errors == []
@@ -688,9 +687,10 @@ def test_blind_search_only_succeeds_on_the_bright_source(
     )
     # The fold check and the period check must agree -- that is the point of it.
     assert folds is _BLIND_SEARCH_SUCCEEDS[scan]
-    # ...while the false-alarm confidence does NOT discriminate: every scan,
-    # right or wrong, clears three sigma.
-    assert result.peak_confidence == "99.73% Confidence"
+    # A conditional Gaussian-noise bound is not a pulsar classification.
+    assert result.peak_confidence is None
+    assert result.false_alarm_method == "gaussian_bonferroni"
+    assert "false_alarm_model_assumptions" in [w.code for w in result.warnings]
 
 
 @pytest.mark.parametrize("scan", ALL_SCANS)
@@ -801,9 +801,9 @@ def test_periodogram_top_peaks_expose_harmonics(pulsar_path, artifact_dir) -> No
     assert len(result.top_peaks) > 1
     harmonics = [
         peak for peak in result.top_peaks[1:]
-        if any(abs(peak["x"] - period / n) < 0.01 * period for n in range(2, 9))
+        if any(abs(peak.period_s - period / n) < 0.01 * period for n in range(2, 9))
     ]
-    assert harmonics, f"expected harmonics among {[p['x'] for p in result.top_peaks]}"
+    assert harmonics, f"expected harmonics among {[p.period_s for p in result.top_peaks]}"
 
 
 def test_periodogram_tool_rejects_an_absurd_grid(pulsar_path) -> None:
@@ -889,6 +889,71 @@ def test_duplicate_if_needed_only_fires_for_two() -> None:
     np.testing.assert_allclose(two_y, [1.0, 2.0, 1.0, 2.0])
 
 
+@pytest.mark.parametrize("values", [
+    [0., 0., 0., 0., 1.],
+    [0., 0., 0., 0., 1e-300],
+    [0., 0., 0., 0., 1e300],
+    [1e300, 1e300, 1e300, 1e300, np.nextafter(1e300, np.inf)],
+    [-1e308, -1e308, -1e308, -1e308, 1e308],
+])
+def test_fold_snr_preserves_sparse_contrast_at_extreme_scales(values):
+    values = np.array(values)
+    profile = folding.FoldedProfile(phase_s=np.arange(values.size), source1=values)
+    # Four equal off-pulse bins and one pulse: population std = 2/5 of
+    # the peak contrast, so the standard-deviation fallback is exactly 5/2.
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() == pytest.approx(2.5, rel=1e-14)
+
+
+def test_fold_snr_uses_mad_at_extreme_scales():
+    profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.arange(5) * 1e300)
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() == pytest.approx(2 / 1.4826, rel=1e-14)
+
+
+def test_fold_snr_rejects_a_flat_extreme_profile_without_median_overflow():
+    profile = folding.FoldedProfile(phase_s=np.arange(4), source1=np.full(4, 1e308))
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() is None
+
+
+def test_fold_snr_withholds_an_unrepresentable_dynamic_range():
+    profile = folding.FoldedProfile(
+        phase_s=np.arange(5), source1=np.array([-1e308, 1e308, 1e-300, -1e-300, 0.]),
+    )
+    with np.errstate(all="raise"):
+        assert profile.pulse_snr() is None
+
+
+def test_fold_snr_does_not_depend_on_the_peak_phase():
+    values = np.array([0., 1e-17, 2e-17, 3e-17, 1.])
+    for shift in range(values.size):
+        profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.roll(values, shift))
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() == pytest.approx(1 / (1.4826e-17), rel=1e-14)
+
+
+@pytest.mark.parametrize("baseline", [1.4e307, -1.4e307])
+def test_fold_snr_preserves_off_pulse_noise_when_the_full_span_overflows(baseline):
+    step = np.spacing(abs(baseline))
+    values = np.r_[-1e308, baseline + step * np.arange(5), 1e308]
+    # Seven bins: the median is baseline + 2*step and the MAD is 2*step.
+    expected = (1e308 - (baseline + 2 * step)) / (1.4826 * 2 * step)
+    assert np.array_equal(values * .5 * 2, values)  # halving loses no input bits
+    for scale in (1., .5):
+        profile = folding.FoldedProfile(phase_s=np.arange(7), source1=values * scale)
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() == pytest.approx(expected, rel=1e-14)
+
+
+def test_fold_snr_withholds_unrepresentable_noise_at_every_peak_phase():
+    values = np.array([0., 1e-300, 2e-300, 3e-300, 1e300])
+    for shift in range(values.size):
+        profile = folding.FoldedProfile(phase_s=np.arange(5), source1=np.roll(values, shift))
+        with np.errstate(all="raise"):
+            assert profile.pulse_snr() is None
+
+
 def test_folding_a_synthetic_pulse_concentrates_it() -> None:
     period = 0.5
     t = np.arange(0, 60, 0.002)
@@ -958,7 +1023,9 @@ def test_stage_one_artifact_feeds_every_later_stage(pulsar_path, artifact_dir) -
     assert lightcurve.errors == []
     assert lightcurve.channels == 2
     assert lightcurve.receiver
-    assert lightcurve.nyquist_period_s > 0
+    assert lightcurve.nyquist_period_s is None  # the scan has gaps/jitter
+    assert lightcurve.suggested_min_period_s > 0
+    assert lightcurve.sampling_policy == "median_spacing_heuristic"
 
     path = lightcurve.artifact.path
     spectrum = compute_pulsar_periodogram(path)

@@ -74,9 +74,8 @@ class LandoltCatalog(Catalog):
             # which assumed an unset error attribute was absent. MARS's ``Mag``
             # always has ``error``, defaulting to None, so any row with a zero or
             # unrecorded catalog error raised ``None ** 2`` (M3). ``_err`` reads
-            # an unset error as 0, the upstream intent. A colour the row mapper
-            # dropped (a value of exactly 0, CAT-23) leaves only the bands it
-            # feeds underived, instead of a KeyError for the whole response.
+            # an unset error as 0, the upstream intent. An absent colour leaves its dependent bands underived. M2 retains
+            # finite zero colours (CAT-23).
             if 'V' not in mags:
                 continue
             v, v_err = mags['V'].value, _err(mags['V'])

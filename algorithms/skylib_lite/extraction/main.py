@@ -12,6 +12,7 @@ from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 from astropy.convolution import Gaussian2DKernel, Kernel2D
 from astropy.modeling.models import Gaussian2D
 import sep
+from algorithms.diagnostics import note_numerical_issue
 
 from ..calibration.background import estimate_background, sep_compatible
 from .centroiding import centroid_iraf, centroid_iraf_masked
@@ -179,6 +180,10 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
 
     # Downsample the image
     if downsample > 1:
+        if sat_img is not None:
+            note_numerical_issue("saturation_count_unreliable",
+                "Downsampled extraction retains an extra coordinate division in saturation "
+                "counting. Zero saturation counts and discard_saturated do not establish unsaturated stars.")
         # Adjust extraction parameters
         min_pixels //= downsample**2
 

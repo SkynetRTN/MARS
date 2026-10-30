@@ -82,11 +82,36 @@ class FoldedProfile:
         A tool has no eye, so it needs a number to report, and a caller
         deciding whether a candidate period is real needs it more than a plot.
         Median-absolute-deviation based, so a narrow pulse does not inflate the
-        noise estimate it is measured against.
+        noise estimate it is measured against. Flat, non-finite or numerically
+        unresolvable profiles return no diagnostic.
         """
         values = self.sum if self.sum is not None else self.source1
         if values is None or values.size < 4:
             return None
+        values = np.asarray(values, dtype=np.float64)
+        if not np.isfinite(values).all():
+            return None
+        low, high = float(np.min(values)), float(np.max(values))
+        if low == high:
+            return None
+        # SNR is invariant under a shared offset and positive scale. Subtract
+        # an observed median first to retain off-pulse contrast independently
+        # of the peak's phase. Partition avoids averaging extreme middle bins.
+        # Halving opposite-sign extremes makes their span representable and
+        # preserves normal float64 differences exactly, unlike division by
+        # an arbitrary maximum before median-centering.
+        if low < 0 < high and high > np.finfo(np.float64).max + low:
+            with np.errstate(under="ignore"):
+                scaled = values * .5
+            if np.any(scaled * 2 != values):
+                return None
+            values = scaled
+        middle = values.size // 2
+        offsets = values - np.partition(values, middle)[middle]
+        with np.errstate(under="ignore"):
+            values = offsets / np.max(np.abs(offsets))
+        if np.any((offsets != 0) & (values == 0)):
+            return None  # the profile's dynamic range is not representable
         off = float(np.median(values))
         peak = float(np.max(values))
         if peak == off:
@@ -102,7 +127,8 @@ class FoldedProfile:
             scatter = float(np.std(values))
         if scatter <= 0:
             return None
-        return (peak - off) / scatter
+        snr = (peak - off) / scatter
+        return snr if math.isfinite(snr) else None
 
 
 def float_mod(a: np.ndarray, b: float) -> np.ndarray:

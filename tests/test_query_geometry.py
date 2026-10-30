@@ -341,30 +341,13 @@ def test_a_region_straddling_ra_twentyfour_splits_into_two_ranges():
     assert len(kept) == 2
 
 
-def test_wide_box_near_a_pole_silently_returns_nothing():
-    """PRESERVED DEFECT: ``arcsin`` of a value > 1 gives NaN, and NaN drops everything.
-
-    The RA half-width is ``arcsin(sin(w/2) / cos(dec))``. Once the field is wide
-    enough relative to ``cos(dec)`` the argument exceeds 1, numpy returns NaN
-    with a RuntimeWarning, and every subsequent comparison against NaN is False
-    — including the guards for the pole and RA-wrap cases. Execution falls
-    through to the final ``ra_min <= ra <= ra_max`` filter, which rejects every
-    source.
-
-    So the failure mode is an empty result, not an exception: a catalog query
-    near a pole comes back with no sources and the calibration reports "no
-    catalog sources" rather than a coordinate error. The threshold is closer
-    than it sounds — at dec 89.5 a 60-arcmin box is already enough.
-
-    Recorded, not fixed: this is upstream behaviour and the extraction contract
-    keeps it. The pole-inside-field guards above it work because they are checked
-    on declination, before the arcsin.
-    """
+def test_wide_box_near_a_pole_keeps_the_full_declination_band():
+    """M2 supersedes CAT-11's NaN/empty result with a conservative RA bound."""
     sources = [_Source(ra_hours=h, dec_degs=88.0) for h in (0.0, 6.0, 12.0, 18.0)]
 
-    with pytest.warns(RuntimeWarning, match="invalid value encountered in arcsin"):
+    with np.errstate(invalid="raise"):
         kept = clip_sources_to_box(sources, 12.0, 88.0, width_arcmins=600, height_arcmins=120)
-    assert kept == []
+    assert kept == sources
 
     # Same latitude, a box narrow enough to keep the arcsin argument under 1.
     narrow = clip_sources_to_box(
@@ -374,17 +357,9 @@ def test_wide_box_near_a_pole_silently_returns_nothing():
     assert len(narrow) == 1
 
 
-def test_the_full_sky_ra_branch_is_unreachable():
-    """``ra_max >= ra_min + 24`` can never fire, because arcsin caps at 90 deg.
-
-    ``dra = degrees(arcsin(...)) / 15`` is at most ``90/15 = 6`` hours, so the
-    span ``2*dra`` is at most 12 hours — never the 24 the branch tests for.
-    Beyond that point the argument exceeds 1 and the NaN path above takes over
-    instead. Pinned so the dead branch is understood as dead rather than
-    trusted as the wide-field case.
-    """
-    max_dra_hours = 90.0 / 15.0
-    assert 2 * max_dra_hours < 24.0
+def test_a_full_ra_box_accepts_all_longitudes_inside_its_declination_band():
+    sources = [_Source(ra_hours=ra, dec_degs=0) for ra in (0, 6, 12, 18)]
+    assert clip_sources_to_box(sources, 12, 0, 21600, 60) == sources
 
 
 # ---------------------------------------------------------------------------

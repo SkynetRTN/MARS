@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import math
+from io import BytesIO
+import warnings
 
 import numpy as np
 import pytest
@@ -19,6 +21,162 @@ from astropy.table import MaskedColumn, Table
 
 from algorithms.query.registry import CATALOGS
 from algorithms.query.vizier import ProviderResponseError
+
+
+def _vizier_response(contents):
+    from requests import Response
+
+    response = Response()
+    response.status_code = 200
+    response._content = contents
+    return response
+
+
+def _error_votable(*, legacy=False, populated=False):
+    # Error-only replies were observed live with HTTP 200. Also cover an
+    # explicit failure following table rows, which cannot be called complete.
+    if populated:
+        buffer = BytesIO()
+        table = _apass()
+        table.rename_columns(table.colnames, [name.replace("'", "_") for name in table.colnames])
+        table.write(buffer, format="votable")
+        document = buffer.getvalue()
+    else:
+        document = b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>'
+    info = (b'<INFO name="Error" value="(pipe) Request has been interrupted"/>' if legacy else
+            b'<INFO name="QUERY_STATUS" value="ERROR">(pipe) Request has been interrupted</INFO>')
+    return document.replace(b'</VOTABLE>', info + b'</VOTABLE>')
+
+
+@pytest.mark.parametrize("legacy,populated", [(False, False), (True, False), (False, True)])
+@pytest.mark.parametrize("mode", ["region", "objects"])
+def test_explicit_vizier_error_is_not_an_empty_or_successful_catalog(
+    legacy, populated, mode, monkeypatch,
+):
+    from astroquery.vizier import VizierClass
+
+    response = _vizier_response(_error_votable(legacy=legacy, populated=populated))
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    with pytest.raises(ProviderResponseError, match="interrupted"):
+        if mode == "objects":
+            CATALOGS["APASS"].query_objects(["test reference"])
+        else:
+            CATALOGS["APASS"].query_circ(13.42, -43.0, 3.)
+
+
+@pytest.mark.parametrize("mode", ["region", "objects", "discovery"])
+def test_public_vizier_tools_report_explicit_query_errors(mode, monkeypatch):
+    from astroquery.vizier import VizierClass
+    from tools.vizier import list_vizier_catalogs, search_vizier
+
+    response = _vizier_response(_error_votable())
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    if mode == "discovery":
+        result = list_vizier_catalogs("APASS")
+    elif mode == "objects":
+        result = search_vizier(target="M67", catalog="II/336/apass9")
+    else:
+        result = search_vizier(ra_hours=13.42, dec_degs=-43., catalog="II/336/apass9")
+    assert result.status == "error"
+    assert [error.code for error in result.errors] == ["unusable_response"]
+
+
+def test_a_successful_empty_vizier_response_remains_no_matches(monkeypatch):
+    from astroquery.vizier import VizierClass
+
+    contents = b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE><INFO name="QUERY_STATUS" value="OK"/></RESOURCE></VOTABLE>'
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: _vizier_response(contents))
+    assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
+
+
+def test_vizier_overflow_still_maps_rows_and_discloses_the_cap(monkeypatch):
+    from astroquery.vizier import VizierClass
+    from algorithms.query.coverage import collect_query_notices
+
+    buffer = BytesIO()
+    table = _apass()
+    table.rename_columns(table.colnames, [name.replace("'", "_") for name in table.colnames])
+    table.write(buffer, format="votable")
+    contents = buffer.getvalue().replace(b'</VOTABLE>', b'<INFO name="QUERY_STATUS" value="OVERFLOW"/></VOTABLE>')
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: _vizier_response(contents))
+    with collect_query_notices() as notices:
+        sources = CATALOGS["APASS"].query_circ(13.42, -43., 3., limit=2)
+    assert [source.mags["V"].value for source in sources] == [13.5, 14.6]
+    assert "catalog_rows_capped" in {notice.code for notice in notices}
+
+
+@pytest.mark.parametrize("tool,arguments", [
+    ("search_vizier", {"ra_hours": 13.42, "dec_degs": -43., "catalog": "II/336/apass9"}),
+    ("list_vizier_catalogs", {"keywords": "APASS"}),
+])
+def test_vizier_transport_allocation_failure_reaches_resource_limit(tool, arguments, monkeypatch):
+    from astroquery.vizier import VizierClass
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("test VizieR transport allocation failure")
+
+    monkeypatch.setattr(VizierClass, "_request", exhausted)
+    reply = call_tool(tool, arguments)
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+def test_checked_vizier_cache_remains_covered_by_pruning(tmp_path, monkeypatch):
+    from datetime import timedelta
+    from astropy.config.paths import set_temp_cache
+    from requests import Request
+    from algorithms.query.cache import prune_vizier_cache, vizier_cache_dir
+
+    def transport(session, method, url, **kwargs):
+        response = _vizier_response(
+            b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>'
+        )
+        response.url = url
+        response.request = Request(method, url).prepare()
+        return response
+
+    monkeypatch.setattr("requests.sessions.Session.request", transport)
+    monkeypatch.setattr(CATALOGS["APASS"], "cache", True)
+    with set_temp_cache(str(tmp_path), delete=False):
+        assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
+        from pathlib import Path
+        directory = Path(vizier_cache_dir())
+        assert list(directory.glob("*.pickle"))
+        prune_vizier_cache(timedelta(seconds=0))
+        assert list(directory.glob("*.pickle")) == []
+
+
+def test_malformed_vizier_xml_is_an_unusable_response(monkeypatch):
+    from astroquery.vizier import VizierClass
+
+    response = _vizier_response(b'<?xml version="1.0"?><VOTABLE><RESOURCE>')
+    monkeypatch.setattr(VizierClass, "_request", lambda *args, **kwargs: response)
+    with pytest.raises(ProviderResponseError, match="malformed XML"):
+        CATALOGS["APASS"].query_circ(13.42, -43., 3.)
+
+
+def test_vizier_error_response_does_not_poison_the_next_cached_query(tmp_path, monkeypatch):
+    from astropy.config.paths import set_temp_cache
+    from requests import Request
+
+    contents = iter([
+        _error_votable(),
+        b'<?xml version="1.0"?><VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3"><RESOURCE/></VOTABLE>',
+    ])
+
+    def transport(session, method, url, **kwargs):
+        response = _vizier_response(next(contents))
+        response.url = url
+        response.request = Request(method, url).prepare()
+        return response
+
+    monkeypatch.setattr("requests.sessions.Session.request", transport)
+    monkeypatch.setattr(CATALOGS["APASS"], "cache", True)
+    with set_temp_cache(str(tmp_path), delete=False):
+        with pytest.raises(ProviderResponseError, match="interrupted"):
+            CATALOGS["APASS"].query_circ(13.42, -43., 3.)
+        assert CATALOGS["APASS"].query_circ(13.42, -43., 3.) == []
 
 
 def _apass(**overrides) -> Table:
@@ -117,10 +275,14 @@ def test_a_band_column_found_under_an_underscore_spelling_is_read():
     assert [s.mags["V"].value for s in sources] == [pytest.approx(13.5), pytest.approx(14.6)]
 
 
-def test_a_row_without_a_finite_position_is_dropped_like_one_without_magnitudes():
+@pytest.mark.parametrize("coordinate", ["RAJ2000", "DEJ2000"])
+def test_a_row_without_a_finite_position_is_dropped_like_one_without_magnitudes(coordinate):
     # Live Tycho-2 has stars with masked mean positions (no PM solution).
-    table = _apass(RAJ2000=MaskedColumn([201.36, 201.37], mask=[True, False]))
-    sources = CATALOGS["APASS"].table_to_sources(table)
+    values = [201.36, 201.37] if coordinate == "RAJ2000" else [-43.01, -43.02]
+    table = _apass(**{coordinate: MaskedColumn(values, mask=[True, False])})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sources = CATALOGS["APASS"].table_to_sources(table)
     assert [s.ra_hours for s in sources] == [pytest.approx(201.37 / 15)]
 
 
@@ -163,12 +325,12 @@ def test_landolt_keeps_the_preserved_u_error_bug():
     assert first.mags["U"].error == pytest.approx(expected)
 
 
-def test_landolt_omits_only_the_bands_a_zero_colour_leaves_underivable():
-    # The row mapper drops a colour of exactly 0.000 (CAT-23), which used to
-    # raise KeyError for the whole response.
+def test_landolt_derives_bands_from_a_finite_zero_colour():
+    # M2 retains finite zero colours (CAT-23); they remain valid inputs.
     sources = CATALOGS["Landolt"].table_to_sources(_landolt(**{"B-V": [0.0, 0.62]}))
     assert len(sources) == 2
-    assert "B" not in sources[0].mags and "U" not in sources[0].mags
+    assert sources[0].mags["B"].value == 13.089
+    assert sources[0].mags["U"].value == pytest.approx(14.289)
     assert {"V", "R", "I"} <= set(sources[0].mags)
     assert {"U", "B", "V", "R", "I"} <= set(sources[1].mags)
 
@@ -429,6 +591,80 @@ def test_ads_fielded_clauses_are_each_grouped():
     assert query == '(abs:"pulsar timing") AND (object:"PSR B1937+21")'
 
 
+@pytest.mark.parametrize("review", [False, True])
+@pytest.mark.parametrize("raw_query", [False, True])
+def test_ads_expands_object_queries_before_search(monkeypatch, artifact_dir, review, raw_query):
+    import json
+    from urllib.parse import parse_qs, urlsplit
+
+    from requests import Response
+    from tools import ads
+
+    original = '(abs:"millisecond pulsar" AND object:"PSR B1937+21")' if raw_query else (
+        '(abs:"millisecond pulsar") AND (object:"PSR B1937+21")'
+    )
+    expanded = '(abs:"millisecond pulsar") AND ((=abs:"PSR B1937+21" OR simbid:0) database:astronomy)'
+    monkeypatch.setattr(ads.ADS, "TOKEN", "test-token")
+
+    def request(method, url, **kwargs):
+        response = Response()
+        response.url, response.status_code = url, 200
+        if method == "POST":
+            assert url == "https://api.adsabs.harvard.edu/v1/objects/query"
+            assert kwargs["json"] == {"query": [original]}
+            assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+            assert kwargs["timeout"] == ads.ADS.TIMEOUT
+            body = {"query": expanded}
+        elif parse_qs(urlsplit(url).query)["q"] == [expanded]:
+            body = {"response": {"docs": [{
+                "bibcode": "1982Natur.300..615B", "title": ["A millisecond pulsar"],
+                "author": ["Backer, D. C."], "pub": "Nature", "volume": "300",
+                "pubdate": "1982-12-00", "page": ["615"], "citation_count": 1,
+                "abstract": "A millisecond pulsar.", "doi": ["10.1038/300615a0"],
+            }]}}
+        else:
+            response.status_code = 400
+            body = {"error": {"msg": "undefined field object"}}
+        response._content = json.dumps(body).encode()
+        return response
+
+    monkeypatch.setattr(ads.ADS, "_request", request)
+    call = ads.build_literature_review if review else ads.search_ads
+    limit = {"max_papers" if review else "max_results": 5}
+    parameters = {"query": 'abs:"millisecond pulsar" AND object:"PSR B1937+21"'} if raw_query else {
+        "abstract": "millisecond pulsar", "object_name": "PSR B1937+21",
+    }
+    result = call(**parameters, **limit)
+    assert result.status == "ok", result.errors
+    assert result.count == 1
+    assert result.preview[0]["bibcode"] == "1982Natur.300..615B"
+
+
+@pytest.mark.parametrize("body", [
+    {"error": "object resolver unavailable", "query": "abs:pulsar"},
+    {}, [], {"query": ""}, {"query": ["abs:pulsar"]},
+])
+def test_ads_unusable_object_expansion_is_an_error(monkeypatch, body):
+    import json
+
+    from requests import Response
+    from tools import ads
+
+    monkeypatch.setattr(ads.ADS, "TOKEN", "test-token")
+
+    def request(method, url, **kwargs):
+        assert method == "POST", "an unusable expansion must never reach search"
+        response = Response()
+        response.status_code = 200
+        response._content = json.dumps(body).encode()
+        return response
+
+    monkeypatch.setattr(ads.ADS, "_request", request)
+    result = ads.search_ads(object_name="M31")
+    assert result.status == "error"
+    assert [error.code for error in result.errors] == ["unusable_response"]
+
+
 def _ads_reply(docs, status=200):
     from requests import Response
 
@@ -448,7 +684,6 @@ def ads_service(monkeypatch):
     Shaped after the live 2026-10-22 responses: search rejects ``object:`` as
     ``undefined field object``; ``POST /v1/objects/query`` rewrites it.
     """
-    from astroquery.nasa_ads import ADSClass
     from requests import Response
 
     import tools.ads as ads
@@ -456,7 +691,7 @@ def ads_service(monkeypatch):
     calls = {"objects": [], "search": []}
     service = {"status": 200, "body": {"query": _TRANSLATED}}
 
-    def request(self, method, url, **kwargs):
+    def request(method, url, **kwargs):
         calls["objects"].append((method, url, kwargs.get("json"), kwargs.get("headers")))
         response = Response()
         response.status_code, response.encoding = service["status"], "utf-8"
@@ -470,7 +705,7 @@ def ads_service(monkeypatch):
         calls["search"].append(query_string)
         return _ads_reply([{"bibcode": ["2020ApJ...1..1A"], "title": ["A paper"]}])
 
-    monkeypatch.setattr(ADSClass, "_request", request)
+    monkeypatch.setattr(ads.ADS, "_request", request)
     monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
     monkeypatch.setattr(ads.ADS, "TOKEN", "token")
     return calls, service
@@ -685,6 +920,8 @@ def test_ads_query_syntax_error_is_invalid_input(monkeypatch, ads_service):
     # Live reply to an object: clause the service cannot parse (object:"").
     (200, {"Error": "Unable to get results!",
            "Error Info": "No identifiers/objects found in Solr object query"}, "invalid_input"),
+    (200, {"Error": "Unable to get results!", "query": "abs:pulsar"},
+     "provider_unavailable"),
     (200, {"unexpected": 1}, "unusable_response"),
     (200, {"query": ""}, "unusable_response"),
 ])
@@ -856,3 +1093,57 @@ def test_run_photometry_on_target_carries_the_failure_as_a_warning(monkeypatch):
     result = photometry.run_photometry_on_target("ngc5128_galaxy_b_001")
     assert [(w.code, w.message) for w in result.warnings] == [
         ("unusable_response", "unusable catalog response: APASS: no RAJ2000")]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("phase", ["objects", "search", "parse"])
+def test_ads_allocation_failure_reaches_resource_limit(ads_service, monkeypatch, tool, phase):
+    import tools.ads as ads
+    from tools.mcp.surface import call_tool, result_is_error
+
+    def allocation_failure(*args, **kwargs):
+        raise MemoryError("test ADS allocation failure")
+
+    attribute = {"objects": "_request", "search": "query_simple", "parse": "_parse_response"}[phase]
+    monkeypatch.setattr(ads.ADS, attribute, allocation_failure)
+    reply = call_tool(tool, {"object_name": "M31"})
+    assert result_is_error(reply)
+    assert [error["code"] for error in reply["errors"]] == ["resource_limit"]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("failure", ["runtime", "http", "malformed"])
+def test_ads_search_failures_preserve_unresolved_object_warning(ads_service, monkeypatch, tool, failure):
+    import tools.ads as ads
+    from requests import HTTPError
+
+    _, service = ads_service
+    service["body"] = {"query": '(((=abs:"M311" OR simbid:"0" OR nedid:"0") database:astronomy))'}
+
+    def query_simple(*args, **kwargs):
+        if failure == "runtime":
+            raise RuntimeError("ADS service unavailable")
+        if failure == "http":
+            raise HTTPError("503 service unavailable", response=_ads_reply([], status=503))
+        response = _ads_reply([])
+        response._content = b'{"response": {}}'
+        return response
+
+    monkeypatch.setattr(ads.ADS, "query_simple", query_simple)
+    result = getattr(ads, tool)(object_name="M311")
+    assert result.status == "error"
+    expected = "unusable_response" if failure == "malformed" else "provider_unavailable"
+    assert [error.code for error in result.errors] == [expected]
+    assert [warning.code for warning in result.warnings] == ["object_not_resolved"]
+
+
+@pytest.mark.parametrize("tool", ["search_ads", "build_literature_review"])
+@pytest.mark.parametrize("docs", [[None], [{}], ["bad row"], [{"bibcode": "valid"}, None]])
+def test_ads_malformed_records_are_unusable_responses(ads_service, monkeypatch, tool, docs):
+    import tools.ads as ads
+    from tools.mcp.surface import call_tool, result_is_error
+
+    monkeypatch.setattr(ads.ADS, "query_simple", lambda *args, **kwargs: _ads_reply(docs))
+    result = call_tool(tool, {"abstract": "pulsar"})
+    assert result_is_error(result)
+    assert [error["code"] for error in result["errors"]] == ["unusable_response"]

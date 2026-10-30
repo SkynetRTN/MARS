@@ -1,23 +1,10 @@
 """MARS: the reference-magnitude catalog subset (``CATALOG_OPTIONS``).
 
-MARS carries *two* catalog registries and field calibration reads both:
-
-* ``catalogs/__init__.py`` exposes ``CATALOGS`` — all 11 catalogs, used for
-  querying and for filter-aware catalog selection;
-* this module exposes ``CATALOG_OPTIONS`` — a two-catalog (APASS, PanSTARRS)
-  subset read only by ``fieldcal.ref_mag.resolve_ref_mag_for_filter``.
-
-They are not the same, and the difference is load-bearing: ``CATALOG_OPTIONS``
-carries the narrowband aliases ``H_alpha`` and ``H_beta``, which
-``CATALOGS['APASS']`` does not. ``resolve_ref_mag_for_filter`` starts from the
-``CATALOG_OPTIONS`` lookup and overlays the caller-supplied lookup on top, so
-collapsing the two registries would silently change which reference band a
-narrowband image calibrates against. Both are therefore kept as they are.
-
-The classes below are deliberately separate from the ones in
-``apass_catalog.py`` / ``panstarrs_catalog.py``: upstream had two parallel plugin
-packages whose APASS and PanSTARRS definitions had drifted apart, and the drift
-is exactly what this module exists to preserve.
+M2 retains these historical APASS/PanSTARRS declarations for compatibility and
+provenance. Runtime selection, numeric resolution and tool reporting use the
+canonical ``CATALOGS`` lookup via ``catalogs.filters``. The old bare-rprime
+H-alpha alias here no longer overrides production's Lupton R expression.
+Numerical expressions below remain unchanged historical records.
 
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/common/catalog_plugins/
   * ``catalog.py``            (45 lines)  -> ``Catalog`` base
@@ -53,7 +40,7 @@ class _MutatingCatalog(Catalog):
 
 # NOTE: distinct from ``catalogs.apass_catalog.APASSCatalog`` -- see the module
 # docstring. VizieR backend hints are kept as inert metadata; this registry is
-# never queried, only read for its ``filter_lookup``.
+# never queried or used as the runtime reference-magnitude registry.
 class APASSCatalog(_MutatingCatalog):
     """
     APASS/VizieR catalog plugin

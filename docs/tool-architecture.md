@@ -127,8 +127,9 @@ The first local, no-network tools are:
   `replay_variable_sources`) that drive a real solve against them, and the
   end-to-end selection replay that re-chooses NGC 5128 B's 35 calibration
   stars from the recorded 132-row APASS cone (45 candidates once clipped to
-  the frame, as the live query path clips) and reproduces the recorded
-  solve bit for bit.
+  the frame, as the live query path clips). The replay reports differences
+  from the recorded solve; M2's corrected scatter and rejection can change
+  the fitted result while preserving the recorded selection.
 - `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`
@@ -264,7 +265,7 @@ Current algorithm ownership:
 | `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, local isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of Astromancer's TypeScript plus a new optimizer, not a byte-preserving extraction. The historical `_py` suffix avoids a disruptive package rename after the TypeScript extraction was retired. Gaia/VizieR fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`; `isochrones.py` fits exact operator-installed Girardi tracks without downloads. Its application-config dependency is tracked as ARC-04 in the master continuation plan. |
 | `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
 | `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | An Astromancer Python **port**, marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
-| `algorithms.variable_star` | Variable-star source ingestion, differential light curves, error-weighted Lomb-Scargle periodograms, and phase folding | Exact-parity Python port of the Astromancer algorithms. |
+| `algorithms.variable_star` | Variable-star source ingestion, differential light curves, error-weighted Lomb-Scargle periodograms, and phase folding | Astromancer port with M2 weighted floating-mean standard powers and independent quadrature uncertainties; grid and fold ordering retained. |
 
 ---
 

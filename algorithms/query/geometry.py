@@ -32,12 +32,17 @@ from typing import Iterable, Optional, Sequence
 import numpy as np
 from astropy.wcs import WCS
 from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy.coordinates import SkyCoord
+from astropy.units import deg
+
+from .coverage import note_query_issue
 
 __all__ = [
     "clip_sources_to_box",
     "wcs_array_shape",
     "infer_image_shape",
     "boxes_from_wcs",
+    "cone_from_wcs",
     "image_boxes_from_wcs",
     "combined_bounding_box",
     "normalize_wcs_list",
@@ -70,8 +75,8 @@ def clip_sources_to_box(
     seam: a pole inside the region means every RA qualifies, and a region
     straddling RA=0 or RA=24 splits into two disjoint RA ranges.
 
-    Preserved verbatim, including that a region enclosing a pole is clipped in
-    declination only.
+    Regions enclosing a pole or lacking a finite tangent-meridian bound are
+    conservatively clipped in declination only (M2, CAT-11).
     """
     h = height_arcmins / 120
     dec_min, dec_max = dec_degs - h, dec_degs + h
@@ -84,11 +89,12 @@ def clip_sources_to_box(
         # North Pole in FOV, use the whole RA range
         return [s for s in sources if s.dec_degs >= dec_min]
 
-    dra = np.rad2deg(
-        np.arcsin(
-            np.sin(np.deg2rad(width_arcmins / 120)) / np.cos(np.deg2rad(dec_degs))
-        )
-    ) / 15
+    ratio = np.sin(np.deg2rad(width_arcmins / 120)) / np.cos(np.deg2rad(dec_degs))
+    # No tangent meridian exists once the width reaches the pole. Keep the
+    # full RA band rather than evaluating arcsin outside its domain (CAT-11).
+    if abs(ratio) >= 1 or width_arcmins >= 21600:
+        return [s for s in sources if dec_min <= s.dec_degs <= dec_max]
+    dra = np.rad2deg(np.arcsin(ratio)) / 15
     ra_min, ra_max = ra_hours - dra, ra_hours + dra
 
     if ra_max >= ra_min + 24:
@@ -214,6 +220,44 @@ def boxes_from_wcs(wcs: WCS) -> list[tuple[float, float, float, float]]:
     height_deg = decs.max() - decs.min()
 
     return [(center[0], center[1], width_deg, height_deg)]
+
+
+def cone_from_wcs(wcs: WCS, *, shape: tuple[int, int] | None = None) -> tuple[float, float, float]:
+    """Enclose an undistorted TAN detector; return RA/Dec/radius in degrees.
+
+    A TAN rectangle is bounded by great-circle segments. A cap of radius
+    below 90 degrees containing its vertices contains that rectangle. Sample
+    other projections/distortions for a best-effort cone and disclose that
+    their completeness is not established. Use [0,width] x [0,height] to
+    enclose every position the detector clipping rule can accept.
+    """
+    height, width = shape if shape is not None else wcs_array_shape(wcs)
+    if height <= 0 or width <= 0:
+        raise ValueError("Positive image dimensions are required for catalog coverage")
+    center = wcs.all_pix2world([[width / 2, height / 2]], 0)[0]
+    # wcslib normalizes TPV to TAN internally and has_distortion excludes its
+    # polynomial. Serialization restores TPV, so inspect the effective header.
+    effective_header = wcs.to_header(relax=True)
+    undistorted_tan = not wcs.has_distortion and all(
+        str(effective_header.get(f"CTYPE{axis}", "")).endswith("-TAN") for axis in (1, 2)
+    )
+    if undistorted_tan:
+        pixels = [(0, 0), (width, 0), (width, height), (0, height)]
+    else:
+        axis = np.linspace(0, 1, 65)
+        pixels = [(width * x, height * y) for x in axis for y in (0, 1)]
+        pixels += [(width * x, height * y) for x in (0, 1) for y in axis]
+        note_query_issue("catalog_coverage_unverified",
+                         "The distorted or non-TAN WCS footprint is sampled; "
+                         "the query cone is not a guarantee of complete detector coverage.")
+    world = np.asarray(wcs.all_pix2world(pixels, 0))
+    if not np.isfinite(center).all() or not np.isfinite(world).all():
+        raise ValueError("The WCS footprint has non-finite sky positions")
+    radius = float(SkyCoord(*center, unit=deg).separation(
+        SkyCoord(world[:, 0], world[:, 1], unit=deg)).deg.max())
+    if not 0 < radius < 90:
+        raise ValueError("The catalog footprint must fit within a cone smaller than a hemisphere")
+    return float(center[0]) % 360, float(center[1]), float(np.nextafter(radius, np.inf))
 
 
 def image_boxes_from_wcs(

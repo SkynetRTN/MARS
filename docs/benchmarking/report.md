@@ -1,5 +1,12 @@
 # MARS model benchmark
 
+**Historical report — attribution unchecked, not regraded.** These scores and
+corpus identities describe the September 2026 grading rules. M2 added a bounded
+metadata-grounded author/year check on 2026-10-23; no revised accuracy or ranking
+is claimed because the original paid transcripts are absent from this checkout.
+The accompanying JSON and figures retain the old scores. See
+[the acceptance record](../analysis/warnings-benchmark-claims.md).
+
 ## Run `2026-09-14-full-claude-sonnet-5-core` -- suite `core`
 
 - started 2026-09-14T17:37:33.000385+00:00, finished 2026-09-14T18:08:30.676458+00:00

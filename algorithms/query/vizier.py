@@ -28,24 +28,27 @@ which are restored here.
 from __future__ import annotations
 
 import builtins
+from io import BytesIO
 import logging
 import math
 import re
 from typing import Dict as TDict, List as TList, Optional, Union
+from xml.etree.ElementTree import ParseError, iterparse
 
 import numpy
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.units import arcmin, deg, hour
-from astroquery.vizier import Vizier
+from astroquery.vizier import VizierClass as _AstroqueryVizierClass
 
 from algorithms.catalogs.catalog import Catalog
 from algorithms.catalogs.schemas import CatalogSource, Mag
 
 from .cache import install_cache_error_suppression
 from .config import settings
+from .coverage import note_row_limit
 
-__all__ = ["ProviderResponseError", "VizierCatalog", "build_custom_vizier_catalog"]
+__all__ = ["ProviderResponseError", "Vizier", "VizierCatalog", "build_custom_vizier_catalog"]
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +58,48 @@ class ProviderResponseError(ValueError):
 
     Raised for renamed or missing coordinate or magnitude columns, so an
     unusable response is never mistaken for a field with no stars. An empty
-    response, or well-formed rows with nothing measurable, is still ``[]``.
+    successful response, or well-formed rows with nothing measurable, is still
+    ``[]``. Explicit provider error payloads are failures even with HTTP 200.
     """
+
+
+class VizierClass(_AstroqueryVizierClass):
+    """Keep query errors that astroquery otherwise discards during parsing.
+
+    The SDK class name is retained so its cache stays in the Vizier directory
+    covered by our existing pruning policy. Other SDK behavior is inherited.
+    """
+
+    def _parse_result(self, response, **kwargs):
+        if response.content.lstrip().startswith(b"<"):
+            try:
+                # Clear parsed elements as we go; no second full table tree is
+                # needed just to check INFO elements, including trailing ones.
+                for _, element in iterparse(BytesIO(response.content), events=("end",)):
+                    if element.tag.rsplit("}", 1)[-1] == "INFO":
+                        name = element.get("name", "").casefold()
+                        value = element.get("value", "")
+                        if name == "error" or (name == "query_status" and value.casefold() == "error"):
+                            message = (element.text or "").strip()
+                            if name == "error":
+                                message = value + " " + message
+                            raise ProviderResponseError(
+                                f"VizieR query failed: {message.strip()[:500] or 'unspecified provider error'}"
+                            )
+                    element.clear()
+            except (ParseError, ProviderResponseError) as exc:
+                # The SDK caches HTTP-200 replies before parsing. Evict an
+                # explicit failure so a later query can reach the provider.
+                query = getattr(self, "_last_query", None)
+                if query is not None:
+                    query.remove_cache_file(self.cache_location)
+                if isinstance(exc, ProviderResponseError):
+                    raise
+                raise ProviderResponseError(f"VizieR returned malformed XML: {exc}") from exc
+        return super()._parse_result(response, **kwargs)
+
+
+Vizier = VizierClass()
 
 # astroquery treats cache failures as query failures; MARS does not. See
 # query/cache.py. Installed on import so that merely importing this module gives
@@ -234,12 +277,12 @@ class VizierCatalog(Catalog):
                         continue
                     try:
                         val = _row_value(row, mag_col)
-                        if val and val < 99:
-                            m = Mag(value=val)
+                        if val is not None and numpy.isfinite(val) and val < 99:
+                            m = Mag(value=float(val))
                             try:
                                 err = _row_value(row, mag_err_col)
-                                if err:
-                                    m.error = err
+                                if err is not None and numpy.isfinite(err) and err >= 0:
+                                    m.error = float(err)
                             except Exception:
                                 # Band present, uncertainty absent.
                                 pass
@@ -365,7 +408,12 @@ class VizierCatalog(Catalog):
             **region,
         )
         if resp:
-            return self.table_to_sources(resp[0])
+            rows = resp[0]
+            effective_limit = getattr(viz, "ROW_LIMIT", limit)
+            note_row_limit(self.name, len(rows), effective_limit, sort=self.sort)
+            if effective_limit is not None and effective_limit > 0:
+                rows = rows[:effective_limit]
+            return self.table_to_sources(rows)
         return []
 
     def query_box(
@@ -404,9 +452,8 @@ class VizierCatalog(Catalog):
     ) -> TList[CatalogSource]:
         """Return catalog objects within a circular region."""
         if self.cache:
-            ra_hours, dec_degs, (radius_arcmins,) = _round_for_cache(
-                ra_hours, dec_degs, radius_arcmins
-            )
+            ra_hours, dec_degs, radius_arcmins = _round_cone_for_cache(
+                ra_hours, dec_degs, radius_arcmins)
         return self.query_region(
             ra_hours, dec_degs, constraints, limit, radius=radius_arcmins * arcmin
         )
@@ -452,6 +499,8 @@ def _column_spelling(name: str, present: set) -> Optional[str]:
 
 
 def _finite_position(source: CatalogSource) -> bool:
+    if any(numpy.ma.is_masked(value) for value in (source.ra_hours, source.dec_degs)):
+        return False
     try:
         return math.isfinite(float(source.ra_hours)) and math.isfinite(float(source.dec_degs))
     except (TypeError, ValueError):
@@ -498,6 +547,15 @@ def _round_for_cache(ra_hours: float, dec_degs: float, *sizes):
         numpy.ceil(size * 5) / 5 if size is not None else None for size in sizes
     )
     return ra_hours, dec_degs, rounded
+
+
+def _round_cone_for_cache(ra_hours: float, dec_degs: float, radius_arcmins: float):
+    """Round a cone while enclosing its original, unrounded region (CAT-17)."""
+    ra, dec, (radius,) = _round_for_cache(ra_hours, dec_degs, radius_arcmins)
+    shift = SkyCoord(ra_hours * 15, dec_degs, unit=deg).separation(
+        SkyCoord(ra * 15, dec, unit=deg)).arcmin
+    radius = max(radius, numpy.ceil((radius_arcmins + shift) * 5) / 5)
+    return ra, dec, radius
 
 
 def build_custom_vizier_catalog(spec: TDict) -> type:

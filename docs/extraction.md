@@ -342,10 +342,10 @@ footprint contract: the padded half-diagonal must fit `catalog_max_radius_deg`
 `catalog_pad_frac` is constructible in [0, 2]. Blind and oriented requests and
 the reference-source follow-up reject oversized footprints before catalog
 initialization, rather than clipping the radius and silently omitting stars.
-The follow-up still uses the legacy maximum scale, not the solved scale
-(WCS-14); a broad legacy requery can therefore explicitly fail an otherwise
-viable solve. This is a deliberate operational acceptance restriction, not a
-scientific correction to the follow-up footprint.
+At this checkpoint the follow-up still used the legacy maximum scale, not the
+solved scale (WCS-14), so a broad requery could explicitly fail an otherwise
+viable solve. M2's subsequent scientific correction uses the solved footprint
+while preserving the operational restriction; see §5.10.
 
 UCAC queries retain coordinate conversion, order and thinning, but process
 16,384-record chunks and reject more than 2,000,000 examined candidates or
@@ -366,6 +366,32 @@ Known hints can narrow it; `test_wcs_solution.py` and `test_wcs_solve_tool.py`
 preserve both modes. Safety comes from finite attempts, pre-load catalog/work
 guards and MCP whole-call isolation, not a claim that blind searching is cheap.
 A valid explicit blind solve can exhaust its operational budget and fail.
+
+##### 5.10 M2 accepted positions and reference coverage (2026-10-22)
+
+After integration of M3 PR #122, WCS-03/14/27 intentionally diverge from the
+extraction. A missing scale prior no longer turns the broad search maximum
+into an acceptance scale: candidate WCS geometry supplies the image size.
+The existing one-degree floor and three-diagonal pointing allowance remain;
+blind inputs still have no pointing prior to compare. Stored and transformed
+nonfinite WCS geometry, including singular solutions, is rejected before
+header write-back.
+
+ATLAS follow-up references use the solved ICRS centre and sampled outer-pixel
+boundary, with existing padding and pre-load radius limits. Rotation, shear,
+off-centre CRPIX and SIP edge curvature affect that estimate. A spherical-cap
+box handles the seam and poles; polar split queries share the returned-row
+budget and deduplicate meridian positions. Per-query candidate/zone/index
+budgets remain. This does not establish catalog completeness or validate the
+native UCAC layout. The MaxIm no-WCS fallback now retains southern signs,
+including `-00` degrees; its return shape and units are unchanged.
+
+The [acceptance record](analysis/accepted-sky-positions.md) documents the
+sampled-footprint approximation and remaining catalog/solver evidence gates.
+`tests/test_wcs_accepted_positions.py` exercises real Astropy transformations
+and pipeline/header behavior with native backends and catalog I/O replaced;
+`tests/test_skylib_fits.py` pins the signed fallback correction. M3's no-hint
+ATLAS skip, textual frame hints and named backend failure paths remain covered.
 
 #### 6. External dependencies
 
@@ -956,8 +982,9 @@ _Former source: `algorithms/fieldcal/EXTRACTION.md`._
 Photometric zero-point calibration, extracted from the Skynet optical
 data-processing pipeline (`/home/claude/skynet`) into `algorithms/fieldcal/`.
 
-This was an **extraction, not a rewrite**. Algorithms, numeric constants,
-ordering and comments are verbatim. Every place a Skynet dependency was cut is
+This began as an extraction. The M2 calibration correction below intentionally
+changes selection, scatter fitting and small-sample rejection. Other extraction
+details retain their historical provenance. Every place a Skynet dependency was cut is
 marked in-code with an `# EXTRACTED:` comment; this document is the index of
 those seams.
 
@@ -1001,7 +1028,7 @@ unless noted. `OPD/` abbreviates
 | MARS file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
 | `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
-| `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
+| `solution.py` | 166 at extraction | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | Originally byte-identical; M2 scientific correction below changes scatter fitting, rejection and empirical-error evaluation while retaining the public return shape. |
 | `ref_mag.py` | 217 at extraction | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Originally verbatim (one blank line lost trailing whitespace); first-party PHOT-15 bounded arithmetic/literal substitution added 2026-10-05 (§5a). Accepted transforms, resolution precedence and numeric error propagation remain unchanged. |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
 | batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained MARS API. |
@@ -1139,7 +1166,7 @@ directory, persisting run state, or aggregating CSV output.
 
 ---
 
-#### 5. Deliberate parity behaviours preserved (do not "fix")
+#### 5. Extraction-time parity behaviours and later corrections
 
 1. **`apcorr_tol` forced to 0** — `field_cal.py:612` (`:645` here):
    `phot_settings.model_copy(update={"apcorr_tol": 0.0})`. This is what disables
@@ -1154,7 +1181,8 @@ directory, persisting run state, or aggregating CSV output.
 2. **`strict_filter_parity` / `allow_preferred_band_fallback`** — the
    preferred-band fallback (`V`, `r'`, `g'`, `B`, `i'`, then any band) is a
    *non-legacy* Skynet behaviour. Legacy Afterglow skips such a source. The gate
-   and both docstrings explaining it are verbatim.
+   is retained. M2 prevents known unsupported passbands from taking it; see
+   [catalog acceptance](analysis/catalog-magnitudes-filters.md).
 
 3. **Direct-band-before-`filter_lookup` precedence** in
    `resolve_ref_mag_for_filter` — legacy Afterglow `field_cal_job.py` ordering,
@@ -1165,20 +1193,14 @@ directory, persisting run state, or aggregating CSV output.
    `(None, None)` without trying the `"*"` wildcard. Looks like a missed
    fallback; it is the legacy ordering. Preserved.
 
-5. **Two divergent catalog registries** — `algorithms.catalogs.CATALOGS` (11
-   catalogs) and `algorithms.catalogs.CATALOG_OPTIONS` (APASS + PanSTARRS). Both
-   now live in `algorithms/catalogs/`; see the Catalogs section of this document
-   §4. They are *not*
-   duplicates and merging them would change numbers. `CATALOG_OPTIONS` carries
-   `H_alpha` / `H_beta` aliases that `CATALOGS['APASS']` lacks; `CATALOGS`
-   carries `Open`/`Clear`/`Lum` → `V` and the curriculum filter names that
-   `CATALOG_OPTIONS` lacks. `resolve_ref_mag_for_filter` starts from
-   `CATALOG_OPTIONS` and overlays the caller's lookup. Demonstrated live:
-   for an APASS source, `H_alpha` resolves to `rprime` (via `CATALOG_OPTIONS`)
-   while `Halpha` resolves to the Lupton R colour expression (via `CATALOGS`) —
-   **different reference magnitudes for two spellings of the same filter.**
-   Preserved verbatim; flagged here as a genuine latent oddity someone should
-   decide about deliberately.
+5. **Historical registry split** — the extraction retained `CATALOGS` (11
+   catalogs) and `CATALOG_OPTIONS` (APASS + PanSTARRS), and resolution originally
+   read the latter before applying a caller map. M2 intentionally replaces that
+   runtime split with `catalogs.filters.catalog_filter_lookup` over `CATALOGS`.
+   `CATALOG_OPTIONS` remains a historical compatibility export. APASS Halpha
+   retains the production Lupton R expression; H_alpha now normalizes to the
+   same route. No transformation coefficients changed. See
+   [scope, native band labels and live evidence](analysis/catalog-magnitudes-filters.md).
 
 6. **Two divergent `Catalog.__init__` merge semantics** — preserved, and now
    documented in the Catalogs section of this document, §5.4.
@@ -1296,6 +1318,53 @@ NaN error (below).
 
 Tests: `tests/test_m3_calibration_inputs.py`, and live against SkyMapper and
 UCAC in `tests/test_m3_calibration_inputs_live.py`.
+
+#### 5c. M2 photometric calibration correction (2026-10-23)
+
+PHOT-03/09/10/14 intentionally diverge from extraction.
+The offset fit compares zero additional variance with positive minima of the
+profiled Gaussian likelihood. Rejection runs below eleven stars, standardizes
+weighted residuals by each star's total error, and keeps at least two rows.
+The empirical weighted-mean uncertainty is evaluated on residuals to avoid
+cancellation; the public five-value return and aperture-correction override
+remain. Plotting consumes the exact solver mask, including pre-fit drops.
+
+Known saturated measurements are excluded before the brightest-star cap;
+matching cannot erase a positive image count with catalog zero. Reference
+magnitude zero sorts normally. Only omitted gain falls back to the FITS header.
+Historical Skynet/Afterglow fixtures remain unchanged; current corrected fits
+are checked against an independent two-parameter optimizer, rather than
+claiming old bitwise parity. M3's degenerate-solve/header safeguards remain.
+
+See [acceptance, derivation and limits](analysis/photometric-calibration.md).
+PHOT-06 downsampled saturation counts, other aperture/background defects,
+catalog completeness and calibration sufficiency are addressed by the following
+disclosure contract; the retained numerical defects remain separate open work.
+
+#### 5d. M2 catalog coverage and sample disclosure (2026-10-23)
+
+Successful public fits report actual solver survivors, independent of private
+reference-provenance keys. All registered fits carry a sample-sufficiency
+warning: finite empirical fit uncertainty does not establish spatial/colour
+coverage, an unbiased sample or magnitude-range validity. Direct measurement
+fits now share M3's refusal of non-finite or nonpositive fit uncertainty.
+Pixel calibrations also carry operation-scoped notices for capped responses,
+unqueried fallback catalogs, unavailable queries and unverified distorted-WCS
+coverage, including on failure returns. No magnitude transform or fitting
+equation changes. See [acceptance and retained limits](analysis/catalog-coverage-sufficiency.md).
+
+#### 5e. M2 retained numerical disclosures (2026-10-23)
+
+Operation-scoped notices now disclose nonpositive aperture-flux placeholders,
+empty background annuli, downsampled saturation counts, the adaptive isophotal
+origin mismatch, aperture-correction crowding, magnitude-error SNR cuts,
+RA-seam matching and unvalidated limiting-magnitude extrapolation. Public
+photometry, calibration, replay, FITS-driven HR and WCS boundaries retain
+notices in structured results, including handled failures. Landolt U-dependent
+references disclose the retained wrong-colour uncertainty. No numerical
+transform, error propagation or fitting arithmetic changes in this checkpoint.
+These defects are disclosed rather than repaired; see the
+[branch conditions and acceptance record](analysis/warnings-benchmark-claims.md).
 
 ---
 
@@ -1453,25 +1522,27 @@ were changed. Behaviour was not.
 | `"""Afterglow Core: …"""` headers | `"""MARS: …"""` | all eleven plugins |
 | `# n_max to Skynet filter names` | `# VSX n_max band code -> MARS band name` | `vsx_catalog.py` |
 
-Numeric content — every colour transform, coefficient, band table, row limit and
-VizieR ID — is untouched.
+At extraction time, colour transforms, coefficients, band tables, row limits
+and VizieR IDs were untouched. M2 preserves numerical transformations but
+corrects native band labels and routing; see
+[catalog acceptance](analysis/catalog-magnitudes-filters.md).
 
-#### 4. The two registries are not redundant
+#### 4. Historical secondary registry and current routing
 
-`CATALOGS` (11 catalogs) and `CATALOG_OPTIONS` (APASS + PanSTARRS) both exist
-upstream and both are read during calibration:
-
-* `CATALOGS` drives filter-aware catalog selection and querying.
-* `CATALOG_OPTIONS` is read only by `fieldcal.ref_mag.resolve_ref_mag_for_filter`.
-
-They disagree, and the disagreement changes results. `CATALOG_OPTIONS['APASS']`
-carries `H_alpha` and `H_beta` narrowband aliases that `CATALOGS['APASS']` does
-not; `CATALOGS['APASS']` carries the `_OCL_TO_V` Open/Clear/Lum mappings that
-`CATALOG_OPTIONS['APASS']` does not. Merging them would silently change which
-reference band a narrowband or unfiltered image calibrates against.
-
-Verified: `resolve_ref_mag_for_filter(image_filter="H_alpha", catalog_name="APASS")`
-resolves to rprime — via `CATALOG_OPTIONS` only.
+The extraction retained both upstream registries: eleven-catalog `CATALOGS`
+for selection/querying and APASS/PanSTARRS `CATALOG_OPTIONS` for numeric
+resolution. Their H-alpha and unfiltered differences were historical behavior,
+not two equally authoritative photometric policies. M2 retains the secondary
+export as provenance while selection, resolution and tool descriptions read
+one canonical effective map. APASS Halpha/H_alpha use the unchanged production
+Lupton R expression. Pan-STARRS retains its prior narrowband aliases. See
+[catalog magnitudes and filters](analysis/catalog-magnitudes-filters.md) for
+native-system names, intentional routing changes and live numerical checks.
+Follow-up review gives registry-key and declared source-name overrides one
+consistent priority. Calibration disclosures follow the actual resolved
+band/expression of solver survivors; supplied references and rejected stars
+cannot imply an unperformed transform. This provenance stays private, and
+the numerical transform expressions and public magnitude/error API are unchanged.
 
 #### 5. Deliberate behaviours preserved (do not "fix")
 
@@ -1566,9 +1637,13 @@ Offline, against synthetic astropy tables — no live provider calls:
 * APASS row mapping, the 99-magnitude null convention, and the
   drop-rows-with-no-magnitudes rule.
 * Registry filter-lookup overlays survive backend binding.
-* The §4 two-registry distinction, through `resolve_ref_mag_for_filter`.
+* The §4 historical export and current shared runtime map, through
+  `resolve_ref_mag_for_filter`.
 
-Not verified: any live VizieR or SkyServer response. See the Query section of this document, §6.
+At original extraction, no live VizieR or SkyServer response was verified.
+Later M3 checks and the M2
+[catalog value acceptance](analysis/catalog-magnitudes-filters.md) record the
+subsequent live evidence and remaining service limits. See also Query §6.
 
 *Update 2026-09-13 (P7):* the APASS and VSX mappings now also run, in the
 default suite, over **real VizieR responses** — recorded once and shipped as
@@ -1727,7 +1802,9 @@ With the cache enabled, `query_box` and `query_circ` snap the region centre to
 cache entry. This means a cached query returns rows for a slightly larger,
 grid-aligned region than asked for. The WCS path clips afterwards; a caller
 using `query_circ` directly does not. Turning the cache off changes results near
-a field edge.
+a field edge. M2 now grows rounded cones by the spherical displacement of
+their centre before rounding the radius upward; moving the centre cannot cut
+away the original cone's edge. Explicit boxes retain their legacy rounding.
 
 ##### 5.2 `_derive_columns` requests columns named `int` and `float`
 
@@ -1762,11 +1839,13 @@ In WCS mode, a failing catalog is skipped only while another remains to try. The
 last one always raises — otherwise a total provider outage would be
 indistinguishable from an empty field.
 
-##### 5.7 `SkyMapperQueryBackend.query_region` mutates the caller's dict
+##### 5.7 M2 isolates SkyMapper constraints (CAT-08, 2026-10-23)
 
-It calls `constraints.setdefault('flags', '0')` on the dict it was handed. A
-caller reusing one dict across catalogs finds `flags` added after querying
-SkyMapper. Upstream did the same; MARS's runner passes a fresh dict per call.
+Upstream calls `constraints.setdefault('flags', '0')` on the caller's dict.
+The original extraction record incorrectly claimed the runner supplied a
+fresh dictionary. M2 copies constraints in the backend before applying the
+same default. Explicit flags are preserved, caller dictionaries stay intact,
+and SkyMapper's quality rule cannot leak into later catalog queries.
 
 ##### 5.8 SDSS ignores `constraints`
 
@@ -1783,13 +1862,22 @@ field separately. The reason was never recorded. MARS keeps it as a working,
 tested function that nothing calls. Enabling it is a behaviour change needing its
 own validation.
 
-##### 5.10 Two footprint implementations, both kept
+##### 5.10 M2 enclosing-cone WCS queries (2026-10-23)
 
-`boxes_from_wcs` projects the four corners with `CRVAL` moved to (0,0), which
-handles rotation and the cos(dec) narrowing. `image_boxes_from_wcs` multiplies
-pixel scale by axis length, which is blind to both but works without
-`array_shape`. Upstream had both; they return different widths for the same WCS
-(verified: 1.02297° vs 1.02400° on a 1024² TAN field). Prefer the former.
+The two historical box helpers remain callable for extraction comparisons.
+Their limitations include off-detector CRPIX failures, the image helper's
+transposed anisotropic scales and rotation, and polar undercoverage. Both live
+WCS runner entry points now query enclosing spherical cones and clip to the
+detector. Undistorted TAN fields use the four outer detector vertices; a cap
+smaller than a hemisphere containing those vertices contains the gnomonic
+rectangle. RA seams, poles, rotation and off-detector CRPIX need no split.
+Other projections and distorted fields use sampled boundaries with an explicit
+`catalog_coverage_unverified` notice. Effective serialized CTYPE identifies TPV
+distortions that wcslib internally reports as TAN with `has_distortion=False`.
+Sampling does not prove completeness. Provider row caps still apply, so a
+larger query region can encounter a cap sooner. CAT-11 explicit-box clipping
+and SQL use the conservative full-RA declination band when no finite tangent
+meridian exists, instead of returning nothing or rejecting the polar request.
 
 ##### 5.11 First-party SDSS acceptance/transport contract (2026-10-06)
 
@@ -1799,7 +1887,7 @@ accept only integer limits in 1–5,000 and slice returned tables before source
 mapping even if a provider ignores `TOP`. This bounds mapped rows, not HTTP
 response bytes, SDK parsing memory or the whole-call deadline (MCP-01). Without
 an ordering/completeness contract, the subset is not a full or unbiased catalog
-sample; CAT-19 remains separate.
+sample; M2 discloses CAT-19 as described in §5.13.
 
 CAT-27 bounds projections to 1–64 literal ASCII SQL identifiers, each at most
 64 characters. Expressions, comments, qualified names and missing projections
@@ -1808,9 +1896,8 @@ or unbounded fallback. Shipped SDSS fields were already trusted. The custom
 metadata/native Python payload boundary is now guarded; no registered tool
 exposes arbitrary projection fields, and this is not evidence of an MCP SQL
 injection exploit. Non-finite/non-positive dimensions and cache-rounding
-overflow are rejected before work; an unrepresentable polar RA span raises
-rather than sending `NaN` SQL. That guard does not correct CAT-11's preserved
-box geometry.
+overflow are rejected before work. M2 now handles CAT-11's polar RA-span
+singularity with a conservative full-RA declination band, never `NaN` SQL.
 
 The pinned `astroquery==0.4.11` cone path passes a coordinate list into the old
 scalar `_args_to_payload` seam and expects a cross-ID rather than SQL payload;
@@ -1836,10 +1923,10 @@ live: 75 objIDs pass, 80 fail), so IDs are batched to stay under
 `MAX_SDSS_QUERY_STRING` (1,900). A live
 round trip (region row -> objID lookup) is in `test_m3_catalog_lookup_live.py`.
 
-Accepted-input cache rounding, quality predicates, box/cone arithmetic and row
-mapping remain preserved; ignored constraints (§5.8) and public schemas are
-unchanged. See `tests/test_sdss_query_limits.py` for the acceptance and transport
-regressions.
+Quality predicates, row mapping, ignored constraints (§5.8) and public schemas
+remain unchanged. M2's deliberate cone-rounding and polar-box repairs are
+recorded in §5.1 and §5.10. See `tests/test_sdss_query_limits.py` for the
+acceptance and transport regressions.
 
 ##### 5.12 M3 provider-response contracts (2026-10-21)
 
@@ -1949,6 +2036,10 @@ fixed where a populated response could look empty or escape as an exception:
   comma attached and resolves nothing, now with that warning
   (`topn(5, object:"M31", ...)` works), and a 400-character name is a 500
   from the service.
+  The M2 integration also rejects error-bearing translations even when a
+  query is present, preserves unresolved-object warnings on handled search
+  failures, rejects malformed records as `unusable_response`, and propagates
+  allocation failures to `resource_limit`.
 * **ADS results past the first page crashed the tool.** astroquery types each
   page's columns from that page alone: a field in every row is a 2-D `str`
   column, one missing from some row a 1-D `object` column holding `[None]`.
@@ -1974,6 +2065,32 @@ Tests: `tests/test_m3_provider_responses.py` (offline, shaped after the live
 responses) and `tests/test_m3_provider_responses_live.py` (`network`: every
 catalog mapping, Landolt UBVRI, 2MASS ids, SIMBAD, Gaia/literature, radio
 positions with 3C 48 matched in the 3C catalog, NED, and ADS `object:` searches when keyed).
+
+##### 5.13 M2 bounded-response and fallback notices (2026-10-23)
+
+CAT-19: a raw VizieR/SDSS response reaching the effective row cap emits
+`catalog_rows_capped` before mapping, slicing or detector clipping. VizieR's
+implicit SDK limit is included. A cap may omit stars; magnitude ordering can
+bias the subset toward bright/saturated sources. This is a possible-incompleteness
+notice, not proof that an extra row exists. Limits and ordering are retained.
+
+CAT-30: priority fallback still stops at the first nonempty catalog, but names
+remaining alternatives under `catalog_fallback_not_exhausted`. A raw-row
+threshold cannot establish the number or quality of fit survivors. Failed
+queries that are skipped, and unavailable variable-star cross-checks, carry
+`catalog_query_incomplete`. Operation-scoped collectors preserve these notices
+in successful and failed photometry tool results without changing low-level
+list return types or attaching last-query state to shared backends. The public
+fit sample contract is in Field Calibration §5d; full evidence and retained
+limits are in [catalog coverage and sufficiency](analysis/catalog-coverage-sufficiency.md).
+
+The final M2 closure review added a first-party `VizierClass` response guard.
+It checks error `INFO`/`QUERY_STATUS` entries before the SDK discards them,
+including errors after returned rows, and rejects malformed XML. Catalog
+queries and public VizieR tools share this guard. Rejected HTTP-200 replies
+are evicted through the SDK's cache hook so later queries can recover; the
+normal cache directory/pruning, successful empty replies and row-cap behavior
+are retained. Failed VSX checks consequently reach `catalog_query_incomplete`.
 
 #### 6. External dependencies
 
@@ -2412,8 +2529,8 @@ new capability Astromancer never had.
 `isochrone-matching/isochrone-plot.util.ts::computePlotDelta` and
 `cluster.util.ts::getExtinction`. Two differences from Astromancer are
 permanent, deliberate deviations rather than defects reproduced for parity
-(contrast with the retired extraction's catalogued defects above, which the
-legacy parity surface reproduces):
+(contrast with the retired extraction's catalogued defects above; later
+legacy science corrections are recorded in the dated M1/M2 sections below):
 
 - `get_extinction` uses the caller's `rv` throughout, rather than Astromancer's
   hard-coded leading factor of 3.1 (that extraction's defect #1).
@@ -3419,6 +3536,85 @@ Still left behind, deliberately: `Highcharts.Chart` handles, `addSeries` /
 tooltip `pointFormat` strings, and the RxJS form subscriptions. A renderer
 needs the specification, not the widget.
 
+#### M2 spectrum presentation correction (2026-10-20)
+
+The historical `PERIODOGRAM_CHART` constant remains the upstream default.
+MARS's renderer now uses `periodogram_chart` to describe the artifact's
+selected channel (Sum, XX or YY) and coordinate: logarithmic seconds for
+`period_s`, linear hertz for `frequency_hz`. The y-axis is labelled Power,
+and peak-marker coordinates include their unit. Standard-format spectra use
+Data for their one generic flux column, keeping the selected `sum` or `source1`
+in metadata. Spectrum artifacts persist the selected `channel` and attach the
+coordinate's Astropy unit; older artifacts without recognized scalar string
+channel metadata are explicitly unknown and warn rather than defaulting to XX.
+This is a deliberate presentation and
+metadata correction; periodogram powers and confidence arithmetic are unchanged.
+`tests/test_pulsar_spectrum_semantics.py` checks saved artifacts and the real
+rendered traces, axes, peaks and confidence lines in both modes.
+
+#### M2 candidates and significance correction (2026-10-21)
+
+First-party `sampling.py` derives the default minimum period from twice median
+positive spacing without rounding. Only uniform epochs receive a Nyquist
+period; gaps/jitter/duplicates expose a labelled search heuristic and warning.
+The frequency default is the reciprocal of the same period band. All stages
+rederive sampling metadata when loading an artifact. The historical
+`nyquist_periodogram_range` helper remains for provenance, but no longer seeds
+the public driver.
+
+`significance.py` replaces the driver's independent-trial confidence levels
+with a conservative finite-grid Gaussian-noise bound: a finite-sample Beta
+tail, multiplied by the actual evaluated grid count through the union
+inequality. Frequency independence is not assumed. Results/plots disclose
+the conditional model, exclude correlated/filtered noise, RFI and retuning,
+and do not call the result a pulsar or correct-period probability. The legacy
+`confidence_threshold` helper/constants remain historical; new driver
+confidence fields are empty/null. Old artifact levels are uncalibrated.
+
+Ordinary spectral powers retain their ported arithmetic. Numerically
+degenerate/nonorthogonal sine/cosine trials, notably exact uniform Nyquist,
+now use a thin SVD projection of the raw columns with a numerical rank test;
+the old sum of quotients was not a valid projection there and could exceed
+the sample-variance normalization. Candidate periods/frequencies must both
+be finite. Candidate rows always have `period_s`, `frequency_hz`, `power`;
+search bounds have an explicit `search_unit`. This deliberately supersedes
+the M1 preservation of default bounds and confidence statistics recorded above.
+The fold-SNR arithmetic and its empirical cutoff remain unchanged, with
+guidance corrected to avoid treating them as calibrated detection probabilities.
+
+The [acceptance record](analysis/pulsar-candidates-confidence.md) contains the
+mathematical argument, primary references, Astropy/SciPy comparisons, Gaussian
+null checks and remeasured scan outcomes. Focused tests are in
+`test_pulsar_candidates_confidence.py`; the existing rendered-content tests
+now inspect conditional false-alarm lines.
+
+The endpoint review follow-up replaces `1 - 2*peak_power/N` with a direct
+SVD residual fit at the selected peak, using the same tau-shifted columns and
+a scaled centered response. Residuals below estimated solver resolution
+produce null probabilities with a warning. Threshold inverses use 80-digit Decimal arithmetic,
+round upward to binary64 and omit the normalization endpoint. This leaves
+spectrum powers/grid unchanged. New artifacts identify the residual statistic;
+pre-fix Gaussian levels are uncalibrated when plotted. The precision policy
+is numerical error handling, not a certified forward-error enclosure; see
+the acceptance record and `test_pulsar_probability_precision.py`.
+
+The exact-constant review follow-up rejects identical flux observations before
+mean/variance arithmetic. Fractional constants such as twenty `0.1` values can
+otherwise acquire a rounding-only residual and spurious calibrated significance.
+Both direct entry points raise `ValueError`; the public tool returns
+`invalid_input` with no spectrum artifact, candidate or false-alarm bound.
+The equality check uses no tolerance and retains representable nonzero
+variation; ordinary nonconstant arithmetic and the trial grid are unchanged.
+
+The 2026-10-26 comprehensive review supersedes that centering arithmetic:
+accepted one-ULP variation around a fractional baseline could still yield a
+rounding-only apparent signal. Powers and residuals now share scaled
+observed-value offsets and the same centered sum of squares. The grid and
+conditional Gaussian model remain unchanged. Current artifacts additionally
+require `false_alarm_flux_centering=observed_offsets`; older M2 levels are
+uncalibrated until recomputed from the light curve. See
+[the master plan's review corrections](working/master-continuation-plan.md#m2-review-corrections).
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in
@@ -3765,6 +3961,9 @@ Target language level: the code uses `**`, optional chaining, and
 
 #### Python M1 weighted-periodogram acceptance contract (2026-10-05)
 
+This section records the M1 state; the M2 correction below supersedes its
+weighted-formula and differential-error parity claims.
+
 The retired TypeScript record above is historical. The current Python port in
 `algorithms/variable_star/periodogram.py` adds first-party ALG-02/TS-03 guards,
 not a replacement for its weighted Lomb--Scargle formula:
@@ -3804,6 +4003,72 @@ Regression evidence: `tests/test_variable_star_periodogram_limits.py`,
 Delivery scope and check counts are maintained in
 `docs/working/master-continuation-plan.md`, not inferred from this local change.
 
+#### Python M2 variable-star powers and errors (2026-10-21)
+
+The Python implementation intentionally corrects TS-09 and TS-14. Powers now
+use inverse-variance weighted floating-mean least squares, with standard
+dimensionless fractional chi-square improvement in [0, 1]. The fitted model,
+normalization and numerical rank policy are described in the
+[derivation and acceptance record](analysis/variable-star-powers-errors.md).
+Independent Astropy and full-model SciPy QR references replace the affected
+power parity assertions; the original period grid is retained.
+
+Differential standard errors are `hypot(error1, error2)` for independent source
+errors, with a fixed reference magnitude. The `error_mse` name remains, but
+the halving is removed. Public stages rederive old cached combined values from
+component errors and require re-ingestion when paired cached values lack
+components. Days/magnitudes and normalization/uncertainty-method metadata now
+accompany new artifacts/results. M3 PR #122 subsequently defines missing-error
+fold bounds as masked values with a warning, and direct constant spectra raise
+`ValueError`; public constants remain rejected. Their integration preserves M2
+powers, quadrature and units. No covariance model or detection-probability claim
+is added; see the [integration record](analysis/m2-m3-integration.md).
+
+The 2026-10-22 review follow-up additionally scales response offsets before
+forming squared energies. Standard powers then remain invariant for tiny and
+large finite amplitudes instead of underflowing to zero or overflowing. Four
+direct/public regressions and an independent 1,500-case amplitude comparison
+cover the correction; see the acceptance record above.
+
+#### Python M2 cluster ages and membership (2026-10-22)
+
+Three exported helpers in `algorithms/hrdiagram_py/legacy.py` intentionally
+diverge from their historical TypeScript behavior. MWSC logarithmic ages in
+years become Myr within the retained 13.8 Gyr display window, rather than
+discarding every cluster older than 13.8 Myr. FSR results join by exact source
+ID, independent of ordering or numeric conversion. Membership cuts accept
+finite zero proper motion, reject missing/nonfinite components, and handle
+zero-width ellipse axes as closed lines or points.
+
+The registered HR membership tool uses the separate `membership.py`, which
+already accepts zero motion; an actual ECSV regression verifies that boundary.
+No membership probability or new HR fit is introduced. See the subsequent
+legacy coordinates/extinction/mass record below and the cluster
+[scope and acceptance record](analysis/cluster-ages-membership.md).
+
+Post-commit review additionally corrects NumPy integer-age arithmetic and
+inclusive decimal ellipse endpoints in the same legacy helpers. Eleven
+regressions cover signed/unsigned catalogue arrays, both motion components,
+line/ellipse endpoints and the immediately adjacent outside values. Positive
+axis widths normalize from their supplied endpoints, with a strict enclosing
+rectangle rather than a tolerance; see the acceptance record's review follow-up.
+
+#### Python M2 legacy coordinates, extinction and mass (2026-10-22)
+
+Legacy DMS/HMS triples now carry the angle's sign in their first component,
+including negative zero below one degree/hour. The IR/optical CCM89 helper
+rejects unsupported WISE bands, uses R(V) throughout and receives it from plot
+parameters. V uses the nominal 0.55 micron wavelength; monochromatic fixed-band
+approximations are not claimed to be band-integrated color excesses.
+
+The asymmetric trimmed radial mean is replaced by an observed isotropic
+one-dimensional proper-motion RMS about the supplied center. Cluster summaries
+add units, methods and warnings: this is angular observed scatter, and the
+retained eta=10 mass is a virial proxy using a projected number radius, without
+intrinsic-dispersion inference or luminosity weighting. Protected mass and
+radius conversion arithmetic remains intact and has independent Astropy unit
+checks. These legacy APIs have no registered-tool callers; the newer HR fitter
+is unchanged. See the [derivation and acceptance record](analysis/legacy-coordinates-extinction-mass.md).
 #### Python M3 direct-helper contracts (2026-10-21)
 
 The registered tools already contained most of these inputs; the helpers

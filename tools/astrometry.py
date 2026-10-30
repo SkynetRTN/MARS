@@ -21,6 +21,8 @@ def _image_shape_from_header(header) -> tuple[int, int] | None:
         return None
     try:
         return int(height), int(width)
+    except MemoryError:
+        raise
     except Exception:
         return None
 
@@ -40,6 +42,8 @@ def _center_from_wcs(wcs, image_shape: tuple[int, int] | None) -> tuple[float | 
     try:
         ra_deg, dec_deg = wcs.all_pix2world(x, y, 1)
         return float(ra_deg) % 360.0, float(dec_deg)
+    except MemoryError:
+        raise
     except Exception:
         return None, None
 
@@ -50,6 +54,8 @@ def _pixel_scale_arcsec(wcs) -> tuple[float, float] | None:
         if len(scales) < 2 or not np.all(np.isfinite(scales[:2])):
             return None
         return abs(float(scales[0])), abs(float(scales[1]))
+    except MemoryError:
+        raise
     except Exception:
         return None
 
@@ -60,6 +66,8 @@ def _rotation_deg(wcs) -> float | None:
         if matrix.shape[0] < 2 or matrix.shape[1] < 2:
             return None
         return math.degrees(math.atan2(matrix[1, 0], matrix[0, 0]))
+    except MemoryError:
+        raise
     except Exception:
         return None
 
@@ -80,6 +88,8 @@ def describe_image_wcs(path: str | Path) -> WcsSummary:
 
     try:
         header = fits.getheader(file.path)
+    except MemoryError:
+        raise
     except Exception as exc:
         errors.append(ToolError(code="fits_header_error", message=str(exc)))
         return WcsSummary(file=file, has_wcs=False, errors=errors)

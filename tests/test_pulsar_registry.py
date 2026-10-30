@@ -4,8 +4,8 @@ BL-8: the curated literature periods lived in ``Curated pulsars.docx`` and in a
 literal dictionary inside ``tests/conftest.py``. Neither is reachable from the
 tool layer, so an agent working offline had only the blind period search --
 which ``test_pulsar_sonification.py`` pins as succeeding on **one of the five**
-bundled scans, while the other four report "99.73% Confidence" for mains
-interference or red noise. These tests pin the offline path: every bundled scan
+bundled scans, while the other four return unsupported candidates. The old
+confidence labels are retired in M2. These tests pin the offline path: every bundled scan
 resolves carrying the period the curation records, and the fixture stays the
 single copy of that number.
 """

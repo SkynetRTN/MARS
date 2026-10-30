@@ -2,14 +2,16 @@
 
 The [master continuation plan](master-continuation-plan.md) is the closure
 checklist for the next release. It describes concrete failures, required
-outcomes and questions that still need evidence. Dated reviews retain the
-original findings; implementation choices belong in subsequent work.
+outcomes and questions that still need evidence. All manual step gates,
+review-fix status and closure evidence are maintained there. Dated reviews
+retain original findings and technical analysis. Do not create separate working
+documents for individual gates.
 
 ## Index
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-20 against `main` at `a6785aa`. M0/M1 closed; M1 merged and unreleased. M2 must be reassessed without PR #120. Remaining gates describe failures, missing evidence and final release checks. Browser hosting remains deferred. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123). M2 is closed locally on `feature/m2` after its final review corrections; M3 is closed on main. M2 remains unmerged into main and unpublished. Remaining gates describe missing evidence and release checks. |
 
 ## Landed
 

@@ -59,12 +59,14 @@ INVARIANTS: dict[str, tuple[str, ...]] = {
         "measure first, compare second",
         "retry with different parameters",
     ),
-    "peak_fold_snr_over_peak_confidence": (
-        "check peak_fold_snr, not peak_confidence",
-        "the confidence threshold assumes white noise",
+    "conditional_noise_bound_and_explicit_candidates": (
+        "fold with period_s in either search mode",
+        "false_alarm_probability_upper_bound",
+        "false_alarm_assumptions",
+        "not a calibrated detection probability",
     ),
     "wrong_period_is_silent": (
-        "folding at a wrong period returns a flat profile, not an error",
+        "a wrong period may return a flat profile rather than an error",
     ),
     "reference_fold_is_not_a_detection": (
         "pulse_snr is not an independent detection",
@@ -244,7 +246,7 @@ def test_the_working_on_the_repository_files_point_at_the_skill():
 BRIEF_INVARIANTS = (
     "never invent a path",
     "measure first, compare second",
-    "peak_fold_snr, not peak_confidence",
+    "false_alarm_assumptions",
     "not an independent detection",
     "0.016665 s",
     "2.1-2.2 s",

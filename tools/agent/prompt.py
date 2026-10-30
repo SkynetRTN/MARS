@@ -57,13 +57,21 @@ the stages in order -- each one produces what the next needs:
      artifact path to every later stage.
   2. compute_pulsar_periodogram -- measure the period from the data. It is the \
      only tool that produces one, and it runs on every scan, including the ones \
-     that already have a curated period. Check peak_fold_snr, not \
-     peak_confidence: the confidence threshold assumes white noise, so mains \
-     interference and baseline drift routinely read "99.73% Confidence" while \
-     folding to nothing. If it warns peak_does_not_fold, the period is wrong.
+     that already have a curated period. top_peaks always carries period_s, \
+     frequency_hz and power: fold with period_s in either search mode. \
+     search_unit identifies the search bounds. false_alarm_probability_upper_bound \
+     assumes iid Gaussian noise on one fixed grid; read false_alarm_assumptions. \
+     It does not calibrate baseline filtering, correlated noise, RFI or retuning, \
+     and is not a probability of a pulsar or correct period. peak_confidence is \
+     retired (null). false_alarm_resolution_limited flags null probabilities \
+     or omitted levels at numerical limits; do not infer them from rounded \
+     power. Recompute older spectra for current residual-based evaluation. \
+     Check peak_fold_snr, the profile, aliases and warnings. \
+     peak_does_not_fold means the fold does not strongly support that candidate.
   3. fold_pulsar_lightcurve -- stack the rotations into a pulse profile. \
-     pulse_snr above ~8 is a detection; folding at a wrong period returns a \
-     FLAT PROFILE, not an error.
+     pulse_snr above ~8 is an empirical concentration diagnostic, not a \
+     calibrated detection probability; periodic RFI can fold too. A wrong \
+     period may return a flat profile rather than an error.
   4. sonify_pulsar -- render audio. ALWAYS pass period_s when you have one: it \
      folds first and loops the profile at the true rate, which is what actually \
      sounds like a pulsar. Without it you get the raw scan played once.
@@ -73,24 +81,25 @@ period looks wrong: the periodogram plot shows interference spikes and harmonic 
 combs at a glance, where the numbers alone do not.
 
 PERIOD SOURCING: measure first, compare second. The scans carry no period of \
-their own, so a fold at a MEASURED period is a real detection while a fold at a \
-LITERATURE period is a fit to a known answer. Those are different claims and \
-one must never be reported as the other.
+their own. A fold at a LITERATURE period does not independently measure that \
+period; a data-derived candidate still needs profile and alias checks. Report \
+the origin of the period and do not treat either fold as proof of a pulsar.
 
   1. Run compute_pulsar_periodogram and read peak_fold_snr and top_peaks. That \
-     is the data's own verdict on its own peak, and it is the only evidence \
-     that does not depend on knowing the answer in advance.
+     uses the data without seeding the search with the reference answer.
   2. THEN compare that period against stage 0's curated_period_s, or against \
-     search_atnf for a source the curation does not cover. Agreement confirms \
-     the measurement: report both numbers and say which is which.
+     search_atnf for a source the curation does not cover. Agreement provides \
+     a cross-check; still inspect the fold and aliases. Report both numbers \
+     and say which is which.
   3. If they disagree, or peak_fold_snr is low, or it warned peak_does_not_fold, \
-     the measurement is wrong -- RETRY with different parameters rather than \
+     the candidate is not supported -- RETRY with different parameters rather than \
      substituting the reference. Vary back_scale by rerunning \
      load_pulsar_lightcurve with it (a red-noise peak moves with it, a real \
      periodicity does not), narrow start/stop away from the \
      artifact, and raise steps to refine. Two artifacts recur on this data: \
      0.016665 s is 60.006 Hz mains interference, and a 2.1-2.2 s peak is \
-     leftover baseline red noise.
+     leftover baseline red noise. Such retuning is not covered by the reported \
+     single-search false-alarm bound.
   4. Only when a retuned search has still failed should you fold at the \
      reference period -- and then say plainly that you did. That fold's \
      pulse_snr is not an independent detection, because the period came from \

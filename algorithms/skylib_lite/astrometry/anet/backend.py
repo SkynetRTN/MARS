@@ -204,6 +204,8 @@ class AstrometryNetBackend:
             return None
         try:
             return WCS(fits.getheader(str(wcs_path)))
+        except MemoryError:
+            raise
         except Exception:
             return None
 
