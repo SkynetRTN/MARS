@@ -65,8 +65,10 @@ def search_ned(
     ``table`` defaults to ``"photometry"`` -- NED's literature-compiled flux
     history, the primary answer to "all historical [radio] data on X" from
     this source. ``output_table_format`` (photometry only) defaults to ``3``,
-    "Homogenized Units (mJy)", so measurements published in inconsistent
-    units over a century of literature come back comparable. ``from_year``/
+    astroquery's "Homogenized Units (mJy)", so measurements published in
+    inconsistent units over a century of literature come back comparable:
+    despite that name, ``Frequency`` is in Hz and ``Flux Density`` in Jy
+    (the columns' own units, checked live 2026-10-30). ``from_year``/
     ``to_year`` apply only when ``table="references"``.
 
     ``min_frequency_hz``/``max_frequency_hz`` restrict the ``photometry``

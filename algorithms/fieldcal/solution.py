@@ -87,6 +87,21 @@ def calc_solution(sources: list[PhotometryData]):
     return _calc_solution_with_mask(sources)[0]
 
 
+def _fit_input_mask(sources: list[PhotometryData]) -> np.ndarray:
+    """The rows the fit starts from, before any outlier rejection.
+
+    Once any star carries an instrumental error, a star without a positive one
+    is dropped here: it is never weighed, so it is not an outlier the fit
+    rejected. Without instrumental errors every row enters. MARS: factored out
+    of ``_calc_solution_with_mask`` so the diagnostic plot can tell the two
+    apart; the rule is unchanged.
+    """
+    mag_errors = np.array(
+        [getattr(source, "mag_error", None) or 0 for source in sources], dtype=float
+    )
+    return mag_errors > 0 if mag_errors.any() else np.ones(len(sources), dtype=bool)
+
+
 def _calc_solution_with_mask(sources: list[PhotometryData]):
     """Return the legacy summary and the exact surviving input-row mask.
 
@@ -112,7 +127,7 @@ def _calc_solution_with_mask(sources: list[PhotometryData]):
     logger.debug("calc_solution: starting with %d sources", len(sources))
     indices = np.arange(len(sources))
     if mag_errors.any():
-        good = mag_errors > 0
+        good = _fit_input_mask(sources)
         indices = indices[good]
         mags = mags[good]
         mag_errors = mag_errors[good]

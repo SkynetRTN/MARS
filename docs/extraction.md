@@ -1389,6 +1389,17 @@ transform, error propagation or fitting arithmetic changes in this checkpoint.
 These defects are disclosed rather than repaired; see the
 [branch conditions and acceptance record](analysis/warnings-benchmark-claims.md).
 
+#### 5f. M4 diagnostic plot reads the solver's pre-fit rule (2026-10-30)
+
+`solution._fit_input_mask` is the existing pre-fit drop, factored out of
+`_calc_solution_with_mask` unchanged: once any star carries an instrumental
+error, a star without a positive one never enters the fit. The zero-point
+plot (`tools/photometry_pipeline.py`) reads it beside the survivor mask, so a
+star dropped before fitting is drawn as "not fitted", not as a rejected
+outlier. On NGC 5128 B's recorded APASS replay all six non-survivors were
+such drops and the outlier loop rejected none; the plot had called all six
+outliers. No fit arithmetic changes.
+
 ---
 
 #### 6. Catalog-backend code — now extracted
@@ -2559,6 +2570,14 @@ legacy science corrections are recorded in the dated M1/M2 sections below):
   hard-coded leading factor of 3.1 (that extraction's defect #1).
 - `isochrone_cmd` does not reproduce Astromancer's off-by-one isochrone splice
   index (that extraction's defect #3).
+
+A third, from M4 (2026-10-30): `plot_cmd` draws the isochrone as points, not
+Astromancer's line. Its server sent an `iSkip` break for the track's phase
+gap; the local Girardi grid carries neither that nor a phase label, so the
+joined rows drew a line straight from the AGB back to core-helium burning
+(3.1-3.5 mag on M67's tracks) and fanned the AGB pulses into a wedge. No step
+size separates phase gaps from in-phase steps across the grid's 4,307 tracks,
+so no break is guessed. The fit is unchanged: it never used the line.
 
 It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
 `fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting

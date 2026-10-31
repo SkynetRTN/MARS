@@ -361,7 +361,13 @@ def plot_cmd(colour, mag, iso_colour=None, iso_mag=None,
         _, ax = plt.subplots(figsize=(6, 7))
     ax.scatter(colour, mag, s=10, c="#33b3e6", alpha=0.8, label="Photometry", zorder=2)
     if iso_colour is not None:
-        ax.plot(iso_colour, iso_mag, color="#5b3fd6", lw=2, label="Isochrone", zorder=3)
+        # Points, not Astromancer's line: its server sent an `iSkip` break for
+        # the track's phase gap, and the local Girardi grid carries neither
+        # that nor a phase label. Joined, the rows drew a line straight from
+        # the AGB back to core-helium burning and fanned the AGB pulses into a
+        # wedge; no step size separates phase gaps from in-phase steps across
+        # the grid (M4, 2026-10-30), so no break is guessed.
+        ax.scatter(iso_colour, iso_mag, s=6, c="#5b3fd6", label="Isochrone", zorder=3)
     if not ax.yaxis_inverted():
         ax.invert_yaxis()
     ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)

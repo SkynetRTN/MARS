@@ -368,14 +368,25 @@ def identify_radio_sources(
 # ---------------------------------------------------------------------------
 # 2. A source's multi-frequency flux history -> fitted spectrum + plot
 # ---------------------------------------------------------------------------
-def _load_spectrum_csv(csv_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+#: Axis labels for spectra whose units are known: explicit arrays are Hz and
+#: Jy by their parameter names, and NED's homogenized photometry columns are
+#: Hz and Jy (checked live, 2026-10-30).
+_FREQUENCY_LABEL = "Frequency (Hz)"
+_FLUX_LABEL = "Flux density (Jy)"
+
+
+def _load_spectrum_csv(
+    csv_path: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, tuple[str, str]]:
+    """The CSV's frequency, flux and optional error columns, plus the first
+    two headers: a CSV may be in any units, so its own headers label the plot."""
     df = pd.read_csv(csv_path)
     if df.shape[1] < 2:
         raise ValueError(f"{csv_path!r} needs at least two columns: frequency, flux")
     freq = df.iloc[:, 0].to_numpy(dtype=float)
     flux = df.iloc[:, 1].to_numpy(dtype=float)
     flux_err = df.iloc[:, 2].to_numpy(dtype=float) if df.shape[1] >= 3 else None
-    return freq, flux, flux_err
+    return freq, flux, flux_err, (str(df.columns[0]), str(df.columns[1]))
 
 
 def _load_spectrum_from_ned(name: str, max_frequency_hz: float) -> tuple[np.ndarray, np.ndarray, str]:
@@ -424,12 +435,13 @@ def analyze_source_spectrum(
     overlaid) to ``output_dir`` (default: the shared artifact directory).
     """
     source_label = name
+    axis_labels = (_FREQUENCY_LABEL, _FLUX_LABEL)
     try:
         if frequencies_hz is not None and fluxes_jy is not None:
             freq = np.asarray(frequencies_hz, dtype=float)
             flux = np.asarray(fluxes_jy, dtype=float)
         elif csv_path is not None:
-            freq, flux, _ = _load_spectrum_csv(csv_path)
+            freq, flux, _, axis_labels = _load_spectrum_csv(csv_path)
             source_label = source_label or Path(csv_path).stem
         elif name is not None:
             freq, flux, _ = _load_spectrum_from_ned(name, max_frequency_hz)
@@ -456,7 +468,7 @@ def analyze_source_spectrum(
     stem = _safe_stem(source_label or "spectrum")
     plot_path = _output_path(f"{stem}_spectrum", ".png", output_dir)
     try:
-        _plot_spectrum(freq, flux, fit, plot_path, title=source_label)
+        _plot_spectrum(freq, flux, fit, plot_path, title=source_label, axis_labels=axis_labels)
     except BaseException:
         # The reservation is an empty file; a failed plot must not leave it.
         artifacts.discard_placeholder(plot_path)
@@ -473,7 +485,8 @@ def analyze_source_spectrum(
 
 
 def _plot_spectrum(freq_hz: np.ndarray, flux: np.ndarray, fit: dict, path: Path,
-                   title: str | None = None) -> None:
+                   title: str | None = None,
+                   axis_labels: tuple[str, str] = (_FREQUENCY_LABEL, _FLUX_LABEL)) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -502,8 +515,8 @@ def _plot_spectrum(freq_hz: np.ndarray, flux: np.ndarray, fit: dict, path: Path,
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Flux density")
+    ax.set_xlabel(axis_labels[0])
+    ax.set_ylabel(axis_labels[1])
     ax.set_title(title or "Radio spectrum")
     ax.grid(alpha=0.15, which="both")
     ax.legend(loc="best", frameon=False, fontsize=9)
@@ -683,8 +696,8 @@ def _plot_field_sed(
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Flux density")
+    ax.set_xlabel(_FREQUENCY_LABEL)
+    ax.set_ylabel(_FLUX_LABEL)
     ax.set_title(title or "Field spectral energy distribution")
     ax.grid(alpha=0.15, which="both")
     ax.legend(loc="best", frameon=False, fontsize=8)

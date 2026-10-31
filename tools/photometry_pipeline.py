@@ -556,6 +556,11 @@ def plot_photometry(
     # scaled up (figure, markers, dpi) for its new role as the only plot,
     # rather than just stretching the old one-third-width panel.
     fig, ax = plt.subplots(figsize=(10, 8.5))
+    # Source positions are FITS (1-based) pixels -- the extraction centroids
+    # add one to sep's array coordinates -- so the image is drawn on the same
+    # grid: pixel (1, 1) centred at (1, 1). Without the extent every marker
+    # sat one pixel up and right of its star.
+    ny, nx = data.shape
     img = ax.imshow(
         data,
         origin="lower",
@@ -563,8 +568,11 @@ def plot_photometry(
         vmin=np.nanpercentile(data, 2),
         vmax=np.nanpercentile(data, 98),
         interpolation="nearest",
+        extent=(0.5, nx + 0.5, 0.5, ny + 0.5),
     )
-    fig.colorbar(img, ax=ax, label="counts", fraction=0.046, pad=0.04)
+    # The wider pad leaves room for the magnitude bar's label, which sits
+    # between the image and this bar.
+    fig.colorbar(img, ax=ax, label="counts", fraction=0.046, pad=0.11)
     scatter = ax.scatter(
         x,
         y,
@@ -575,9 +583,9 @@ def plot_photometry(
         linewidths=0.6,
         alpha=0.9,
     )
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    fig.colorbar(scatter, ax=ax, label=magnitude_label, fraction=0.046, pad=0.08)
+    ax.set_xlabel("x (FITS pixel)")
+    ax.set_ylabel("y (FITS pixel)")
+    fig.colorbar(scatter, ax=ax, label=magnitude_label, fraction=0.046, pad=0.04)
 
     bright_idx = np.argsort(mag)[: min(8, len(mag))]
     if len(bright_idx) > 0:
@@ -626,6 +634,17 @@ def _replicate_zero_point_rejection(sources: Sequence[object]) -> np.ndarray:
     return _calc_solution_with_mask(sources)[1]
 
 
+def _zero_point_fit_inputs(sources: Sequence[object]) -> np.ndarray:
+    """The stars the solve fitted at all, from the solver's own rule.
+
+    A star outside it was dropped before fitting (no positive instrumental
+    error), not rejected as an outlier; the plot must not call it one.
+    """
+    from algorithms.fieldcal.solution import _fit_input_mask
+
+    return _fit_input_mask(sources)
+
+
 def plot_zero_point_solution(
     zero_point: ZeroPointResolution,
     output_path: Path,
@@ -641,12 +660,15 @@ def plot_zero_point_solution(
       zero point, not a free two-parameter regression (see
       ``algorithms/fieldcal/solution.py::calc_solution``).
     - right: each star's residual from that fit (``ref_mag - mag -
-      zero_point``) vs. instrumental magnitude, with the solved scatter
-      (+/-1 sigma) shaded.
+      zero_point``) vs. instrumental magnitude, with the measurement error
+      the weighted fit gave it (instrumental and catalog errors in
+      quadrature) as an error bar, and the fitted additional scatter shaded.
 
-    In both panels, stars the solve's Chauvenet-rejection loop kept are blue;
-    stars it rejected as outliers are red crosses (see
-    ``_replicate_zero_point_rejection`` for how "rejected" is recovered, since
+    In both panels, stars the solve kept are blue; stars its Chauvenet loop
+    rejected as outliers are red crosses; stars it never fitted -- no
+    positive instrumental error, so the solver drops them first -- are grey
+    rings (see ``_replicate_zero_point_rejection`` and
+    ``_zero_point_fit_inputs``, which read the solver's own masks, since
     ``calc_solution`` itself reports only an aggregate rejection percentage).
 
     Returns ``None`` (after a stderr message) if ``zero_point`` was not a
@@ -683,20 +705,33 @@ def plot_zero_point_solution(
     sigma = diagnostics.get("zero_point_slop")
 
     kept = _replicate_zero_point_rejection(sources)
+    fitted = _zero_point_fit_inputs(sources)
+    rejected = fitted & ~kept
+    unfitted = ~fitted
     resid = ref_mag - mag - m0
+    sigma_total = np.hypot(
+        [float(getattr(s, "mag_error", None) or 0) for s in sources],
+        [float(getattr(s, "ref_mag_error", None) or 0) for s in sources],
+    )
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     axes[0].scatter(
         mag[kept], ref_mag[kept],
         c="steelblue", s=35, edgecolors="k", linewidths=0.4, alpha=0.85,
-        label=f"good fit ({int(kept.sum())})",
+        label=f"kept in fit ({int(kept.sum())})",
     )
-    if (~kept).any():
+    if rejected.any():
         axes[0].scatter(
-            mag[~kept], ref_mag[~kept],
+            mag[rejected], ref_mag[rejected],
             c="crimson", s=55, marker="x", linewidths=1.6,
-            label=f"rejected outlier ({int((~kept).sum())})",
+            label=f"rejected outlier ({int(rejected.sum())})",
+        )
+    if unfitted.any():
+        axes[0].scatter(
+            mag[unfitted], ref_mag[unfitted],
+            facecolors="none", edgecolors="dimgray", s=45, linewidths=1.2,
+            label=f"not fitted: no instrumental error ({int(unfitted.sum())})",
         )
     mag_range = np.array([mag.min(), mag.max()])
     axes[0].plot(
@@ -712,18 +747,38 @@ def plot_zero_point_solution(
 
     axes[1].axhline(0.0, color="black", linewidth=1.0)
     if sigma:
-        axes[1].axhspan(-sigma, sigma, color="gray", alpha=0.15, label=f"±1σ ({sigma:.3f} mag)")
+        axes[1].axhspan(
+            -sigma, sigma, color="gray", alpha=0.15,
+            label=f"additional scatter ±{sigma:.3f} mag",
+        )
+    # The error each star was weighed with; without it a kept star far from
+    # the line reads as a bad fit when its catalog error simply covers it.
+    axes[1].errorbar(
+        mag[fitted], resid[fitted], yerr=sigma_total[fitted],
+        fmt="none", ecolor="gray", elinewidth=0.8, alpha=0.7, zorder=1,
+    )
     axes[1].scatter(
         mag[kept], resid[kept],
         c="steelblue", s=35, edgecolors="k", linewidths=0.4, alpha=0.85,
-        label="good fit",
+        label="kept in fit (bars: measurement error)", zorder=2,
     )
-    if (~kept).any():
+    if rejected.any():
         axes[1].scatter(
-            mag[~kept], resid[~kept],
+            mag[rejected], resid[rejected],
             c="crimson", s=55, marker="x", linewidths=1.6,
-            label="rejected outlier",
+            label="rejected outlier", zorder=2,
         )
+    if unfitted.any():
+        axes[1].scatter(
+            mag[unfitted], resid[unfitted],
+            facecolors="none", edgecolors="dimgray", s=45, linewidths=1.2,
+            label="not fitted: no instrumental error", zorder=2,
+        )
+    # Framed on the residuals, not the bars: one star with a catalog error of
+    # nearly 2 mag otherwise squeezes every other residual into a strip.
+    spread = np.r_[resid, -(sigma or 0.0), sigma or 0.0]
+    margin = 0.1 * (spread.max() - spread.min()) or 0.1
+    axes[1].set_ylim(spread.min() - margin, spread.max() + margin)
     axes[1].set_xlabel("instrumental magnitude")
     axes[1].set_ylabel("residual (ref_mag − mag − zero_point)")
     axes[1].set_title("Zero-point residuals")
@@ -737,9 +792,12 @@ def plot_zero_point_solution(
     title = f"zero point = {m0:.4f}"
     if m0_error is not None:
         title += f" ± {m0_error:.4f}"
+    counts = f"{int(kept.sum())} kept, {int(rejected.sum())} rejected"
+    if unfitted.any():
+        counts += f", {int(unfitted.sum())} not fitted"
     title += (
         f" mag  |  {len(sources)} calibration stars "
-        f"({int(kept.sum())} kept, {int((~kept).sum())} rejected)  |  catalogs: {catalog_summary}"
+        f"({counts})  |  catalogs: {catalog_summary}"
     )
     fig.suptitle(title, fontsize=10, y=0.99)
     fig.tight_layout(rect=mentor_sidebar_rect())

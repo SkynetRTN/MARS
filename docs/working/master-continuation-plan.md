@@ -512,9 +512,34 @@ Evidence: [query backends](../../algorithms/query/),
   no scale or pointing it refuses, so astrometry.net stays the blind route.
   Missing data skips with its name; a miss with data present fails
   (`tests/test_wcs_solution.py`).
-- [ ] **Scientific plot content.** Dimensions and specification strings do
+- [x] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.
+  *Done 2026-10-30:* every supported plot was rendered from bundled or
+  recorded data and inspected, and `tests/test_plot_content.py` now compares
+  each saved figure's traces, markers, fits, error bars and axis units with
+  its input (M2's `test_pulsar_spectrum_semantics.py` covers both spectrum
+  modes). Six of its ten tests fail on the previous renderers.
+  - **Correct as drawn:** pulsar light curves, folded profiles and both
+    spectrum modes (B0329+54 peaks at 0.7146 s and 1.403 Hz, with the
+    false-alarm levels); the HR fit's members; the radio fits and SED.
+  - **Fixed:** the zero-point plot called stars the solver drops before
+    fitting (no instrumental error) "rejected outliers". On NGC 5128 B all six
+    non-survivors were such drops; the outlier loop rejected none. It also
+    drew no error bars for an error-weighted fit, so a kept star with a
+    1.88 mag catalog error looked like a 1.27 mag miss, and labelled the
+    fitted extra scatter "±1σ". The photometry overlay drew 1-based source
+    positions on a 0-based image, one pixel off (measured: 0.99, 1.03 px).
+    Radio plots gave flux no unit, and labelled a CSV's frequencies Hz in
+    whatever unit the file used; NED's columns are Hz and Jy (checked live).
+  - **HR isochrone, by maintainer decision (2026-10-30): drawn as points.**
+    It was one line through every phase. The local Girardi tracks carry
+    neither Astromancer's `iSkip` break nor a phase label, so the line jumped
+    straight from the AGB back to core-helium burning (a 3.1-3.5 mag step on
+    M67's tracks) and the thermally pulsing AGB fanned into a wedge. Across
+    the grid's 4,307 tracks no step size separates phase gaps from in-phase
+    steps, so the rows are drawn as points rather than joined by a guessed
+    break; the fit never used the line.
 - [x] **Console first launch.** An installed `mars` with no key or reachable
   model exits before its interface opens, telling the user to edit "the
   repository's .env", which an installed copy has neither of nor reads.
@@ -721,6 +746,10 @@ reachable now, what it does, and whether the release needs a change or caveat.
   sources, or growth-curve neighbor checks fail? Check pixel origins,
   matching tolerances, SNR/fit weights and the tentative ellipse-clipping
   arithmetic report. M1's crash containment is already closed.
+  *Found 2026-10-30 (M4 plot review):* six of NGC 5128 B's 35 calibration
+  stars leave the aperture kernel with `flux_err` exactly 0 at ordinary
+  fluxes (3,000-4,000 counts), so the zero-point solve drops them before
+  fitting. Why the error is zero is not yet known.
 - [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
