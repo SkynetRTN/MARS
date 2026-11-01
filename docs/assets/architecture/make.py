@@ -9,7 +9,7 @@ Four figures, each drawn once and rendered in three palettes:
   GitHub picks between the two from *its own* theme setting, which an SVG's
   internal media query cannot see.
 - ``print`` -- greyscale and set in CMU Serif, for documents outside the
-  repository; the results figure (Fig. 4) prints in its light colours. Written
+  repository; the overview (Fig. 4) prints in its light colours. Written
   only with ``--print DIR``, as SVG, PDF and a 600-dpi PNG, and never
   committed.
 
@@ -35,17 +35,12 @@ from __future__ import annotations
 
 import argparse
 import ast
-import base64
 import collections
-import contextlib
 import inspect
-import io
-import os
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -67,6 +62,7 @@ PALETTES = {
         "accent": "#0C6B78", "accentSoft": "#E1F0F1",
         "warn": "#A8500C", "warnSoft": "#F7EADF",
         "data": "#0C6B78", "data2": "#D9730D", "dots": "#5F7480", "mark": "#F5A623",
+        "skynet": "#3D5A80", "skynetSoft": "#E6ECF4",
     },
     "dark": {
         "bg": "#0D1117", "lane": "#151E23", "box": "#0D1117",
@@ -74,6 +70,7 @@ PALETTES = {
         "accent": "#4FBECA", "accentSoft": "#0E3238",
         "warn": "#DE9A52", "warnSoft": "#38281A",
         "data": "#4FBECA", "data2": "#F0A04B", "dots": "#9AAEB7", "mark": "#F5A623",
+        "skynet": "#8FB0D9", "skynetSoft": "#17222F",
     },
     # Grey lanes, white boxes, black type. Emphasis is carried by weight and
     # fill, never by colour alone.
@@ -83,6 +80,7 @@ PALETTES = {
         "accent": "#000000", "accentSoft": "#DCDCDC",
         "warn": "#000000", "warnSoft": "#F4F4F4",
         "data": "#000000", "data2": "#000000", "dots": "#555555", "mark": "#FFFFFF",
+        "skynet": "#000000", "skynetSoft": "#F4F4F4",
     },
 }
 
@@ -122,6 +120,12 @@ STYLE = """{faces}
   .pData2 {{ fill: none; stroke: {data2}; stroke-width: 2.4; stroke-linejoin: round; }}
   .pDot {{ fill: {dots}; fill-opacity: .75; }}
   .pMark {{ fill: none; stroke: {mark}; stroke-width: 1.6; }}
+  .boxS {{ fill: {skynetSoft}; stroke: {skynet}; stroke-width: 1.4; }}
+  .pill {{ fill: {box}; stroke: {accent}; stroke-width: 1.4; }}
+  .none {{ fill: none; stroke: none; }}
+  .ring {{ fill: {accentSoft}; stroke: none; }}
+  .icon {{ fill: {data2}; }}
+  .iconL {{ fill: none; stroke: {skynet}; stroke-width: 2.4; stroke-linecap: round; }}
 {text_classes}"""
 
 HEAD = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{pw}" height="{ph}" role="img" aria-labelledby="t d">
@@ -714,301 +718,167 @@ def fig3(m: dict) -> tuple[Canvas, str, str]:
     return c, title, alt
 
 
-# --- The science behind Fig. 4 -----------------------------------------------
+# --- Fig. 4 -- the agentic system and the workflow it serves ----------------
 #
-# Fig. 4's panels are MARS's own results. Each is computed here from data in
-# this repository, with no network: the zero point and the pulsar through
-# MARS's public tools, and the cluster through the fit the HR-diagram tools
-# call (the tools would fetch its literature values live). Two
-# values the tools keep internal -- the matched stars and the colour-magnitude
-# arrays the HR fit plots -- are observed on their way into code that already
-# receives them (:func:`_observe`); nothing MARS computes is changed here.
-
-OPTICAL_FRAME = "data/optical/ngc5128_galaxy_b_001.fits"
-OPTICAL_SOLVE = "ngc5128_b_002"  # the recorded Skynet solve of that frame
-OPTICAL_LABEL = "Centaurus A · PROMPT-5, CTIO"
-PULSAR_SOURCE = "psr_b0329_54"
-PULSAR_LABEL = "PSR B0329+54 · Green Bank 20 m"
-M67_FIXTURE = "tests/fixtures/hrdiagram_m67"
-# Cantat-Gaudin & Anders 2020, as tests/test_hrdiagram_local_grid.py uses them.
-M67_LITERATURE = {
-    "log_age": 9.63, "distance_kpc": 0.889, "ebv": 0.022580645257426847, "age_myr": 4265.8,
-}
+# One figure for a reader who sees only one: the scientific workflow on top,
+# the machinery that carries out each step underneath. Dashed outlines are
+# work to be built (Aim 2), as in Fig. 2; everything solid exists.
 
 
-@contextlib.contextmanager
-def _observe(module, name, calls):
-    """Record each call's arguments and result, and change nothing."""
+def _person(c: Canvas, x: float, y: float) -> None:
+    """A small person glyph centred on (x, y): the human-approval points."""
 
-    original = getattr(module, name)
-
-    def observed(*args, **kwargs):
-        result = original(*args, **kwargs)
-        calls.append((args, kwargs, result))
-        return result
-
-    setattr(module, name, observed)
-    try:
-        yield calls
-    finally:
-        setattr(module, name, original)
+    c.raw(f'<g class="icon"><circle cx="{x}" cy="{y - 7}" r="5"/>'
+          f'<path d="M {x - 9} {y + 10} Q {x - 9} {y} {x} {y} Q {x + 9} {y} {x + 9} {y + 10} Z"/></g>')
 
 
-def _optical() -> dict:
-    """A recorded PROMPT frame, calibrated offline against its APASS response."""
+def _telescope(c: Canvas, x: float, y: float) -> None:
+    """A small telescope glyph with its base at (x, y)."""
 
-    import numpy as np
-    from astropy.io import fits
-    from PIL import Image
-
-    from algorithms.fieldcal import field_cal
-    from tools import photometry
-
-    calls: list = []
-    # The extraction code prints a flux total to stdout; a figure build is not
-    # its audience.
-    with _observe(field_cal, "perform_field_calibration", calls), \
-            contextlib.redirect_stdout(io.StringIO()):
-        result = photometry.calibrate_zeropoint(
-            ROOT / OPTICAL_FRAME, catalog_fixture="full_response", compare_to=OPTICAL_SOLVE
-        )
-    if result.errors or not calls:
-        raise RuntimeError(f"calibrate_zeropoint failed: {result.errors}")
-    _, outcome = calls[-1][2]
-
-    data = fits.getdata(ROOT / OPTICAL_FRAME).astype(float)
-    ny, nx = data.shape
-    # Display only. A 2x2 mean halves the noise at the panel's size, and an
-    # asinh stretch shows the dust lane and the field stars at once.
-    binned = data[: ny // 2 * 2, : nx // 2 * 2].reshape(ny // 2, 2, nx // 2, 2).mean(axis=(1, 3))
-    lo, hi = np.nanpercentile(binned, [30, 99.8])
-    scaled = np.arcsinh(8 * np.clip((binned - lo) / (hi - lo), 0, 1)) / np.arcsinh(8)
-    image = Image.fromarray((np.flipud(scaled) * 255).round().astype(np.uint8))
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=85, optimize=True)
-    return {
-        "zero_point": result.zero_point,
-        "zero_point_error": outcome.zero_point_error_mag,
-        "delta_vs_skynet": result.delta_vs_skynet,
-        "stars": [(star.x, star.y) for star in outcome.phot_results],
-        "shape": (ny, nx),
-        "jpeg": base64.b64encode(buffer.getvalue()).decode("ascii"),
-    }
-
-
-def _pulsar() -> dict:
-    """A blind period search on a bundled scan, then a fold at what it found."""
-
-    import numpy as np
-    from astropy.table import Table
-
-    from tools import pulsar
-
-    scan = next(s for s in pulsar.list_pulsar_scans().scans if s.source_name == PULSAR_SOURCE)
-    gram = pulsar.compute_pulsar_periodogram(scan.path)
-    fold = pulsar.fold_pulsar_lightcurve(scan.path, gram.peak_period_s)
-    if gram.errors or fold.errors:
-        raise RuntimeError(f"pulsar chain failed: {gram.errors or fold.errors}")
-    profile = np.asarray(Table.read(fold.artifact.path)["sum"], dtype=float)
-    # Phase zero is arbitrary; centre the pulse for display.
-    profile = np.roll(profile, len(profile) // 2 - int(np.argmax(profile)))
-    floor = float(np.median(profile))
-    profile = (profile - floor) / (float(profile.max()) - floor)
-    return {
-        "measured": gram.peak_period_s,
-        "catalogue": scan.curated_period_s,
-        "fold_snr": gram.peak_fold_snr,
-        "profile": profile.tolist(),
-    }
-
-
-def _cluster() -> dict:
-    """M67's isochrone fit, offline, on the recorded members and grid tracks."""
-
-    import pandas as pd
-
-    from algorithms.hrdiagram_py import hrfit, isochrones
-    from tools import config
-
-    fixture = ROOT / M67_FIXTURE
-    members = pd.read_csv(fixture / "members.csv")
-    calls: list = []
-    saved = config.ISOCHRONE_DIR
-    config.ISOCHRONE_DIR = fixture
-    try:
-        with tempfile.TemporaryDirectory() as tmp, _observe(hrfit, "plot_cmd", calls):
-            report = isochrones.fit_and_compare(
-                members, M67_LITERATURE, "M67",
-                members_csv_path=Path(tmp) / "members.csv", out_png=Path(tmp) / "fit.png",
-                logage_half_width=0.4, max_error=0.2,
-            )
-    finally:
-        config.ISOCHRONE_DIR = saved
-    colour, mag, iso_colour, iso_mag = calls[-1][0][:4]
-    return {
-        "log_age": float(report["fitted"]["log_age"]),
-        "literature_log_age": M67_LITERATURE["log_age"],
-        "stars": int(report["fitted"]["n_stars_fitted"]),
-        "colour": [float(v) for v in colour], "mag": [float(v) for v in mag],
-        "iso_colour": [float(v) for v in iso_colour], "iso_mag": [float(v) for v in iso_mag],
-    }
-
-
-def science() -> dict:
-    import logging
-
-    # The pipelines narrate at INFO; a figure build needs only their failures.
-    for name in ("algorithms", "tools"):
-        logging.getLogger(name).setLevel(logging.ERROR)
-    return {"optical": _optical(), "pulsar": _pulsar(), "cluster": _cluster()}
-
-
-# --- Fig. 4 -- MARS at a glance: questions in, results out ---------------------
-
-
-def _ticks(lo: float, hi: float, step: float) -> list[float]:
-    import math
-
-    first = math.ceil(lo / step) * step
-    return [round(first + i * step, 6) for i in range(int((hi - first) / step) + 1)]
+    c.raw(f'<g class="iconL"><path d="M {x - 22} {y - 22} L {x + 16} {y - 40}"/>'
+          f'<path d="M {x - 4} {y - 31} L {x - 14} {y} M {x - 4} {y - 31} L {x + 6} {y}"/></g>'
+          f'<rect class="icon" x="{x - 6}" y="{y - 51}" width="34" height="11" rx="2" '
+          f'transform="rotate(-25 {x + 11} {y - 45})"/>')
 
 
 def fig4(m: dict) -> tuple[Canvas, str, str]:
     import math
 
-    sc = m["science"]
-    opt, psr, cl = sc["optical"], sc["pulsar"], sc["cluster"]
-    c = Canvas(1000, 540)
-    centres = (168, 500, 832)
-    half = 160  # half a panel's width
-    top = 208  # panel top
-    plot_top, plot_bottom = top + 40, top + 236
+    sw = m["sweep"]
+    c = Canvas(1000, 640)
 
-    questions = (
-        "“Calibrate this image’s photometry.”",
-        "“What is this pulsar’s period?”",
-        "“How old is the cluster M67?”",
-    )
-    chains = ("extract · match · calibrate", "periodogram · fold", "isochrone fit")
-    for cx, question, chain in zip(centres, questions, chains):
-        c.box(cx - 152, 10, 304, 46, [(question, "tq")], pad=8)
-        c.arrow((cx, 56), (cx, 92))
-        c.arrow((cx, 170), (cx, top), kind="lnA")
-        c.text(cx + 8, 194, chain, "ti", halo="halo", room=200)
+    # Two bands: what a researcher does, and what MARS does to carry it out.
+    c.raw(f'<rect class="lane" x="0" y="0" width="1000" height="268"/>')
+    c.raw(f'<rect class="lane" x="0" y="300" width="1000" height="340"/>')
+    c.text(20, 24, "The scientific workflow", "tl", room=300)
+    c.text(20, 324, "The MARS engine that carries out each step", "tl", room=500)
 
-    c.box(8, 92, 984, 78, [], kind="boxA")
-    c.text(32, 146, "MARS", "tH", room=150)
-    c.text(206, 124, f"{m['tools']} tested astronomy tools that a person or an AI agent can call",
-           "t", room=770)
-    c.text(206, 150, "the model chooses the steps; tested software computes every number",
-           "ti", room=770)
+    # --- Workflow: a closed loop, objective to evidence and back. -----------
+    row1, row2, h = 40, 178, 70
+    c.box(20, row1, 186, h, [("Research objective", "t"), ("in natural language", "ti"),
+                             ("“a period to 1%”", "ts")])
+    c.box(250, row1, 186, h, [("Measurement plan", "t"), ("cadence, precision,", "ts"),
+                              ("bands", "ts")], kind="boxD")
+    c.box(526, row1, 170, h, [("Observing request", "t"), ("instrument-agnostic", "ti")],
+          kind="boxD")
+    c.box(746, row1, 234, row2 + h - row1, [], kind="boxS")
+    c.text(863, row1 + 28, "Skynet 2", "tb", anchor="middle", room=200)
+    c.text(863, row1 + 52, "matches, schedules and", "ts", anchor="middle", room=214)
+    c.text(863, row1 + 72, "observes on its telescopes", "ts", anchor="middle", room=214)
+    _telescope(c, 863, row1 + 150)
+    c.box(526, row2, 170, h, [("Returned data", "t"), ("images, spectra, QA", "ts")],
+          kind="boxD")
+    c.box(250, row2, 186, h, [("Analysis", "t"), ("validated tools", "ti")])
+    c.box(20, row2, 186, h, [("Scientific adequacy", "t"), ("is the requirement met?", "ts")],
+          kind="boxD", pad=6)
 
-    headers = (OPTICAL_LABEL, PULSAR_LABEL, f"M67 · {cl['stars']} Gaia DR3 stars")
-    results = (
-        # delta_vs_skynet is MARS's zero point minus Skynet's recorded one.
-        f"zero point {opt['zero_point']:.3f} (Skynet {opt['zero_point'] - opt['delta_vs_skynet']:.3f})",
-        f"period {psr['measured']:.4f} s (catalogue {psr['catalogue']:.4f})",
-        f"age {10 ** cl['log_age'] / 1e9:.1f} Gyr (literature "
-        f"{10 ** cl['literature_log_age'] / 1e9:.1f})",
-    )
-    for cx, header, result in zip(centres, headers, results):
-        c.raw(f'<rect class="box" x="{cx - half}" y="{top}" width="{2 * half}" height="320" rx="2"/>')
-        c.text(cx, top + 26, header, "t", anchor="middle", room=2 * half - 12)
-        c.text(cx, top + 306, result, "tb", anchor="middle", room=2 * half - 12)
+    mid1, mid2 = row1 + h / 2, row2 + h / 2
+    c.arrow((206, mid1), (250, mid1))
+    c.arrow((436, mid1), (526, mid1))
+    _person(c, 481, mid1 - 22)
+    c.text(481, mid1 + 22, "approves", "tw", anchor="middle", halo="haloL", room=80)
+    c.arrow((696, mid1), (746, mid1))
+    c.arrow((746, mid2), (696, mid2))
+    c.arrow((526, mid2), (436, mid2))
+    c.arrow((250, mid2), (206, mid2))
+    c.arrow((113, row2), (113, row1 + h))
+    _person(c, 140, (row1 + h + row2) / 2 - 6)
+    c.text(156, (row1 + h + row2) / 2, "accepts the result,", "tw", room=170)
+    c.text(156, (row1 + h + row2) / 2 + 19, "or a follow-up", "tw", room=170)
 
-    # Optical: the frame, and the catalogue stars MARS matched in it.
-    ny, nx = opt["shape"]
-    ih = plot_bottom + 26 - plot_top
-    iw = ih * nx / ny
-    ix, iy = centres[0] - iw / 2, plot_top
-    c.raw(f'<image x="{ix:.1f}" y="{iy}" width="{iw:.1f}" height="{ih}" '
-          f'preserveAspectRatio="none" href="data:image/jpeg;base64,{opt["jpeg"]}"/>')
-    for x, y in opt["stars"]:
-        px = ix + (x + 0.5) / nx * iw
-        py = iy + (ny - 0.5 - y) / ny * ih
-        c.raw(f'<circle class="pMark" cx="{px:.1f}" cy="{py:.1f}" r="6"/>')
+    # --- Between the bands: how the two relate. ------------------------------
+    c.text(500, 290, "every step is a sequence of tool calls: the model chooses them, "
+           "tested software computes", "ti", anchor="middle", room=940)
 
-    # Radio: the folded pulse profile at the period the blind search found.
-    x0, x1 = centres[1] - 136, centres[1] + 136
-    y0, y1 = plot_top + 6, plot_bottom - 4
-    profile = psr["profile"]
-    points = " ".join(
-        f"{x0 + (i + 0.5) / len(profile) * (x1 - x0):.1f},"
-        f"{y1 - max(v, -0.06) * (y1 - y0) * 0.95:.1f}"
-        for i, v in enumerate(profile)
-    )
-    c.raw(f'<polyline class="pData" points="{points}"/>')
-    c.line((x0, y1 + 4), (x1, y1 + 4), kind="axis")
-    for t in (0.0, 0.5, 1.0):
-        tx = x0 + t * (x1 - x0)
-        c.line((tx, y1 + 4), (tx, y1 + 9), kind="axis")
-        c.text(tx, y1 + 26, f"{t:g}", "ts", anchor="middle")
-    c.text(centres[1], y1 + 44, "pulse phase", "ti", anchor="middle", room=200)
+    # --- Engine: model, loop, tools, record, evaluation. --------------------
+    c.box(20, 362, 200, 112, [("Language model", "t"), ("any provider", "ti"),
+                              ("Claude · GPT · Gemini", "ts"),
+                              ("or local (Ollama)", "ts")])
 
-    # Stars: M67's colour-magnitude diagram and the fitted isochrone.
-    colour, mag = cl["colour"], cl["mag"]
-    cx0, cx1 = min(colour) - 0.12, max(colour) + 0.12
-    my0, my1 = min(mag) - 0.5, max(mag) + 0.4  # bright at the top
-    px0, px1 = centres[2] - 108, centres[2] + 140
-    py0, py1 = plot_top, plot_bottom
-    sx = lambda v: px0 + (v - cx0) / (cx1 - cx0) * (px1 - px0)
-    sy = lambda v: py0 + (v - my0) / (my1 - my0) * (py1 - py0)
-    c.raw(f'<clipPath id="cmd"><rect x="{px0}" y="{py0}" width="{px1 - px0}" '
-          f'height="{py1 - py0}"/></clipPath>')
-    dots = "".join(f'<circle cx="{sx(u):.1f}" cy="{sy(v):.1f}" r="1.9"/>'
-                   for u, v in zip(colour, mag))
-    c.raw(f'<g class="pDot" clip-path="url(#cmd)">{dots}</g>')
-    # A track lists its phases in order, and a plain line joins the end of one
-    # to the start of the next across the diagram. Break it at those jumps --
-    # a step longer than a tenth of the panel -- and draw each phase alone.
-    pieces, piece, last = [], [], None
-    for u, v in zip(cl["iso_colour"], cl["iso_mag"]):
-        if last and math.hypot((u - last[0]) / (cx1 - cx0), (v - last[1]) / (my1 - my0)) > 0.1:
-            pieces.append(piece)
-            piece = []
-        piece.append(f"{sx(u):.1f},{sy(v):.1f}")
-        last = (u, v)
-    pieces.append(piece)
-    for piece in pieces:
-        if len(piece) > 1:
-            c.raw(f'<polyline class="pData2" clip-path="url(#cmd)" points="{" ".join(piece)}"/>')
-    c.line((px0, py0), (px0, py1), (px1, py1), kind="axis")
-    for t in _ticks(cx0, cx1, 0.5):
-        c.line((sx(t), py1), (sx(t), py1 + 5), kind="axis")
-        c.text(sx(t), py1 + 22, f"{t:g}", "ts", anchor="middle")
-    for t in _ticks(my0, my1, 2.0):
-        c.line((px0 - 5, sy(t)), (px0, sy(t)), kind="axis")
-        c.text(px0 - 9, sy(t) + 5, f"{t:g}", "ts", anchor="end")
-    c.text((px0 + px1) / 2, py1 + 40, "colour BP − RP", "ti", anchor="middle", room=200)
-    c.raw(f'<text class="ti" x="{px0 - 34}" y="{(py0 + py1) / 2}" text-anchor="middle" '
-          f'transform="rotate(-90 {px0 - 34} {(py0 + py1) / 2})">absolute G mag</text>')
-    c._use("absolute G mag", "ti")
+    # The agent loop: five steps on a ring, one pass per tool call. The
+    # bottom of the ring is left free for the record it writes.
+    cx, cy, r = 430, 450, 100
+    c.raw(f'<circle class="ring" cx="{cx}" cy="{cy}" r="{r}"/>')
+    steps = (("propose", 198), ("validate", 270), ("approve", 342),
+             ("execute", 414), ("observe", 486))
+    centre = {}
+    for label, angle in steps:
+        a = math.radians(angle)
+        px, py = cx + r * math.cos(a), cy + r * math.sin(a)
+        centre[label] = (px, py)
+        c.box(round(px - 42), round(py - 13), 84, 26, [(label, "ts")], kind="pill", pad=4)
+    for _, angle in steps:
+        a0, a1 = math.radians(angle + 25), math.radians(angle + 47)
+        x0, y0 = cx + r * math.cos(a0), cy + r * math.sin(a0)
+        x1, y1 = cx + r * math.cos(a1), cy + r * math.sin(a1)
+        c.raw(f'<path class="lnA" d="M {x0:.1f} {y0:.1f} A {r} {r} 0 0 1 {x1:.1f} {y1:.1f}" '
+              f'marker-end="url(#aA)"/>')
+    c.text(cx, cy - 6, "Agent loop", "tb", anchor="middle", room=120)
+    c.text(cx, cy + 16, f"at most {m['max_turns']} turns,", "ti", anchor="middle", room=140)
+    c.text(cx, cy + 35, "interruptible", "ti", anchor="middle", room=120)
 
-    title = "MARS at a glance: three questions, three results computed from real data"
+    # Model <-> loop: the model proposes each call and reads what came back.
+    py = round(centre["propose"][1])
+    c.arrow((220, py), (round(centre["propose"][0]) - 42, py))
+    ox, oy = round(centre["observe"][0]) - 42, round(centre["observe"][1])
+    c.arrow((ox, oy), (170, oy), (170, 474))
+    c.text(256, oy - 8, "results", "ti", anchor="middle", halo="haloL", room=80)
+
+    # Loop <-> tools.
+    c.raw('<rect class="box" x="620" y="350" width="360" height="206" rx="2"/>')
+    c.text(800, 376, f"{m['tools']} validated astronomy tools", "tb", anchor="middle", room=340)
+    c.box(636, 388, 328, 30, [("planning: Skynet 2 capabilities", "ts")], kind="boxD", pad=6)
+    c.box(636, 426, 328, 46, [("analysis: astrometry, photometry,", "ts"),
+                              ("time series, HR diagrams, radio", "ts")], pad=6)
+    c.box(636, 480, 328, 46, [("catalogs and archives: SIMBAD,", "ts"),
+                              ("VizieR, MAST, ADS and more", "ts")], pad=6)
+    c.text(800, 546, "also served over MCP to other AI agents", "ti", anchor="middle", room=340)
+    ex, ey = round(centre["execute"][0]) + 42, round(centre["execute"][1])
+    c.arrow((ex, ey), (620, ey), both=True, kind="lnA")
+
+    # Record and evaluation: every step is kept, and recorded runs are graded.
+    c.arrow((cx, cy + r), (cx, 578))
+    c.box(300, 578, 260, 52, [("Session record", "t"), ("every call, argument, decision", "ts")])
+    c.box(600, 578, 380, 52, [
+        ("Evaluation harness", "t"),
+        (f"{sw['sessions']} sessions, {sw['backends']} models, deterministic grading", "ts")],
+        pad=6)
+    c.arrow((560, 604), (600, 604))
+
+    # Legend.
+    c.raw('<rect class="boxD" x="20" y="584" width="24" height="13"/>')
+    c.text(52, 596, "built in Aim 2", "ts", room=180)
+    c.raw('<rect class="box" x="20" y="608" width="24" height="13"/>')
+    c.text(52, 620, "exists", "ts", room=180)
+
+    title = ("MARS architecture and scientific workflow: research objectives to "
+             "human-approved actions")
     alt = (
-        "Three questions flow into MARS, a set of "
-        f"{m['tools']} tested astronomy tools that a person or an AI agent can call, and "
-        "three results flow out, each computed by MARS from real data in its repository. "
-        "Optical: a PROMPT-5 image of Centaurus A with the catalogue stars MARS matched, "
-        f"giving a zero point of {opt['zero_point']:.3f} ± {opt['zero_point_error']:.3f} "
-        f"mag against Skynet's {opt['zero_point'] - opt['delta_vs_skynet']:.3f}. Radio: the folded pulse profile of PSR B0329+54 from the Green Bank 20 m "
-        f"telescope, at a blind-search period of {psr['measured']:.4f} s against the "
-        f"catalogue's {psr['catalogue']:.4f} s. Stars: the colour-magnitude diagram of "
-        f"{cl['stars']} Gaia DR3 members of M67 with the fitted isochrone, an age of "
-        f"{10 ** cl['log_age'] / 1e9:.1f} Gyr against the literature's "
-        f"{10 ** cl['literature_log_age'] / 1e9:.1f} Gyr."
+        "Two bands. Top, the scientific workflow as a loop: a research objective in natural "
+        "language becomes a measurement plan; a person approves it; MARS sends an "
+        "instrument-agnostic observing request to Skynet 2, which matches, schedules and "
+        "observes on its telescopes; the returned data are analysed with validated tools and "
+        "checked for scientific adequacy; a person accepts the result or a follow-up, which "
+        "starts the loop again. Bottom, the MARS engine that carries out each step: a "
+        "language model from any provider proposes tool calls to a bounded, interruptible "
+        "agent loop that proposes, validates, approves, executes and observes each call; "
+        f"{m['tools']} validated astronomy tools for planning, analysis and catalogs and "
+        "archives, also served over MCP to other AI agents; a session record "
+        f"of every call; and an evaluation harness of {sw['sessions']} recorded sessions over "
+        f"{sw['backends']} models with deterministic grading. Dashed outlines are to be built "
+        "in Aim 2."
     )
     return c, title, alt
 
 
 # (file stem, drawing function, palette of the --print export). The diagrams
-# print in greyscale; the results figure keeps its colour, because its data
-# are what it shows.
+# print in greyscale; the overview keeps its colour, because it is meant to
+# stand alone.
 FIGURES = [
     ("fig-1-mars-as-built", fig1, "print"),
     ("fig-2-aim-2-proposed", fig2, "print"),
     ("fig-3-validation", fig3, "print"),
-    ("fig-4-mars-science", fig4, "light"),
+    ("fig-4-mars-workflow", fig4, "light"),
 ]
 
 
@@ -1118,11 +988,7 @@ def main() -> None:
     if not METRICS.available:
         print(f"warning: CMU Serif not found under {FONT_DIR}; "
               "labels not fitted, face not embedded", file=sys.stderr)
-    # Fig. 4 runs MARS's tools, which write artifacts; keep them out of the tree.
-    with tempfile.TemporaryDirectory() as artifacts:
-        os.environ["MARS_ARTIFACT_DIR"] = artifacts
-        m = measure()
-        m["science"] = science()
+    m = measure()
     failed = False
     for name, draw, print_palette in FIGURES:
         canvas, title, alt = draw(m)
