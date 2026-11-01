@@ -31,7 +31,7 @@ own tests against independent references (`tests/README.md`).
 
 The three figures below are generated, and every count printed in them is
 read from the checkout when they are drawn (see the end of this document).
-§1 and §5 describe MARS as it is; §6 is a proposal.
+§1 and §5 describe MARS as it is; §6 is proposed work.
 
 ---
 
@@ -193,15 +193,15 @@ repository, so those rates are historical: see
 establish. Their 95% intervals overlap for the top two backends, which the
 suite therefore does not separate.
 
-The dashed box is not built. It is the proposal in §6 carried into
+The dashed box is not built. It is §6's proposed work carried into
 evaluation.
 
 ---
 
 ## 6. Proposed: from scientific intent to evidence
 
-> **Proposed, not built.** This figure was drawn for a funding proposal; "Aim
-> 2" and "Aim 3" are that proposal's aims. Nothing drawn dashed exists in this
+> **Proposed, not built.** "Aim 2" is the work this section describes and
+> "Aim 3" its validation (§5). Nothing drawn dashed exists in this
 > repository.
 
 <picture>
@@ -209,7 +209,7 @@ evaluation.
   <img src="assets/architecture/fig-2-aim-2-proposed-light.svg" alt="A proposed workflow in four lanes: user, MARS, Skynet 2 and facility. A scientific objective becomes measurement requirements and a plan in MARS, which the user reviews and approves before MARS sends an observation request through a constrained interface; Skynet 2 matches, schedules and executes it at a telescope and returns data and quality assessment, which MARS analyses and checks for scientific adequacy before the user interprets the result. Dashed outlines are to be built; solid outlines exist." width="1000">
 </picture>
 
-The proposal extends MARS from analysing data to helping plan the
+The proposed work extends MARS from analysing data to helping plan the
 observations that produce it, through Skynet 2. Its division of
 responsibility is the point of the figure:
 

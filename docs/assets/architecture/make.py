@@ -8,9 +8,9 @@ Three figures, each drawn once and rendered in three palettes:
   element, not as one file with an internal ``prefers-color-scheme`` query:
   GitHub picks between the two from *its own* theme setting, which an SVG's
   internal media query cannot see.
-- ``print`` -- greyscale and set in CMU Serif, to sit beside the Skynet 2
-  pathway figure in a proposal. Written only with ``--print DIR``, as SVG,
-  PDF and a 600-dpi PNG, and never committed.
+- ``print`` -- greyscale and set in CMU Serif, for documents outside the
+  repository. Written only with ``--print DIR``, as SVG, PDF and a 600-dpi
+  PNG, and never committed.
 
 Every count a figure prints is measured from this checkout when it is drawn
 (:func:`measure`), never typed in, so a re-run picks up any change that moves
@@ -67,8 +67,8 @@ PALETTES = {
         "accent": "#4FBECA", "accentSoft": "#0E3238",
         "warn": "#DE9A52", "warnSoft": "#38281A",
     },
-    # Matches the proposal's Figure 6: grey lanes, white boxes, black type.
-    # Emphasis is carried by weight and fill, never by colour alone.
+    # Grey lanes, white boxes, black type. Emphasis is carried by weight and
+    # fill, never by colour alone.
     "print": {
         "bg": "#FFFFFF", "lane": "#EDEDED", "box": "#FFFFFF",
         "ink": "#000000", "ink2": "#333333", "rule": "#8A8A8A", "line": "#3F3F3F",
@@ -493,8 +493,8 @@ def fig1(m: dict) -> tuple[Canvas, str, str]:
 #
 # Proposed work, drawn as proposed: a dashed outline is to be built under the
 # award; a solid one exists in MARS today or is Skynet 2, funded by NSF ATI.
-# The Skynet 2 boxes are the proposal's own Figure 6, collapsed into one lane,
-# under its own names.
+# The Skynet 2 boxes are Skynet 2's own control and data pathway, collapsed
+# into one lane, under its own names.
 
 
 def fig2(m: dict) -> tuple[Canvas, str, str]:
