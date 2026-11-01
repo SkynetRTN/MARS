@@ -22,12 +22,19 @@
   .hdA { fill: #0C6B78; }
   .halo { paint-order: stroke; stroke: #FFFFFF; stroke-width: 5; stroke-linejoin: round; }
   .haloL { paint-order: stroke; stroke: #F1F5F4; stroke-width: 5; stroke-linejoin: round; }
+  .axis { fill: none; stroke: #46565D; stroke-width: 1; }
+  .pData { fill: none; stroke: #0C6B78; stroke-width: 2; stroke-linejoin: round; }
+  .pData2 { fill: none; stroke: #D9730D; stroke-width: 2.4; stroke-linejoin: round; }
+  .pDot { fill: #5F7480; fill-opacity: .75; }
+  .pMark { fill: none; stroke: #F5A623; stroke-width: 1.6; }
   .t { font-size: 17.5px;  fill: #0F1619; }
   .tb { font-size: 17.5px; font-weight: bold; fill: #0F1619; }
   .ts { font-size: 16px;  fill: #46565D; }
   .ti { font-size: 16px; font-style: italic; fill: #46565D; }
   .tl { font-size: 17px; font-style: italic; fill: #46565D; }
-  .tw { font-size: 16px; font-style: italic; fill: #A8500C; }</style>
+  .tw { font-size: 16px; font-style: italic; fill: #A8500C; }
+  .tq { font-size: 18px; font-style: italic; fill: #0F1619; }
+  .tH { font-size: 40px; font-weight: bold; fill: #0C6B78; }</style>
 <defs>
   <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,1 L10,5 L0,9 z"/></marker>
   <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hdA" d="M0,1 L10,5 L0,9 z"/></marker>
