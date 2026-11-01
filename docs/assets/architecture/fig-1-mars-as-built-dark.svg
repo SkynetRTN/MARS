@@ -33,6 +33,12 @@
   .ring { fill: #0E3238; stroke: none; }
   .icon { fill: #F0A04B; }
   .iconL { fill: none; stroke: #8FB0D9; stroke-width: 2.4; stroke-linecap: round; }
+  .lnR { fill: none; stroke: #8EA0A6; stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .act { fill: #0E3238; stroke: #4FBECA; stroke-width: 1; }
+  .frag { fill: none; stroke: #8EA0A6; stroke-width: 1; }
+  .fragTab { fill: #151E23; stroke: #8EA0A6; stroke-width: 1; }
+  .card { fill: #0D1117; stroke: #3A4D55; stroke-width: 1.2; }
+  .cardHead { fill: #151E23; stroke: #3A4D55; stroke-width: 1.2; }
   .t { font-size: 17.5px;  fill: #E7EDEB; }
   .tb { font-size: 17.5px; font-weight: bold; fill: #E7EDEB; }
   .ts { font-size: 16px;  fill: #A8B8BD; }
@@ -40,7 +46,9 @@
   .tl { font-size: 17px; font-style: italic; fill: #A8B8BD; }
   .tw { font-size: 16px; font-style: italic; fill: #DE9A52; }
   .tq { font-size: 18px; font-style: italic; fill: #E7EDEB; }
-  .tH { font-size: 40px; font-weight: bold; fill: #4FBECA; }</style>
+  .tH { font-size: 40px; font-weight: bold; fill: #4FBECA; }
+  .tm { font-size: 15px; font-family: "MARS Figure Mono", "CMU Typewriter Text", ui-monospace, Menlo, Consolas, monospace; fill: #E7EDEB; }
+  .tmA { font-size: 15px; font-family: "MARS Figure Mono", "CMU Typewriter Text", ui-monospace, Menlo, Consolas, monospace; fill: #4FBECA; }</style>
 <defs>
   <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,1 L10,5 L0,9 z"/></marker>
   <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hdA" d="M0,1 L10,5 L0,9 z"/></marker>

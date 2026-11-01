@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the architecture figures for ``docs/architecture-layers.md``.
 
-Four figures, each drawn once and rendered in three palettes:
+Five figures, each drawn once and rendered in three palettes:
 
 - ``light`` and ``dark`` -- the committed SVG pairs. The repository renders
   theme-aware assets as a ``-light``/``-dark`` pair behind a ``<picture>``
@@ -94,8 +94,14 @@ TEXT = {
     "tw": ("cmunti.otf", 16, "font-style: italic;", "warn"),
     "tq": ("cmunti.otf", 18, "font-style: italic;", "ink"),
     "tH": ("cmunbx.otf", 40, "font-weight: bold;", "accent"),
+    # Code: identifiers as the source spells them.
+    "tm": ("cmuntt.otf", 15, 'font-family: "MARS Figure Mono", "CMU Typewriter Text", '
+           'ui-monospace, Menlo, Consolas, monospace;', "ink"),
+    "tmA": ("cmuntt.otf", 15, 'font-family: "MARS Figure Mono", "CMU Typewriter Text", '
+            'ui-monospace, Menlo, Consolas, monospace;', "accent"),
 }
-LINE_HEIGHT = {"t": 21, "tb": 21, "ts": 19, "ti": 19, "tl": 20, "tw": 19, "tq": 22, "tH": 44}
+LINE_HEIGHT = {"t": 21, "tb": 21, "ts": 19, "ti": 19, "tl": 20, "tw": 19, "tq": 22, "tH": 44,
+               "tm": 18, "tmA": 18}
 
 STYLE = """{faces}
   text {{ font-family: {serif}; }}
@@ -126,6 +132,12 @@ STYLE = """{faces}
   .ring {{ fill: {accentSoft}; stroke: none; }}
   .icon {{ fill: {data2}; }}
   .iconL {{ fill: none; stroke: {skynet}; stroke-width: 2.4; stroke-linecap: round; }}
+  .lnR {{ fill: none; stroke: {line}; stroke-width: 1.2; stroke-dasharray: 5 3; }}
+  .act {{ fill: {accentSoft}; stroke: {accent}; stroke-width: 1; }}
+  .frag {{ fill: none; stroke: {line}; stroke-width: 1; }}
+  .fragTab {{ fill: {lane}; stroke: {line}; stroke-width: 1; }}
+  .card {{ fill: {box}; stroke: {rule}; stroke-width: 1.2; }}
+  .cardHead {{ fill: {lane}; stroke: {rule}; stroke-width: 1.2; }}
 {text_classes}"""
 
 HEAD = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{pw}" height="{ph}" role="img" aria-labelledby="t d">
@@ -191,6 +203,34 @@ def _sweep() -> dict[str, object]:
     }
 
 
+def _engine() -> dict[str, object]:
+    """The agent engine's own vocabulary, as the code declares it."""
+
+    import dataclasses
+    import typing
+
+    from tools.agent import approval, events, policy
+    from tools.llm import base, types
+    from tools.models import ToolResult
+    from tools.runtime.limits import CallLimits
+
+    limits = CallLimits()
+    return {
+        "faults": typing.get_args(types.FaultType),
+        "stop_reasons": typing.get_args(types.StopReason),
+        "dialects": typing.get_args(base.SchemaDialect),
+        "risk_tags": typing.get_args(policy.RiskTag),
+        "decisions": tuple(d.value for d in approval.Decision),
+        "statuses": typing.get_args(ToolResult.model_fields["status"].annotation),
+        "events": tuple(t.__name__ for t in typing.get_args(events.Event)),
+        "http_timeout_s": base.BaseHTTPBackend._timeout_s,
+        "call_timeout_s": limits.timeout_s,
+        "call_memory_gib": limits.memory_bytes // 1024**3,
+        "call_reply_mib": limits.reply_bytes // 1024**2,
+        "call_download_mib": limits.download_bytes // 1024**2,
+    }
+
+
 def measure() -> dict[str, object]:
     """Every number the figures print, read from the checkout."""
 
@@ -223,6 +263,7 @@ def measure() -> dict[str, object]:
             r"python: \[([^\]]*)\]", (ROOT / ".github" / "workflows" / "ci.yml").read_text()
         ).group(1).replace('"', "").split(", "),
         "sweep": _sweep(),
+        "engine": _engine(),
     }
 
 
@@ -871,6 +912,164 @@ def fig4(m: dict) -> tuple[Canvas, str, str]:
     return c, title, alt
 
 
+# --- Fig. 5 -- the agent engine, one turn at a time --------------------------
+#
+# The engine on its own, drawn the way a design document would: a sequence
+# diagram of one turn, with the calls named as the code names them, and the
+# vocabularies the loop speaks in beside it. Every identifier and enumeration
+# is read from the code (:func:`_engine`); nothing here is proposed work.
+
+
+def _wrap_words(words, width_chars: int, sep: str = "  ") -> list[str]:
+    lines, line = [], ""
+    for word in words:
+        candidate = f"{line}{sep}{word}" if line else word
+        if len(candidate) > width_chars and line:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return lines
+
+
+def fig5(m: dict) -> tuple[Canvas, str, str]:
+    e = m["engine"]
+    c = Canvas(1000, 688)
+
+    # --- The sequence diagram. ------------------------------------------------
+    X = {"caller": 44, "loop": 172, "checks": 348, "tools": 440, "record": 530, "model": 622}
+    heads = (("caller", "Caller", 76), ("loop", "Agent loop", 108), ("checks", "Checks", 84),
+             ("tools", "Tools", 84), ("record", "Record", 84), ("model", "Model port", 96))
+    top, bottom = 44, 566
+    for key, label, w in heads:
+        x = X[key]
+        c.line((x, top), (x, bottom), kind="lnD")
+        c.box(x - w / 2, 12, w, 32, [(label, "t")], pad=4)
+    # The loop's activation bar: it holds control for the whole session.
+    c.raw(f'<rect class="act" x="{X["loop"] - 5}" y="62" width="10" height="{548 - 62}"/>')
+
+    def frame(x0, y0, x1, y1, guard):
+        c.raw(f'<rect class="frag" x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}"/>')
+        c.raw(f'<path class="fragTab" d="M {x0} {y0} H {x0 + 44} V {y0 + 14} L {x0 + 38} {y0 + 20} '
+              f'H {x0} Z"/>')
+        c.text(x0 + 6, y0 + 15, "loop", "tm", room=40)
+        # The guard sits clear of the loop's activation bar.
+        c.text(X["loop"] + 14, y0 + 15, f"[{guard}]", "ti", halo="halo", room=x1 - X["loop"] - 20)
+
+    def call(y, a, b, label, accent=False, back=False):
+        xa, xb = X[a] + (5 if a == "loop" else 0), X[b] - (5 if b == "loop" else 0)
+        if xb < xa:
+            xa, xb = X[a] - (5 if a == "loop" else 0), X[b] + (5 if b == "loop" else 0)
+        kind = "lnR" if back else ("lnA" if accent else "ln")
+        c.arrow((xa, y), (xb, y), kind=kind)
+        left = min(xa, xb) + 6
+        c.text(left, y - 6, label, "tmA" if accent else "tm", halo="halo",
+               room=abs(xb - xa) - 8)
+
+    def self_call(y, label, accent=False):
+        x = X["loop"] + 5
+        c.arrow((x, y - 8), (x + 24, y - 8), (x + 24, y + 6), (x, y + 6),
+                kind="lnA" if accent else "ln")
+        c.text(x + 32, y + 4, label, "tmA" if accent else "tm", halo="halo", room=420)
+
+    def note(x, y, text, room):
+        c.text(x, y, text, "ti", halo="halo", room=room)
+
+    call(76, "caller", "loop", "run_session(…)")
+    frame(20, 88, 660, 496, f"each turn, at most {m['max_turns']}")
+    self_call(124, "should_stop()  pending_input()")
+    call(154, "loop", "model", "complete(messages, tools, system, max_tokens)")
+    call(182, "model", "loop", "ModelResponse(stop_reason, tool_calls, faults)", back=True)
+    frame(108, 198, 652, 462, "each proposed tool call")
+    call(234, "loop", "checks", "validate_tool_call()", accent=True)
+    call(260, "checks", "loop", "fault | None", back=True)
+    note(X["checks"] + 8, 258, "a fault: error result, tool not called", 300)
+    call(288, "loop", "checks", "approver(proposed)", accent=True)
+    call(314, "checks", "loop", "Decision", back=True)
+    note(X["checks"] + 8, 312, "deny or stop: refused result", 300)
+    self_call(342, "make_cache_key(name, args): hit reuses", accent=True)
+    call(372, "loop", "tools", "functions[name](**args)", accent=True)
+    call(398, "tools", "loop", "ToolResult", back=True)
+    call(426, "loop", "record", "record_tool_call()  save()", accent=True)
+    call(450, "loop", "caller", "yield", back=True)
+    self_call(480, "append ToolResultBlock(is_error)")
+    call(518, "loop", "record", "save(outcome)")
+    call(542, "loop", "caller", "yield", back=True)
+    c.text(X["caller"] - 24, 562, "SessionFinished.outcome: " + " | ".join(
+        ("end_turn", "max_turns", "interrupted", "error")), "tm", halo="halo", room=620)
+
+    # The event stream every caller reads.
+    c.text(20, 596, f"yielded to the caller as it happens ({len(e['events'])} event types):",
+           "ti", room=620)
+    for i, line in enumerate(_wrap_words(e["events"], 78)):
+        c.text(20, 616 + i * 18, line, "tm", room=640)
+
+    # --- The vocabularies, as specification cards. ----------------------------
+    cards = (
+        ("Model port", [
+            ("complete(messages, tools, system)", "tm"),
+            ("dialects: " + ", ".join(e["dialects"][:1]) + ",", "tm"),
+            (", ".join(e["dialects"][1:]), "tm"),
+            # The OpenAI, Gemini and Ollama adapters; Anthropic's goes through its SDK.
+            (f"httpx: TLS on, no redirects, {e['http_timeout_s']:g} s timeout", "ts"),
+        ]),
+        ("Protocol faults", [(line, "tm") for line in _wrap_words(e["faults"], 37)]),
+        ("Approval", [
+            ("risk tags: " + " | ".join(e["risk_tags"]), "tm"),
+            ("Decision: " + " | ".join(e["decisions"]), "tm"),
+            ("headless default: deny any tagged call", "ts"),
+        ]),
+        ("ToolResult", [
+            ("status: " + "|".join(e["statuses"]), "tm"),
+            ("count, preview[], columns", "tm"),
+            ("artifacts[ArtifactRef]", "tm"),
+            ("warnings[], errors[ToolError]", "tm"),
+        ]),
+        ("MCP path: mars-mcp over stdio", [
+            ("additionalProperties: false", "tm"),
+            ("run_call(): owned worker per call", "tm"),
+            (f"limits: {e['call_timeout_s']:g} s, {e['call_memory_gib']} GiB, "
+             f"{e['call_reply_mib']} MiB reply", "tm"),
+        ]),
+        ("Evaluation: mars-bench", [
+            (f"{m['local']} live | {m['remote']} replayed | {m['mixed']} per call", "tm"),
+            ("graders: answer, efficiency,", "tm"),
+            ("trajectory, protocol", "tm"),
+            ("no model grades a model; keys.lock", "ts"),
+        ]),
+    )
+    y = 12
+    for title, lines in cards:
+        h = 30 + 18 * len(lines) + 8
+        c.raw(f'<rect class="card" x="680" y="{y}" width="312" height="{h}" rx="2"/>')
+        c.raw(f'<rect class="cardHead" x="680" y="{y}" width="312" height="26" rx="2"/>')
+        c.text(690, y + 19, title, "tb", room=292)
+        for i, (text, cls) in enumerate(lines):
+            c.text(690, y + 46 + 18 * i, text, cls, room=296)
+        y += h + 8
+    if y - 8 > c.height - 4:
+        c.overflows.append(f"cards end at {y - 8}, below the canvas ({c.height})")
+
+    title = "The MARS agent engine: one turn, as the code runs it"
+    alt = (
+        "A sequence diagram of one agent turn across six lifelines: caller, agent loop, "
+        "checks, tools, record and model. The caller calls run_session; for each turn, at "
+        f"most {m['max_turns']}, the loop checks should_stop and pending_input, calls "
+        "complete on the model port and receives a ModelResponse; for each proposed tool "
+        "call it calls validate_tool_call, then the approver, then make_cache_key, then the "
+        "tool function, which returns a ToolResult; it records the call and saves the "
+        "manifest, and appends a ToolResultBlock for the next turn. The session ends with "
+        "SessionFinished, whose outcome is end_turn, max_turns, interrupted or error. "
+        f"Beside it, specification cards list the model port's schema dialects, the "
+        f"{len(e['faults'])} protocol fault types, the approval risk tags and decisions, "
+        "the ToolResult envelope, the MCP path's strict validation and owned worker per "
+        "call, and the benchmark's tool plane and graders."
+    )
+    return c, title, alt
+
+
 # (file stem, drawing function, palette of the --print export). The diagrams
 # print in greyscale; the overview keeps its colour, because it is meant to
 # stand alone.
@@ -879,6 +1078,7 @@ FIGURES = [
     ("fig-2-aim-2-proposed", fig2, "print"),
     ("fig-3-validation", fig3, "print"),
     ("fig-4-mars-workflow", fig4, "light"),
+    ("fig-5-agent-engine", fig5, "light"),
 ]
 
 
@@ -886,12 +1086,14 @@ FIGURES = [
 
 
 # The three CMU Serif faces the figures use: (file, CSS weight, CSS style).
-FACES = (
-    ("cmunrm.otf", "normal", "normal"),
-    ("cmunbx.otf", "bold", "normal"),
-    ("cmunti.otf", "normal", "italic"),
-)
+# The CMU faces the figures use: (file, embedded family, CSS weight, style).
 EMBEDDED = "MARS Figure Serif"
+FACES = (
+    ("cmunrm.otf", EMBEDDED, "normal", "normal"),
+    ("cmunbx.otf", EMBEDDED, "bold", "normal"),
+    ("cmunti.otf", EMBEDDED, "normal", "italic"),
+    ("cmuntt.otf", "MARS Figure Mono", "normal", "normal"),
+)
 
 
 def embedded_faces(canvas: Canvas) -> str:
@@ -917,7 +1119,7 @@ def embedded_faces(canvas: Canvas) -> str:
 
     logging.getLogger("fontTools").setLevel(logging.ERROR)
     rules = []
-    for filename, weight, style in FACES:
+    for filename, family, weight, style in FACES:
         chars = "".join(sorted(canvas.used.get(filename, ())))
         if not chars:
             continue
@@ -933,7 +1135,7 @@ def embedded_faces(canvas: Canvas) -> str:
         font.save(buffer)
         data = base64.b64encode(buffer.getvalue()).decode("ascii")
         rules.append(
-            f'\n  @font-face {{ font-family: "{EMBEDDED}"; font-weight: {weight}; '
+            f'\n  @font-face {{ font-family: "{family}"; font-weight: {weight}; '
             f'font-style: {style}; src: url(data:font/woff;base64,{data}) format("woff"); }}'
         )
     return "".join(rules)
