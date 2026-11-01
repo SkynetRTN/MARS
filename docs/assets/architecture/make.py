@@ -1,498 +1,835 @@
 #!/usr/bin/env python3
-"""Generate the architecture-layer figures for ``docs/architecture-layers.md``.
+"""Generate the architecture figures for ``docs/architecture-layers.md``.
 
-Twelve files, two per figure: the repository renders theme-aware assets as a
-``-light``/``-dark`` pair behind a ``<picture>`` element, not as one file with an internal ``prefers-color-scheme`` query.
-GitHub picks between the two from *its own* theme setting, which an SVG's
-internal media query cannot see -- it follows the operating system instead,
-so a reader on GitHub's dark theme with a light OS would get black text on a
-dark plate.
+Three figures, each drawn once and rendered in three palettes:
 
-One geometry, two palettes. Each figure's body is written once, in terms of
-the classes :data:`STYLE` defines; only the colour literals differ between the
-two renders. Re-run after editing a figure:
+- ``light`` and ``dark`` -- the committed SVG pairs. The repository renders
+  theme-aware assets as a ``-light``/``-dark`` pair behind a ``<picture>``
+  element, not as one file with an internal ``prefers-color-scheme`` query:
+  GitHub picks between the two from *its own* theme setting, which an SVG's
+  internal media query cannot see.
+- ``print`` -- greyscale and set in CMU Serif, to sit beside the Skynet 2
+  pathway figure in a proposal. Written only with ``--print DIR``, as SVG,
+  PDF and a 600-dpi PNG, and never committed.
 
-    python3 docs/assets/architecture/make.py
+Every count a figure prints is measured from this checkout when it is drawn
+(:func:`measure`), never typed in, so a re-run picks up any change that moves
+one. Measuring imports the registry, so run it in the project environment:
 
-Line counts quoted inside the figures come from ``wc -l`` over tracked
-sources at dev @ aa93c87. Re-measure before changing them.
+    uv run python docs/assets/architecture/make.py
+    uv run python docs/assets/architecture/make.py --print ~/figures
+
+Labels are fitted against CMU Serif's own metrics, and the run fails if one
+overflows its box or uses a glyph the face lacks; each SVG embeds a subset of
+the face (:func:`embedded_faces`). Without the CMU fonts installed the check
+and the embedding are skipped with a warning. The ``print`` exports need
+``rsvg-convert`` (librsvg) on PATH.
+
+The figures are sized for a 6.5-inch column: one SVG unit is
+6.5 in / 1000 = 0.468 pt in print, so the smallest label (16 units) prints
+at 7.5 pt. Cut detail before shrinking type below that.
 """
 
 from __future__ import annotations
 
+import argparse
+import ast
+import collections
+import inspect
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 OUT = Path(__file__).resolve().parent
+ROOT = OUT.parents[2]
 
-SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace'
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+PRINT_WIDTH_IN = 6.5
+FONT_DIR = Path("/usr/share/fonts/cm-unicode")
+SERIF = '"CMU Serif", "Latin Modern Roman", "Computer Modern Serif", Georgia, "Times New Roman", serif'
 
 PALETTES = {
     "light": {
-        "bg": "#FFFFFF", "surface2": "#F5F8F7",
-        "ink": "#0F1619", "ink2": "#38474E", "muted": "#6B7C84",
-        "rule": "#CBD5D3",
-        "accent": "#0C6B78", "accentSoft": "#D9EDEF",
-        "warn": "#A8500C", "warnSoft": "#F6E6D7",
+        "bg": "#FFFFFF", "lane": "#F1F5F4", "box": "#FFFFFF",
+        "ink": "#0F1619", "ink2": "#46565D", "rule": "#AEBBB9", "line": "#56656B",
+        "accent": "#0C6B78", "accentSoft": "#E1F0F1",
+        "warn": "#A8500C", "warnSoft": "#F7EADF",
     },
     "dark": {
-        "bg": "#0D1117", "surface2": "#151F24",
-        "ink": "#E7EDEB", "ink2": "#B3C2C7", "muted": "#7E9097",
-        "rule": "#25343B",
+        "bg": "#0D1117", "lane": "#151E23", "box": "#0D1117",
+        "ink": "#E7EDEB", "ink2": "#A8B8BD", "rule": "#3A4D55", "line": "#8EA0A6",
         "accent": "#4FBECA", "accentSoft": "#0E3238",
         "warn": "#DE9A52", "warnSoft": "#38281A",
     },
+    # Matches the proposal's Figure 6: grey lanes, white boxes, black type.
+    # Emphasis is carried by weight and fill, never by colour alone.
+    "print": {
+        "bg": "#FFFFFF", "lane": "#EDEDED", "box": "#FFFFFF",
+        "ink": "#000000", "ink2": "#333333", "rule": "#8A8A8A", "line": "#3F3F3F",
+        "accent": "#000000", "accentSoft": "#DCDCDC",
+        "warn": "#000000", "warnSoft": "#F4F4F4",
+    },
 }
 
-STYLE = """
-  svg {{ color: {ink}; }}
-  text {{ font-family: {sans}; fill: {ink}; }}
-  .d-box {{ fill: {surface2}; stroke: {rule}; stroke-width: 1.4; }}
-  .d-boxA {{ fill: {accentSoft}; stroke: {accent}; stroke-width: 1.4; }}
-  .d-boxW {{ fill: {warnSoft}; stroke: {warn}; stroke-width: 1.4; }}
-  .d-frame {{ fill: none; stroke: {rule}; stroke-width: 1.4; opacity: .6; }}
-  .d-panel {{ fill: none; stroke: {rule}; stroke-width: 1.2; stroke-dasharray: 5 4; }}
-  .d-plane {{ fill: {accentSoft}; stroke: none; opacity: .5; }}
-  .d-line {{ stroke: {ink}; stroke-width: 1.4; fill: none; opacity: .55; }}
-  .d-lineA {{ stroke: {accent}; stroke-width: 1.6; fill: none; }}
-  .d-lineW {{ stroke: {warn}; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }}
-  .d-lineW.solid {{ stroke-dasharray: 0; }}
-  .d-rule {{ stroke: {ink}; stroke-width: 1; fill: none; opacity: .25; }}
-  .mk {{ fill: {ink}; opacity: .55; }}
-  .mkA {{ fill: {accent}; }}
-  .t {{ font-size: 13px; font-weight: 500; }}
-  .ts {{ font-family: {mono}; font-size: 10.5px; fill: {muted}; }}
-  .tm {{ font-family: {mono}; font-size: 12px; font-weight: 500; }}
-  .tl {{ font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: {muted}; }}
-  .tla {{ font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: {accent}; }}
-  .tlw {{ font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: {warn}; }}
-  .tn {{ font-family: {mono}; font-size: 10.5px; fill: {muted}; }}
-  .tn.ink {{ fill: {ink}; }}
-  .tn.ink2 {{ fill: {ink2}; }}
-  .tn.accent {{ fill: {accent}; }}
-  .tn.warn {{ fill: {warn}; }}
-  .mid {{ text-anchor: middle; }}
-  .end {{ text-anchor: end; }}
-"""
+# Text classes: (font file, size in SVG units, CSS weight/style, colour key).
+TEXT = {
+    "t": ("cmunrm.otf", 17.5, "", "ink"),
+    "tb": ("cmunbx.otf", 17.5, "font-weight: bold;", "ink"),
+    "ts": ("cmunrm.otf", 16, "", "ink2"),
+    "ti": ("cmunti.otf", 16, "font-style: italic;", "ink2"),
+    "tl": ("cmunti.otf", 17, "font-style: italic;", "ink2"),
+    "tw": ("cmunti.otf", 16, "font-style: italic;", "warn"),
+}
+LINE_HEIGHT = {"t": 21, "tb": 21, "ts": 19, "ti": 19, "tl": 20, "tw": 19}
 
-HEAD = """<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" \
-viewBox="0 0 {w} {h}" role="img" aria-label="{alt}">
-  <title>{alt}</title>
-  <style>{style}  </style>
-  <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" \
-orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
-    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" \
-orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
-  </defs>
-  <rect width="{w}" height="{h}" fill="{bg}"/>
-"""
+STYLE = """{faces}
+  text {{ font-family: {serif}; }}
+  .bg {{ fill: {bg}; }}
+  .lane {{ fill: {lane}; }}
+  .box {{ fill: {box}; stroke: {rule}; stroke-width: 1.2; }}
+  .boxA {{ fill: {accentSoft}; stroke: {accent}; stroke-width: 1.4; }}
+  .boxD {{ fill: {box}; stroke: {line}; stroke-width: 1.3; stroke-dasharray: 5 3; }}
+  .boxW {{ fill: {warnSoft}; stroke: {warn}; stroke-width: 1.4; }}
+  .boxAD {{ fill: {accentSoft}; stroke: {accent}; stroke-width: 1.4; stroke-dasharray: 5 3; }}
+  .frame {{ fill: none; stroke: {accent}; stroke-width: 1.4; }}
+  .ln {{ fill: none; stroke: {line}; stroke-width: 1.3; }}
+  .lnA {{ fill: none; stroke: {accent}; stroke-width: 1.6; }}
+  .lnD {{ fill: none; stroke: {line}; stroke-width: 1.2; stroke-dasharray: 4 3; }}
+  .lnW {{ fill: none; stroke: {warn}; stroke-width: 1.8; stroke-dasharray: 9 5; }}
+  .hd {{ fill: {line}; }}
+  .hdA {{ fill: {accent}; }}
+  .halo {{ paint-order: stroke; stroke: {bg}; stroke-width: 5; stroke-linejoin: round; }}
+  .haloL {{ paint-order: stroke; stroke: {lane}; stroke-width: 5; stroke-linejoin: round; }}
+{text_classes}"""
 
-
-# --- Fig. 1 -- the five strata ------------------------------------------
-
-FIG1_ALT = (
-    "Five layers: two harnesses -- the mars console and mars-bench -- drive "
-    "run_session, which branches left into the model port and its four adapters "
-    "and right into the tool registry, the tool modules and the algorithms. The "
-    "right branch runs with no model, no key and no socket. The adapters never "
-    "import the registry."
-)
-FIG1 = """
-  <rect class="d-plane" x="514" y="230" width="336" height="282"/>
-
-  <text class="tl mid" x="450" y="16">THE HARNESSES &#8212; TWO CONSUMERS, ONE LOOP</text>
-
-  <rect class="d-box" x="70" y="28" width="300" height="62"/>
-  <text class="t" x="86" y="52">mars &#8212; the console</text>
-  <text class="ts" x="86" y="72">tools/tui/ &#183; 2,944 lines &#183; Textual</text>
-
-  <rect class="d-box" x="530" y="28" width="300" height="62"/>
-  <text class="t" x="546" y="52">mars-bench &#8212; the benchmark</text>
-  <text class="ts" x="546" y="72">tools/bench/ &#183; 7,383 lines</text>
-
-  <line class="d-line" x1="220" y1="90" x2="320" y2="140" marker-end="url(#a)"/>
-  <line class="d-line" x1="680" y1="90" x2="580" y2="140" marker-end="url(#a)"/>
-  <text class="tn mid" x="200" y="124">a human in the loop</text>
-  <text class="tn mid" x="700" y="124">a recorder in the loop</text>
-
-  <text class="tla mid" x="450" y="132">THE TURN-TAKING LAYER</text>
-  <rect class="d-boxA" x="270" y="142" width="360" height="62"/>
-  <text class="tm mid" x="450" y="170">run_session()</text>
-  <text class="ts mid" x="450" y="189">tools/agent/ &#183; 1,206 lines &#8212; engine.py is 547 of them</text>
-
-  <line class="d-line" x1="350" y1="204" x2="240" y2="244" marker-end="url(#a)"/>
-  <line class="d-line" x1="550" y1="204" x2="660" y2="244" marker-end="url(#a)"/>
-  <text class="tn end" x="330" y="234">complete()</text>
-  <text class="tn" x="572" y="234">schemas + callables</text>
-
-  <rect class="d-box" x="70" y="246" width="300" height="62"/>
-  <text class="t" x="86" y="270">tools/llm/ &#8212; the model port</text>
-  <text class="ts" x="86" y="290">2,568 lines &#183; provider-neutral</text>
-
-  <rect class="d-box" x="530" y="246" width="300" height="62"/>
-  <text class="t" x="546" y="270">tools/registry.py &#8212; the tool surface</text>
-  <text class="ts" x="546" y="290">1,623 lines &#183; 55 schemas &#8596; 55 callables</text>
-
-  <line class="d-lineW" x1="374" y1="277" x2="526" y2="277"/>
-  <line class="d-lineW solid" x1="442" y1="269" x2="458" y2="285"/>
-  <line class="d-lineW solid" x1="458" y1="269" x2="442" y2="285"/>
-  <text class="tn warn mid" x="450" y="301">never imports</text>
-
-  <line class="d-line" x1="220" y1="308" x2="220" y2="342" marker-end="url(#a)"/>
-  <rect class="d-box" x="70" y="344" width="300" height="52"/>
-  <text class="t" x="86" y="366">anthropic &#183; openai &#183; ollama &#183; gemini</text>
-  <text class="ts" x="86" y="384">+ replay, test-only &#183; raw httpx, zero new deps</text>
-
-  <line class="d-line" x1="680" y1="308" x2="680" y2="342" marker-end="url(#a)"/>
-  <rect class="d-box" x="530" y="344" width="300" height="52"/>
-  <text class="t" x="546" y="366">tools/*.py &#8212; 21 tool modules</text>
-  <text class="ts" x="546" y="384">10,606 lines &#183; thin, typed, stateless</text>
-
-  <line class="d-line" x1="680" y1="396" x2="680" y2="426" marker-end="url(#a)"/>
-  <rect class="d-box" x="530" y="428" width="300" height="62"/>
-  <text class="t" x="546" y="452">algorithms/ &#8212; the science</text>
-  <text class="ts" x="546" y="472">20,578 lines &#183; Python</text>
-
-  <text class="tla mid" x="682" y="506">NO MODEL &#183; NO KEY &#183; NO SOCKET</text>
+HEAD = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{pw}" height="{ph}" role="img" aria-labelledby="t d">
+<title id="t">{title}</title>
+<desc id="d">{alt}</desc>
+<style>{style}</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,1 L10,5 L0,9 z"/></marker>
+  <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hdA" d="M0,1 L10,5 L0,9 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="{w}" height="{h}"/>
 """
 
 
-# --- Fig. 2 -- one turn --------------------------------------------------
-
-FIG2_ALT = (
-    "The control flow of one turn in run_session. Shaded as harness: drain "
-    "pending input, the stop check, fault recording, argument validation, "
-    "approval, the interrupt check, the cache lookup and the manifest save. "
-    "Unshaded as turn-taking: the model call, the stop-reason branch, the tool "
-    "dispatch, result serialisation and appending results to the conversation. "
-    "Eight of the fourteen steps are harness steps."
-)
-FIG2 = """
-  <rect class="d-box" x="180" y="6" width="13" height="13"/>
-  <text class="tn" x="200" y="17">turn-taking &#8212; the irreducible part</text>
-  <rect class="d-boxA" x="450" y="6" width="13" height="13"/>
-  <text class="tn" x="470" y="17">harness &#8212; what this loop adds</text>
-
-  <rect class="d-boxA" x="180" y="40" width="500" height="42"/>
-  <text class="t" x="196" y="59">drain pending_input()</text>
-  <text class="ts" x="196" y="75">a note typed mid-run is merged into the trailing user message</text>
-
-  <line class="d-line" x1="430" y1="82" x2="430" y2="94" marker-end="url(#a)"/>
-  <rect class="d-boxA" x="180" y="96" width="500" height="38"/>
-  <text class="t" x="196" y="114">should_stop()</text>
-  <text class="ts" x="196" y="128">&#8594; SessionFinished(interrupted)</text>
-
-  <line class="d-line" x1="430" y1="134" x2="430" y2="146" marker-end="url(#a)"/>
-  <rect class="d-box" x="180" y="148" width="500" height="54"/>
-  <text class="tm" x="196" y="172">backend.complete(messages, tools, system, max_tokens)</text>
-  <text class="ts" x="196" y="191">streams into on_text / on_thinking &#8212; reasoning is never merged into text</text>
-
-  <line class="d-line" x1="430" y1="202" x2="430" y2="214" marker-end="url(#a)"/>
-  <rect class="d-boxA" x="180" y="216" width="500" height="38"/>
-  <text class="t" x="196" y="234">response.faults &#8594; ProtocolFault</text>
-  <text class="ts" x="196" y="248">a max_tokens stop carrying tool calls means truncated arguments</text>
-
-  <line class="d-line" x1="430" y1="254" x2="430" y2="266" marker-end="url(#a)"/>
-  <rect class="d-box" x="180" y="268" width="500" height="42"/>
-  <text class="t" x="196" y="294">stop_reason?</text>
-
-  <line class="d-line" x1="680" y1="289" x2="736" y2="289" marker-end="url(#a)"/>
-  <rect class="d-box" x="740" y="266" width="128" height="46"/>
-  <text class="tn ink mid" x="804" y="285">end_turn &#8594;</text>
-  <text class="tn ink mid" x="804" y="300">SessionFinished</text>
-
-  <line class="d-line" x1="430" y1="310" x2="430" y2="328" marker-end="url(#a)"/>
-  <text class="tn" x="440" y="324">tool_use</text>
-
-  <rect class="d-panel" x="180" y="330" width="500" height="254"/>
-  <text class="ts" x="196" y="350">for each call in response.tool_calls:</text>
-
-  <rect class="d-boxA" x="196" y="358" width="468" height="26"/>
-  <text class="tn ink" x="208" y="375">validate_tool_call(...) &#8212; a bad argument never reaches the function</text>
-  <rect class="d-boxA" x="196" y="388" width="468" height="26"/>
-  <text class="tn ink" x="208" y="405">approver(proposed) &#8212; DENY returns an error result instead</text>
-  <rect class="d-boxA" x="196" y="418" width="468" height="26"/>
-  <text class="tn ink" x="208" y="435">should_stop() &#8212; an interrupted call still answers its tool_use</text>
-  <rect class="d-boxA" x="196" y="448" width="468" height="26"/>
-  <text class="tn ink" x="208" y="465">make_cache_key(name, args) &#8212; a repeat costs no second call</text>
-  <rect class="d-box" x="196" y="478" width="468" height="26"/>
-  <text class="tn ink" x="208" y="495">functions[name](**arguments)</text>
-  <rect class="d-box" x="196" y="508" width="468" height="26"/>
-  <text class="tn ink" x="208" y="525">model_dump() &#8594; json &#8594; ToolResultBlock</text>
-  <rect class="d-boxA" x="196" y="538" width="468" height="26"/>
-  <text class="tn ink" x="208" y="555">session.save() &#8212; after every single call</text>
-
-  <line class="d-line" x1="430" y1="584" x2="430" y2="602" marker-end="url(#a)"/>
-  <rect class="d-box" x="180" y="604" width="500" height="42"/>
-  <text class="t" x="196" y="630">messages.append(user, blocks = every tool_result)</text>
-
-  <path class="d-line" d="M 430 646 L 430 668 L 130 668 L 130 61 L 176 61" marker-end="url(#a)"/>
-  <text class="tn" x="14" y="336">next turn &#8212;</text>
-  <text class="tn" x="14" y="350">max_turns = 20</text>
-"""
+# --- Measurement ------------------------------------------------------------
 
 
-# --- Fig. 3 -- what one tool call crosses --------------------------------
+def _count_markers(tag: str) -> int:
+    """``EXTRACTED:``/``PORTED:`` markers under ``algorithms/``.
 
-FIG3_ALT = (
-    "One tool call descends through five layers: the model emits JSON, the loop "
-    "validates approves and caches it, the registry maps the name to a callable, "
-    "the tool module normalises inputs, and the algorithm computes. The result "
-    "climbs back as a typed model, a dict, JSON text and a tool_result block. "
-    "Nothing survives the call."
-)
-FIG3 = """
-  <text class="tl end" x="138" y="62">THE MODEL</text>
-  <rect class="d-box" x="150" y="30" width="580" height="54"/>
-  <text class="tn ink" x="166" y="54">{"name": "compute_pulsar_periodogram",</text>
-  <text class="tn ink" x="166" y="70"> "arguments": {"path": "...", "start": 0.2, "stop": 3.0, "steps": 20000}}</text>
+    Most are ``# EXTRACTED: was <symbol>`` comments, some sit in docstrings;
+    a backticked mention (a header saying changes are "marked `EXTRACTED:`")
+    is a reference to the convention, not a marker.
+    """
 
-  <text class="tl end" x="138" y="146">THE LOOP</text>
-  <rect class="d-boxA" x="150" y="114" width="580" height="54"/>
-  <text class="t" x="166" y="138">validate &#183; approve &#183; cache &#183; dispatch</text>
-  <text class="ts" x="166" y="156">tools/agent/engine.py &#8212; nothing below runs if any gate refuses</text>
-
-  <text class="tl end" x="138" y="230">THE REGISTRY</text>
-  <rect class="d-box" x="150" y="198" width="580" height="54"/>
-  <text class="tm" x="166" y="222">TOOL_FUNCTIONS[name]</text>
-  <text class="ts" x="166" y="240">a dict of 55 names to 55 plain callables &#8212; no framework in between</text>
-
-  <text class="tl end" x="138" y="314">THE TOOL</text>
-  <rect class="d-box" x="150" y="282" width="580" height="54"/>
-  <text class="t" x="166" y="306">tools/pulsar.py</text>
-  <text class="ts" x="166" y="324">resolve the scan path, bound the frequency grid, build settings objects</text>
-
-  <text class="tl end" x="138" y="398">THE ALGORITHM</text>
-  <rect class="d-box" x="150" y="366" width="580" height="54"/>
-  <text class="t" x="166" y="390">algorithms/pulsar/periodogram.py</text>
-  <text class="ts" x="166" y="408">Lomb&#8211;Scargle over the scan &#8212; numpy, scipy, astropy</text>
-
-  <line class="d-line" x1="250" y1="84" x2="250" y2="112" marker-end="url(#a)"/>
-  <text class="tn" x="262" y="103">JSON arguments</text>
-  <line class="d-line" x1="250" y1="168" x2="250" y2="196" marker-end="url(#a)"/>
-  <text class="tn" x="262" y="187">a validated dict</text>
-  <line class="d-line" x1="250" y1="252" x2="250" y2="280" marker-end="url(#a)"/>
-  <text class="tn" x="262" y="271">**kwargs</text>
-  <line class="d-line" x1="250" y1="336" x2="250" y2="364" marker-end="url(#a)"/>
-  <text class="tn" x="262" y="355">ndarray, settings</text>
-
-  <line class="d-lineA" x1="640" y1="364" x2="640" y2="338" marker-end="url(#aa)"/>
-  <text class="tn accent end" x="626" y="355">peaks, snr, warnings</text>
-  <line class="d-lineA" x1="640" y1="280" x2="640" y2="254" marker-end="url(#aa)"/>
-  <text class="tn accent end" x="626" y="271">PeriodogramResult</text>
-  <line class="d-lineA" x1="640" y1="196" x2="640" y2="170" marker-end="url(#aa)"/>
-  <text class="tn accent end" x="626" y="187">model_dump() &#8594; dict</text>
-  <line class="d-lineA" x1="640" y1="112" x2="640" y2="86" marker-end="url(#aa)"/>
-  <text class="tn accent end" x="626" y="103">a tool_result block</text>
-
-  <text class="tn warn mid" x="440" y="452">Nothing survives the call. The next one re-opens the file.</text>
-"""
+    pattern = re.compile(rf"(?<!`)\b{tag}:")
+    return sum(
+        len(pattern.findall(path.read_text(encoding="utf-8")))
+        for path in (ROOT / "algorithms").rglob("*.py")
+    )
 
 
-# --- Fig. 4 -- the tool plane -------------------------------------------
-
-FIG4_ALT = (
-    "The 55 registered tools split into 26 local, 22 remote and 7 mixed. Local "
-    "tools run live because replaying a periodogram would let the task author "
-    "rather than the data decide what the model got wrong. Remote tools are "
-    "always replayed because every one opens a socket. Mixed tools are decided "
-    "per call from the arguments. The classification is closed: an unclassified "
-    "tool raises."
-)
-FIG4 = """
-  <text class="tl" x="40" y="34">55 REGISTERED TOOLS, OVER 21 MODULES</text>
-
-  <rect class="d-box" x="40" y="46" width="378" height="46"/>
-  <text class="t mid" x="229" y="75">26 local</text>
-  <rect class="d-boxA" x="418" y="46" width="320" height="46"/>
-  <text class="t mid" x="578" y="75">22 remote</text>
-  <rect class="d-boxW" x="738" y="46" width="102" height="46"/>
-  <text class="t mid" x="789" y="75">7</text>
-
-  <line class="d-line" x1="229" y1="92" x2="165" y2="118" marker-end="url(#a)"/>
-  <line class="d-line" x1="578" y1="92" x2="440" y2="118" marker-end="url(#a)"/>
-  <line class="d-line" x1="789" y1="92" x2="715" y2="118" marker-end="url(#a)"/>
-
-  <text class="tl" x="40" y="140">CLASS L &#8212; RUN LIVE</text>
-  <text class="tn ink2" x="40" y="162">Local and deterministic: they read the</text>
-  <text class="tn ink2" x="40" y="178">bundled fixture tree and compute.</text>
-  <text class="tn ink2" x="40" y="200">Replaying a periodogram would let the</text>
-  <text class="tn ink2" x="40" y="216">task author, not the data, decide</text>
-  <text class="tn ink2" x="40" y="232">whether a model's mistake is visible.</text>
-
-  <text class="tla" x="315" y="140">CLASS R &#8212; ALWAYS REPLAYED</text>
-  <text class="tn ink2" x="315" y="162">Every one opens a socket, so none is</text>
-  <text class="tn ink2" x="315" y="178">ever executed inside a benchmark run;</text>
-  <text class="tn ink2" x="315" y="200">each is replayed from a recorded</text>
-  <text class="tn ink2" x="315" y="216">fixture. Includes one that merely looks</text>
-  <text class="tn ink2" x="315" y="232">local: get_literature_cluster_params.</text>
-
-  <text class="tlw" x="590" y="140">CLASS M &#8212; DECIDED PER CALL</text>
-  <text class="tn ink2" x="590" y="162">Local code behind a network-capable</text>
-  <text class="tn ink2" x="590" y="178">argument. A task must pin the offline</text>
-  <text class="tn ink2" x="590" y="200">path in the call's own arguments</text>
-  <text class="tn ink2" x="590" y="216">(use_field_cal=false; catalog_fixture</text>
-  <text class="tn ink2" x="590" y="232">with compare_to) or it is replayed.</text>
-
-  <line class="d-rule" x1="40" y1="256" x2="840" y2="256"/>
-  <text class="tn ink2" x="40" y="278">The plane is closed: an unclassified tool raises rather than defaulting, and a test asserts it covers the whole registry.</text>
-  <text class="tn ink2" x="40" y="294">A new registry tool must be classified in the same commit that adds it &#8212; otherwise the first new remote tool runs live, inside a run that believes it is offline.</text>
-"""
+def _count_test_functions() -> int:
+    count = 0
+    for path in (ROOT / "tests").rglob("test_*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        count += sum(
+            1
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+        )
+    return count
 
 
-# --- Fig. 5 -- wrapper vs. gated loop ------------------------------------
+def _sweep() -> dict[str, object]:
+    """The recorded benchmark sweep, from its generated report."""
 
-FIG5_ALT = (
-    "Two panels side by side. On the left a plain turn-taking wrapper: the "
-    "conversation, the model call, dispatch, append the result, repeat, with "
-    "nothing between the steps. On the right MARS's loop: the same four steps "
-    "with seven gates sitting on the wires between them -- drain notes, the stop "
-    "check, protocol faults, validate arguments, approve, cache, and save the "
-    "manifest."
-)
-FIG5 = """
-  <text class="tl" x="30" y="20">A TURN-TAKING WRAPPER</text>
-  <text class="tn" x="30" y="38">about 80 lines &#183; unbounded, ungated</text>
-  <rect class="d-frame" x="30" y="48" width="380" height="392"/>
+    import json
 
-  <rect class="d-box" x="110" y="60" width="240" height="44"/>
-  <text class="t mid" x="230" y="87">the conversation</text>
-  <rect class="d-box" x="110" y="150" width="240" height="44"/>
-  <text class="t mid" x="230" y="177">model.complete()</text>
-  <rect class="d-box" x="110" y="280" width="240" height="44"/>
-  <text class="t mid" x="230" y="307">dispatch the call</text>
-  <rect class="d-box" x="110" y="370" width="240" height="44"/>
-  <text class="t mid" x="230" y="397">append the result</text>
-
-  <line class="d-line" x1="230" y1="104" x2="230" y2="148" marker-end="url(#a)"/>
-  <line class="d-line" x1="230" y1="194" x2="230" y2="278" marker-end="url(#a)"/>
-  <line class="d-line" x1="230" y1="324" x2="230" y2="368" marker-end="url(#a)"/>
-  <path class="d-line" d="M 110 392 L 60 392 L 60 82 L 106 82" marker-end="url(#a)"/>
-
-  <text class="tla" x="470" y="20">MARS'S LOOP &#8212; engine.py, 547 LINES</text>
-  <text class="tn" x="470" y="38">bounded at max_turns = 20 &#183; every call recorded</text>
-  <rect class="d-frame" x="470" y="48" width="380" height="392"/>
-
-  <rect class="d-box" x="550" y="60" width="240" height="44"/>
-  <text class="t mid" x="670" y="87">the conversation</text>
-  <rect class="d-box" x="550" y="150" width="240" height="44"/>
-  <text class="t mid" x="670" y="177">model.complete()</text>
-  <rect class="d-box" x="550" y="280" width="240" height="44"/>
-  <text class="t mid" x="670" y="307">dispatch the call</text>
-  <rect class="d-box" x="550" y="370" width="240" height="44"/>
-  <text class="t mid" x="670" y="397">append the result</text>
-
-  <line class="d-line" x1="670" y1="104" x2="670" y2="148" marker-end="url(#a)"/>
-  <line class="d-line" x1="670" y1="194" x2="670" y2="278" marker-end="url(#a)"/>
-  <line class="d-line" x1="670" y1="324" x2="670" y2="368" marker-end="url(#a)"/>
-  <path class="d-line" d="M 550 392 L 500 392 L 500 82 L 546 82" marker-end="url(#a)"/>
-
-  <rect class="d-boxA" x="600" y="106" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="119">drain notes</text>
-  <rect class="d-boxA" x="600" y="128" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="141">stop?</text>
-
-  <rect class="d-boxA" x="600" y="198" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="211">protocol faults</text>
-  <rect class="d-boxA" x="600" y="220" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="233">validate arguments</text>
-  <rect class="d-boxA" x="600" y="242" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="255">approve</text>
-  <rect class="d-boxA" x="600" y="264" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="277">cache</text>
-
-  <rect class="d-boxA" x="600" y="336" width="140" height="18" rx="9"/>
-  <text class="tn ink mid" x="670" y="349">save the manifest</text>
-"""
+    report = json.loads((ROOT / "docs" / "benchmarking" / "report.json").read_text())
+    header = report["header"]
+    repeats = {run["repeats"] for run in header["runs"]}
+    assert len(repeats) == 1, f"mixed repeat counts: {repeats}"
+    board = sorted(report["boards"]["correctness"], key=lambda row: row["rank"])
+    return {
+        "sessions": header["sessions"],
+        "tasks": len({key.split("\x00")[0] for key in report["by_task"]}),
+        "repeats": repeats.pop(),
+        "backends": len(report["matrix"]),
+        "correct": [round(100 * row["value"]) for row in board],
+        "intervals": [[round(100 * bound) for bound in row["interval"]] for row in board],
+    }
 
 
-# --- Fig. 6 -- two harnesses, three seams --------------------------------
+def measure() -> dict[str, object]:
+    """Every number the figures print, read from the checkout."""
 
-FIG6_ALT = (
-    "run_session in the centre with three parameter seams: backend, approver and "
-    "tool_functions. The console fills them with a live switchable backend, a "
-    "policy approver backed by a modal a person answers, and all 55 tools live. "
-    "The benchmark fills them with the model under test or a replay backend, "
-    "auto-approve, and a tool plane of 26 live, 22 replayed and 7 decided per "
-    "call."
-)
-FIG6 = """
-  <text class="tl" x="30" y="52">MARS &#8212; THE CONSOLE</text>
-  <text class="tn" x="30" y="72">a human in the loop</text>
+    from tools import downloads
+    from tools.agent.engine import run_session
+    from tools.bench.plane import TOOL_CLASSES
+    from tools.mcp.groups import GROUPS, tools_in_groups
+    from tools.registry import TOOL_SCHEMAS
 
-  <text class="tl end" x="870" y="52">MARS-BENCH</text>
-  <text class="tn end" x="870" y="72">a recorder in the loop</text>
+    classes = collections.Counter(TOOL_CLASSES.values())
+    groups = {group.name: len(tools_in_groups([group.name])) for group in GROUPS}
+    assert sum(groups.values()) == len(TOOL_SCHEMAS), "groups must partition the registry"
+    return {
+        "tools": len(TOOL_SCHEMAS),
+        "groups": groups,
+        "local": classes["local"],
+        "remote": classes["remote"],
+        "mixed": classes["mixed"],
+        "max_turns": inspect.signature(run_session).parameters["max_turns"].default,
+        "extracted": _count_markers("EXTRACTED"),
+        "ported": _count_markers("PORTED"),
+        "tests": _count_test_functions(),
+        "frames": len(list((ROOT / "data" / "optical").glob("*.fits"))),
+        "scans": len(list((ROOT / "data" / "pulsar").glob("*.cal.txt"))),
+        "max_products": downloads.MAX_PRODUCTS,
+        "max_mib": downloads.MAX_DOWNLOAD_BYTES // 1024**2,
+        "max_seconds": downloads.MAX_TRANSFER_SECONDS,
+        "solves": sum(1 for p in (ROOT / "data" / "fieldcal" / "zp_solutions").iterdir() if p.is_dir()),
+        "ci_pythons": re.search(
+            r"python: \[([^\]]*)\]", (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        ).group(1).replace('"', "").split(", "),
+        "sweep": _sweep(),
+    }
 
-  <rect class="d-boxA" x="330" y="90" width="240" height="252"/>
-  <text class="tm mid" x="450" y="120">run_session()</text>
-  <text class="ts mid" x="450" y="136">unchanged in both</text>
 
-  <rect class="d-box" x="346" y="148" width="208" height="40"/>
-  <text class="tn ink mid" x="450" y="173">backend =</text>
-  <rect class="d-box" x="346" y="200" width="208" height="40"/>
-  <text class="tn ink mid" x="450" y="225">approver =</text>
-  <rect class="d-box" x="346" y="252" width="208" height="40"/>
-  <text class="tn ink mid" x="450" y="277">tool_functions =</text>
-  <text class="ts mid" x="450" y="318">+ on_delta &#183; pending_input</text>
-  <text class="ts mid" x="450" y="333">&#183; should_stop</text>
+# --- Drawing ----------------------------------------------------------------
 
-  <rect class="d-box" x="30" y="148" width="270" height="40"/>
-  <text class="tn ink" x="42" y="165">build_backend(spec)</text>
-  <text class="ts" x="42" y="180">live; switchable mid-session with /backend</text>
-  <rect class="d-box" x="30" y="200" width="270" height="40"/>
-  <text class="tn ink" x="42" y="217">policy_approver(SessionPolicy)</text>
-  <text class="ts" x="42" y="232">a modal &#8212; a person answers it</text>
-  <rect class="d-box" x="30" y="252" width="270" height="40"/>
-  <text class="tn ink" x="42" y="269">the default 55</text>
-  <text class="ts" x="42" y="284">every tool runs live, against the real thing</text>
 
-  <rect class="d-box" x="600" y="148" width="270" height="40"/>
-  <text class="tn ink" x="612" y="165">the model under test</text>
-  <text class="ts" x="612" y="180">or ReplayBackend, for a recorded transcript</text>
-  <rect class="d-box" x="600" y="200" width="270" height="40"/>
-  <text class="tn ink" x="612" y="217">auto_approve</text>
-  <text class="ts" x="612" y="232">no human is present to ask</text>
-  <rect class="d-box" x="600" y="252" width="270" height="40"/>
-  <text class="tn ink" x="612" y="269">build_tool_plane(...)</text>
-  <text class="ts" x="612" y="284">26 live &#183; 22 replayed &#183; 7 decided per call</text>
+class _Metrics:
+    """CMU Serif advance widths, for the overflow check."""
 
-  <line class="d-lineA" x1="300" y1="168" x2="342" y2="168" marker-end="url(#aa)"/>
-  <line class="d-lineA" x1="300" y1="220" x2="342" y2="220" marker-end="url(#aa)"/>
-  <line class="d-lineA" x1="300" y1="272" x2="342" y2="272" marker-end="url(#aa)"/>
-  <line class="d-lineA" x1="600" y1="168" x2="558" y2="168" marker-end="url(#aa)"/>
-  <line class="d-lineA" x1="600" y1="220" x2="558" y2="220" marker-end="url(#aa)"/>
-  <line class="d-lineA" x1="600" y1="272" x2="558" y2="272" marker-end="url(#aa)"/>
+    def __init__(self) -> None:
+        self.fonts = {}
+        self.cmaps = {}
+        try:
+            from fontTools.ttLib import TTFont
+            from PIL import ImageFont
+        except ImportError:  # pragma: no cover - both ship with matplotlib
+            return
+        for cls, (filename, size, _, _) in TEXT.items():
+            path = FONT_DIR / filename
+            if path.exists():
+                # Measure at 10x and scale back: sub-unit sizes stay exact.
+                self.fonts[cls] = (ImageFont.truetype(str(path), size * 10), 10.0)
+                if filename not in self.cmaps:
+                    self.cmaps[filename] = TTFont(path).getBestCmap()
 
-  <text class="tn ink2 mid" x="165" y="366">renders events; blocks the worker on a modal;</text>
-  <text class="tn ink2 mid" x="165" y="382">queues mid-run notes; escape stops the turn</text>
-  <text class="tn ink2 mid" x="735" y="366">writes events.jsonl, answer.txt, run.json;</text>
-  <text class="tn ink2 mid" x="735" y="382">grades afterwards, separately from running</text>
+    @property
+    def available(self) -> bool:
+        return len(self.fonts) == len(TEXT)
 
-  <text class="tn accent mid" x="450" y="418">Same function. Same 547 lines. The loop cannot tell which one called it.</text>
-"""
+    def width(self, text: str, cls: str) -> float:
+        font, scale = self.fonts[cls]
+        return font.getlength(text) / scale
+
+
+METRICS = _Metrics()
+
+
+@dataclass
+class Canvas:
+    width: int
+    height: int
+    parts: list[str] = field(default_factory=list)
+    overflows: list[str] = field(default_factory=list)
+    #: Characters drawn per font file, for the embedded subsets.
+    used: dict[str, set[str]] = field(default_factory=lambda: collections.defaultdict(set))
+
+    def _use(self, text: str, cls: str) -> None:
+        filename = TEXT[cls][0]
+        self.used[filename].update(text)
+        if METRICS.available:
+            missing = sorted({ch for ch in text if ord(ch) not in METRICS.cmaps[filename]})
+            if missing:
+                # A fallback font would draw these, at other metrics.
+                self.overflows.append(f"{text!r}: {filename} has no glyph for {missing}")
+
+    def _check(self, text: str, cls: str, room: float, where: str) -> None:
+        if METRICS.available and METRICS.width(text, cls) > room:
+            self.overflows.append(
+                f"{where}: {text!r} is {METRICS.width(text, cls):.0f} wide, room {room:.0f}"
+            )
+
+    def text(self, x, y, s, cls="t", anchor="start", halo=None, room=None):
+        self._use(s, cls)
+        if room is not None:
+            self._check(s, cls, room, f"text at ({x},{y})")
+        extra = f' class="{cls}' + (f" {halo}" if halo else "") + '"'
+        self.parts.append(
+            f'<text{extra} x="{x}" y="{y}" text-anchor="{anchor}">{escape(s)}</text>'
+        )
+
+    def lane(self, y, h, label):
+        self.parts.append(f'<rect class="lane" x="0" y="{y}" width="{self.width}" height="{h}"/>')
+        cx, cy = 17, y + h / 2
+        self._use(label, "tl")
+        self._check(label, "tl", h - 8, f"lane {label!r}")
+        self.parts.append(
+            f'<text class="tl" x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="central" '
+            f'transform="rotate(-90 {cx} {cy})">{escape(label)}</text>'
+        )
+
+    def box(self, x, y, w, h, lines, kind="box", align="middle", pad=10):
+        """A box with centred lines; ``lines`` is ``[(text, class), ...]``."""
+
+        self.parts.append(f'<rect class="{kind}" x="{x}" y="{y}" width="{w}" height="{h}" rx="2"/>')
+        heights = [LINE_HEIGHT[cls] for _, cls in lines]
+        block = sum(heights)
+        if block > h - 6:
+            self.overflows.append(f"box at ({x},{y}): {len(lines)} lines need {block}, room {h - 6}")
+        baseline = y + (h - block) / 2
+        tx = {"middle": x + w / 2, "start": x + pad}[align]
+        for (s, cls), lh in zip(lines, heights):
+            baseline += lh
+            self._use(s, cls)
+            self._check(s, cls, w - 2 * pad, f"box at ({x},{y})")
+            self.parts.append(
+                f'<text class="{cls}" x="{tx}" y="{baseline - lh * 0.27:.1f}" '
+                f'text-anchor="{align}">{escape(s)}</text>'
+            )
+
+    def arrow(self, *points, kind="ln", both=False):
+        d = " ".join(("M" if i == 0 else "L") + f" {x} {y}" for i, (x, y) in enumerate(points))
+        head = "aA" if kind == "lnA" else "a"
+        start = f' marker-start="url(#{head})"' if both else ""
+        self.parts.append(f'<path class="{kind}" d="{d}"{start} marker-end="url(#{head})"/>')
+
+    def line(self, *points, kind="ln"):
+        d = " ".join(("M" if i == 0 else "L") + f" {x} {y}" for i, (x, y) in enumerate(points))
+        self.parts.append(f'<path class="{kind}" d="{d}"/>')
+
+    def panel(self, x, w, label):
+        """A full-height band with an italic heading, for side-by-side panels."""
+
+        self.parts.append(f'<rect class="lane" x="{x}" y="0" width="{w}" height="{self.height}"/>')
+        self.text(x + 20, 26, label, "tl", room=w - 40)
+
+    def raw(self, s):
+        self.parts.append(s)
+
+
+# --- Fig. 1 -- MARS as built ------------------------------------------------
+
+
+def fig1(m: dict) -> tuple[Canvas, str, str]:
+    c = Canvas(1000, 702)
+    g = m["groups"]
+
+    # Lanes.
+    c.lane(0, 86, "Callers")
+    c.lane(90, 214, "Agent layer")
+    c.lane(308, 122, "Tools")
+    c.lane(434, 132, "Algorithms")
+    c.lane(570, 132, "Data")
+
+    # Callers.
+    c.box(44, 14, 218, 58, [("mars console", "t"), ("students, researchers", "ts")])
+    c.box(278, 14, 218, 58, [("mars-bench", "t"), ("recorded, graded runs", "ts")])
+    c.box(620, 14, 186, 58, [("Python, notebooks", "t"), ("no model in the path", "ts")])
+    c.box(812, 14, 180, 58, [("MCP clients", "t"), ("Claude Code, any host", "ts")])
+
+    # The loop.
+    c.raw('<rect class="frame" x="44" y="100" width="560" height="194" rx="3"/>')
+    c.text(58, 124, "One bounded, recorded loop", "tb", room=280)
+    c.text(590, 124, f"at most {m['max_turns']} turns", "ts", anchor="end", room=140)
+    c.arrow((153, 72), (153, 100))
+    c.arrow((387, 72), (387, 100))
+
+    c.text(58, 150, "each turn: stop check \u2192 user notes \u2192 model call \u2192 fault log",
+           "ti", room=530)
+    c.text(58, 176, "each call, before it runs:", "ti", room=530)
+    gates = [
+        ("schema check", "no extra args", 116),
+        ("stop check", "user can halt", 104),
+        ("approval", "slow \u00b7 keyed \u00b7 writes", 156),
+        ("repeat cache", "reuses a result", 0),
+    ]
+    x = 58
+    for i, (title, sub, w) in enumerate(gates):
+        w = w or (594 - x)
+        c.box(x, 186, w, 48, [(title, "t"), (sub, "ts")], kind="boxA", pad=6)
+        if i < len(gates) - 1:
+            c.arrow((x + w, 210), (x + w + 14, 210), kind="lnA")
+        x += w + 14
+
+    c.box(58, 242, 422, 46, [
+        ("session record: every argument,", "ts"),
+        ("decision and result, saved per call", "ts"),
+    ])
+    c.arrow((560, 234), (560, 320), kind="lnA")
+    c.text(552, 270, "dispatch", "ti", anchor="end", room=64)
+
+    # Model port, beside the loop.
+    c.box(628, 100, 160, 162, [
+        ("Model port", "t"),
+        ("provider-neutral", "ti"),
+        ("Anthropic", "ts"),
+        ("OpenAI-compatible", "ts"),
+        ("Gemini", "ts"),
+        ("Ollama (local)", "ts"),
+    ])
+    c.arrow((604, 152), (628, 152), both=True)
+
+    # MCP server.
+    c.box(812, 100, 180, 112, [
+        ("MCP server", "t"),
+        ("strict schema check:", "ts"),
+        ("undeclared arguments", "ts"),
+        ("never reach a tool", "ts"),
+    ])
+    c.arrow((902, 72), (902, 100))
+    c.arrow((830, 212), (830, 336), (808, 336))
+    c.arrow((798, 72), (798, 320))
+
+    # Trust boundary between the model side and the software side.
+    c.line((36, 306), (1000, 306), kind="lnW")
+    c.text(992, 296, "a model\u2019s request crosses only as a schema-valid call", "tw",
+           anchor="end", halo="haloL", room=370)
+
+    # Tools.
+    c.box(44, 320, 764, 32, [(
+        f"Tool surface: {m['tools']} typed tools \u00b7 {m['local']} local \u00b7 "
+        f"{m['remote']} remote \u00b7 {m['mixed']} mixed \u00b7 stateless per call", "t")])
+    groups = [
+        ("Optical", "optical", 44, 200),
+        ("Time series", "timeseries", 260, 132),
+        ("HR diagram", "hr", 408, 132),
+        ("Radio", "radio", 556, 108),
+        ("Databases", "databases", 680, 128),
+    ]
+    for label, key, x, w in groups:
+        c.box(x, 364, w, 54, [(label, "t"), (f"{g[key]} tools", "ts")])
+
+    # What comes back.
+    c.box(840, 320, 152, 98, [
+        ("Structured result", "t"), ("status, preview,", "ts"), ("warnings,", "ts"),
+        ("artifact paths", "ts")])
+    c.arrow((808, 391), (840, 391))
+    c.line((916, 418), (916, 446), kind="lnD")
+    c.box(840, 446, 152, 108, [
+        ("Artifacts", "t"), ("tables, plots,", "ts"), ("audio, downloads", "ts"),
+        ("under fixed roots", "ti")])
+
+    # Algorithms.
+    c.box(44, 446, 272, 108, [
+        ("Skynet and Afterglow extractions", "t"),
+        ("plate solving, source extraction,", "ts"),
+        ("photometry, zero point, catalogs", "ts"),
+        (f"{m['extracted']} inline EXTRACTED markers", "ti"),
+    ], pad=6)
+    c.box(332, 446, 224, 108, [
+        ("Astromancer ports", "t"),
+        ("pulsar, variable star,", "ts"),
+        ("HR-diagram fit", "ts"),
+        (f"{m['ported']} inline PORTED markers", "ti"),
+    ])
+    c.box(572, 446, 112, 108, [
+        ("First-party", "t"), ("radio source", "ts"), ("identification,", "ts"),
+        ("spectral index", "ts")], pad=6)
+    for x in (144, 354, 474, 628):
+        c.arrow((x, 418), (x, 446))
+
+    # Data and services: every algorithm reads through one bus; the database
+    # tools reach their services directly.
+    c.line((172, 554), (172, 568), (640, 568))
+    c.line((446, 554), (446, 568))
+    c.line((640, 554), (640, 568))
+    for x in (172, 446, 640):
+        c.arrow((x, 568), (x, 582))
+    c.arrow((744, 418), (744, 582))
+    c.box(44, 582, 272, 108, [
+        ("In the installed package", "t"),
+        (f"{m['scans']} Green Bank 20 m pulsar scans", "ts"),
+        (f"{m['solves']} recorded zero-point solves", "ts"),
+        ("Afterglow reference outputs", "ts"),
+    ], pad=6)
+    c.box(332, 582, 272, 108, [
+        ("Optional data bundles", "t"),
+        (f"{m['frames']} PROMPT/Skynet optical frames", "ts"),
+        ("Girardi isochrone grid", "ts"),
+        ("size and SHA-256 pinned", "ti"),
+    ], pad=6)
+    c.box(620, 582, 372, 108, [
+        ("Remote services", "t"),
+        ("SIMBAD \u00b7 NED \u00b7 VizieR \u00b7 ADS \u00b7 SDSS", "ts"),
+        ("MAST \u00b7 ATNF \u00b7 CASDA \u00b7 MPC", "ts"),
+        (f"downloads capped: {m['max_products']} products, {m['max_mib']} MiB, "
+         f"{m['max_seconds']} s", "ti"),
+    ])
+
+    title = "MARS as built: the model proposes, tested software computes"
+    alt = (
+        "Five horizontal lanes. Callers (the mars console, the mars-bench benchmark, "
+        "Python scripts and MCP clients) enter at the top. The console and the benchmark "
+        f"drive one bounded loop of at most {m['max_turns']} turns, which checks every "
+        "proposed tool call against its schema, a stop request, an approval policy and a "
+        "repeat-call cache before dispatching it, and records every call in a session "
+        "record. MCP clients reach the tools through a server that applies a strict schema "
+        "check. A dashed trust boundary separates the model side from the software side. "
+        f"Below it, a surface of {m['tools']} typed tools in five groups calls algorithms "
+        "extracted from the Skynet pipeline and Afterglow, ported from Astromancer, or "
+        "first-party, which read the data installed with the package, checksum-pinned "
+        "optional bundles and remote astronomy "
+        "services. Results return as structured results and artifacts."
+    )
+    return c, title, alt
+
+
+# --- Fig. 2 -- the proposed Aim 2 loop --------------------------------------
+#
+# Proposed work, drawn as proposed: a dashed outline is to be built under the
+# award; a solid one exists in MARS today or is Skynet 2, funded by NSF ATI.
+# The Skynet 2 boxes are the proposal's own Figure 6, collapsed into one lane,
+# under its own names.
+
+
+def fig2(m: dict) -> tuple[Canvas, str, str]:
+    c = Canvas(1000, 484)
+
+    c.lane(0, 118, "User")
+    c.lane(122, 130, "MARS")
+    c.lane(256, 130, "Skynet 2")
+    c.lane(390, 94, "Facility")
+
+    # User.
+    c.box(44, 16, 226, 86, [
+        ("Scientific objective", "t"), ("e.g. measure a variable", "ts"),
+        ("star’s period to 1%", "ts")])
+    c.box(300, 16, 200, 86, [
+        ("Review, clarify,", "t"), ("approve", "t"), ("the plan and each", "ts"),
+        ("consequential action", "ts")], kind="boxAD")
+    c.box(632, 16, 180, 86, [
+        ("Interpretation", "t"), ("result with its evidence,", "ts"),
+        ("or the limiting", "ts"), ("requirement", "ts")], pad=6)
+    c.text(836, 34, "Proposed", "tb", room=156)
+    c.raw('<rect class="boxD" x="836" y="48" width="26" height="14"/>')
+    c.text(870, 60, "built in Aim 2", "ts", room=122)
+    c.raw('<rect class="box" x="836" y="74" width="26" height="14"/>')
+    c.text(870, 86, "existing", "ts", room=122)
+    c.arrow((632, 59), (500, 59))
+    c.text(566, 52, "follow-up", "ti", anchor="middle", halo="haloL", room=120)
+
+    # MARS.
+    c.box(44, 138, 226, 98, [
+        ("Measurement", "t"), ("requirements", "t"), ("cadence, baseline,", "ts"),
+        ("precision, bands", "ts")], kind="boxD")
+    c.box(286, 138, 160, 98, [
+        ("Observing and", "t"), ("analysis plan", "t"), ("for the user", "ti"),
+        ("to inspect", "ti")], kind="boxD")
+    c.box(462, 138, 154, 98, [
+        ("Observation", "t"), ("request", "t"), ("via a constrained", "ts"),
+        ("interface", "ts")], kind="boxD", pad=6)
+    c.box(632, 138, 180, 98, [
+        ("Adequacy check", "t"), ("operational success", "ts"), ("vs. scientific", "ts"),
+        ("adequacy", "ts")], kind="boxD")
+    c.box(828, 138, 164, 98, [
+        ("Analysis", "t"), ("existing MARS tools:", "ti"), ("photometry, zero", "ts"),
+        ("point, periodograms", "ts")], pad=6)
+
+    c.arrow((157, 102), (157, 138))
+    c.arrow((270, 187), (286, 187))
+    c.arrow((366, 138), (366, 102))
+    c.arrow((482, 102), (482, 138), kind="lnA")
+    c.arrow((828, 187), (812, 187))
+    c.arrow((722, 138), (722, 102))
+
+    # Skynet 2: Figure 6's service lane.
+    c.box(44, 272, 402, 98, [
+        ("Registered instrument capabilities", "t"),
+        ("filters, response curves, field of view,", "ts"),
+        ("measured sensitivity", "ts"),
+        ("App State and UNCG facilities added in Aim 1", "ti")])
+    c.box(462, 272, 154, 98, [
+        ("Access control", "t"), ("& capability", "t"), ("matching", "t")], pad=6)
+    c.box(628, 272, 96, 98, [("Scheduler", "t")], pad=6)
+    c.box(736, 272, 110, 98, [("SkyNode", "t"), ("gateway", "t")], pad=6)
+    c.box(858, 272, 134, 98, [("Data storage,", "t"), ("pipeline & QA", "t")], pad=6)
+
+    c.arrow((157, 272), (157, 236))
+    c.text(165, 258, "registered capabilities", "ti", halo="haloL", room=180)
+    c.arrow((539, 236), (539, 272))
+    c.arrow((616, 321), (628, 321))
+    c.arrow((724, 321), (736, 321))
+    c.arrow((925, 272), (925, 236))
+    c.text(917, 258, "data, QA", "ti", anchor="end", halo="haloL", room=80)
+
+    # Facility.
+    c.text(44, 430, "Facility selection, scheduling and execution stay with", "ti", room=500)
+    c.text(44, 450, "Skynet 2, funded by NSF ATI.", "ti", room=500)
+    c.box(560, 404, 140, 64, [("Local operator", "t"), ("control", "t")], pad=6)
+    c.box(716, 404, 150, 64, [("SkyNode", "t"), ("at each telescope", "ts")], pad=6)
+    c.line((700, 436), (716, 436), kind="lnD")
+    c.arrow((791, 370), (791, 404))
+    c.text(799, 392, "tasks", "ti", room=50)
+    c.arrow((866, 436), (925, 436), (925, 370))
+    c.text(917, 392, "raw assets", "ti", anchor="end", room=80)
+
+    title = "Proposed (Aim 2): from scientific intent to evidence through MARS and Skynet 2"
+    alt = (
+        "A proposed workflow in four lanes: user, MARS, Skynet 2 and facility. A user "
+        "states a scientific objective. MARS, using the capabilities registered in "
+        "Skynet 2, turns it into measurement requirements and an observing-and-analysis "
+        "plan, which the user reviews and approves; only then does MARS send an "
+        "observation request through a constrained interface. Skynet 2 performs access "
+        "control and capability matching, scheduling and dispatch through the SkyNode "
+        "gateway to SkyNode at each telescope, under local operator control, and returns "
+        "data and quality assessment. MARS analyses the data with its existing tools and "
+        "checks scientific adequacy separately from operational success; the user receives "
+        "the result with its evidence, or the limiting requirement and a follow-up for "
+        "review. Dashed outlines are to be built under Aim 2; solid outlines exist: MARS "
+        "today, and Skynet 2, funded by NSF ATI, which keeps facility selection, scheduling "
+        "and execution."
+    )
+    return c, title, alt
+
+
+# --- Fig. 3 -- validation -----------------------------------------------------
+
+
+def fig3(m: dict) -> tuple[Canvas, str, str]:
+    sw = m["sweep"]
+    c = Canvas(1000, 618)
+    c.panel(0, 492, "Provenance: is it the same algorithm?")
+    c.panel(508, 492, "Evaluation: does a model use it correctly?")
+
+    rows = [40, 150, 260, 370, 480]
+    h = 88
+    lx, lw = 20, 452
+    rx, rw = 528, 452
+
+    # Left: where the algorithms came from, and what holds them there.
+    c.box(lx, rows[0], 216, h, [
+        ("Skynet and Afterglow", "t"), ("production Python", "ts"),
+        ("plate solving to zero point", "ti")])
+    c.box(lx + 236, rows[0], 216, h, [
+        ("Astromancer", "t"), ("TypeScript", "ts"), ("pulsar, variable star, HR fit", "ti")])
+    c.box(lx, rows[1], lw, h, [
+        ("Extracted and ported, not rewritten", "t"),
+        ("upstream files and line ranges recorded", "ts"),
+        (f"{m['extracted']} EXTRACTED and {m['ported']} PORTED markers in the code", "ts"),
+        ("deliberate corrections tested against independent references", "ti")])
+    c.box(lx, rows[2], lw, h, [
+        ("Preservation tests", "t"),
+        (f"{m['tests']:,} test functions; offline and keyless by default", "ts"),
+        ("parity with recorded upstream output, known bugs included", "ts"),
+        (f"{m['frames']} real frames, {m['solves']} recorded zero-point solves", "ti")])
+    pythons = " and ".join(m["ci_pythons"])
+    c.box(lx, rows[3], lw, h, [
+        ("Continuous integration", "t"),
+        (f"Python {pythons}, against the lockfile", "ts"),
+        ("secret scan over the tree and its full history", "ts"),
+        ("workflow audit; actions pinned to commit hashes", "ti")])
+    c.box(lx, rows[4], lw, h, [
+        ("Release", "t"),
+        ("TestPyPI → byte-compared install → PyPI", "ts"),
+        ("trusted publishing: no stored upload token", "ts"),
+        ("SHA-256 sums; data bundles pinned by size and hash", "ti")])
+    for x in (lx + 108, lx + 344):
+        c.arrow((x, rows[0] + h), (x, rows[1]))
+    for top in rows[1:4]:
+        c.arrow((lx + lw / 2, top + h), (lx + lw / 2, top + 110))
+
+    # Right: the benchmark today, and what Aim 3 adds.
+    c.box(rx, rows[0], rw, h, [
+        ("Task", "t"),
+        ("a scientific prompt, and an answer key of what", "ts"),
+        ("must and must not be claimed", "ts")])
+    c.box(rx, rows[1], rw, h, [
+        ("Run, recorded", "t"),
+        ("the console’s loop, unchanged; every call recorded", "ts"),
+        (f"tool plane: {m['local']} live · {m['remote']} replayed · "
+         f"{m['mixed']} decided per call", "ts"),
+        ("astronomy services replayed from recorded fixtures", "ti")])
+    c.box(rx, rows[2], rw, h, [
+        ("Graded separately from running", "t"),
+        ("answer, efficiency, trajectory, protocol", "ts"),
+        ("deterministic checks; no model grades a model", "ts"),
+        ("a corrected check re-grades without re-running", "ti")])
+    top, second = sw["intervals"][0], sw["intervals"][1]
+    overlap = "overlap" if top[0] <= second[1] and second[0] <= top[1] else "separate"
+    c.box(rx, rows[3], rw, h, [
+        ("September 2026 sweep, before attribution checks", "t"),
+        (f"{sw['sessions']} sessions: {sw['tasks']} tasks × {sw['repeats']} repeats "
+         f"× {sw['backends']} models", "ts"),
+        ("correct: " + ", ".join(f"{v}%" for v in sw["correct"])
+         + " of scored sessions", "ts"),
+        (f"95% intervals for the top two {overlap}", "ti")])
+    c.box(rx, rows[4], rw, 120, [
+        ("Aim 3, proposed", "t"),
+        ("real Skynet 2 observations as validation cases", "ts"),
+        ("each failure traced to instrument capability,", "ts"),
+        ("observing execution, analysis or AI interpretation", "ts"),
+        ("a warranted request for human help scores as success", "ti")], kind="boxD")
+    for top_y in rows[:4]:
+        c.arrow((rx + rw / 2, top_y + h), (rx + rw / 2, top_y + 110))
+
+    title = "Validation: provenance and preservation testing, and the benchmark"
+    alt = (
+        "Two panels. Left, provenance: algorithms extracted from the Skynet pipeline and "
+        "Afterglow and ported from Astromancer, with upstream files and line ranges "
+        "recorded and "
+        f"{m['extracted']} EXTRACTED and {m['ported']} PORTED markers, and deliberate "
+        f"corrections tested against independent references; {m['tests']:,} test functions "
+        "pin parity with recorded upstream output, known bugs included; continuous integration "
+        f"on Python {pythons} against the lockfile with secret scanning and a workflow "
+        "audit; and a release path from TestPyPI through a byte-compared install to PyPI by "
+        "trusted publishing. Right, evaluation: tasks with answer keys run through the same "
+        "loop with astronomy services replayed, graded deterministically and separately from "
+        f"running; the September 2026 sweep of {sw['sessions']} sessions scored "
+        + ", ".join(f"{v}%" for v in sw["correct"])
+        + " correct. A dashed box marks Aim 3's proposed extension to real Skynet 2 "
+        "observations, with failures traced to instrument, execution, analysis or AI "
+        "interpretation."
+    )
+    return c, title, alt
 
 
 FIGURES = [
-    ("fig-1-strata", 900, 548, FIG1_ALT, FIG1),
-    ("fig-2-one-turn", 880, 702, FIG2_ALT, FIG2),
-    ("fig-3-tool-call", 880, 472, FIG3_ALT, FIG3),
-    ("fig-4-tool-plane", 880, 304, FIG4_ALT, FIG4),
-    ("fig-5-gates", 880, 472, FIG5_ALT, FIG5),
-    ("fig-6-seams", 900, 446, FIG6_ALT, FIG6),
+    ("fig-1-mars-as-built", fig1),
+    ("fig-2-aim-2-proposed", fig2),
+    ("fig-3-validation", fig3),
 ]
 
 
+# --- Output -----------------------------------------------------------------
+
+
+# The three CMU Serif faces the figures use: (file, CSS weight, CSS style).
+FACES = (
+    ("cmunrm.otf", "normal", "normal"),
+    ("cmunbx.otf", "bold", "normal"),
+    ("cmunti.otf", "normal", "italic"),
+)
+EMBEDDED = "MARS Figure Serif"
+
+
+def embedded_faces(canvas: Canvas) -> str:
+    """``@font-face`` rules carrying a WOFF subset of each face, inline.
+
+    A browser showing the SVG as an image loads no external font, so without
+    these a reader without CMU Serif gets Georgia or similar, about a tenth
+    wider -- enough to push labels into their box edges. A data URI is not
+    external, so the figure renders in the face it was fitted to everywhere.
+    CMU Serif is under the SIL Open Font License, which permits embedding.
+    librsvg ignores ``@font-face`` and uses the installed fonts instead.
+    """
+
+    if not METRICS.available:
+        return ""
+    import base64
+    import io
+
+    import logging
+
+    from fontTools import subset
+    from fontTools.ttLib import TTFont
+
+    logging.getLogger("fontTools").setLevel(logging.ERROR)
+    rules = []
+    for filename, weight, style in FACES:
+        chars = "".join(sorted(canvas.used.get(filename, ())))
+        if not chars:
+            continue
+        # A recalculated head.modified would make every run's bytes differ
+        # and every regeneration a diff.
+        font = TTFont(FONT_DIR / filename, recalcTimestamp=False)
+        options = subset.Options()
+        options.flavor = "woff"
+        subsetter = subset.Subsetter(options)
+        subsetter.populate(text=chars)
+        subsetter.subset(font)
+        buffer = io.BytesIO()
+        font.save(buffer)
+        data = base64.b64encode(buffer.getvalue()).decode("ascii")
+        rules.append(
+            f'\n  @font-face {{ font-family: "{EMBEDDED}"; font-weight: {weight}; '
+            f'font-style: {style}; src: url(data:font/woff;base64,{data}) format("woff"); }}'
+        )
+    return "".join(rules)
+
+
+def render(canvas: Canvas, title: str, alt: str, theme: str) -> str:
+    palette = PALETTES[theme]
+    text_classes = "\n".join(
+        f"  .{cls} {{ font-size: {size}px; {css} fill: {palette[colour]}; }}"
+        for cls, (_, size, css, colour) in TEXT.items()
+    )
+    faces = embedded_faces(canvas)
+    serif = f'"{EMBEDDED}", {SERIF}' if faces else SERIF
+    style = STYLE.format(serif=serif, faces=faces, text_classes=text_classes, **palette)
+    if theme == "print":
+        pw = f"{PRINT_WIDTH_IN}in"
+        ph = f"{PRINT_WIDTH_IN * canvas.height / canvas.width:.3f}in"
+    else:
+        pw, ph = canvas.width, canvas.height
+    head = HEAD.format(
+        w=canvas.width, h=canvas.height, pw=pw, ph=ph,
+        title=escape(title), alt=escape(alt), style=style,
+    )
+    return head + "\n".join(canvas.parts) + "\n</svg>\n"
+
+
+def export_print(svg_path: Path) -> None:
+    rsvg = shutil.which("rsvg-convert")
+    if rsvg is None:
+        sys.exit("--print needs rsvg-convert (librsvg) on PATH")
+    stem = svg_path.with_suffix("")
+    subprocess.run([rsvg, "-f", "pdf", "-o", f"{stem}.pdf", str(svg_path)], check=True)
+    subprocess.run(
+        [rsvg, "-f", "png", "-d", "600", "-p", "600", "-o", f"{stem}.png", str(svg_path)],
+        check=True,
+    )
+    # rsvg-convert writes no resolution into the PNG, and Word then assumes
+    # 96 dpi and inserts it six times too large. Record the 600 dpi it has.
+    from PIL import Image
+
+    with Image.open(f"{stem}.png") as image:
+        image.load()
+    image.save(f"{stem}.png", dpi=(600, 600))
+
+
 def main() -> None:
-    for name, width, height, alt, body in FIGURES:
-        for theme, palette in PALETTES.items():
-            style = STYLE.format(sans=SANS, mono=MONO, **palette)
-            head = HEAD.format(
-                w=width, h=height, alt=alt, style=style, bg=palette["bg"]
-            )
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--print", dest="print_dir", type=Path,
+                        help="also write greyscale print SVG, PDF and 600-dpi PNG here")
+    args = parser.parse_args()
+
+    if not METRICS.available:
+        print(f"warning: CMU Serif not found under {FONT_DIR}; "
+              "labels not fitted, face not embedded", file=sys.stderr)
+    m = measure()
+    failed = False
+    for name, draw in FIGURES:
+        canvas, title, alt = draw(m)
+        for problem in canvas.overflows:
+            print(f"{name}: {problem}", file=sys.stderr)
+            failed = True
+        for theme in ("light", "dark"):
             path = OUT / f"{name}-{theme}.svg"
-            path.write_text(head + body + "</svg>\n", encoding="utf-8")
-            print(f"wrote {path.relative_to(OUT.parents[2])}")
+            path.write_text(render(canvas, title, alt, theme), encoding="utf-8")
+            print(f"wrote {path.relative_to(ROOT)}")
+        if args.print_dir:
+            args.print_dir.mkdir(parents=True, exist_ok=True)
+            path = args.print_dir / f"{name}.svg"
+            path.write_text(render(canvas, title, alt, "print"), encoding="utf-8")
+            export_print(path)
+            print(f"wrote {path.with_suffix('')}.{{svg,pdf,png}}")
+    if failed:
+        sys.exit("labels overflow; widen the box or cut the text")
 
 
 if __name__ == "__main__":
