@@ -320,8 +320,8 @@ def test_one_warning_per_code_when_a_solve_skipped_a_backend(fake_anet, fake_atl
     monkeypatch.setattr("tools.wcs._atlas_catalog_problem", lambda settings: None)
     original = __import__("tools.wcs", fromlist=["_configured_backend_warnings"])._configured_backend_warnings
 
-    def with_config_warning(settings):
-        available, warnings = original(settings)
+    def with_config_warning(settings, *rest):
+        available, warnings = original(settings, *rest)
         return available, warnings + [ToolWarning(code="solver_backend_unavailable", message="One index dir was ignored.")]
 
     monkeypatch.setattr("tools.wcs._configured_backend_warnings", with_config_warning)

@@ -60,7 +60,7 @@ def test_tool_defaults_and_explicit_environment_precedence(monkeypatch, tmp_path
     if explicit is not None:
         monkeypatch.setenv("ANET_TIMEOUT_S", "bad")
         monkeypatch.setenv("ATLAS_TIMEOUT_S", "bad")
-    monkeypatch.setattr("tools.wcs._configured_backend_warnings", lambda _: ([], []))
+    monkeypatch.setattr("tools.wcs._configured_backend_warnings", lambda *_: ([], []))
     captured = []
 
     def fake_solve(*args, solver_settings, **kwargs):

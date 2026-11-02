@@ -107,7 +107,11 @@ class AstrometryNetBackend:
         lines = ["autoindex"]
         for d in index_dirs:
             lines.append(f"add_path {d}")
-        cfg.write_text("\n".join(lines) + "\n", encoding="ascii")
+        # MARS divergence (2026-11-02): upstream wrote ASCII, so a folder the
+        # user picked with a non-ASCII name raised UnicodeEncodeError. The
+        # engine reads add_path's rest of line as bytes; UTF-8 is the path's
+        # own encoding on macOS and Linux, and spaces need no quoting.
+        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return cfg
 
     @staticmethod

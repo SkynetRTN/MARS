@@ -51,8 +51,8 @@ def _isochrones_present() -> bool:
 def _plate_solving_available(environ: Mapping[str, str]) -> bool:
     from tools.wcs import _configured_backend_warnings, _solver_settings
 
-    settings, _problems = _solver_settings(environ)
-    available, _warnings = _configured_backend_warnings(settings)
+    settings, problems = _solver_settings(environ)
+    available, _warnings = _configured_backend_warnings(settings, problems)
     return bool(available)
 
 

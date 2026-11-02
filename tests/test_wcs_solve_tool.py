@@ -45,7 +45,7 @@ def test_wcs_allocation_failures_reach_resource_limit(phase, monkeypatch, tmp_pa
     shutil.copyfile(SOLVED_FRAME, path)
     solution = WCS(fits.getheader(path))
     monkeypatch.setenv("ANET_INDEX_PATH", str(tmp_path))
-    monkeypatch.setattr(public_wcs, "_configured_backend_warnings", lambda settings: (["anet"], []))
+    monkeypatch.setattr(public_wcs, "_configured_backend_warnings", lambda settings, *_: (["anet"], []))
     monkeypatch.setattr(public_wcs, "_solve_wcs", lambda *args, **kwargs: WcsSolveResult(
         wcs=solution, catalog_sources=(), metadata=WcsSolveMetadata(width_px=1056, height_px=1027)))
 
@@ -497,14 +497,10 @@ def test_solve_astrometry_is_registered():
 
 @pytest.mark.solver_data
 @solver_available
-def test_the_solver_runs_and_reports_its_outcome_either_way():
+def test_the_solver_runs_and_reports_its_outcome_either_way(operator_solver_env):
     """Exercise the real backend without claiming the installed indexes solve M15."""
 
-    summary = solve_astrometry(
-        OPEN_FRAME,
-        index_path=OPERATOR_INDEX_PATH,
-        timeout_s=900,
-    )
+    summary = solve_astrometry(OPEN_FRAME, timeout_s=900)
 
     assert summary.errors == []
     codes = [warning.code for warning in summary.warnings]
@@ -746,7 +742,7 @@ def test_a_header_wcs_short_circuit_reports_no_search(monkeypatch):
 
 @pytest.mark.solver_data
 @solver_available
-def test_an_explicit_scale_window_runs_a_bounded_solve():
+def test_an_explicit_scale_window_runs_a_bounded_solve(operator_solver_env):
     """P6's exit criterion, against the real backend: a caller who knows the
     frame's scale and pointing gets a bounded search rather than an all-sky one,
     and the result says which search ran. The M15 frame's header carries
@@ -756,7 +752,6 @@ def test_an_explicit_scale_window_runs_a_bounded_solve():
 
     summary = solve_astrometry(
         OPEN_FRAME,
-        index_path=OPERATOR_INDEX_PATH,
         timeout_s=300,
         search_radius_deg=1.0,
         min_scale_arcsec=0.4,
