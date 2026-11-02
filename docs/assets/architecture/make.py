@@ -338,14 +338,18 @@ class Canvas:
         )
 
     def lane(self, y, h, label, kind="lane", cls="tl"):
-        """A full-width band, its label rotated; a newline splits the label."""
+        """A full-width band, its label rotated; a newline splits the label.
+
+        Every label of two or more lines starts in the same column, so a third
+        line steps right rather than pushing the first off the canvas.
+        """
 
         self.parts.append(f'<rect class="{kind}" x="0" y="{y}" width="{self.width}" height="{h}"/>')
         lines = label.split("\n")
         for i, line in enumerate(lines):
             cx, cy = 17, y + h / 2
             if len(lines) > 1:
-                cx += round((i - (len(lines) - 1) / 2) * LINE_HEIGHT[cls], 1)
+                cx += round((i - 0.5) * LINE_HEIGHT[cls], 1)
             self._use(line, cls)
             self._check(line, cls, h - 8, f"lane {line!r}")
             self.parts.append(
@@ -981,7 +985,7 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
     assert set(RECOGNIZED_PROVIDERS) == set(PROVIDER_NAMES), "name every provider"
     assert set(m["groups"]) == set(GROUP_NAMES), "name every tool group"
 
-    c = Canvas(1000, 428)
+    c = Canvas(1000, 440)
     c.style = LOOP_STYLE
     c.raw('<defs>' + "".join(
         f'<marker id="{k}" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" '
@@ -1009,7 +1013,7 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
     c.lane(28, 146, "User", cls="nl")
     c.lane(176, 96, "MARS\nAgent", kind="lane2", cls="nl")
     c.lane(296, 54, "Model", cls="nl")
-    c.lane(352, 76, "Tools", cls="nl")
+    c.lane(352, 88, "Validated\nScientific\nTools", cls="nl")
 
     # User: three ways in, one conversation; the answer, three ways out.
     for y, lines in ((35, ("MARS", "Console")), (80, ("Python", "API")),
@@ -1036,9 +1040,11 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
         name(x, 210, w, 40, *lines)
     for (x0, w0, _), (x1, _, _) in zip(chain, chain[1:]):
         flow((x0 + w0, 230), (x1, 230))
-    name(750, 210, 80, 40, "Session", "Record")
+    # What the record keeps, from AgentSession.to_manifest.
+    c.box(750, 201, 186, 58, [("Session Record", "n"), ("(calls, arguments, outputs,", "ni"),
+                              ("decisions, artifacts)", "ni")], kind="gBox", pad=5)
     flow((270, 121), (270, 210))
-    flow((790, 210), (790, 121))
+    flow((790, 201), (790, 121))
     flow((474, 150), (474, 210), kind="gDash", start=True)
     c.text(480, 167, "risk-tagged calls", "ne", room=150)
     # A call that fails its schema or is refused goes back as an error, unrun.
@@ -1046,8 +1052,12 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
     flow((372, 210), (372, 100), (296, 100), kind="gDash")
     c.text(334, 95, "errors", "ng", anchor="middle", room=70)
 
-    # Feedback, as the pathway figures draw it: grey, labelled in the line.
-    flow((762, 210), (762, 194), (726, 194), (726, 44), (260, 44), (260, 79), kind="gFb")
+    # Results rise from the tools and go straight on to the conversation; the
+    # session record takes a copy on the way. Feedback, as the pathway figures
+    # draw it: grey, labelled in the line.
+    flow((726, 366), (726, 230), (750, 230))
+    c.text(732, 289, "structured results + artifact paths", "ne", room=230)
+    flow((726, 230), (726, 44), (260, 44), (260, 79), kind="gFb")
     on_line(493, 44, f"tool results return to the model for the next turn "
                      f"(default limit: {m['max_turns']})", "lane", room=420)
     flow((790, 79), (790, 14), (40, 14), (40, 100), (52, 100), kind="gFb")
@@ -1064,20 +1074,19 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
     c.text(288, 289, "proposed calls", "ne", room=120)
 
     # Tools: the groups, and the observing interface proposed for Skynet 2.
-    c.raw('<rect class="gGroup" x="242" y="360" width="745" height="60" rx="3"/>')
+    c.raw('<rect class="gGroup" x="242" y="366" width="745" height="60" rx="3"/>')
     for i, group in enumerate(m["groups"]):
-        name(248 + i * 123, 368, 118, 44, *GROUP_NAMES[group])
-    c.box(863, 368, 118, 44, [("Skynet 2", "n"), ("(proposed)", "ni")], kind="gData", pad=5)
-    flow((662, 250), (662, 360))
-    flow((790, 360), (790, 250))
+        name(248 + i * 123, 374, 118, 44, *GROUP_NAMES[group])
+    c.box(863, 374, 118, 44, [("Skynet 2", "n"), ("(proposed)", "ni")], kind="gData", pad=5)
+    flow((662, 250), (662, 366))
     c.text(656, 289, "validated call", "ne", anchor="end", room=120)
-    c.text(796, 289, "result", "ne", room=60)
 
     groups = ", ".join(" ".join(GROUP_NAMES[g]).replace("& ", "and ").lower()
                        for g in m["groups"])
     title = "The MARS agent loop: from a question, through a language model and checked tool calls, to an answer"
     alt = (
-        "A swimlane diagram in four lanes: user, MARS agent, model and tools. A question "
+        "A swimlane diagram in four lanes: user, MARS agent, model and validated scientific "
+        "tools. A question "
         "enters from the MARS console, the Python API or the benchmark harness and becomes "
         "the conversation. The agent's model port sends the messages and tool schemas to "
         f"one of {len(PROVIDER_NAMES)} model providers ("
@@ -1086,9 +1095,10 @@ def fig_loop(m: dict) -> tuple[Canvas, str, str]:
         "risk-tagged calls, and a repeat-call cache, then tool dispatch runs it on one of "
         f"{m['tools']} tools in {len(m['groups'])} groups ({groups}); a Skynet 2 observing "
         "interface is shown as proposed. A call that fails validation or is refused returns "
-        "to the conversation as an error without running. Results go to the session record, "
-        "and return to the model for the next turn, by default at most "
-        f"{m['max_turns']}. The answer and artifacts go to the console, the Python caller "
+        "to the conversation as an error without running. Structured results and artifact "
+        "paths return from the tools to the conversation for the model's next turn, by "
+        f"default at most {m['max_turns']}, and are copied on the way into the session record, which "
+        "keeps the calls, arguments, outputs, decisions and artifacts. The answer and artifacts go to the console, the Python caller "
         "and the benchmark graders; answers and saved sessions inform follow-up questions."
     )
     return c, title, alt
