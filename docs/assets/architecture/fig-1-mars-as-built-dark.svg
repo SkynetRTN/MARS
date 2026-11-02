@@ -93,7 +93,7 @@
 <text class="ti" x="708.0" y="157.9" text-anchor="middle">provider-neutral</text>
 <text class="ts" x="708.0" y="176.9" text-anchor="middle">Anthropic</text>
 <text class="ts" x="708.0" y="195.9" text-anchor="middle">OpenAI-compatible</text>
-<text class="ts" x="708.0" y="214.9" text-anchor="middle">Gemini</text>
+<text class="ts" x="708.0" y="214.9" text-anchor="middle">Google</text>
 <text class="ts" x="708.0" y="233.9" text-anchor="middle">Ollama (local)</text>
 <path class="ln" d="M 604 152 L 628 152" marker-start="url(#a)" marker-end="url(#a)"/>
 <rect class="box" x="812" y="100" width="180" height="112" rx="2"/>
