@@ -94,6 +94,33 @@ def test_comments_and_anchored_directories_are_honoured(tmp_path):
     assert "tests/kept.py" in names
 
 
+def test_patterns_are_matched_as_a_gitignore(tmp_path):
+    """The first matcher kept `tests/kept.py` and `.venv/lib/site.py` under
+    `tests` and `.venv` lines with no slash, read `/server.py` as matching any
+    server.py, let `*` cross directories, and ignored case on Windows."""
+    source = _copy(tmp_path)
+    ignore = source / ".mcpbignore"
+    ignore.write_text(ignore.read_text() + "tests\n/top.txt\nsrc/*.tmp\nCase.txt\n", encoding="utf-8")
+    for name in ("tests/kept.py", ".venv/lib/site.py", "top.txt", "src/top.txt",
+                 "src/a.tmp", "src/deep/b.tmp", "case.txt"):
+        (source / name).parent.mkdir(parents=True, exist_ok=True)
+        (source / name).write_text("x")
+
+    names = {p.as_posix() for p in pack_extension.packed_files(source)}
+
+    assert {"tests/kept.py", ".venv/lib/site.py", "top.txt", "src/a.tmp"}.isdisjoint(names)
+    assert {"src/top.txt", "src/deep/b.tmp", "case.txt"} <= names
+
+
+def test_a_folder_without_an_ignore_file_packs_what_is_left(tmp_path):
+    source = _copy(tmp_path)
+    (source / ".mcpbignore").unlink()
+
+    names = {p.as_posix() for p in pack_extension.packed_files(source)}
+
+    assert "README.md" in names and ".mcpbignore" not in names
+
+
 def test_a_negation_is_refused_rather_than_ignored(tmp_path):
     source = _copy(tmp_path)
     ignore = source / ".mcpbignore"
