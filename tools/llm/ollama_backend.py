@@ -185,14 +185,15 @@ class OllamaBackend(OpenAIBackend):
         import httpx
 
         try:
+            # No hooks yet: an answer from a truncated prompt must not reach
+            # the screen before it is refused. They are replayed below, in the
+            # order the parent would have called them.
             response = super().complete(
                 messages=messages,
                 tools=tools,
                 system=system,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                on_text=on_text,
-                on_thinking=on_thinking,
             )
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise BackendUnavailableError(
@@ -212,7 +213,33 @@ class OllamaBackend(OpenAIBackend):
                 f"a higher {OLLAMA_TIMEOUT_ENV}",
             ) from exc
         _refuse_a_truncated_prompt(response, messages, tools, system)
+        if on_thinking is not None:
+            for block in response.thinking:
+                if block.text:
+                    on_thinking(block.text)
+        if on_text is not None and response.text:
+            on_text(response.text)
         return response
+
+
+class PromptTruncated(BackendUnavailableError):
+    """The daemon answered, but read only part of the prompt.
+
+    Still a :class:`BackendUnavailableError` naming ``OLLAMA_CONTEXT_LENGTH``,
+    so callers that act on the variable keep working; the message is its own,
+    since the daemon was reachable and the variable may be set, only too small.
+    """
+
+    def __init__(self, counted: int, estimate: int) -> None:
+        super().__init__(OLLAMA_CONTEXT_ENV)
+        self.counted = counted
+        self.estimate = estimate
+        self.args = (
+            f"Ollama read {counted} of about {estimate} prompt tokens and dropped "
+            "the rest: its context window is too small for MARS's instructions "
+            "and tools. Restart the daemon with a larger one, such as "
+            f"`{OLLAMA_CONTEXT_ENV}=32768 ollama serve`.",
+        )
 
 
 def _refuse_a_truncated_prompt(
@@ -237,11 +264,7 @@ def _refuse_a_truncated_prompt(
     )
     estimate = len(sent) // _CHARS_PER_TOKEN
     if counted < estimate // 2:
-        raise BackendUnavailableError(
-            OLLAMA_CONTEXT_ENV,
-            f"the daemon read {counted} of about {estimate} prompt tokens and "
-            f"dropped the rest; restart it with a larger {OLLAMA_CONTEXT_ENV}",
-        )
+        raise PromptTruncated(counted, estimate)
 
 
 def _resolve_timeout(explicit: float | None) -> float:
