@@ -320,6 +320,28 @@ code. This covers the owned process group, not descendants that
 deliberately escape the session. The non-POSIX fallback kills only the direct
 process; no Windows process-tree validation is claimed.
 
+**The engine configuration drops `inparallel` (2026-10-28), a deliberate
+divergence.** Upstream's `_write_index_config` wrote `inparallel` before
+`autoindex`, so `astrometry-engine` mapped every configured index file before
+searching. Mapped files count in full against an address-space limit, and the
+MCP runtime runs every call under 4 GiB (`RLIMIT_AS`, inherited by
+`solve-field`): with a full narrow-field set (the 4200 series alone is about
+32 GB) the engine failed with "Failed to add index" before any search, so a
+user could not give MARS the catalogs a ~10-arcminute field needs. Without
+`inparallel` the engine maps one index at a time, and the search arithmetic is
+unchanged. Measured on the development host with all three index sets
+configured (about 77 GB), the known-solution tests still recover the recorded
+solution, all-sky in 18-19 s against 50-64 s with `inparallel` (the engine no
+longer loads every index before the one that solves), bounded in 2.6 s
+against 1.6 s.
+
+**It is written as UTF-8, not ASCII (2026-11-02), a second divergence.** The
+Claude Desktop folder picker and `MARS_CATALOG_DIR` hand it folders the user
+named, and an ASCII write raised `UnicodeEncodeError` on the first non-ASCII
+one. The engine takes the rest of an `add_path` line as the path, spaces
+included; a bounded M15 solve through `Catalogs José/4200` recovers the
+fixture's pointing.
+
 ATLAS's finite allowance still covers only the blind matcher loop, not catalog
 loading, extraction, its oriented path or all retry work. MCP dispatch additionally
 contains the complete call in an owned worker with a 600-second default and
@@ -520,6 +542,14 @@ data installed.
   expected `no_sources` outcome after a non-empty lookup, so the check validates
   dependency loading and search configuration without claiming blind-triangle
   convergence; the tool retains astrometry.net as the blind solving route.
+- *Addendum, 2026-10-26 (M4):* ATLAS convergence, not only reachability, is
+  now checked. `test_atlas_recovers_the_known_solution_in_a_bounded_search`
+  strips NGC 3628 V's recorded WCS and, with a 1-degree, +/-10% scale window
+  around the recorded values, ATLAS recovers it in ~20 s to 0.10 arcsec,
+  0.03% in scale and 0.02 deg in rotation (UCAC5). With no scale or pointing
+  it refuses ("catalog footprint exceeds the 2-degree radius budget"), so it
+  remains a pointed solver; astrometry.net is the blind route, and its
+  all-sky solve of the same frame matches to 0.10 arcsec.
 
 #### 9. M3 setup and I/O failures (2026-10-21)
 
@@ -1365,6 +1395,19 @@ references disclose the retained wrong-colour uncertainty. No numerical
 transform, error propagation or fitting arithmetic changes in this checkpoint.
 These defects are disclosed rather than repaired; see the
 [branch conditions and acceptance record](analysis/warnings-benchmark-claims.md).
+
+#### 5f. M4 diagnostic plot reads the solver's pre-fit rule (2026-10-30)
+
+`solution._fit_input_mask` is the existing pre-fit drop, factored out of
+`_calc_solution_with_mask` unchanged: once any star carries an instrumental
+error, a star without a positive one never enters the fit. The solver now
+applies it unconditionally (a no-op without instrumental errors) instead of
+inside its own `mag_errors.any()` branch, so the rule is decided once. The zero-point
+plot (`tools/photometry_pipeline.py`) reads it beside the survivor mask, so a
+star dropped before fitting is drawn as "not fitted", not as a rejected
+outlier. On NGC 5128 B's recorded APASS replay all six non-survivors were
+such drops and the outlier loop rejected none; the plot had called all six
+outliers. No fit arithmetic changes.
 
 ---
 
@@ -2536,6 +2579,23 @@ legacy science corrections are recorded in the dated M1/M2 sections below):
   hard-coded leading factor of 3.1 (that extraction's defect #1).
 - `isochrone_cmd` does not reproduce Astromancer's off-by-one isochrone splice
   index (that extraction's defect #3).
+
+A third, from M4 (2026-10-30): `plot_cmd` draws the isochrone as points, not
+Astromancer's line. Its server sent an `iSkip` break for the track's phase
+gap; the local Girardi grid carries neither that nor a phase label, so the
+joined rows drew a line straight from the AGB back to core-helium burning
+(3.1-3.5 mag on M67's tracks) and fanned the AGB pulses into a wedge. No step
+size separates phase gaps from in-phase steps across the grid's 4,307 tracks,
+so no break is guessed. The fit is unchanged and keeps its own rule: it
+joins rows no more than `TRACK_MAX_GAP_MAG` (0.5 mag) apart. Drawn with that
+rule, M67's fitted track (log age 9.6) breaks at 43 steps: the one real phase
+gap (3.37 mag); ten on the faint main sequence, whose rows there are 0.5-0.84
+mag apart; and 32 inside the AGB pulses, whose other 166 steps stay joined in
+the wedge. The plot therefore does not draw it. The fit inherits both effects:
+between M_G 6.94 and 7.48 it scores stars against the two end rows only, and
+27 of M67's 548 members sit there, while its AGB segments join pulse to pulse.
+Each star's cost is capped (`CHI2_CAP`); the effect on the fitted distance,
+reddening and age has not been measured (M5, Light-curve and HR boundaries).
 
 It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
 `fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting

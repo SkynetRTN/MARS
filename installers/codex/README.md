@@ -5,17 +5,24 @@ threads), the Codex CLI and the Codex IDE extension. All three share
 `~/.codex`, so one install serves all of them. The plugin carries the MCP
 server's launch configuration and the `mars-tools` skill. It carries no Python,
 no dependencies and no MARS version. Codex starts the server with
+`uv run --no-project --python 3.13 python -c <launcher>`, where the launcher
+is the Claude Desktop extension's own
+[`src/server.py`](../claude-desktop/src/server.py), copied into `.mcp.json` by
+`.github/scripts/sync_codex_launcher.py` (a test keeps them identical). It
+runs the **newest `skynet-mars` release** on PyPI in two steps:
 
-```bash
-uv tool run --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp
-```
+1. `uv tool run --from "skynet-mars[mcp]@latest"` fetches the newest release
+   into uv's cache if it is not there yet (Python 3.13 and about 640 MB of
+   dependencies the first time, a quick check after that) and prints its
+   version.
+2. `uv tool run --offline … mars-mcp` starts exactly that release, by its
+   version. Naming it matters: given the bare name, uv
+   prefers a `uv tool install` of MARS, however old, over the cache.
 
-which runs the **newest `skynet-mars` release** on PyPI, like the Claude
-Desktop extension. Each start asks PyPI for the newest release and installs it
-into uv's cache if it is not there yet: Python 3.13 and about 640 MB of
-dependencies the first time, a quick check after that. So the plugin picks up
-a new MARS release the next time it starts, with no change here. Starting
-needs that one PyPI lookup; with no network the server does not start.
+So the plugin picks up a new MARS release the next time it starts, with no
+change here, and **with no network it starts the newest release in uv's
+cache** (step 1 run offline finds it).
+`MARS_VERSION` pins one release instead (see [Settings](#settings)).
 
 The server runs from uv's cache, never from the plugin's directory. Codex
 replaces that directory while a server starts, and an earlier design that ran
@@ -48,10 +55,10 @@ The ChatGPT desktop app for Linux is in preview. OpenAI publishes `.rpm`
 packages for Fedora 43 and 44, for x86_64 and aarch64.
 
 1. Install the app from OpenAI's `.rpm` (`sudo dnf install ./<downloaded>.rpm`),
-   and install `uv`, `git` and `gcc` from Fedora:
+   and install `uv` and `git` from Fedora:
 
    ```bash
-   sudo dnf install uv git gcc
+   sudo dnf install uv git
    ```
 
    Use Fedora's `uv`, which lands in `/usr/bin`. An app started from the
@@ -59,9 +66,7 @@ packages for Fedora 43 and 44, for x86_64 and aarch64.
    Codex starts the server with the app's `PATH`. Fedora configures its `uv`
    not to download Python (`python-downloads = "manual"` in
    `/etc/uv/uv.toml`), and Fedora 44's own Python is 3.14, so the plugin sets
-   `UV_PYTHON_DOWNLOADS=automatic` for its server. `gcc` is needed on aarch64
-   only: `photutils` publishes no Python 3.13 wheel for ARM64 Linux, so the
-   first start compiles it.
+   `UV_PYTHON_DOWNLOADS=automatic` for its server.
 
 2. Add the marketplace and install the plugin. With the Codex CLI:
 
@@ -86,6 +91,9 @@ Codex asks before any tool that writes an artifact
 **Updating.** A new MARS release needs nothing: the server starts the newest
 one. A new version of the plugin itself (its launch settings or skill) comes
 with `codex plugin marketplace upgrade mars`, then `codex plugin add mars@mars`.
+Until then the plugin's copy of the `mars-tools` skill can be older than the
+server, which always sends its own current guide as instructions and
+`mars://skill/` resources.
 
 ## Settings
 
@@ -99,8 +107,10 @@ started with them:
 | `ADS_DEV_KEY` | Enables the ADS literature tools. Simpler for a desktop app: write the token to `~/.ads/dev_key` |
 | `MARS_HOME`, `XDG_DATA_HOME` | Where artifacts, downloads and data bundles go. Default: `~/.local/share/mars` |
 | `MARS_MCP_TOOLS` | A subset of tool groups to serve: `databases`, `optical`, `timeseries`, `hr`, `radio` |
+| `MARS_VERSION` | Run this exact release (for example to step back from a bad one) instead of the newest. Empty or unset means the newest |
 | `CASDA_OPAL_USERNAME` | CASDA downloads. The password is read from the system keyring, which needs `DBUS_SESSION_BUS_ADDRESS` (or `XDG_RUNTIME_DIR`); both are forwarded |
-| `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' index and catalogue data ([installing](../../docs/installing.md)) |
+| `MARS_CATALOG_DIR` | The folder holding your plate-solving catalogs: astrometry.net index files and the UCAC catalogue ([plate solving](../../docs/installing.md#plate-solving)) |
+| `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' own settings; the two paths name their data folders directly and win over `MARS_CATALOG_DIR` |
 
 Codex forwards a variable as the app has it, an empty value included. An
 `ADS_DEV_KEY` exported empty therefore hides `~/.ads/dev_key`.
@@ -135,10 +145,9 @@ look.
   could not find `uv` on the `PATH` the app was started with. Install it with
   `sudo dnf install uv`, then restart the app.
 - **`handshaking with MCP server failed: connection closed`**: the server
-  exited before it started. Run the self-test above to see why. Two causes
+  exited before it started. Run the self-test above to see why. A cause
   seen on a clean Fedora 44: uv refusing to download Python 3.13 (the plugin
-  now allows it), and, on aarch64, no `cc` to build `photutils`
-  (`sudo dnf install gcc`).
+  now allows it).
 - **A timeout on the first start**: the dependency download outlasted the
   10-minute limit. Run the self-test above once, which installs the same
   release, then start a new thread.
@@ -173,8 +182,13 @@ the update.
 ## Platforms
 
 Verified in clean Fedora 44 containers, x86_64 and aarch64, through Codex
-0.160's app server, installing from GitHub with Fedora's `uv`. On aarch64
-the first start also compiles `photutils` with `gcc`. macOS and Windows use
+0.160's app server, installing from GitHub with Fedora's `uv`, and by the
+maintainer in the ChatGPT app on Fedora Workstation and Windows
+(2026-10-23); the launch command, on Windows 11 ARM64 (2026-10-27). The app on macOS is untested: a macOS VM blocks Codex
+messages by workspace settings (Issue #51667). Step-by-step installs:
+[Linux](../../docs/installing/linux.md), [Windows](../../docs/installing/windows.md),
+[macOS](../../docs/installing/macos.md). macOS and Windows use
 the same wheels as the Claude Desktop extension, and the same limits apply.
-`numba` and `llvmlite` have no Intel Mac wheels, and several dependencies
-have none for Windows on ARM.
+`numba` and `llvmlite` have no Intel Mac wheels. Several dependencies have
+none for Windows on ARM, so there the launcher runs MARS on the x64 Python
+under Windows' emulation; x64 Windows is no longer tested.

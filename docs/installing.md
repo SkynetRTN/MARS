@@ -4,6 +4,12 @@ How to install MARS (MCP Astronomy Research Suite) from PyPI, with no checkout
 of this repository, and register its MCP server with an agent host. How the
 package and its data are built is `tool-architecture.md` §10.3.
 
+**For the Claude or ChatGPT desktop app**, follow the step-by-step guide for
+your platform: [Windows on ARM](installing/windows.md),
+[macOS (Apple Silicon)](installing/macos.md) or
+[Linux (ARM)](installing/linux.md). This page is the reference for every
+other host and for what the guides leave out.
+
 ## Install
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/):
@@ -14,12 +20,27 @@ mars-mcp self-test
 ```
 
 This creates a private environment for MARS and puts its commands
-(`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. uv fetches
+(`mars-mcp`, the `mars` console, `mars-bench`) on your `PATH`. `mars-bench`
+benchmarks models on suites kept in a checkout's `benchmarks/`, which the
+package does not ship; run it from the root of a clone. uv fetches
 Python 3.13 itself if you do not have it. `self-test` launches the server the
 way a host would. If it passes, the install works. If `mars-mcp` is not
 found, uv's command directory is not on your `PATH` yet: run
 `uv tool update-shell` and open a new shell, or call it by its full path
 (below).
+
+**Plate solving is a machine dependency.** It needs the astrometry.net
+solver and its index files installed on your machine, which no MARS install
+route provides; without them, every other tool works. See
+[Plate solving](#plate-solving).
+
+**Windows on ARM:** `--python 3.13` picks the native ARM64 Python, for which
+`sep` and `pyerfa` have no wheels. Name the x64 build, which Windows runs
+under emulation:
+
+```powershell
+uv tool install --python cpython-3.13-windows-x86_64-none "skynet-mars[mcp]"
+```
 
 **Where it goes.** Hosts need the full path to `mars-mcp`. `uv tool dir --bin`
 prints the directory that holds it:
@@ -43,11 +64,14 @@ python3.13 -m venv ~/mars-env
 ```
 
 **Python 3.12 and 3.13** are supported, and CI tests both; the commands above
-use 3.13. On either, on x86_64 Linux, Apple Silicon macOS or x64 Windows,
-every dependency has a pre-built wheel.
-Elsewhere, something builds from source: `sep` on Python 3.14, `photutils` on
-Linux ARM, and `numba`'s `llvmlite` on an Intel Mac, which needs an LLVM
-toolchain as well as a C compiler (`gcc`, or the Xcode command-line tools). The install takes about
+use 3.13. On either, on Linux (x86_64 or ARM), Apple Silicon macOS or x64
+Windows, every dependency has a pre-built wheel; on Windows on ARM, use an
+x64 Python (above).
+Elsewhere, something builds from source: `sep` on Python 3.14, and `numba`'s
+`llvmlite` on an Intel Mac, which needs an LLVM toolchain as well as a C
+compiler (the Xcode command-line tools). A checkout on Linux ARM also
+compiles `photutils`, which `uv.lock` pins to 3.0.0, the release before its
+ARM wheels, so `uv sync` there needs `gcc`. The install takes about
 700 MB, nearly all of it dependencies.
 
 Every release is a pre-release for now, so the commands above install the
@@ -65,9 +89,10 @@ newest one. To install a specific release, use
 talks to it over stdin/stdout, with no port and no network listener. So it
 works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
 (in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
-[dated host proposal](analysis/mcp-desktop-hosts.md) §6. Real desktop-host
-validation is still an open gate in the
-[release checklist](working/master-continuation-plan.md#m4-supported-installations-and-real-solver-runs-must-work).
+[dated host proposal](analysis/mcp-desktop-hosts.md) §6. The maintainer
+verified Claude Desktop on macOS and Windows and the ChatGPT app on Windows
+and Linux on 2026-10-23 ([record](archive/desktop-acceptance.md)); the
+ChatGPT app on macOS, Cursor, VS Code and Gemini CLI are untested.
 
 In the examples below, replace `/path/to/mars-mcp` with the full path from
 [Install](#install).
@@ -80,11 +105,13 @@ claude mcp add --scope user mars -- /path/to/mars-mcp
 
 **Claude Desktop.** The simplest route is the extension, a `.mcpb` file that
 installs with a double-click and needs no Python or config file, on an Apple
-Silicon Mac or x64 Windows. It always runs the newest MARS release. Releases do
-not carry the extension yet; see
-[`installers/claude-desktop/`](../installers/claude-desktop/README.md) to
-build it. To register it by hand instead, go to Settings → Developer → Edit
-Config and add:
+Silicon Mac or a Windows on ARM PC. It always runs the newest MARS release. Download
+`mars.mcpb` from the newest release on the
+[releases page](https://github.com/SkynetRTN/MARS/releases); how it
+is built is in
+[`installers/claude-desktop/`](../installers/claude-desktop/README.md). It is
+unsigned, so Claude Desktop says so when installing it. To register it by hand
+instead, go to Settings → Developer → Edit Config and add:
 
 ```json
 {"mcpServers": {"mars": {"command": "/path/to/mars-mcp"}}}
@@ -94,7 +121,7 @@ Then quit and reopen the app.
 
 **Codex CLI and the ChatGPT desktop app** share `~/.codex`. The simplest
 route is the plugin, which needs no Python and no path, only `uv` and `git`
-(on Fedora: `sudo dnf install uv git`, plus `gcc` on aarch64):
+(on Fedora: `sudo dnf install uv git`):
 
 ```bash
 codex plugin marketplace add SkynetRTN/MARS --sparse .agents/plugins --sparse installers/codex
@@ -156,8 +183,54 @@ mars-mcp install-skill ~/.claude/skills/mars-tools
 
 **If the server does not appear**, run `mars-mcp self-test` first. When it
 passes, the problem is the host config. Claude Desktop logs the server's
-output to `~/Library/Logs/Claude/mcp-server-mars.log` on macOS, and under
+output to `~/Library/Logs/Claude/mcp-server-MARS — MCP Astronomy Research Suite.log` on macOS, and under
 `%APPDATA%\Claude\logs\` on Windows.
+
+## Updates, offline use and rollback
+
+| | Claude Desktop extension, Codex plugin | `uv tool install` |
+| --- | --- | --- |
+| **New release** | Picked up at the next start: the launcher asks PyPI for the newest release each time. Nothing to do. | `uv tool upgrade skynet-mars` |
+| **No network** | Starts the newest release in uv's cache, and says so in the app's log. Only a first start needs the network. | Runs what is installed. |
+| **Roll back** | Set the extension's *MARS release* setting, or `MARS_VERSION` for Codex, to an earlier release (for example `0.1.0rc5`). Clear it to return to the newest. | `uv tool install --force --python 3.13 "skynet-mars[mcp]==<version>"` |
+| **Fails to start** | Run the self-test below; when it passes, the fault is in the app's configuration. The app's log has the server's output. | `mars-mcp self-test` |
+
+```bash
+uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
+```
+
+An update never touches your files. Artifacts, downloads and bundles stay in
+the MARS home; after an upgrade, `mars-mcp fetch-data` re-checks installed
+bundles against the new release's pins and downloads only what changed. The
+skill copy `mars-mcp install-skill` wrote is upgraded by running it again if
+you have not edited it; with your edits it is left alone and the edited files
+are named. The Codex plugin's own copy of the skill updates with the plugin
+(`codex plugin marketplace upgrade mars`); the server always sends its current
+guide as instructions and resources.
+
+## The `mars` console
+
+The install above also puts `mars` on your `PATH`: a terminal console where a
+model calls MARS's tools itself, with no agent host. It needs a model:
+
+- **Anthropic** (the default): set `ANTHROPIC_API_KEY` in your shell before
+  starting `mars`. An installed MARS reads no `.env` file; only a checkout
+  does.
+- **A local Ollama model**, which needs no key: start `ollama serve`, then
+  `mars --backend ollama/<model>` with a model from `ollama list`. The
+  default, `qwen3.8:27b-mlx`, is an MLX build for Apple Silicon; on Linux
+  and Windows, name another model. MARS's instructions and tools take about
+  19,000 tokens, more than Ollama's default context window on a machine
+  with less memory, which Ollama fills by silently dropping most of the
+  prompt. Start the daemon with a larger window,
+  `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `mars` stops a turn with this
+  advice when it sees a prompt cut short.
+
+`MARS_MODEL_BACKEND=provider/model` sets the default backend, and `/backend`
+switches inside the console. If the backend it starts on cannot be used,
+`mars` exits and says what to set or which model to name. `/help` lists the
+commands. Sessions and their artifacts are kept in the MARS home
+([Where things go](#where-things-go)).
 
 ## Optional data
 
@@ -188,9 +261,83 @@ data locations at startup. After upgrading MARS, run `mars-mcp fetch-data` again
 it checks what is installed against the new release's pins, keeps a copy whose
 bytes still match, and downloads only what changed.
 
-Plate solving (`solve_astrometry`) needs astrometry.net index files
-(`ANET_INDEX_PATH`) or a local UCAC catalogue (`ATLAS_CATALOG_ROOT`), which
-you supply yourself. Without them, it reports `solver_unavailable`.
+Plate solving needs software and data of its own, installed on your machine;
+see [Plate solving](#plate-solving).
+
+## Plate solving
+
+`solve_astrometry` needs two things MARS does not ship, because they are
+installed on your machine rather than in Python: the **astrometry.net solver**
+(the `solve-field` program) and its **index files**. Without them it reports
+`solver_unavailable`, and everything else in MARS works as usual.
+
+**1. Install the solver** from your system's package manager:
+
+| System | Command |
+| --- | --- |
+| macOS (Homebrew) | `brew install astrometry-net` |
+| Fedora | `sudo dnf install astrometry` |
+| Debian, Ubuntu | `sudo apt install astrometry.net` |
+| Windows | No native build. astrometry.net runs under WSL or Cygwin, and MARS has not been run against either; on Windows, see ATLAS below. |
+
+Check it with `solve-field --help`. MARS finds `solve-field` on the `PATH`
+of whatever starts it, so install it where that program looks: a desktop app
+started from the Dock or Start menu may not see the folders your shell adds.
+
+**2. Get index files** covering your images' field of view. astrometry.net's
+rule is indexes whose sizes run from about 10% to 100% of the image's width:
+
+| Index series | Field of view it serves | Where |
+| --- | --- | --- |
+| 4107–4119 (Tycho-2) | wide: 22 arcmin and up | Fedora `astrometry-data-4107-4119` (340 MB); Debian/Ubuntu `astrometry-data-tycho2` |
+| 5200 or 4200 series | narrow: 2–22 arcmin | <http://data.astrometry.net/> (tens of GB for the smallest scales); Debian/Ubuntu `astrometry-data-2mass-*` (contrib) |
+
+The bundled frames are about 10 arcmin wide and need the narrow series; the
+4200 series solves them.
+
+**3. Point MARS at them** with `MARS_CATALOG_DIR`, set once: the one folder
+that holds your plate-solving catalogs, the index files and the UCAC catalogue
+for ATLAS below. MARS looks for them up to four folders deep, so each set can
+keep its own subfolder. It uses every folder holding index files, and the
+first holding the UCAC catalogue. For example, with Fedora's package:
+
+```bash
+export MARS_CATALOG_DIR=/usr/share/astrometry
+```
+
+or a folder of your own, laid out however you like:
+
+```text
+~/catalogs/
+  astrometry/4200/index-4208.fits ...
+  astrometry/TYCHO2/index-110 ...
+  ATLAS/UCAC5/u5z/u5index.asc ...
+```
+
+Set it where the program that runs MARS reads its environment: your shell
+(or a checkout's `.env`) for `mars`, `mars-mcp` and Claude Code; the
+environment the ChatGPT app starts in for the Codex plugin, which forwards it;
+the **Catalog folder** setting for the Claude Desktop extension. A desktop
+app must also find `solve-field` (step 1); without it the extension still
+solves with ATLAS.
+
+Every index series under the folder is searched, and an all-sky solve
+against several of them is slow: give a solve the frame's scale and a search
+radius when you know them, or keep only the series your images need.
+
+`ANET_INDEX_PATH` and `ATLAS_CATALOG_ROOT` name the folders themselves
+instead, and win over `MARS_CATALOG_DIR` for their own solver.
+`ANET_INDEX_PATH` takes the folder, or folders, that hold the index files
+directly (a parent folder is refused), joined with `:` (`;` on Windows).
+
+A full catalog is fine: MARS has astrometry.net load one index at a time,
+so a large set (the whole 4200 series is about 32 GB) fits within the 4 GiB
+memory limit MARS runs a solve under.
+
+**ATLAS** is MARS's second solver: pure Python, so it needs no program, only a
+local UCAC4 or UCAC5 catalogue, found under `MARS_CATALOG_DIR` (or named by
+`ATLAS_CATALOG_ROOT`; set `ATLAS_CATALOG=ucac4` for UCAC4). It solves only near a known pointing and scale, never blind. It has
+not been tested on Windows.
 
 ## Where things go
 

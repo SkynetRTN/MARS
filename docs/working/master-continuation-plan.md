@@ -1,16 +1,18 @@
 # MARS release closure gate
 
-Updated 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123), with all
-ten M2 checkpoints closed locally on the single working branch `feature/m2`.
-It includes the channels-and-axes checkpoint at `27bdceb`.
-M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
-and #123; their changes are absent from the published `0.1.0rc6`.
-Publication remains deferred until the remaining gates below have been worked
-through. The next release needs a new version.
+Updated 2026-10-30 against `main` at `e1ad8b0` (M2, PR #124), merged into
+M4's branch `docs/m4-desktop-acceptance`.
+M0, M1, M2 and M3 are closed. M1 merged through PR #118, M3 through PRs #122
+and #123, and M2 through PR #124; their changes are absent from the published
+`0.1.0rc6`. Publication remains deferred until the remaining
+gates below have been worked through. The next release needs a new version.
+By maintainer decision (2026-10-26), it ships as soon as every gate with a
+manual step is complete; the install guides (`../installing/`) always point
+at the latest release and name none. M4's work stays on its branch, without
+a PR, until all of M4 is done.
 
-M2 is closed locally after the final review corrections and regression checks.
-Its changes remain unmerged into main and unpublished. Live provider failures remain
-recorded below.
+M2 is closed and merged into main (PR #124, 2026-10-30), unpublished. Live
+provider failures remain recorded below.
 M4 and subsequent release gates remain open. PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
@@ -27,7 +29,7 @@ the subsequent work.
 
 ## M2: results must mean what their labels and units say
 
-**Closed locally on `feature/m2` after the adversarial follow-up and validation.**
+**Closed after the adversarial follow-up and validation; merged into main through PR #124.**
 The independent comparison against main found seven remaining cases. Each now
 has a reproduced failure and a regression-tested correction. The follow-up added
 51 regression/control cases, including the subsequent independent review fixes.
@@ -91,7 +93,7 @@ the actual helper interpreter's process handle before cleanup and checks its
 termination immediately after return, avoiding launcher/PID reuse ambiguity.
 
 All ten checkpoints and the four final corrections below are complete within
-the recorded limits. Changes remain unmerged into main and unpublished.
+the recorded limits. Merged into main through PR #124; unpublished.
 Other release gates remain open. Technical derivations and detailed acceptance
 evidence are linked below; this section records outcomes and remaining limits.
 
@@ -278,7 +280,7 @@ credentialed ADS cases), one Ollama check, four historical benchmark cases, one
 Windows-only check and four native-data checks. The ADS cases passed separately;
 prior native evidence and the other live-provider limits above remain distinct.
 The tested implementation and regression files were transferred unchanged into
-the branch; M2 remains closed locally, unmerged into main and unpublished.
+the branch, which then merged into main through PR #124 (2026-10-30).
 
 ## M3: failed inputs and services must produce usable failures
 
@@ -388,32 +390,386 @@ Evidence: [query backends](../../algorithms/query/),
 
 ## M4: supported installations and real solver runs must work
 
-- [ ] **Real desktop use.** Installer and Fedora app-server checks do not
+- [x] **Real desktop use.** Installer and Fedora app-server checks do not
   establish use in the actual Claude and ChatGPT desktop apps. Record supported
   OS/app versions and demonstrate registration, calls, instructions, approvals
   and media. Missing macOS/Windows and other advertised-host evidence must
   remain explicit.
-- [ ] **Updates and offline startup.** Both launchers follow the latest
+  *Done 2026-10-23,* by the maintainer, following
+  [desktop-acceptance.md](../archive/desktop-acceptance.md): Claude Desktop with the
+  `.mcpb` verified on an Apple Silicon Mac and x64 Windows, and Codex in the
+  ChatGPT app on x64 Windows and Linux (Fedora Workstation). Claude Desktop
+  on Linux is closed (no build). Codex on the Mac is accepted untested: the
+  maintainer's macOS VM blocks Codex messages by workspace settings (Issue
+  #51667), and the route is the Unix one verified on Fedora; test it on a
+  physical Mac when one is available.
+- [x] **Desktop install guides.** Once real desktop use is verified, archive
+  the desktop guide and fold its Claude Desktop and Codex install steps into
+  per-platform guides under `../installing/`: Windows (x64), macOS (Apple
+  Silicon) and Linux (ARM), with the verified OS and app versions.
+  *Done 2026-10-23:* [Windows](../installing/windows.md),
+  [macOS](../installing/macos.md) and [Linux](../installing/linux.md), linked
+  from `../installing.md`, which stays where it is because shipped wheels and
+  the `.mcpb` manifest link to it; the guide is
+  [archived](../archive/desktop-acceptance.md). No OS or app versions were
+  recorded, so the guides name none.
+- [x] **Windows on ARM.** The maintainer's decision (2026-10-27): Windows
+  support is ARM64, and x64 Windows is no longer tested. `sep` and `pyerfa`
+  publish no Windows ARM64 wheels, so MARS runs on the x64 build of
+  Python 3.13 under Windows' own emulation, which the launcher (both routes)
+  now chooses on ARM64; `uv tool install` names it
+  (`--python cpython-3.13-windows-x86_64-none`). Guides, both installer
+  READMEs, the manifest, `../releasing.md`, and the Windows jobs in
+  `ci.yml` and `release.yml` (now `windows-11-arm`) say so.
+  *Verified 2026-10-27* on Windows 11 Home ARM64 (build 26300), over SSH
+  through the Codex plugin's own command: a first start from empty uv
+  directories in 86 s (1.7 GB: the launcher's native Python and MARS's x64
+  one), an offline start serving the newest cached release, a pin to rc5,
+  and a start from a folder holding a planted `re.py` and `uv.toml`, each
+  serving 55 tools. `uv tool install` on the x64 Python: install 29 s,
+  `self-test` 113 s, passing. CI's runtime-containment job passed on
+  `windows-11-arm` with the x64 Python (run 40608763583, 2026-10-27, 146 s).
+  The Release dry run (run 40611174066) passed both jobs moved to
+  `windows-11-arm`: the extension's self-test, on the x64 Python, and the
+  bundle checks. *Done 2026-11-02:* the maintainer checked both apps on
+  the ARM64 VM by hand (no versions recorded).
+- [x] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
   copies. Upgrade, startup failure, offline use and rollback need documented,
   verified behavior that preserves user changes.
-- [ ] **Installed commands and data.** `mars-bench` ships without its
+  *In progress (2026-10-26),* with the maintainer's choices:
+  - **One launcher:** the Codex plugin now runs the Claude extension's
+    launcher (`uv run python -c`, kept identical by a test), so both routes
+    fall back offline to the newest cached release.
+  - **Rollback:** `MARS_VERSION`, the extension's *MARS release* setting,
+    pins a release; a malformed pin stops with a message. Extension and
+    plugin are now 1.1.0.
+  - **Verified on this host** through both routes' own commands: an online
+    start; no network (a dead proxy), which started the newest cached
+    release, rc6; a pin to rc5 served rc5; a bad pin exited 2.
+  - **Skill upgrades:** `install-skill` writes a record of what it wrote. It
+    upgrades an unedited older copy by swapping in a complete new one, and
+    refuses an edited copy, naming the edited files. A copy from before the
+    record existed is refused, with how to proceed.
+  - **Docs:** `../installing.md` has an updates, offline and rollback
+    table; the installer READMEs explain the shared launcher and that the
+    plugin's skill copy can lag the server.
+  - **Installed copy (2026-10-27):** given the bare name, uv prefers a
+    `uv tool install` of MARS, however old, over its cache, so a user with
+    rc5 installed was served rc5 after the launcher had fetched rc6. Step 1
+    now prints the release it fetched and step 2 serves exactly that one;
+    offline, step 1 runs again with `--offline`, which names the newest
+    cached release.
+  - **macOS (2026-10-27),** on the maintainer's Apple Silicon VM (macOS
+    27.0.1, Claude 3.6556.2, ChatGPT 26.1021.31345), over SSH through the
+    1.1.0 extension's own command with rc5 installed as a uv tool: online
+    served rc6, a pin served rc5, offline served rc6 (the newest cached),
+    offline with a pin served rc5, a malformed pin exited 2. The Codex
+    command, started from a folder holding a planted `re.py` and `uv.toml`,
+    used neither and served 55 tools.
+  - **Done 2026-11-02:** the maintainer re-checked the changed Codex launch
+    in the ChatGPT app on Windows and Linux, and the *MARS release* setting
+    in Claude Desktop's own settings screen, by hand (no versions recorded).
+- [x] **Installed commands and data.** `mars-bench` ships without its
   checkout-only assets. Verify its installed behavior and cross-platform bundle
   installation, interruption and recovery. Record current cold/warm startup
   where host timeouts matter. Claude's MCPB is built manually and is absent
   from release assets; the advertised installation route must say so.
-- [ ] **Configured solver success.** A supported known-solution fixture
+  *Done 2026-10-27.* At the next tag, check that the GitHub release carries
+  `mars.mcpb`: `publish` attaches it, and only a tag runs that job, so the
+  dry run below could not.
+  - **`mars-bench`:** checked from a built wheel. Outside a checkout it now
+    exits 2 and says the suites live in a clone, instead of a traceback. From
+    a clone's root it replays the smoke suite. Its reference data now
+    resolves through the bundled-data root rather than a path beside the
+    package. `../installing.md` says it needs a checkout.
+  - **Bundles:** interruption and recovery are unit-tested (an interrupted
+    swap, a restored backup, a resumed range download, a corrupt marker).
+    The release workflow's installed-wheel `fetch-data all`, `--verify` and
+    `self-test --with-data` now run on Linux, macOS and Windows, not Linux
+    only. actionlint and zizmor are clean.
+  - **Startup:** the routes' own command (`uvx … mars-mcp self-test`) took
+    47 s cold, from an empty uv cache with uv-managed Python only (752 MB
+    cache + 91 MB Python), and 8.2 s warm, on this 8-core aarch64 host. Both
+    include a blind pulsar detection. The Codex plugin allows 600 s to start.
+  - **MCPB:** the release workflow packs, tests and attaches `mars.mcpb`, and
+    the guides point at the newest release.
+  - **Release dry run (2026-10-27,** run 40611174066, `workflow_dispatch`,
+    publishing skipped): every job passed: packing and validating
+    `mars.mcpb`, the extension's self-test on macOS and `windows-11-arm`
+    (which served this build), and the installed-wheel bundle checks on
+    Linux, macOS and `windows-11-arm`.
+- [x] **Configured solver success.** A blind WCS test can skip after failing
+  even when resources exist, and omits configured settings. ATLAS reachability
+  does not establish blind convergence. A supported known-solution fixture
   must solve within position, scale and rotation tolerances; missing data must
-  be reported separately. *Progress 2026-10-26:* operator settings now reach the
-  blind test, configured no-solution results fail, and real astrometry.net
-  recovery plus UCAC lookup passed. Stronger scale/rotation acceptance and blind
-  ATLAS convergence remain unverified by these tests.
-- [ ] **Scientific plot content.** Dimensions and specification strings do
+  be reported separately.
+  *Done 2026-10-26:* NGC 3628 V with its recorded WCS stripped is the
+  known-solution fixture. Each solve must recover it within 1 arcsec, 0.5%
+  in scale and 0.25 deg in rotation, with the configured settings passed in.
+  On this host: astrometry.net bounded in 4 s and all-sky in 148 s, ATLAS
+  bounded in 20 s, all within 0.11 arcsec. ATLAS does not search blind: with
+  no scale or pointing it refuses, so astrometry.net stays the blind route.
+  Missing data skips with its name; a miss with data present fails
+  (`tests/test_wcs_solution.py`).
+- [x] **Scientific plot content.** Dimensions and specification strings do
   not prove that traces, peak markers or confidence lines are drawn. Verify
   supported plots' content, including both pulsar spectrum modes.
+  *Done 2026-10-30:* every supported plot was rendered from bundled or
+  recorded data and inspected, and `tests/test_plot_content.py` now compares
+  each saved figure's traces, markers, fits, error bars and axis units with
+  its input (M2's `test_pulsar_spectrum_semantics.py` covers both spectrum
+  modes). Six of its ten tests fail on the previous renderers.
+  - **Correct as drawn:** pulsar light curves, folded profiles and both
+    spectrum modes (B0329+54 peaks at 0.7146 s and 1.403 Hz, with the
+    false-alarm levels); the HR fit's members; the radio fits and SED.
+  - **Fixed:** the zero-point plot called stars the solver drops before
+    fitting (no instrumental error) "rejected outliers". On NGC 5128 B all six
+    non-survivors were such drops; the outlier loop rejected none. It also
+    drew no error bars for an error-weighted fit, so a kept star with a
+    1.88 mag catalog error looked like a 1.27 mag miss, and labelled the
+    fitted extra scatter "±1σ". The photometry overlay drew 1-based source
+    positions on a 0-based image, one pixel off (measured: 0.99, 1.03 px).
+    Radio plots gave flux no unit, and labelled a CSV's frequencies Hz in
+    whatever unit the file used; NED's columns are Hz and Jy (checked live).
+  - **HR isochrone, by maintainer decision (2026-10-30): drawn as points.**
+    It was one line through every phase. The local Girardi tracks carry
+    neither Astromancer's `iSkip` break nor a phase label, so the line jumped
+    straight from the AGB back to core-helium burning (a 3.1-3.5 mag step on
+    M67's tracks) and the thermally pulsing AGB fanned into a wedge. Across
+    the grid's 4,307 tracks no step size separates phase gaps from in-phase
+    steps, so the rows are drawn as points rather than joined by a guessed
+    break. The fit's own 0.5 mag joining rule is no better a drawing: on
+    M67's fitted track it cuts the faint main sequence into pieces and
+    still joins most AGB pulse steps (`../extraction.md`, HR Diagram).
+  - **Review corrections (2026-11-01):** the zero-point band reads
+    "residual RMS" when no star has a measurement error, since the solver
+    then fits no extra scatter, and draws no bars; the bars are labelled
+    as each star's measurement error, which the fit adds to the scatter in
+    quadrature. A radio CSV with no header row keeps its first row and
+    gets unitless axes, rather than losing that row to pandas and labelling
+    the axes with its numbers. A CSV's flux-error column, documented but
+    read and dropped since the tool was added (`7621b7d`), now weights the
+    power-law fit and draws error bars. The solver decides its pre-fit drop
+    in one place, `_fit_input_mask`, which the plot reads.
+- [x] **Console first launch.** An installed `mars` with no key or reachable
+  model exits before its interface opens, telling the user to edit "the
+  repository's .env", which an installed copy has neither of nor reads.
+  `../installing.md` does not cover the console, and the default Ollama
+  model's `-mlx` tag may exist only on Apple Silicon. A clean install on
+  each supported OS must reach a working session or an accurate next step.
+  *Done 2026-10-28:* a clean install on each supported OS (a fresh Mac,
+  Windows on ARM, a fresh Fedora 44 container) gave an accurate next step,
+  and the Mac and Windows reached working sessions; details below.
+  *2026-10-26:* the message now depends on the install (a
+  checkout's `.env`, or the shell for an installed copy) and offers
+  `mars --backend ollama`; a missing Ollama model lists what the daemon
+  holds with the exact command to pick one or `ollama pull` it.
+  `../installing.md` has a console section, including the `-mlx` default.
+  The default model is unchanged.
+  - **macOS (2026-10-27),** installed from this branch, over SSH: with no
+    key `mars` exits 2 with the shell-variable advice; with no daemon, and
+    Ollama not installed, it now says where to get Ollama rather than only
+    `ollama serve`; with a daemon but not the default model it names an
+    installed one to copy (`mars --backend ollama/qwen3:0.6b`). With a model
+    it reaches a working session.
+  - **Ollama's context window:** MARS's prompt and tools are 18,830 tokens,
+    and on the VM Ollama's default window was 4,096, so the daemon silently
+    kept 2,050 of them and the model answered without its tools. The
+    OpenAI-compatible endpoint cannot ask for a size, so the adapter now
+    refuses a turn whose reported input is under half of what was sent,
+    naming `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`; `../installing.md`
+    says so. A timeout now says what ran out. The maintainer kept this
+    check (2026-10-28) over reading the model's window before sending,
+    which would need Ollama's native endpoint.
+  - **macOS, fresh VM (2026-10-27,** macOS 27.2): install 9 s,
+    `self-test` 44 s, both messages as above.
+  - **Windows on ARM (2026-10-27),** installed on the x64 Python: the same
+    two messages; with Ollama 0.40.12 (native ARM64) and a 32k window, the
+    console opens over SSH in 6.6 s, `/status` works, Ctrl+Q quits at once,
+    and a question reached a working session: the model called
+    `resolve_pulsar_scan` (✓, 21 ms) and listed the five bundled scans, in
+    turns of 730 s and 380 s on the VM's four CPU cores.
+  - **Linux (2026-10-27),** a fresh Fedora 44 aarch64 container with uv's
+    installer: install 14 s, `self-test` 22 s, the same two messages.
+    A model session on Linux was not rerun; the console is developed and
+    tested on this Fedora host.
+- [x] **Console terminals and long runs.** Nothing records the console in
+  Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
+  questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the
+  forced dark theme on light terminals, `NO_COLOR`, and an 80-column status
+  line that cuts off the stop hint and never names a quit key. Esc cannot
+  stop a running tool, quitting during a plate solve may wait for it, and
+  progress reads in raw milliseconds (now seconds and minutes past one
+  second, 2026-10-26). Record supported terminals and the
+  measured stop and quit behavior during a real solve.
+  *macOS over SSH, in tmux 3.8 (2026-10-27):* the console renders at
+  80x24 and 100x30; Esc is seen within a second (no tmux delay), but a stop
+  waits for the request in flight (188 s for a model call on the VM);
+  Ctrl+Q quits at once and Ctrl+C says to press Ctrl+Q. The graphics probe
+  reports sixel inside tmux. The status line is cut at 80 and at 100
+  columns once token counts appear, losing the stop hint, and never names
+  Ctrl+Q. `NO_COLOR` was inconclusive: the idle screen is grey either way.
+  *Windows on ARM over SSH (2026-10-27):* renders at 80x24 and 100x34 with
+  half-block graphics; Ctrl+Q quits at once.
+  *A real plate solve, in tmux at 80x24 (2026-10-28),* driven by a scripted
+  model calling `solve_astrometry` all-sky on NGC 3628 (about 80 s): Esc
+  10 s in is acknowledged at once and the session ends 71 s later, when the
+  solve does; a tool cannot be interrupted. Ctrl+Q 10 s in used to close
+  the screen and then wait 85 s out of sight; now the console stays open,
+  says it is quitting, stops at the next safe point and exits when the solve
+  ends (78 s), denying any pending approval. No solver process outlived the
+  console either way. The status line now starts with its keys and adds
+  counts only as they fit, so 80 columns keep them. Superseded by the next
+  item: Ctrl+C now stops a step, and Ctrl+Q quits at once.
+  **Supported terminals (maintainer's decision, 2026-10-27):** on macOS,
+  Terminal.app, the default; iTerm2 is not supported. *Done 2026-11-02:*
+  the maintainer checked the console in Terminal.app at the Mac by hand
+  (no versions recorded).
+- [x] **Console failures and commands.** A tool that returns an error is
+  marked ✓, and a backend failure mid-turn reports only "Session finished:
+  error." `/status`, `/tools`, `/approve`, `/prompt` and `/new` are listed
+  in the menu and `/help` but have no handler, so context can be cleared
+  only by restarting. Approval needs the mouse or Tab focus, and Esc's
+  effect on an open approval is unclear. Failures must name their cause and a
+  next step, approvals must work from the keyboard, and each listed command
+  must work or be removed. Resume showing only assistant text needs a
+  decision.
+  *In progress (2026-10-26):* tool calls are marked by their result (✓ only
+  for `ok`; ✗ with the error's message, `!` partial, `∅` not found). A failed
+  session names its cause from the exception's type and HTTP status, never
+  its text, plus a next step. `/status`, `/tools`, `/approve`, `/prompt` and
+  `/new` work, and a test requires a handler for every command. Approvals
+  work from the keyboard (Tab or arrows, Enter; `n` or Esc denies). No
+  letter allows, Deny has focus, and every key but Esc is held back for
+  the first half second, so typing meant for the prompt (an Enter, or the
+  `n` in "and") cannot answer a call; a click acts at once (2026-10-28,
+  after the code review). "Allow always" still lasts one question, as a
+  test pins, and ends with it: between questions `/status` and `/approve`
+  describe the next question's fresh policy.
+  *Done 2026-10-27:* by the maintainer's decision, a resumed session shows
+  both sides, in order: each question or mid-run note, then the model's
+  answers. Tool calls and artifacts are not replayed.
+- [x] **Stop a running step; quit at once.** The maintainer's decision
+  (2026-10-28): Ctrl+C stops the step in flight -- a tool or a model reply --
+  and keeps the console open; Ctrl+Q closes it and ends the process; Esc
+  still stops after the step. *Done 2026-10-28:*
+  - **Tools** run in the MCP server's owned workers (`tools/runtime/`), which
+    Ctrl+C kills with anything they started; 14 instant local lookups stay
+    in-process (`tools/tui/tool_calls.py`, `INLINE_TOOLS`; a test keeps
+    every remote or mixed tool out). A worker costs about 2.5 s to start
+    here and brings the MCP limits (600 s, 4 GiB, disk budgets), which the
+    console had none of.
+  - **Model replies:** `run_session(interrupt=)` runs the request on a
+    daemon thread the loop stops waiting for, and drops what arrives later.
+  - **Measured** in tmux at 80x24: Ctrl+C 5 s into a bounded ATLAS solve
+    ended the session 0.27 s later, the worker gone, the console open
+    (`✗ solve_astrometry — stopped by the user`); Ctrl+Q exited in 0.78 s.
+    With a 60 s model reply in flight: 0.27 s and 0.79 s.
+  - **Runtime fix found on the way, MCP too:** a worker passed its own
+    `PYTHONPATH` to the tool's children, so astrometry.net's Python helpers
+    (Fedora's `removelines`, system Python 3.14) imported MARS's 3.13 numpy
+    and `solve-field` failed in every worker. The worker now restores the
+    caller's `PYTHONPATH` (test in `tests/test_runtime_limits.py`).
+  - **Full catalogs (2026-10-28, the maintainer's decision):** the worker's
+    4 GiB address-space cap stopped astrometry.net loading a large index set
+    -- the worker reads the files where they are, but `inparallel`, in the
+    engine config extracted from Skynet, mapped every one before searching.
+    It is dropped (`algorithms/skylib_lite/astrometry/anet/backend.py`,
+    recorded in `../extraction.md`), so the engine maps one index at a time
+    and users can give MARS a full catalog. On this host, all three index
+    sets (about 77 GB) configured, the known-solution tests still land on
+    the recorded solution: all-sky 18-19 s, against 50-64 s with
+    `inparallel`; bounded 2.6 s, against 1.6 s. Through the MCP worker,
+    which used to fail, bounded solves in 9.2 s and all-sky in 22.0 s,
+    worker start included. Ctrl+C 10 s into a real all-sky solve stopped it
+    in 0.53 s, the solver gone and the console open; Ctrl+Q exited in 1.03 s.
+  - **A crashed `solve-field` is an error (2026-10-28, the maintainer's
+    decision).** The `solver_failed` error was in the result all along, but
+    `WcsSummary` had no `status`, and the console and the MCP surface decide
+    a failure from `status` alone: the crash showed as ✓ and reached MCP
+    clients as a success. `WcsSummary.status` is now computed, `error`
+    whenever `errors` is not empty; a genuine miss stays `ok` with its
+    `no_solution` warning (`tests/test_m3_wcs_failures.py`).
+  - **The other result models (2026-10-28, the maintainer's decision).** 20
+    more models carried `errors` but no `status` (pulsar, variable-star,
+    zero-point, photometry, optical-frame, field-calibration and
+    reference-band results), so their failures were shown and reported as
+    successes too. Checked model by model: every place they are built with
+    errors returns no usable result alongside them (a listing that found
+    nothing, or the caller's own input echoed back), so all 20 now share
+    `StatusFromErrors`: no errors is `ok`, only `not_found`/`target_not_found`
+    is `not_found` (a lookup with no match, as elsewhere), anything else is
+    `error`. `tests/test_result_status.py` exercises real failures in each
+    family and requires a status on every registered tool's result that can
+    carry errors.
+- [x] **Plate solving is documented as a machine dependency.** The
+  maintainer's request (2026-10-28): the install guides say that plate
+  solving needs astrometry.net and its index files installed on the user's
+  machine, which no MARS route provides. *Done 2026-10-28:* a
+  [Plate solving](../installing.md#plate-solving) section (the solver per
+  system: Homebrew `astrometry-net`, Fedora `astrometry`, Debian and Ubuntu
+  `astrometry.net`, none native on Windows; index series by field of view;
+  `ANET_INDEX_PATH`; the memory limit; ATLAS), a pointer from Install, and a
+  short section in each platform guide. Package names checked against
+  Homebrew's and Debian's package indexes and this host's Fedora packages.
+- [x] **Catalog location setting.** One environment variable,
+  set once when MARS is installed (in the shell or a `.env`), names the
+  folder that holds the user's own catalogs -- astrometry.net index files,
+  the UCAC catalogue -- and MARS finds the solvers' data under it, instead
+  of `ANET_INDEX_PATH` and `ATLAS_CATALOG_ROOT` naming each leaf folder. On
+  the development host it is `/srv/agents/catalogs`. The install guides
+  say that catalogs are set with this variable, and the Claude Desktop
+  extension gains a setting for it: today it passes none, so plate solving
+  cannot be configured there.
+  *Done 2026-11-01 (maintainer's go-ahead):* `MARS_CATALOG_DIR`.
+  `tools.wcs._solver_settings` searches it four folder levels deep, links
+  followed without looping, for every folder of index files and the first
+  UCAC5 root (UCAC4 when `ATLAS_CATALOG` asks); the two explicit variables
+  and the `index_path` argument still win for their own solver. A missing
+  folder, or one holding neither, is a `solver_backend_unavailable`
+  warning, and the no-solver message names the setting first. The MCP
+  install facts read the same function. Claude Desktop gains a **Catalog
+  folder** setting (the launcher drops it unfilled), the Codex plugin
+  forwards the variable, and the install guides and platform pages use it.
+  `tests/conftest.py` keeps a developer's folder out of the default suite
+  and gives it to the `solver_data` tests: with only
+  `MARS_CATALOG_DIR=/srv/agents/catalogs` set, all six pass (101 s);
+  `tests/test_catalog_dir.py` covers the rest.
+  *macOS, 2026-11-02:* on the Mac VM (macOS 27.2, arm64), Homebrew's
+  `astrometry-net` 0.97 with index scales 4204-4210 under
+  `MARS_CATALOG_DIR=~/catalogs` solves the M15 frame bounded (322.49,
+  +12.17, 0.593 arcsec/px) directly in 19.8 s and through the MCP worker
+  (600 s, 4 GiB) in 13.5 s. Claude Desktop 4.29 starts MCP servers with
+  the login shell's PATH (`/opt/homebrew/bin` included, read from a probe
+  server's environment), so the `brew shellenv` line Homebrew's installer
+  adds to `~/.zprofile` is what makes `solve-field` visible to the
+  extension. A review pass then made the search breadth-first (a folder
+  first reached at the depth limit through one link is still searched
+  from a shallower one), the paths absolute (solve-field runs in a
+  temporary folder), an unknown `ATLAS_CATALOG` a reported problem rather
+  than a guessed root, one `solver_unavailable` message that names what is
+  wrong instead of advising a setting already made, and the engine
+  configuration UTF-8 (a bounded solve through `Catalogs José/4200`
+  works).
+- [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
+  other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
+  documentation and behavior changes, which the repository keeps in
+  separate, narrow PRs (CLAUDE.md, Conventions). Split it by kind, in an
+  order each PR can merge in: behavior (launcher, console, model port,
+  skill installer, `mars-bench`), workflow (`ci.yml`, `release.yml`, the
+  packer), then documentation. Target `main`, by the maintainer's
+  decision (2026-10-28), not the usual `dev`. Some commits mix kinds and
+  split by hunk: `3e90733` alone carries four separate plot fixes
+  (zero-point, overlay, radio, HR) with documentation and plan edits.
+
+Animations, Markdown rendering, input history, notifications, inline
+scrollback and theme memory are polish, not release requirements; add any of
+them as a gate only with a failing supported use case.
 
 Evidence: [installation guide](../installing.md),
+[console](../../tools/tui/),
 [Claude installer](../../installers/claude-desktop/README.md),
 [Codex installer](../../installers/codex/README.md),
 [test coverage](../../tests/README.md).
@@ -436,6 +792,10 @@ reachable now, what it does, and whether the release needs a change or caveat.
   sources, or growth-curve neighbor checks fail? Check pixel origins,
   matching tolerances, SNR/fit weights and the tentative ellipse-clipping
   arithmetic report. M1's crash containment is already closed.
+  *Found 2026-10-30 (M4 plot review):* six of NGC 5128 B's 35 calibration
+  stars leave the aperture kernel with `flux_err` exactly 0 at ordinary
+  fluxes (3,000-4,000 counts), so the zero-point solve drops them before
+  fitting. Why the error is zero is not yet known.
 - [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
@@ -445,6 +805,11 @@ reachable now, what it does, and whether the release needs a change or caveat.
   channels paired by index rather than phase and prefolded-file axes. Legacy
   isochrone splicing drops a point; luminosity framing and edge-on projection
   scales also need their intended meaning established.
+  *Found 2026-11-01 (M4 plot review):* the HR fit joins track rows no more
+  than 0.5 mag apart (`TRACK_MAX_GAP_MAG`). On M67's fitted track that
+  leaves the main sequence unjoined between M_G 6.94 and 7.48, where 27 of
+  548 members are scored against the two end rows only, and joins most
+  AGB pulse steps. The effect on the fitted parameters is unmeasured.
 - [ ] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding

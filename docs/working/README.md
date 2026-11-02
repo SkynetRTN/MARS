@@ -11,7 +11,7 @@ documents for individual gates.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123). M2 is closed locally on `feature/m2` after its final review corrections; M3 is closed on main. M2 remains unmerged into main and unpublished. Remaining gates describe missing evidence and release checks. |
+| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-30 against `main` at `e1ad8b0` (M2, PR #124). M2 and M3 are closed on main, unpublished. Remaining gates describe missing evidence and release checks. |
 
 ## Landed
 
@@ -29,6 +29,7 @@ from the record.
 | MCP tool surface | [`../archive/mcp-tool-surface.md`](../archive/mcp-tool-surface.md); `v0.1.0rc1` published | 2026-09-25 (C9, the last phase) |
 | Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
 | Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |
+| Desktop acceptance (M4) | [`../archive/desktop-acceptance.md`](../archive/desktop-acceptance.md); install steps in [`../installing/`](../installing/) | 2026-10-23 |
 | Benchmark | [`../benchmarking/`](../benchmarking/README.md) — phases 4–5 of the model port, with its results, report and figures | 2026-09-14 (calibration gate) |
 | TUI | `../tool-architecture.md` section 10.2; working document deleted, git history has it | 2026-09-18 (phase G) |
 
