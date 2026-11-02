@@ -203,8 +203,18 @@ jobs:
           echo "served skynet-mars $served; built $VERSION"
           # A dry run may build a version PyPI already has, so only a tag must match.
           if [ "$EVENT" = "push" ] && [ "$served" != "$VERSION" ]; then
-            echo "::error::the extension served $served, not this build ($VERSION)"
-            exit 1
+            # `@latest` skips a prerelease once a stable release exists, and never
+            # picks an older version: for those tags (a prerelease after a stable,
+            # a backport) the extension rightly serves another release.
+            expected=$(uv tool run --offline --python "$PYTHON" --from "skynet-mars[mcp]" \
+              python -c "import sys; from packaging.version import Version as V; b, s = V(sys.argv[1]), V(sys.argv[2]); print((b.is_prerelease and not s.is_prerelease) or b < s)" \
+              "$VERSION" "$served")
+            if [ "$expected" = "True" ]; then
+              echo "::warning::the extension serves $served, not $VERSION: @latest does not pick a prerelease after a stable release, or an older version"
+            else
+              echo "::error::the extension served $served, not this build ($VERSION)"
+              exit 1
+            fi
           fi
 
   verify:
