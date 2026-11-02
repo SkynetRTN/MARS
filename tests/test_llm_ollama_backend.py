@@ -339,10 +339,30 @@ def test_a_prompt_the_daemon_truncated_is_refused_naming_the_setting():
         backend.complete(messages=(), tools=[], system="x" * 75_000, max_tokens=64)
     assert excinfo.value.variable == "OLLAMA_CONTEXT_LENGTH"
     assert "read 2050 of about" in str(excinfo.value)
+    # The daemon answered and the variable may be set: the message says what
+    # happened and the command that fixes it, not "not set or unreachable".
+    assert "not set or" not in str(excinfo.value)
+    assert "OLLAMA_CONTEXT_LENGTH=32768 ollama serve" in str(excinfo.value)
+
+
+def test_a_refused_answer_never_reaches_the_screen():
+    """The parent adapter passes the answer to on_text before returning; the
+    console then showed the answer of a model that never saw its tools."""
+
+    capture = CapturingTransport(openai_chat_response(usage=_usage(2050)))
+    backend = OllamaBackend(model="qwen3:0.6b", transport=capture())
+    shown: list[str] = []
+    with pytest.raises(BackendUnavailableError):
+        backend.complete(messages=(), tools=[], system="x" * 75_000, max_tokens=64,
+                         on_text=shown.append, on_thinking=shown.append)
+    assert shown == []
 
 
 def test_a_prompt_read_whole_passes():
     capture = CapturingTransport(openai_chat_response(usage=_usage(16_000)))
     backend = OllamaBackend(model="qwen3:0.6b", transport=capture())
-    response = backend.complete(messages=(), tools=[], system="x" * 75_000, max_tokens=64)
+    shown: list[str] = []
+    response = backend.complete(messages=(), tools=[], system="x" * 75_000, max_tokens=64,
+                                on_text=shown.append)
     assert response.usage.input_tokens == 16_000
+    assert shown == [response.text] and response.text
