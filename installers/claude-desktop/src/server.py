@@ -31,10 +31,11 @@ uv call passes ``--no-config``: the host may start this in any folder, and a
 The manifest maps each optional ``user_config`` field to an environment
 variable. A field the user left empty can arrive as an empty string, or as
 the unexpanded ``${user_config...}`` placeholder; which one is undocumented.
-Both are removed here, before ``mars-mcp`` reads anything. Two of them
+Both are removed here, before ``mars-mcp`` reads anything. Three of them
 matter: an unexpanded ``MARS_MCP_TOOLS`` stops ``mars-mcp`` at startup
-("unknown tool group(s)"), and an empty ``ADS_DEV_KEY`` stops astroquery
-from reading ``~/.ads/dev_key``. ``mars-mcp`` already treats an empty
+("unknown tool group(s)"), an empty ``ADS_DEV_KEY`` stops astroquery
+from reading ``~/.ads/dev_key``, and an unexpanded ``MARS_CATALOG_DIR``
+would be reported to the model as a catalog folder that does not exist. ``mars-mcp`` already treats an empty
 ``MARS_HOME`` or ``MARS_MCP_TOOLS`` as unset; removing them too keeps one rule.
 """
 
@@ -45,7 +46,7 @@ import shutil
 import subprocess
 import sys
 
-OPTIONAL_SETTINGS = ("ADS_DEV_KEY", "MARS_MCP_TOOLS", "MARS_HOME", "MARS_VERSION")
+OPTIONAL_SETTINGS = ("ADS_DEV_KEY", "MARS_MCP_TOOLS", "MARS_HOME", "MARS_VERSION", "MARS_CATALOG_DIR")
 
 #: A release as PyPI names one (PEP 440's characters), never a specifier.
 VERSION = re.compile(r"[0-9][0-9A-Za-z.!+-]*")

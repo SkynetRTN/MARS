@@ -27,7 +27,8 @@
         "ADS_DEV_KEY": "${user_config.ads_dev_key}",
         "MARS_MCP_TOOLS": "${user_config.tool_groups}",
         "MARS_HOME": "${user_config.mars_home}",
-        "MARS_VERSION": "${user_config.mars_version}"
+        "MARS_VERSION": "${user_config.mars_version}",
+        "MARS_CATALOG_DIR": "${user_config.catalog_dir}"
       }
     }
   },
@@ -59,6 +60,12 @@
       "type": "string",
       "title": "MARS release",
       "description": "Run this exact release (for example 0.1.0) instead of the newest, to step back from a bad one. Leave empty for the newest.",
+      "required": false
+    },
+    "catalog_dir": {
+      "type": "directory",
+      "title": "Catalog folder",
+      "description": "The folder holding your plate-solving catalogs: astrometry.net index files and the UCAC catalogue, which MARS looks for up to four folders deep. Plate solving also needs astrometry.net installed (see the documentation). Leave empty to go without plate solving.",
       "required": false
     }
   },

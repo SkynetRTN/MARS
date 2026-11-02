@@ -148,6 +148,7 @@ def test_only_variables_mars_reads_are_forwarded():
         "CASDA_OPAL_USERNAME",
         "DBUS_SESSION_BUS_ADDRESS",
         "XDG_RUNTIME_DIR",
+        "MARS_CATALOG_DIR",
         "ANET_INDEX_PATH",
         "ANET_TIMEOUT_S",
         "ATLAS_CATALOG_ROOT",
