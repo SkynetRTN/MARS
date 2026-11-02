@@ -3,9 +3,11 @@
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
 observation_asset_processing/optical_data_processing/field_cal.py (701 lines).
 
-Copied verbatim. The maintained interface supplies WCS and catalog rows
-explicitly, while deterministic extraction and photometry are ordinary imports.
-No numerical expression, constant, or ordering has been changed. The M3
+Originally copied verbatim. The maintained interface supplies WCS and catalog
+rows explicitly, while deterministic extraction and photometry are ordinary
+imports. M5 corrects detector-pixel and spherical matching, measured-flux SNR
+selection, and calibration measurement validity, and forwards extraction RMS
+without changing annular sky subtraction. The M3
 malformed-input guards, marked ``M3`` inline, do change outcomes: inputs that
 used to abort now solve or fail by name, unusable rows are left out, and a
 degenerate solve -- including upstream's single-star zero point with a NaN
@@ -21,7 +23,6 @@ from numbers import Integral
 from typing import Iterable, Mapping
 
 import numpy as np
-from algorithms.diagnostics import note_numerical_issue
 from astropy.wcs import WCS
 from scipy.spatial import cKDTree
 
@@ -224,15 +225,13 @@ def _match_detected_sources(
     header,
     data: np.ndarray,
     source_match_tol: float | None,
+    source_match_tol_arcsec: float | None = None,
     matched_shapes: list | None = None,
 ) -> list[CatalogSource]:
     if not detected_sources:
         return catalog_sources
-    if source_match_tol is None or source_match_tol <= 0:
-        raise ValueError("Positive catalog source match tolerance expected")
-
     epoch = get_fits_time(header)[0]
-    file_ids = sorted({getattr(source, "file_id", None) for source in detected_sources})
+    file_ids = set(getattr(source, "file_id", None) for source in detected_sources)
     catalog_sources_for_file: dict[int | None, list[CatalogSource]] = {
         file_id: [] for file_id in file_ids
     }
@@ -245,40 +244,35 @@ def _match_detected_sources(
             if catalog_file_id in catalog_sources_for_file:
                 catalog_sources_for_file[catalog_file_id].append(catalog_source)
 
-    # When all detected sources carry sky coordinates (ra_hours, dec_degs), use
-    # angular distance matching instead of WCS-projected pixel distance.
-    # This is WCS-quality-independent: if the detected source RA/Dec comes from
-    # the same plate solution used to generate the catalog, the catalog star at a
-    # detected source's sky position is its nearest neighbour regardless of any
-    # fitting error in the harness-constructed WCS.
-    # The flat-sky tolerance is expressed in arcseconds.  source_match_tol is in
-    # pixels, so it is converted using the WCS pixel scale when available.
-    det_ra_h = [getattr(s, "ra_hours", None) for s in detected_sources]
-    det_dec_d = [getattr(s, "dec_degs", None) for s in detected_sources]
-    use_angular = all(v is not None for v in det_ra_h) and all(v is not None for v in det_dec_d)
+    def has_position(source, x_name, y_name):
+        return all(value is not None and np.isfinite(value)
+                   for value in (getattr(source, x_name, None), getattr(source, y_name, None)))
+
+    # A WCS always means detector-pixel distance. Without one, retain supplied
+    # pixel coordinates when both lists have them; sky-only matching has its own
+    # explicit angular contract and never reinterprets source_match_tol.
+    have_pixels = (all(has_position(s, "x", "y") for s in detected_sources)
+                   and any(has_position(s, "x", "y") for s in catalog_sources))
+    use_angular = wcs is None and not have_pixels
     if use_angular:
-        longitudes = [float(v) for v in det_ra_h if v is not None and np.isfinite(v)]
-        longitudes += [float(s.ra_hours) for s in catalog_sources
-                       if s.ra_hours is not None and np.isfinite(s.ra_hours)]
-        if longitudes and max(longitudes) - min(longitudes) > 12:
-            note_numerical_issue("ra_seam_matching_approximation",
-                "Angular source matching retains an unwrapped flat-sky RA approximation "
-                "across the 0/24-hour seam; nearby catalog stars can fail to match.")
-
-    if not use_angular and wcs is None:
-        raise ValueError("Missing WCS for catalog source matching")
-
-    # In angular mode the kd-tree is built in flat-sky arcsec coordinates, so the
-    # tolerance must be in arcsec.  Convert from pixels via the WCS pixel scale.
-    if use_angular and wcs is not None:
-        try:
-            from astropy.wcs.utils import proj_plane_pixel_scales as _ppps
-            pixel_scale_arcsec = float(np.mean(np.abs(_ppps(wcs)))) * 3600.0
-            tol_arcsec = source_match_tol * pixel_scale_arcsec
-        except Exception:
-            tol_arcsec = float(source_match_tol)  # treat as arcsec if conversion fails
+        if not all(has_position(s, "ra_hours", "dec_degs") for s in detected_sources):
+            raise ValueError("Missing WCS or shared pixel/sky coordinates for catalog source matching")
+        if (source_match_tol_arcsec is None or not np.isfinite(source_match_tol_arcsec)
+                or source_match_tol_arcsec <= 0):
+            raise ValueError("Positive source_match_tol_arcsec required for sky-only matching without WCS")
+        # Unit-vector chord distance is monotonic in spherical separation,
+        # including longitude seams and poles. A sphere's maximum angle is pi.
+        match_tol = 2 * np.sin(np.deg2rad(min(source_match_tol_arcsec / 3600, 180)) / 2)
     else:
-        tol_arcsec = float(source_match_tol)
+        if source_match_tol is None or not np.isfinite(source_match_tol) or source_match_tol <= 0:
+            raise ValueError("Positive catalog source match tolerance expected")
+        match_tol = source_match_tol
+
+    def sky_vectors(ra, dec):
+        longitude, latitude = np.deg2rad(ra), np.deg2rad(dec)
+        cos_latitude = np.cos(latitude)
+        return np.column_stack([cos_latitude * np.cos(longitude),
+                                cos_latitude * np.sin(longitude), np.sin(latitude)])
 
     # ---- build catalog match coordinates ----------------------------------------
     # Both angular and pixel paths need the epoch-corrected catalog RA/Dec.
@@ -286,12 +280,6 @@ def _match_detected_sources(
     catalog_source_coord_for_file: dict[int | None, np.ndarray] = {}
     catalog_source_kdtree_for_file: dict[int | None, cKDTree | None] = {}
     catalog_index_for_file: dict[int | None, np.ndarray] = {}
-
-    # Reference point for the flat-sky projection used in angular mode.
-    if use_angular:
-        ra_ref = float(np.mean([float(v) * 15.0 for v in det_ra_h if v is not None]))
-        dec_ref = float(np.mean([float(v) for v in det_dec_d if v is not None]))
-        cos_dec_ref = float(np.cos(np.deg2rad(dec_ref)))
 
     for file_id, catalog_source_list in catalog_sources_for_file.items():
         if not catalog_source_list:
@@ -349,24 +337,18 @@ def _match_detected_sources(
                     ra[have_pm] = (ra[have_pm] + mu * np.sin(theta) / cd) % 360
                     dec[have_pm] = np.clip(dec[have_pm] + mu * np.cos(theta), -90, 90)
 
-            if use_angular:
-                # Flat-sky coordinates in arcsec (consistent with detected-source coords below)
-                cx = np.where(have_radec, (ra - ra_ref) * cos_dec_ref * 3600.0, np.nan)
-                cy = np.where(have_radec, (dec - dec_ref) * 3600.0, np.nan)
-            else:
-                # Project to pixels via WCS (original behaviour)
+            if wcs is not None:
+                # Catalog sky coordinates are at their reference epoch; project
+                # the corrected coordinates into FITS origin-1 detector pixels.
                 x[have_radec], y[have_radec] = wcs.all_world2pix(
                     ra[have_radec], dec[have_radec], 1, quiet=True,
                 )
-        elif use_angular:
-            # M3 (PHOT-05): with no row positioned, cx/cy were never bound and
-            # the lookup below raised NameError.
-            cx = cy = np.full(len(catalog_source_list), np.nan)
 
         if not use_angular:
             if epoch is not None:
                 have_pm_epoch = np.array([isinstance(val, datetime) for val in pm_epoch])
-                have_pm = have_pm_epoch & (pm_pixel != 0)
+                # Sky motion has already been applied before WCS projection.
+                have_pm = have_pm_epoch & (pm_pixel != 0) & ~(have_radec & (wcs is not None))
                 if have_pm.any():
                     mu = pm_pixel[have_pm] * np.asarray(
                         [(epoch - dt).total_seconds() for dt in pm_epoch[have_pm]]
@@ -376,7 +358,7 @@ def _match_detected_sources(
                     y[have_pm] += mu * np.sin(theta)
             coords = np.transpose([x, y])
         else:
-            coords = np.column_stack([cx, cy])
+            coords = sky_vectors(ra, dec)
 
         # M3 (PHOT-05): a row with no usable position cannot be matched, and
         # one NaN coordinate made cKDTree reject the whole catalog. Such rows
@@ -410,19 +392,23 @@ def _match_detected_sources(
         if use_angular:
             det_ra_deg = np.array([float(getattr(s, "ra_hours", 0)) * 15.0 for s in sources])
             det_dec_deg = np.array([float(getattr(s, "dec_degs", 0)) for s in sources])
-            coords = np.column_stack([
-                (det_ra_deg - ra_ref) * cos_dec_ref * 3600.0,
-                (det_dec_deg - dec_ref) * 3600.0,
-            ])
+            coords = sky_vectors(det_ra_deg, det_dec_deg)
         else:
-            coords = np.array([(s.x, s.y) for s in sources])
+            # A measured centroid is already at the image epoch. Prefer it to
+            # supplied RA/Dec; project sky-only detections only when necessary.
+            coords = np.array([(s.x, s.y) for s in sources], dtype=float)
+            need_projection = ~np.isfinite(coords).all(axis=1)
+            if need_projection.any() and wcs is not None:
+                det_ra = np.array([s.ra_hours if s.ra_hours is not None else np.nan for s in sources]) * 15
+                det_dec = np.array([s.dec_degs if s.dec_degs is not None else np.nan for s in sources])
+                coords[need_projection] = np.column_stack(wcs.all_world2pix(
+                    det_ra[need_projection], det_dec[need_projection], 1, quiet=True))
+            if not np.isfinite(coords).all():
+                raise ValueError("Detected sources need usable detector positions for pixel matching")
         detected_source_coord_for_file[file_id] = coords
         detected_source_kdtree_for_file[file_id] = cKDTree(coords)
 
     # ---- mutual nearest-neighbour matching --------------------------------------
-    # In angular mode the kd-tree units are arcsec; use tol_arcsec.
-    # In pixel mode use source_match_tol (pixels) directly.
-    match_tol = tol_arcsec if use_angular else source_match_tol
     matched_sources: list[CatalogSource] = []
     for source in detected_sources:
         file_id, src_idx = detected_source_file_idx[id(source)]
@@ -453,6 +439,8 @@ def _match_detected_sources(
                 "theta",
             }
         )
+        if not use_angular:
+            source_map["x"], source_map["y"] = det_coord
         for attr in (
             "id",
             "catalog_name",
@@ -630,6 +618,7 @@ def perform_field_calibration(
         header=header,
         data=data,
         source_match_tol=settings.source_match_tol,
+        source_match_tol_arcsec=settings.source_match_tol_arcsec,
         matched_shapes=matched_shapes,
     )
     logger.info("Catalog sources after detected-source matching: %d", len(sources))
@@ -680,6 +669,13 @@ def perform_field_calibration(
             # M3 (PHOT-11): restore the matched detection's FWHM. Read only by
             # mode="auto"; aperture photometry ignores it.
             src_map.update({attr: value for attr, value in shape.items() if value is not None})
+            if matched_shapes:
+                # Matching supplies the observed detector position, already at
+                # the frame epoch. Do not reproject a supplied sky position or
+                # apply the catalog's proper motion to that measurement again.
+                for attr in ("ra_hours", "dec_degs", "pm_sky", "pm_pos_angle_sky",
+                             "pm_pixel", "pm_pos_angle_pixel", "pm_epoch"):
+                    src_map[attr] = None
             normalized_sources.append(SourceExtractionData(**src_map))
 
         # LEGACY AFTERGLOW PARITY — DO NOT "CLEAN UP".  Forcing apcorr_tol to 0
@@ -697,7 +693,7 @@ def perform_field_calibration(
             cal_phot_settings,
             wcs=wcs,
             background=None,
-            background_rms=None,
+            background_rms=background_rms,
         )
     # M3: a non-finite magnitude reached calc_solution and raised LinAlgError.
     # An infinite mag_error survives calc_solution's `> 0` filter, gives a
@@ -706,6 +702,7 @@ def perform_field_calibration(
         source for source in photometry_results
         if source.mag is not None and math.isfinite(source.mag)
         and (source.mag_error is None or math.isfinite(source.mag_error))
+        and (source.flux is None or (math.isfinite(source.flux) and source.flux > 0))
         and not (getattr(source, "sat_pixels", None) or 0) > 0
     ]
 
@@ -713,17 +710,26 @@ def perform_field_calibration(
         raise RuntimeError("No catalog sources could be photometered")
     logger.info("Photometry produced %d catalog-linked measurements", len(photometry_results))
 
-    min_snr = settings.min_snr or 0
-    max_snr = settings.max_snr or np.inf
+    min_snr = settings.min_snr if settings.min_snr is not None else 0
+    max_snr = settings.max_snr if settings.max_snr is not None else np.inf
     if settings.min_snr or settings.max_snr:
-        note_numerical_issue("magnitude_error_snr_cut",
-            "Calibration SNR selection uses the retained inverse-magnitude-error proxy, "
-            "which differs from flux/error SNR. Thresholds are not exact flux-SNR cuts.")
+        def measurement_snr(source):
+            if source.flux is not None and source.flux_error is not None:
+                if (math.isfinite(source.flux) and source.flux > 0
+                        and math.isfinite(source.flux_error) and source.flux_error > 0):
+                    return source.flux / source.flux_error
+                return np.nan
+            # Invert the retained mag_error = 2.5*log10(1 + error/flux)
+            # relation for legacy rows carrying only magnitude uncertainty.
+            if source.mag_error is None or not math.isfinite(source.mag_error) or source.mag_error <= 0:
+                return np.nan
+            with np.errstate(over="ignore"):
+                return 1 / np.expm1(np.log(10) * source.mag_error / 2.5)
+
         photometry_results = [
             source
             for source in photometry_results
-            if not getattr(source, "mag_error", None)
-            or min_snr <= 1 / getattr(source, "mag_error", 1) <= max_snr
+            if min_snr <= measurement_snr(source) <= max_snr
         ]
         logger.info("Photometry results after SNR filter: %d", len(photometry_results))
         if not photometry_results:

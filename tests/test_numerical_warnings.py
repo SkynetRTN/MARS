@@ -37,11 +37,11 @@ def test_artifact_failure_keeps_catalog_and_sample_notices(phase, frame_path, tm
     )
     assert [error.code for error in result.errors] == ["tool_exception"]
     assert {"catalog_rows_capped", "catalog_fallback_not_exhausted",
-            "calibration_sufficiency_unverified", "magnitude_error_snr_cut"} <= {
+            "calibration_sufficiency_unverified"} <= {
         warning.code for warning in result.warnings}
 
 
-def test_nonpositive_flux_placeholder_is_reported_without_changing_legacy_values():
+def test_nonpositive_flux_is_reported_and_excluded():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData
@@ -51,12 +51,11 @@ def test_nonpositive_flux_placeholder_is_reported_without_changing_legacy_values
         rows = run_photometry(image, fits.Header({"EXPTIME": 1}),
             [SourceExtractionData(x=8, y=8)], PhotometrySettings(a=2, apcorr_tol=0),
             background=image.copy(), background_rms=np.ones_like(image))
-    assert len(rows) == 1
-    assert rows[0].flux == 0 and rows[0].mag == 0
+    assert rows == []
     assert "nonpositive_aperture_flux" in {notice.code for notice in notices}
 
 
-def test_empty_annulus_is_reported_even_when_the_legacy_flux_is_finite():
+def test_empty_annulus_is_reported_and_excluded():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData
@@ -65,7 +64,7 @@ def test_empty_annulus_is_reported_even_when_the_legacy_flux_is_finite():
         rows = run_photometry(np.full((20, 20), 10.), fits.Header({"EXPTIME": 1}),
             [SourceExtractionData(x=10, y=10)],
             PhotometrySettings(a=2, a_in_px=30, a_out_px=35, apcorr_tol=0))
-    assert len(rows) == 1 and rows[0].flux > 0
+    assert rows == []
     assert "empty_background_annulus" in {notice.code for notice in notices}
 
 
@@ -84,7 +83,7 @@ def test_isophotal_origin_warning_follows_the_actual_adaptive_branch(provided_sh
             PhotometrySettings(mode="auto", a=2.5, centroid_radius=3, apcorr_tol=0),
             background=np.zeros_like(image), background_rms=np.ones_like(image))
     assert rows
-    assert ("isophotal_origin_approximation" in {notice.code for notice in notices}) != provided_shape
+    assert "isophotal_origin_approximation" not in {notice.code for notice in notices}
 
 
 @pytest.mark.parametrize("downsample", [1, 2])
@@ -97,7 +96,7 @@ def test_downsampled_saturation_counting_is_disclosed_only_on_that_path(downsamp
     with collect_numerical_notices() as notices:
         rows, _, _ = run_source_extraction(data.copy(), header, SourceExtractionSettings(downsample=downsample))
     assert rows
-    assert ("saturation_count_unreliable" in {notice.code for notice in notices}) == (downsample > 1)
+    assert "saturation_count_unreliable" not in {notice.code for notice in notices}
 
 
 def test_calibration_reports_near_flat_snr_extrapolation_and_its_actual_snr_cut(frame_path):
@@ -106,7 +105,8 @@ def test_calibration_reports_near_flat_snr_extrapolation_and_its_actual_snr_cut(
     result = calibrate_zeropoint(frame_path("ngc5128_b"), catalog_fixture="selected_rows",
                                  compare_to="ngc5128_b_002")
     assert result.errors == []
-    assert {"limiting_magnitude_unvalidated", "magnitude_error_snr_cut"} <= {w.code for w in result.warnings}
+    assert "limiting_magnitude_unvalidated" in {w.code for w in result.warnings}
+    assert "magnitude_error_snr_cut" not in {w.code for w in result.warnings}
 
 
 def test_direct_limiting_magnitude_is_disclosed_on_nearly_flat_snr_inputs():
@@ -128,28 +128,29 @@ def test_landolt_u_error_limit_is_not_attached_to_unaffected_bands():
     assert "retained_catalog_uncertainty" not in {w.code for w in resolve_reference_band("Landolt", "V").warnings}
 
 
-def test_angular_matching_discloses_its_retained_ra_seam_limit():
+def test_angular_matching_handles_the_ra_seam_without_a_defect_warning():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.catalogs.schemas import CatalogSource
     from algorithms.fieldcal.field_cal import _match_detected_sources
     from algorithms.fieldcal.schemas import SourceExtractionData
 
     with collect_numerical_notices() as notices:
-        with pytest.raises(RuntimeError, match="Could not match"):
-            _match_detected_sources(
+        rows = _match_detected_sources(
                 [CatalogSource(id="c", ra_hours=.00001, dec_degs=0)],
                 [SourceExtractionData(id="d", ra_hours=23.99999, dec_degs=0, x=5, y=5)],
-                wcs=None, header=fits.Header(), data=np.zeros((10, 10)), source_match_tol=5)
-    assert "ra_seam_matching_approximation" in {notice.code for notice in notices}
+                wcs=None, header=fits.Header(), data=np.zeros((10, 10)),
+                source_match_tol=5, source_match_tol_arcsec=5)
+    assert len(rows) == 1
+    assert not notices
 
 
-def test_instrumental_public_photometry_reports_aperture_correction_crowding(frame_path, tmp_path):
+def test_instrumental_public_photometry_does_not_invent_crowding_for_a_clean_reference(frame_path, tmp_path):
     from tools.photometry import run_photometry_on_target
 
     result = run_photometry_on_target(frame_path("ngc5128_b"), use_field_cal=False, output_dir=tmp_path)
     assert result.errors == []
     assert result.status == "ok"
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert "aperture_correction_crowding" not in {warning.code for warning in result.warnings}
 
 
 def test_hr_detection_reports_its_real_aperture_warning(frame_path, tmp_path, monkeypatch):
@@ -179,14 +180,14 @@ def test_solver_failure_keeps_source_extraction_notices(frame_path, tmp_path, mo
         return ["astrometry.net"], []
 
     def failing_solver(*args, **kwargs):
-        note_numerical_issue("saturation_count_unreliable", "Downsampled saturation counts are unreliable.")
+        note_numerical_issue("astrometry_catalog_epoch_unverified", "Reference epoch is unavailable.")
         raise RuntimeError("test native failure")
 
     monkeypatch.setattr(wcs, "_configured_backend_warnings", configured)
     monkeypatch.setattr(wcs, "_solve_wcs", failing_solver)
     result = wcs.solve_astrometry(frame_path("ngc5128_b"), force=True)
     assert "solver_failed" in {error.code for error in result.errors}
-    assert "saturation_count_unreliable" in {warning.code for warning in result.warnings}
+    assert "astrometry_catalog_epoch_unverified" in {warning.code for warning in result.warnings}
 
 
 def test_direct_band_resolution_discloses_the_retained_landolt_u_uncertainty():
@@ -208,15 +209,21 @@ def test_public_photometry_keeps_prior_notices_when_a_later_phase_raises(phase, 
 
     if phase == "compute":
         def fail(*args, **kwargs):
-            note_numerical_issue("saturation_count_unreliable", "Retained saturation counting limit.")
+            note_numerical_issue("astrometry_catalog_epoch_unverified", "Reference epoch is unavailable.")
             raise ValueError("test photometry failure")
         monkeypatch.setattr(photometry, "compute_photometry", fail)
-        expected = "saturation_count_unreliable"
+        expected = "astrometry_catalog_epoch_unverified"
     else:
+        original_compute = photometry.compute_photometry
+        def compute_with_notice(*args, **kwargs):
+            result = original_compute(*args, **kwargs)
+            note_numerical_issue("aperture_correction_unavailable", "Test correction is unavailable.")
+            return result
+        monkeypatch.setattr(photometry, "compute_photometry", compute_with_notice)
         def fail(*args, **kwargs):
             raise ValueError("test plot failure")
         monkeypatch.setattr(photometry, "plot_photometry", fail)
-        expected = "aperture_correction_crowding"
+        expected = "aperture_correction_unavailable"
     reply = call_tool("run_photometry_on_target", {
         "target": str(frame_path("ngc5128_b")), "use_field_cal": False, "output_dir": tmp_path})
     assert "tool_exception" in {error["code"] for error in reply["errors"]}

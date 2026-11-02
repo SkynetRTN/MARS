@@ -254,6 +254,7 @@ def test_catalog_zero_saturation_does_not_erase_a_saturated_detection():
     detection = SourceExtractionData(id="detected", x=5, y=5, ra_hours=10, dec_degs=-30,
                                      sat_pixels=7)
     (matched,) = _match_detected_sources(
-        [catalog], [detection], wcs=None, header={}, data=np.zeros((10, 10)), source_match_tol=1,
+        [catalog], [detection], wcs=None, header={}, data=np.zeros((10, 10)),
+        source_match_tol=1, source_match_tol_arcsec=1,
     )
     assert matched.sat_pixels > 0

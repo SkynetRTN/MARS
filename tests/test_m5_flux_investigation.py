@@ -1,9 +1,4 @@
-"""M5 investigation: characterize current failures, NOT desired acceptance behavior.
-
-All images are synthetic and local. These tests intentionally pass while
-PHOT-01/02/12 survive; a numerical repair should replace their bug-pinning
-assertions with its acceptance contract. No production files are changed.
-"""
+"""M5 flux validity, annular sky and growth-correction correctness regressions."""
 
 import numpy as np
 import pytest
@@ -21,7 +16,7 @@ from algorithms.skylib_lite.photometry.aperture_numba import _sum_circann, sum_c
 
 
 @pytest.mark.parametrize('sky', [0., 1.])
-def test_phot01_nonpositive_flux_remains_a_finite_magnitude(sky):
+def test_phot01_nonpositive_flux_has_no_magnitude_or_public_detection(sky):
     image = np.zeros((15, 15))
     sources = np.array([(8., 8.)], dtype=[('x', float), ('y', float)])
     background = np.full_like(image, sky)
@@ -33,14 +28,13 @@ def test_phot01_nonpositive_flux_remains_a_finite_magnitude(sky):
             PhotometrySettings(a=2, apcorr_tol=0, zero_point_mag=20),
             background=background, background_rms=np.ones_like(image))
     assert raw['flux'][0] == pytest.approx(-sky * np.pi * 4)
-    assert raw['flag'][0] == 0
-    assert raw['mag'][0] == raw['mag_err'][0] == 0
-    assert len(rows) == 1
-    assert rows[0].mag == 20 and rows[0].mag_error == 0
+    assert raw['flag'][0] & 0x80
+    assert np.isnan(raw['mag'][0]) and np.isnan(raw['mag_err'][0])
+    assert rows == []
     assert 'nonpositive_aperture_flux' in {n.code for n in notices}
 
 
-def test_phot01_public_calibration_succeeds_on_an_image_containing_only_zeros(tmp_path):
+def test_phot01_public_calibration_refuses_an_image_containing_only_zeros(tmp_path):
     from tools.photometry import calibrate_zeropoint
 
     wcs = WCS(naxis=2)
@@ -62,15 +56,14 @@ def test_phot01_public_calibration_succeeds_on_an_image_containing_only_zeros(tm
     # Supplying catalog_sources selects the genuine offline pixel-measurement
     # path; no provided-photometry shortcut or extraction mock is used.
     result = calibrate_zeropoint(path, catalog_sources=catalog)
-    assert result.errors == []
-    assert result.zero_point == pytest.approx(13.)
+    assert result.errors
+    assert result.zero_point is None
     warnings = {w.code: w.message for w in result.warnings}
     assert 'nonpositive_aperture_flux' in warnings
-    assert '3 of 3' in warnings['calibration_sufficiency_unverified']
 
 
 @pytest.mark.parametrize('add_positive_errors', [False, True])
-def test_phot01_zero_error_filter_depends_on_other_rows(add_positive_errors):
+def test_solver_preserves_explicit_magnitude_only_unweighted_contract(add_positive_errors):
     rows = [PhotometryData(flux=0, mag=0, mag_error=0, ref_mag=ref, ref_mag_error=0)
             for ref in [12.95, 13., 13.05]]
     if add_positive_errors:
@@ -89,7 +82,7 @@ def test_phot01_zero_error_filter_depends_on_other_rows(add_positive_errors):
 
 
 @pytest.mark.parametrize('masked', [False, True])
-def test_phot02_empty_annulus_keeps_sky_flux_and_discards_annulus_flags(masked):
+def test_phot02_empty_annulus_invalidates_measurement_and_preserves_flags(masked):
     image = np.full((20, 20), 10.)
     image[9, 9] += 300.
     inner, outer = (6., 8.) if masked else (30., 35.)
@@ -108,21 +101,19 @@ def test_phot02_empty_annulus_keeps_sky_flux_and_discards_annulus_flags(masked):
             [SourceExtractionData(x=10, y=10)],
             PhotometrySettings(a=2, a_in_px=inner, a_out_px=outer, apcorr_tol=0))
     assert internal[2] == 0
-    assert annulus[3][0] == internal[3] == (0x20 if masked else 0x10)
-    assert raw['flag'][0] == 0
-    assert len(rows) == 1
-    assert rows[0].flux == pytest.approx(300 + 10 * np.pi * 4)
-    assert rows[0].mag + 2.5 * np.log10(300) == pytest.approx(-.37986341820956326)
+    expected_flag = 0x20 if masked else 0x10
+    assert annulus[3][0] & expected_flag
+    assert internal[3] & expected_flag
+    assert raw['flag'][0] & internal[3]
+    assert raw['flag'][0] & 0x40
+    assert np.isnan(raw['flux'][0])
+    assert rows == []
     notice_codes = {n.code for n in notices}
-    if masked:
-        assert raw['background_area'][0] > 0  # misleading preflight area
-        assert 'empty_background_annulus' not in notice_codes
-    else:
-        assert raw['background_area'][0] == 0
-        assert 'empty_background_annulus' in notice_codes
+    assert raw['background_area'][0] == 0
+    assert 'empty_background_annulus' in notice_codes
 
 
-def test_phot12_growth_absorbs_a_neighbor_and_shifts_a_distant_source(monkeypatch):
+def test_phot12_growth_rejects_a_neighbor_and_uses_a_clean_reference(monkeypatch):
     import algorithms.skylib_lite.photometry.aperture as aperture
 
     yy, xx = np.indices((129, 129))
@@ -153,17 +144,43 @@ def test_phot12_growth_absorbs_a_neighbor_and_shifts_a_distant_source(monkeypatc
             corrected = run_photometry(image, fits.Header({'EXPTIME': 1}), sources,
                 PhotometrySettings(a=3, a_in_px=20, a_out_px=25, apcorr_tol=1e-4),
                 background=sky, background_rms=np.ones_like(image))
-        assert 'aperture_correction_crowding' in {n.code for n in notices}
+        assert ('aperture_correction_crowding' in {n.code for n in notices}) == crowded
         correction = corrected[1].mag - baseline[1].mag
         measurements.append((baseline, corrected, correction))
         if crowded:
             ratios = np.array([growth_calls[i][1] / growth_calls[i-1][1]
                                for i in range(1, len(growth_calls))])
             assert np.any(np.diff(ratios) > 1e-4)  # intended guard sees reacceleration
-            assert growth_calls[-1][0] > 11
+            assert growth_calls[-1][0] < 9
     isolated, crowded = measurements
     assert isolated[0][1].flux == crowded[0][1].flux
     assert isolated[1][1].flux == crowded[1][1].flux
     assert isolated[2] == pytest.approx(-.4412405521459153)
-    assert crowded[2] == pytest.approx(-.5526048150307812)
-    assert crowded[1][1].mag - isolated[1][1].mag == pytest.approx(-.1113642628848659)
+    assert crowded[2] == pytest.approx(isolated[2], abs=1e-10)
+    assert crowded[1][1].mag == pytest.approx(isolated[1][1].mag, abs=1e-10)
+
+
+def test_nonpositive_remeasurement_clears_preexisting_magnitudes():
+    table = np.array([(8., 8., 42., .01)],
+                     dtype=[('x', float), ('y', float), ('mag', float), ('mag_err', float)])
+    image = np.zeros((15, 15))
+    result = aperture_photometry(image, table, background=image.copy(),
+                                background_rms=np.ones_like(image), a=2, apcorr_tol=0)
+    assert np.isnan(result['mag'][0]) and np.isnan(result['mag_err'][0])
+
+
+def test_growth_without_a_clean_reference_keeps_measured_aperture_scale():
+    yy, xx = np.indices((129, 129))
+    sky = np.full((129, 129), 10.)
+    image = sky + 1000*np.exp(-((xx-40)**2 + (yy-50)**2)/8)
+    image += 300*np.exp(-((xx-48.5)**2 + (yy-50)**2)/(2*1.2**2))
+    source = [SourceExtractionData(x=41, y=51)]
+    baseline = run_photometry(image, fits.Header({'EXPTIME': 1}), source,
+        PhotometrySettings(a=3, a_in_px=20, a_out_px=25, apcorr_tol=0),
+        background=sky, background_rms=np.ones_like(image))[0]
+    with collect_numerical_notices() as notices:
+        measured = run_photometry(image, fits.Header({'EXPTIME': 1}), source,
+            PhotometrySettings(a=3, a_in_px=20, a_out_px=25, apcorr_tol=1e-4),
+            background=sky, background_rms=np.ones_like(image))[0]
+    assert measured.mag == baseline.mag
+    assert {'aperture_correction_crowding', 'aperture_correction_unavailable'} <= {n.code for n in notices}

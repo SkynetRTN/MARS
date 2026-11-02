@@ -11,7 +11,7 @@ documents for individual gates.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123). M2 is closed locally on `feature/m2` after its final review corrections; M3 is closed on main. M2 remains unmerged into main and unpublished. Remaining gates describe missing evidence and release checks. |
+| [master-continuation-plan.md](master-continuation-plan.md) | M1–M3 merged into main. M5 geometry and flux/position work is on `feature/m5-geometry` (2026-11-02); the master records validation and remaining gates. No release or main merge is implied by local closure. |
 
 ## Landed
 

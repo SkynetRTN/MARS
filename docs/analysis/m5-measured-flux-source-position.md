@@ -1,14 +1,19 @@
 # M5 measured flux and source position investigation
 
+**Current status:** all confirmed findings below are corrected and validated on
+`feature/m5-geometry`. The original investigation remains as failure evidence;
+the correction and final-validation record is at the end.
+
 Recorded 2026-11-02 on `feature/m5-geometry`, against `fab8b21` after the
 coordinates/image-geometry corrections were committed and pushed. Scope is
 the second M5 square in the [master continuation plan](../working/master-continuation-plan.md):
 PHOT-01/02/06/07/12/13/18/19, source origins, matching tolerances and uncertainty
 handling. This record establishes failures; it does not repair their numerical
-paths. The square remains open.
+paths. The original observations below predate the corrections recorded at the
+end of this document; those later results supersede the retained-defect status.
 
 The shared-vault lookup used its index/text fallback because BM25 retrieval was
-not configured. The Kepler optical/findings notes predate the merged M2/M3
+not configured. The shared optical/findings notes predate the merged M2/M3
 changes; current source, recorded data and executed probes are authoritative.
 
 ## Disposition of the older reports
@@ -214,3 +219,97 @@ by saturation/origin/matching and growth correction. Correctness regressions
 must replace the corresponding bug-pinning assertions as each path is repaired.
 M4 host/manual acceptance remains a separate activity and does not validate
 these numerical paths.
+
+## Corrections after investigation (2026-11-02)
+
+The authorized remediation fixes PHOT-01/02/06/07/12/13/18/19 and
+M5-FLUX-01/02, M5-POS-01/02. The original characterization assertions have
+been converted to correctness regressions. The [implementation plan](../superpowers/plans/2026-11-02-m5-flux-position-fixes.md)
+records the scope; [extraction provenance](../extraction.md#11-m5-measured-flux-and-source-position-corrections-2026-11-02)
+records intentional numerical departures.
+
+- Exact clipping retains the second third-edge intersection. The half-disk,
+  individual ellipse-cap/pixel integrals, formerly fatal public 0.8×0.5 case
+  and older small-axis low-level probes now complete with correct areas in
+  bounded native subprocesses. The conservative public axis floor remains.
+- Nonpositive flux clears even preexisting magnitudes to NaN and sets a failure
+  flag. Public measurement excludes it; the zero-valued image cannot produce
+  a calibration. Unusable annuli likewise invalidate measurements and retain
+  flags, including masked annuli. Annulus truncation is now visible to the
+  existing rejection policy.
+- Detector saturation counts are exact before downsampling; masking, nonzero
+  integer maps and incomplete edge blocks are covered. FITS pixel-center
+  admission, isophotal origin and equal-diagonal covariance angles are fixed.
+- Noise uses independent background and RMS inputs, supplied marginal sky
+  variance or weighted annular residual variance, variance of the sky mean,
+  and positive net source shot variance after subtraction. The optimal-radius
+  objective squares RMS. Calibration forwards extracted RMS while retaining
+  annular sky. The six negative-raw-sum candidates no longer generate zero
+  measurement errors; an edge candidate is excluded by its annulus flag.
+- WCS associations use detector distance, with no average-scale approximation
+  or duplicate motion/projection of measured centroids. Sky-only association
+  without WCS requires `source_match_tol_arcsec` and uses unit-vector chord
+  distance. SNR gates use flux/error or the exact logarithmic error inverse for
+  magnitude-only input. Missing/zero errors cannot bypass a constrained gate;
+  M2's fit weights remain unchanged.
+- Growth curves that reaccelerate beyond the fractional tolerance are rejected
+  as references; a clean replacement supplies the correction. Without a usable
+  curve, magnitudes stay on the measured aperture scale with
+  `aperture_correction_unavailable`. `aperture_correction_crowding` now reports
+  an actual rejected reference rather than an unconditional retained defect.
+  Repaired saturation, origin, seam and SNR-proxy warnings are retired.
+
+Independent review reproduced two additional edge cases before correction:
+missing-RMS estimation discarded combined masks, and a separately requested
+annulus could differ from the one used for subtraction. Both received failing
+regressions first. Mask-aware estimation now gives identical flux/error when
+only masked values change, agreeing with independently masked SEP estimation.
+One annulus's actual shape, rotation, masks and outlier selection now govern
+flux, variance and metadata. The custom ellipse excludes the planted sky
+contaminant and returns the analytic 300-count source with its expected error.
+The reviewer rechecked both probes and found no remaining actionable issue.
+
+The full-suite integration also exercised an interpolated RMS map on NGC 5286
+B with 120 negative pixels. Rejecting its entire frame was too broad. Invalid
+RMS pixels are now excluded locally, with `background_noise_masked`, rather
+than squared or assigned fabricated valid noise. A wholly invalid map produces
+invalid measurements. An independent recheck found identical flux/variance/
+metadata to explicit masking for bad pixels in the aperture, annulus and
+elsewhere, in both sky modes; the real frame's calibration succeeds.
+
+The error model follows SEP's fractional-area convention and assumes independent
+marginal sky errors and a known gain. It does not reconstruct original detector
+noise, covariance from resampling, sky-model systematics or aperture-correction
+uncertainty from reduced pixels. Background RMS is an estimate, not a proof of
+a calibrated confidence interval. These limits are separate from the corrected
+arithmetic and invalid-row acceptance.
+
+Historical fixtures remain unchanged: the provided-photometry replay selects
+29 usable-error rows instead of 35; pixel measurement returns 34 of 35 because
+one annulus is truncated. The default NGC 3628 annular path returns 33 of 35
+detections for the same flag policy. Dedicated controls preserve the identity
+and order of surviving measurements and compare annulus bounds independently.
+
+Validation before final suite: 117 photometry/calibration/warning checks pass;
+46 recorded-reference checks pass; the two review regressions and related
+flux/uncertainty controls pass (26 cases). An earlier 13-failure integration
+run identified stale historical counts, retired warning expectations and
+inconsistent synthetic sky/pixel fixtures; these were corrected without
+widening historical numerical tolerances. The first full-suite attempt was
+interrupted after review changed the source; the final run checks those fixes.
+The next full run exposed two stale coverage counts, the invalid-RMS real-frame
+case, the same RMS policy on a radio map, and a prohibited earlier project name
+in the report: 5 failed, 4,508 passed and 90 skipped. Those failures are retained
+as evidence; the corrected cases pass separately before final validation.
+
+Final validation on Python 3.13.15: `uv run --locked pytest` passed
+**4,514 tests, with 90 skips and 214 FITS normalization warnings**, no failures
+(428.26 seconds). The run used the final source and generated guidance outside
+the socket-restricted sandbox. The preceding run had one served-guidance
+invariant failure because a guidance file changed after pytest cached its old
+contents; a fresh 50-case guidance check passed, and the final full run held
+source/guidance unchanged. Compilation, generated-copy consistency and whitespace
+checks pass. Independent review found no remaining actionable findings after
+the mask, custom-annulus and local invalid-RMS rechecks. Asset/network/platform
+skips remain gated; this does not claim live-catalog or additional host coverage.
+The master's measured-flux/source-position square is closed on this branch.

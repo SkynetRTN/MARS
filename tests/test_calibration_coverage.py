@@ -61,8 +61,8 @@ def test_reported_calibration_star_count_uses_exact_solver_survivors(frame_image
     assert value is not None and error is None
     assert diagnostics["num_calibration_stars"] == len(result._reference_routes)
     assert diagnostics["num_calibration_candidates"] == len(result.phot_results)
-    assert diagnostics["num_calibration_stars"] == 29
-    assert diagnostics["num_calibration_candidates"] == 35
+    assert diagnostics["num_calibration_stars"] == 33
+    assert diagnostics["num_calibration_candidates"] == 34
 
 
 @pytest.mark.parametrize("tool", ["calibrate", "photometry"])
@@ -157,7 +157,7 @@ def test_direct_and_recorded_fits_disclose_sufficiency_and_count_only_survivors(
     else:
         replay = replay_field_calibration("ngc5128_b_002")
         assert replay.errors == []
-        assert replay.num_matched == 35
+        assert replay.num_matched == 29
         solution = replay.solution
         assert "calibration_sufficiency_unverified" in {warning.code for warning in replay.warnings}
     assert solution.errors == []

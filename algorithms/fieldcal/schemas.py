@@ -223,7 +223,10 @@ class PhotometricCalibrationSettings(MARSBaseModel):
     source_inclusion_percent: Optional[float] = 100
     min_snr: Optional[float] = 10
     max_snr: Optional[float] = None
-    source_match_tol: Optional[float] = 5
+    source_match_tol: Optional[float] = Field(default=5, description="Detector-pixel source association radius")
+    source_match_tol_arcsec: Optional[float] = Field(
+        default=None, description="Angular association radius required for sky-only matching without WCS",
+    )
     variable_check_tol: Optional[float] = 5
     max_star_rms: Optional[float] = None
     max_stars: Optional[int] = None

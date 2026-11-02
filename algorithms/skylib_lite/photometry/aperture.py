@@ -17,6 +17,8 @@ from .aperture_numba import (
     _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX,
     _sum_circle,
     _sum_ellipse,
+    SEP_APER_NONPOSITIVE,
+    SEP_APER_ALLMASKED,
     sum_circle,
     sum_circann,
     sum_ellipse,
@@ -65,7 +67,7 @@ def calc_flux_err(a: np.ndarray, img_back: np.ndarray, x: float, y: float, elong
     aper[1] = a[0]/elongation
     aper[2] = theta
     aper[3] = 1
-    flux, flux_err, _, flags = _sum_ellipse(x, y, aper, img_back, mask, 0, err, None, 0, gain)
+    flux, flux_err, _, flags = _sum_ellipse(x, y, aper, img_back, mask, 0, err**2, None, 0, gain)
     if flags or flux <= 0:
         raise ValueError()
     # noinspection PyTypeChecker
@@ -126,12 +128,8 @@ def isophotal_analysis(img_back: np.ndarray, x: np.ndarray, y: np.ndarray, radiu
                 x2 = (xi**2).mean() - cx**2
                 y2 = (yi**2).mean() - cy**2
                 xy = (xi*yi).mean() - cx*cy
-            if x2 == y2:
-                thetai = 0
-            else:
-                thetai = np.arctan(2*xy/(x2 - y2))/2
-                if y2 > x2:
-                    thetai += np.pi/2
+            # The covariance sets orientation even when diagonal moments agree.
+            thetai = np.arctan2(2*xy, x2 - y2)/2
             m1 = (x2 + y2)/2
             m2 = np.sqrt(max((x2 - y2)**2/4 + xy**2, 0))
             ai = max(1/12, np.sqrt(max(m1 + m2, 0)))
@@ -254,28 +252,48 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
 
     x, y = sources['x'] - 1, sources['y'] - 1
     if isinstance(img, MaskedArray):
-        mask = img.mask
+        mask = np.ma.getmaskarray(img).copy()
         img = img.data
     else:
         mask = None
 
-    have_background = background is not None and background_rms is not None
+    # The sky estimator and the sky-noise map are independent inputs. In
+    # particular, calibration supplies RMS while retaining local annular sky.
+    have_background = background is not None
     if have_background:
         background = sep_compatible(background)
         if isinstance(background, MaskedArray):
             if mask is None:
-                mask = background.mask
+                mask = np.ma.getmaskarray(background).copy()
             else:
-                mask |= background.mask
+                mask = mask | np.ma.getmaskarray(background)
             background = background.data
 
-        background_rms = sep_compatible(background_rms)
+    if background_rms is not None:
+        background_rms = sep_compatible(np.asanyarray(background_rms))
         if isinstance(background_rms, MaskedArray):
             if mask is None:
-                mask = background_rms.mask
+                mask = np.ma.getmaskarray(background_rms).copy()
             else:
-                mask |= background_rms.mask
+                mask = mask | background_rms.mask
             background_rms = background_rms.data
+    elif have_background:
+        residual = img - background
+        _, background_rms = estimate_background(
+            np.ma.array(residual, mask=mask) if mask is not None else residual, size=64)
+        background_rms = np.ma.getdata(background_rms)
+
+    if background_rms is not None:
+        background_rms = np.broadcast_to(background_rms, img.shape)
+        invalid_noise = ~np.isfinite(background_rms) | (background_rms < 0)
+        newly_masked = invalid_noise if mask is None else invalid_noise & ~mask
+        if np.any(newly_masked):
+            note_numerical_issue("background_noise_masked",
+                "Pixels with non-finite or negative background RMS were excluded; "
+                "their noise cannot support valid measurements.")
+        if np.any(invalid_noise):
+            mask = invalid_noise.copy() if mask is None else mask | invalid_noise
+            background_rms = np.where(invalid_noise, 0, background_rms)
 
     # Will need this to fill the newly added source table columns
     z = np.zeros(nsource, np.float64)
@@ -320,7 +338,11 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         # Use automatic apertures derived from ellipse axes; will need image with background subtracted
         if background is None:
             # Estimate background on the fly
-            tmp_back, tmp_rms = estimate_background(img, size=64)
+            tmp_back, tmp_rms = estimate_background(
+                np.ma.array(img, mask=mask) if mask is not None else img, size=64)
+            tmp_back, tmp_rms = np.ma.getdata(tmp_back), np.ma.getdata(tmp_rms)
+            if background_rms is not None:
+                tmp_rms = background_rms
         else:
             tmp_back, tmp_rms = background, background_rms
         img_back = img - tmp_back
@@ -331,12 +353,9 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         flux = sources['flux']
         bad = (a <= 0) | (b <= 0) | (flux <= 0)
         if bad.any():
-            note_numerical_issue("isophotal_origin_approximation",
-                "Adaptive aperture remeasurement retains a one-pixel coordinate-origin mismatch; "
-                "its sizes, orientation and flux can be biased.")
             # Do isophotal analysis to compute ellipse parameters if missing
             a[bad], b[bad], theta[bad], flux[bad] = isophotal_analysis(
-                img_back, sources['x'][bad], sources['y'][bad], radius)
+                img_back, x[bad], y[bad], radius)
         else:
             theta %= np.pi
             theta[theta > np.pi/2] -= np.pi
@@ -417,55 +436,74 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     if have_background:
         # No outlier rejection needed since the background map is expected to be smooth
         if fixed_aper and a == b:
-            bk_flux, _, bk_area, _ = sum_circle(background, x, y, a, err=1, mask=mask)
+            bk_flux, bk_err, bk_area, _ = sum_circle(background_rms, x, y, a, var=background_rms**2, mask=mask)
+            bk_flux, _, _, _ = sum_circle(background, x, y, a, mask=mask)
         else:
-            bk_flux, _, bk_area, _ = sum_ellipse(background, x, y, a, b, theta, 1, err=1, mask=mask)
+            _, bk_err, bk_area, _ = sum_ellipse(background_rms, x, y, a, b, theta, 1,
+                                               var=background_rms**2, mask=mask)
+            bk_flux, _, _, _ = sum_ellipse(background, x, y, a, b, theta, 1, mask=mask)
     elif fixed_aper and a_out == b_out:
-        bk_flux, _, bk_area, _ = sum_circann(img, x, y, a_in, a_out, mask=mask, reject_outliers=reject_outliers)
+        bk_flux, bk_err, bk_area, bk_flags = sum_circann(
+            img, x, y, a_in, a_out, err=background_rms if background_rms is not None else 0,
+            mask=mask, reject_outliers=reject_outliers, ignore_mask=True,
+            estimate_noise=background_rms is None)
     else:
-        bk_flux, _, bk_area, _ = sum_ellipann(
-            img, x, y, a_in, a_in*b_out/a_out, theta_out, 1, a_out/a_in, mask=mask, reject_outliers=reject_outliers)
+        bk_flux, bk_err, bk_area, bk_flags = sum_ellipann(
+            img, x, y, a_in, a_in*b_out/a_out, theta_out, 1, a_out/a_in,
+            err=background_rms if background_rms is not None else 0,
+            mask=mask, reject_outliers=reject_outliers, ignore_mask=True,
+            estimate_noise=background_rms is None)
 
     if fixed_aper and a == b:
         # Fixed circular aperture
         if have_background:
-            flux, flux_err, area, flags = sum_circle(img, x, y, a, err=background_rms, mask=mask, gain=gain)
+            flux, flux_err, area, flags = sum_circle(img - background, x, y, a, err=background_rms, mask=mask, gain=gain)
         else:
             flux, flux_err, area, flags = sum_circle(
-                img, x, y, a, mask=mask, bkgann=(a_in, a_out), gain=gain, reject_outliers=reject_outliers)
+                img, x, y, a, err=background_rms if background_rms is not None else 0,
+                mask=mask)
     else:
         # Variable or elliptic aperture
         if have_background:
             flux, flux_err, area, flags = sum_ellipse(
-                img, x, y, a, b, theta, 1, err=background_rms, mask=mask, gain=gain)
+                img - background, x, y, a, b, theta, 1, err=background_rms, mask=mask, gain=gain)
         else:
             flux, flux_err, area, flags = sum_ellipse(
-                img, x, y, a, b, theta, 1, mask=mask, bkgann=(a_in/a, a_out/a), gain=gain,
-                reject_outliers=reject_outliers)
+                img, x, y, a, b, theta, 1, mask=mask,
+                err=background_rms if background_rms is not None else 0)
 
     if have_background:
-        # Subtract background from fluxes; background area equals aperture area
-        flux -= bk_flux
-        bk_mean = bk_flux/area
+        # Pixels were background-subtracted before adding source shot noise.
+        bk_mean = np.divide(bk_flux, area, out=np.full_like(bk_flux, np.nan), where=area > 0)
     else:
-        # Background already subtracted; background area equals annulus area
-        if np.any(bk_area <= 0):
-            note_numerical_issue("empty_background_annulus",
-                "Some background annuli contain no usable pixels. The retained kernel can "
-                "return finite flux without sky subtraction and without a reliable failure flag.")
+        # Use exactly the annulus measured above, including its own axes,
+        # rotation, masks and outlier selection, for both mean and variance.
         bk_mean = np.divide(bk_flux, bk_area, out=np.full_like(bk_flux, np.nan), where=bk_area > 0)
+        flux -= bk_mean*area
+        variance = flux_err**2 + np.divide(
+            bk_err*area, bk_area, out=np.full_like(bk_err, np.nan), where=bk_area > 0)**2
+        if background_rms is None:
+            variance += np.divide(bk_err**2, bk_area, out=np.full_like(bk_err, np.nan), where=bk_area > 0)*area
+        if gain > 0:
+            variance += np.maximum(flux, 0)/gain
+        flux_err = np.sqrt(variance)
+        flags |= bk_flags
+        invalid_sky = (bk_area <= 0) | ~np.isfinite(bk_mean) | ~np.isfinite(bk_err)
+        if np.any(invalid_sky):
+            note_numerical_issue("empty_background_annulus",
+                "Some background annuli cannot provide usable sky and variance; those measurements are invalid and omitted.")
+            flux[invalid_sky] = flux_err[invalid_sky] = np.nan
+            flags[invalid_sky] |= SEP_APER_ALLMASKED
 
     # Convert ADUs to electrons
     flux *= gain
     flux_err *= gain
     bk_mean *= gain
+    bk_rms = np.sqrt(np.divide(bk_err**2, bk_area, out=np.full_like(bk_err, np.nan), where=bk_area > 0))*gain
 
     # Calculate aperture correction for all aperture sizes from the brightest source
     aper_corr = {}
     if apcorr_tol > 0:
-        note_numerical_issue("aperture_correction_crowding",
-            "Growth-curve aperture correction is enabled; its retained neighbour-rejection "
-            "guard is ineffective, so crowding can bias the correction applied to the field.")
         aper_circle = np.empty(1, np.float64)
         aper_ellipse = np.empty(4, np.float64)
         aper_ellipse[3] = 1
@@ -511,9 +549,10 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
             else:
                 f, _, _, fl = sum_ellipse(
                     img, xi, yi, ai, bi, thetai, 1, mask=mask, bkgann=(ai_in, ai_out), reject_outliers=reject_outliers)
-            if fl[0]:
+            if fl[0] or not np.isfinite(f[0]) or f[0] <= 0:
                 continue
             f0 = f_prev = f[0]
+            df_prev = np.inf
             dap = 0
             f_tot = None
             while dap < 100*ai:
@@ -532,6 +571,11 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
                 if f <= 0:
                     break
                 df = f/f_prev
+                if df > df_prev + apcorr_tol:
+                    note_numerical_issue("aperture_correction_crowding",
+                        "A reaccelerating growth curve was rejected as an aperture-correction reference; "
+                        "a nearby source may contaminate it.")
+                    break
                 if df < 1:
                     # Decreasing flux; ignore this point
                     f_prev = f
@@ -565,6 +609,10 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
                     aper_corr[aj] = -2.5*np.log10(f_tot/f)
 
             break
+        if not aper_corr:
+            note_numerical_issue("aperture_correction_unavailable",
+                "No uncontaminated converged growth curve supplied an aperture correction; "
+                "reported magnitudes retain their measured aperture scale.")
 
     if 'flux' in sources.dtype.names:
         sources['flux'] = flux
@@ -586,11 +634,14 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         if name not in sources.dtype.names:
             sources = append_fields(sources, name, z, usemask=False)
 
-    good = (flux > 0).nonzero()
+    sources['mag'] = np.nan
+    sources['mag_err'] = np.nan
+    nonpositive = flux <= 0
+    sources['flag'][nonpositive] |= SEP_APER_NONPOSITIVE
+    good = (np.isfinite(flux) & (flux > 0) & np.isfinite(flux_err)).nonzero()
     if np.any(flux <= 0):
         note_numerical_issue("nonpositive_aperture_flux",
-            "Some apertures have nonpositive net flux. Their retained finite magnitude/error "
-            "placeholders are not valid magnitudes or detections, even when flags are zero.")
+            "Some apertures have nonpositive net flux; they have no valid magnitude and are omitted from detections.")
     if len(good[0]):
         sources['mag'][good] = -2.5*np.log10(flux[good]/texp)
         sources['mag_err'][good] = 2.5*np.log10(1 + flux_err[good]/flux[good])
@@ -608,6 +659,7 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     sources['aper_area'] = area
     sources['background_area'] = bk_area
     sources['background'] = bk_mean
+    sources['background_rms'] = bk_rms
 
     # Apply aperture correction
     for i in good[0]:

@@ -467,13 +467,13 @@ reachable now, what it does, and whether the release needs a change or caveat.
   remaining findings in that correction scope. Committed and pushed on
   2026-11-02 as `fab8b21` on `feature/m5-geometry`; other M5 and M4 items are
   not closed by this result.
-- [ ] **Measured flux and source position.** Do nonpositive fluxes appear
+- [x] **Measured flux and source position.** Do nonpositive fluxes appear
   valid, empty annuli omit sky subtraction, downsampling misplace saturated
   sources, or growth-curve neighbor checks fail? Check pixel origins,
   matching tolerances, SNR/fit weights and the tentative ellipse-clipping
   arithmetic report. M1's original crash cases were contained; newly reachable
   geometry still needs checking.
-  *Investigated 2026-11-02 against `fab8b21`; numerical fixes remain open.*
+  *Original investigation 2026-11-02 against `fab8b21`:*
   [The investigation](../analysis/m5-measured-flux-source-position.md) confirms
   PHOT-01/02/06/07/12/18 and PHOT-13's SNR selection mismatch, while correcting
   the old mean-RA cause and superseded fit-weight claim. PHOT-19 is confirmed
@@ -488,6 +488,22 @@ reachable now, what it does, and whether the release needs a change or caveat.
   The 33 new cases and related existing tests pass (**431 passed**, 8 FITS
   notices); compilation/whitespace checks and independent review pass. No
   production source changed in this investigation.
+  *Corrected and validated 2026-11-02 on `feature/m5-geometry`.* All confirmed
+  reports above now have correctness regressions. Exact clipping fixes the
+  native crash; invalid magnitudes/annuli are excluded. Detector saturation,
+  pixel origins, covariance angles, WCS/spherical matching and flux-SNR gates
+  are corrected. Calibration keeps annular sky, forwards RMS and adds net-source
+  shot variance after subtraction; masks and actual annulus geometry govern
+  flux/error/metadata consistently. Unusable RMS pixels are excluded locally
+  with a notice. Crowded correction references are rejected; unavailable
+  corrections are disclosed. M2's fitter and historical fixtures remain.
+  Independent review rechecked the mask/annulus/RMS edge cases and found no
+  remaining actionable findings. Final locked suite: **4,514 passed, 90 skipped,
+  214 FITS notices**, no failures (428.26 seconds), outside the socket-restricted
+  sandbox. Earlier five-failure integration and cached-guidance failure remain
+  documented in the report; compilation, guidance and whitespace checks pass.
+  The error model does not infer detector history, resampling covariance or
+  sky/correction systematics. Other M5/M4 work remains separate.
 - [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic

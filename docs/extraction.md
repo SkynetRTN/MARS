@@ -624,9 +624,9 @@ This began as a **verbatim extraction**, not a port. Every algorithm, constant,
 comment, and numeric quirk was preserved exactly as it was in Skynet; the
 original edits were import rewiring and removal of hard dependencies on
 Skynet's ORM and plate-solving stage, each marked in-place with an
-`# EXTRACTED:` comment. The current tree has one later, explicitly documented
-MARS containment divergence: ALG-01 rejects unsafe sub-pixel ellipse geometry
-before the preserved overlap arithmetic runs.
+`# EXTRACTED:` comment. Subsequent M1 containment, M2/M3 and M5 corrections
+intentionally depart from the copied behavior. The M5 checkpoint below
+records the current measurement contracts, including exact-overlap arithmetic.
 
 Current package note: the copied Skylib files described below now live under
 `algorithms/skylib_lite/`; historical paths in this record describe the original
@@ -682,18 +682,19 @@ divergence described immediately below it.
 | `util/fits.py` | 211 | `algorithms/skylib_lite/util/fits.py` |
 | `util/__init__.py` | 8 | `algorithms/skylib_lite/util/__init__.py` |
 
-The original **3,311 source lines were vendored unmodified**. Eleven files
-remain byte-identical. `photometry/aperture.py` validates source ellipses before
+The original **3,311 source lines were vendored unmodified**. The following
+describes M1's initial containment checkpoint, before M5's corrections.
+`photometry/aperture.py` validates source ellipses before
 the automatic optimal-radius search and after final fixed/automatic axes are
 derived. `photometry/aperture_numba.py` applies the same validation to every
 effective ellipse and elliptical-annulus axis before parallel dispatch, with a
 second initializer check for direct internal kernel calls. Elliptical semi-axes
 must be finite and at least 0.5 pixels before any exact-overlap kernel runs.
 Fixed circles retain the independent circle-overlap path and are not subject to
-the floor. The upstream arithmetic in `aperture.py`, `aperture_numba.py`, and
-`util/overlap.py` is otherwise unchanged; the fatal low-level recursion remains
-pinned in subprocess tests while maintained fixed, auto, annulus, optimizer,
-HR-FITS, and radio-FITS paths now fail cleanly.
+the floor. M5 subsequently fixes the discarded intersection in
+`util/overlap.py`, including a native recursion case that passed this floor.
+Bounded low-level probes now require independent areas rather than crashes;
+the conservative public floor remains in place.
 
 Their intra-package relative imports
 (`from ..calibration.background import ...`, `from ..util.stats import ...`,
@@ -939,10 +940,9 @@ parity with legacy output.
 1. `skylib/photometry/aperture_numba.py:537` — `_aper_init_ellipann` validates
    `if aper[3] > aper[3]:`, comparing a value to itself. Presumably meant
    `aper[3] > aper[4]` (inner > outer radius). The check is dead.
-2. `skylib/photometry/aperture_numba.py:307` — `_sum_aper_reject` indexes the mask
-   box-relative (`mask[iy - ymin, ix - xmin]`) while `_sum_aper` at line 212
-   indexes it absolutely (`mask[iy, ix]`). Reached only with
-   `reject_outliers=True` and a non-`None` mask.
+2. **Corrected by M5 (2026-11-02):** `_sum_aper_reject` indexes masks with
+   absolute detector coordinates, matching the ordinary kernel. A masked
+   contaminant in an offset annulus is excluded with or without rejection.
 3. `skylib/extraction/centroiding.py:305` — in the `method='win'` all-good branch,
    `y[:] = y + 1` uses the input `y` rather than the windowed result `y1`.
    Unreached on this photometry path: `run_photometry` calls `centroid_sources`
@@ -957,9 +957,8 @@ parity with legacy output.
    YWIN_IMAGE)" but the code calls `centroid_iraf` / `centroid_iraf_masked`. The
    comment at line 281 (`# Centroid sources using IRAF-like method`) matches the
    code; the docstring does not.
-6. `skylib/photometry/aperture.py:542–545` — a `background_rms` column is appended
-   to the output record array but never assigned, so it stays 0. (The docstring
-   lists it as an output field.)
+6. **Corrected by M5 (2026-11-02):** the `background_rms` output column now
+   contains the effective supplied/estimated sky RMS in output electron units.
 7. `skylib/util/stats.py:292` — a second `from numba import njit` mid-module,
    immediately before `chauvenet1 = njit(...)(chauvenet1py)`, with the comment
    "Compile WITHOUT parallel=True to avoid parfors entirely". Redundant but
@@ -998,9 +997,8 @@ not on the photometry call path if that import proves inconvenient.
 #### 10. Verification performed
 
 - At extraction time, `diff -q` against source for all 13 vendored skylib files
-  was byte-identical. Eleven remain so; the current `photometry/aperture.py`
-  and `photometry/aperture_numba.py` differences are the documented ALG-01
-  containment guards above.
+  was byte-identical. Current intentional departures include ALG-01 containment
+  and the later M5 measurement/geometry corrections below.
 - `python3 -m compileall` over the whole tree — clean.
 - Import-graph audit: no `skynet_db`, `skynet_sdk`, or absolute `skylib` imports
   remain outside `# EXTRACTED:` comments.
@@ -1012,6 +1010,59 @@ not on the photometry call path if that import proves inconvenient.
 `scipy`, `numba`, `sep`, and `photutils` were not installed in the original
 extraction environment. Later repository tests cover the deliberate ALG-01
 guard; this paragraph records only the initial extraction-time limitation.
+#### 11. M5 measured flux and source position corrections (2026-11-02)
+
+PHOT-01/02/06/07/12/13/18/19 and the additional investigation findings
+intentionally diverge from the extraction. The [investigation and correction
+record](analysis/m5-measured-flux-source-position.md) retains the original
+failures and describes the converted correctness probes.
+
+Exact ellipse clipping retains both third-edge intersections, agreeing with
+pinned SEP 1.4.1 and analytic/quadrature areas; old small-axis and newer
+guard-passing native recursion cases now complete. The separate public 0.5-pixel
+ellipse floor remains. Saturation counts map each original detector pixel into
+its reduced segmentation cell once, including partial-block cropping and masks.
+Photometry admits FITS pixel centers 1 through width/height. Isophotal analysis
+receives zero-based centers and uses the covariance `atan2` orientation.
+
+Nonpositive net flux has no finite magnitude; existing magnitude fields are
+cleared, failure flags set, and invalid rows excluded. Unusable sky annuli yield
+invalid measurements and preserve flags, including masked/edge annuli. The
+requested annulus's axes, rotation, masks and outlier selection govern the same
+sky mean, variance and metadata used for subtraction.
+
+Background/RMS maps are independent inputs. Supplied RMS describes marginal
+per-pixel sky/read noise; annular residual sample variance supplies a local
+estimate when absent. The weighted sample estimate uses denominator
+`sum(w) - sum(w**2)/sum(w)`. The error follows SEP's fractional-area convention:
+sky variance integrated over aperture area, plus the variance of the annular
+mean, plus positive net source flux divided by gain. Map-based sky is subtracted
+before adding source shot noise. Constant reduction offsets do not change this
+source term; masks also constrain fallback RMS estimation. The optimal-radius
+objective squares RMS before calling its variance kernel. These marginal errors
+do not recover detector history, resampling covariance or background-model
+systematics from reduced pixels.
+
+Growth curves that reaccelerate beyond the fractional tolerance are rejected
+as correction references; the next suitable source is tried. If none supplies
+a converged correction, the aperture scale is retained with an explicit notice.
+Field calibration continues to disable aperture correction.
+
+Calibration retains its annular flux convention and forwards extracted RMS.
+WCS matching uses actual detector pixels, including anisotropic and rotated
+frames. Sky-only matching without WCS requires explicit `source_match_tol_arcsec`
+and uses spherical chord distance. A matched centroid is not projected or moved
+a second time during measurement. SNR selection uses positive finite flux/error
+or the exact inverse logarithmic magnitude error for magnitude-only input.
+Missing/zero errors cannot bypass a constrained SNR window. M2's
+magnitude-variance fitter remains unchanged.
+
+Historical Skynet/Afterglow fixtures are unchanged. Current selection excludes
+six uncertainty-free rows in the recorded NGC 5128 replay (35 to 29).
+Propagated annulus truncation excludes edge measurements (35 to 34 in its
+selected-row pixel measurement; 35 to 33 in the NGC 3628 default-annulus test).
+These are deliberate validity changes, not widened parity tolerances.
+
 ## Field Calibration
 
 _Former source: `algorithms/fieldcal/EXTRACTION.md`._
@@ -1376,9 +1427,9 @@ are checked against an independent two-parameter optimizer, rather than
 claiming old bitwise parity. M3's degenerate-solve/header safeguards remain.
 
 See [acceptance, derivation and limits](analysis/photometric-calibration.md).
-PHOT-06 downsampled saturation counts, other aperture/background defects,
-catalog completeness and calibration sufficiency are addressed by the following
-disclosure contract; the retained numerical defects remain separate open work.
+The M2 disclosure checkpoint below predated M5's repair of downsampled
+saturation, aperture/background validity and SNR/matching. Catalog completeness
+and calibration sufficiency remain separate limits.
 
 #### 5d. M2 catalog coverage and sample disclosure (2026-10-23)
 

@@ -345,7 +345,7 @@ def triangle_unitcircle_overlap(x1: float, y1: float, x2: float, y2: float, x3: 
         return (triangle_unitcircle_overlap(x3, y3, x1, y1, xp, yp) +
                 triangle_unitcircle_overlap(x2, y2, x1, y1, xp, yp))
 
-    (pt1x, pt1y), _ = circle_segment(x3, y3, x1, y1)
+    (pt1x, pt1y), (pt2x, pt2y) = circle_segment(x3, y3, x1, y1)
     if pt1x <= 1:
         xp = 0.5*(pt1x + pt2x)
         yp = 0.5*(pt1y + pt2y)
