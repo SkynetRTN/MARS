@@ -93,6 +93,120 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The Claude Desktop extension (installers/claude-desktop/). It names no
+  # MARS release, so one file serves every release; attaching it saves users
+  # building it. Packed by a standard-library script in its own job, apart
+  # from dist/: `mcpb pack` would run npm's unlocked dependency tree on the
+  # bytes users install.
+  extension:
+    name: pack the extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/pack_extension.py
+            installers/claude-desktop/
+          sparse-checkout-cone-mode: false
+
+      - name: Pack mars.mcpb
+        run: |
+          mkdir extension
+          python3 .github/scripts/pack_extension.py installers/claude-desktop extension/mars.mcpb
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: extension
+          path: extension/
+          if-no-files-found: error
+
+  # mcpb's own manifest check. npx resolves mcpb's dependencies unlocked, so
+  # this job only reads the manifest: nothing it writes reaches another job.
+  validate-extension:
+    name: validate the extension manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: installers/claude-desktop/
+          sparse-checkout-cone-mode: false
+
+      - name: Validate with mcpb
+        run: npx --yes @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
+
+  # The packed extension, run as Claude Desktop runs it, on the two platforms
+  # it supports (installers/claude-desktop/README.md, Platforms): Windows on
+  # ARM, where the launcher runs MARS on the x64 Python under emulation. It installs
+  # the newest release it can find; UV_FIND_LINKS offers it this build, which
+  # is newer than anything on PyPI on a tag. This proves the launch, not the
+  # app: a real Claude Desktop install stays a manual check (M4).
+  verify-extension:
+    name: verify the extension (${{ matrix.os }})
+    needs: [build, extension]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            python: "3.13"
+          # What the launcher picks on Windows on ARM (src/server.py).
+          - os: windows-11-arm
+            python: cpython-3.13-windows-x86_64-none
+    defaults:
+      run:
+        shell: bash
+    env:
+      MPLBACKEND: Agg
+      # A first launch: uv-managed Python only, as on a machine without 3.13.
+      UV_PYTHON_PREFERENCE: only-managed
+      UV_FIND_LINKS: ${{ github.workspace }}/dist
+    steps:
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv, with an empty cache and home
+        run: |
+          python -m pip install uv==0.12.3
+          {
+            echo "MARS_HOME=$RUNNER_TEMP/mars-home"
+            echo "UV_CACHE_DIR=$RUNNER_TEMP/uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$RUNNER_TEMP/uv-python"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: extension
+          path: extension
+
+      - name: Self-test through the extension's own command
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m zipfile -e "$GITHUB_WORKSPACE/extension/mars.mcpb" ext
+          uv run --directory ext --locked src/server.py self-test
+
+      - name: Check the extension served this build
+        env:
+          EVENT: ${{ github.event_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PYTHON: ${{ matrix.python }}
+        run: |
+          served=$(uv tool run --offline --python "$PYTHON" --from "skynet-mars[mcp]" python -c "import importlib.metadata as m; print(m.version('skynet-mars'))")
+          echo "served skynet-mars $served; built $VERSION"
+          # A dry run may build a version PyPI already has, so only a tag must match.
+          if [ "$EVENT" = "push" ] && [ "$served" != "$VERSION" ]; then
+            echo "::error::the extension served $served, not this build ($VERSION)"
+            exit 1
+          fi
+
   verify:
     name: verify install (python ${{ matrix.python }})
     needs: build
@@ -162,14 +276,26 @@ jobs:
             echo "ok $archive"
           done
 
+  # Every supported platform (M4): bundle installation writes, renames and
+  # verifies trees under the MARS home, which differs per OS.
   verify-data:
-    name: verify installed optional data
+    name: verify installed optional data (${{ matrix.os }})
     needs: [build, data]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-11-arm]
+    defaults:
+      run:
+        shell: bash
     steps:
+      # Windows on ARM installs the x64 Python, run under emulation: sep and
+      # pyerfa have no Windows ARM64 wheels (docs/installing/windows.md).
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
+          architecture: ${{ matrix.os == 'windows-11-arm' && 'x64' || '' }}
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
@@ -180,17 +306,19 @@ jobs:
           MPLBACKEND: Agg
         working-directory: ${{ runner.temp }}
         run: |
-          python -m venv "$RUNNER_TEMP/mars"
-          wheel=$(ls "$GITHUB_WORKSPACE"/dist/*.whl)
-          "$RUNNER_TEMP/mars/bin/pip" install --quiet "${wheel}[mcp]"
-          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data all
-          "$RUNNER_TEMP/mars/bin/mars-mcp" fetch-data --verify
-          "$RUNNER_TEMP/mars/bin/mars-mcp" self-test --with-data
+          python -m venv mars
+          # A venv keeps its interpreter in Scripts/ on Windows, bin/ elsewhere.
+          if [ -d mars/Scripts ]; then py=mars/Scripts/python; else py=mars/bin/python; fi
+          wheel=$(python -c 'import glob, os; print(glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "dist", "*.whl"))[0])')
+          "$py" -m pip install --quiet "${wheel}[mcp]"
+          "$py" -m tools.mcp fetch-data all
+          "$py" -m tools.mcp fetch-data --verify
+          "$py" -m tools.mcp self-test --with-data
 
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [build, verify, data, verify-data]
+    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -199,6 +327,11 @@ jobs:
         with:
           name: dist
           path: dist
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: extension
+          path: extension
 
       - name: Create the GitHub release
         env:
@@ -211,9 +344,10 @@ jobs:
           # else is a release. The build job classified the version with
           # packaging.version. docs/releasing.md.
           if [ "$PRERELEASE" = "true" ]; then flag=--prerelease; else flag=--latest; fi
-          gh release create "$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
+          (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
+          gh release create "$TAG" dist/*.whl dist/*.tar.gz extension/mars.mcpb dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
-            --notes "Install and register: docs/installing.md. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
+            --notes "Install and register: docs/installing.md. Claude Desktop (Apple Silicon Mac, Windows on ARM): double-click \`mars.mcpb\`; it is unsigned and runs the newest MARS release. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
 
   # PyPI versions are permanent -- a file, once uploaded, can never be
   # replaced -- so every release goes to TestPyPI first and is installed from
@@ -221,7 +355,7 @@ jobs:
   publish-testpypi:
     name: publish to TestPyPI
     if: github.event_name == 'push'
-    needs: [build, verify, data, verify-data]
+    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     environment:
       name: testpypi

@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Pack the Claude Desktop extension into a ``.mcpb`` with the standard library.
+
+Run by the release workflow (docs/releasing.md). A ``.mcpb`` is a zip of the
+extension folder; ``mcpb pack`` makes the same thing, but would run npm's
+unlocked dependency tree on the bytes users install, so the release packs here
+and runs ``mcpb validate`` only in a job whose output nothing uses.
+
+Packs every file under the folder except what ``mcpb pack`` always leaves
+out (:data:`DEFAULT_EXCLUDES`: ``.env*``, ``.git``, ``.DS_Store``, older
+``.mcpb`` files and the like), ``.mcpbignore`` itself, and what it lists, one
+pattern per line; blank lines and ``#`` comments are skipped. A
+pattern ending in ``/`` excludes a directory: anywhere in the tree when it
+has no other slash, at that path when it does. Any other pattern is matched
+against each file's name and its path. ``!`` negations are refused rather
+than ignored, since packing what ``mcpb pack`` would leave out (or the
+reverse) changes the bytes users install. The archive is deterministic:
+sorted entries, a fixed timestamp and mode.
+
+Usage: pack_extension.py SOURCE_DIR OUTPUT.mcpb
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import sys
+import zipfile
+from pathlib import Path
+
+IGNORE_FILE = ".mcpbignore"
+TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+#: ``mcpb pack``'s own excludes, applied before ``.mcpbignore`` as it does:
+#: ``EXCLUDE_PATTERNS`` in ``@anthropic-ai/mcpb`` 2.1.2's
+#: ``dist/node/files.js``. As in a ``.gitignore``, a pattern with no slash
+#: matches a file or directory of that name at any depth.
+DEFAULT_EXCLUDES = (
+    ".DS_Store", "Thumbs.db", ".gitignore", ".git", ".mcpbignore", "*.log",
+    ".env*", ".npm", ".npmrc", ".yarnrc", ".yarn", ".eslintrc",
+    ".editorconfig", ".prettierrc", ".prettierignore", ".eslintignore",
+    ".nycrc", ".babelrc", ".pnp.*", "node_modules/.cache",
+    "node_modules/.bin", "*.map", ".env.local", ".env.*.local",
+    "npm-debug.log*", "yarn-debug.log*", "yarn-error.log*",
+    "package-lock.json", "yarn.lock", "*.mcpb", "*.d.ts", "*.tsbuildinfo",
+    "tsconfig.json",
+)
+
+
+def read_patterns(source: Path) -> list[str]:
+    patterns = []
+    for line in (source / IGNORE_FILE).read_text(encoding="utf-8").splitlines():
+        pattern = line.strip()
+        if not pattern or pattern.startswith("#"):
+            continue
+        if pattern.startswith("!"):
+            raise ValueError(f"{IGNORE_FILE}: negation is not supported: {pattern}")
+        patterns.append(pattern.lstrip("/"))
+    return patterns
+
+
+def _directory_excluded(relative: Path, pattern: str) -> bool:
+    pattern = pattern.rstrip("/")
+    parents = relative.parts[:-1]
+    if "/" in pattern:
+        # Anchored: the pattern names a directory path from the folder root.
+        return any(
+            fnmatch.fnmatch("/".join(parents[: depth + 1]), pattern)
+            for depth in range(len(parents))
+        )
+    return any(fnmatch.fnmatch(part, pattern) for part in parents)
+
+
+def _default_excluded(relative: Path) -> bool:
+    parts = relative.parts
+    for pattern in DEFAULT_EXCLUDES:
+        if "/" in pattern:
+            prefixes = ("/".join(parts[: depth + 1]) for depth in range(len(parts)))
+            if any(fnmatch.fnmatch(prefix, pattern) for prefix in prefixes):
+                return True
+        elif any(fnmatch.fnmatch(part, pattern) for part in parts):
+            return True
+    return False
+
+
+def packed_files(source: Path) -> list[Path]:
+    patterns = read_patterns(source)
+    directories = [p for p in patterns if p.endswith("/")]
+    names = [p for p in patterns if not p.endswith("/")]
+    files = []
+    for path in sorted(source.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        if _default_excluded(relative):
+            continue
+        if any(_directory_excluded(relative, d) for d in directories):
+            continue
+        if any(fnmatch.fnmatch(relative.name, n) or fnmatch.fnmatch(relative.as_posix(), n) for n in names):
+            continue
+        files.append(relative)
+    return files
+
+
+def pack(source: Path, output: Path) -> list[Path]:
+    files = packed_files(source)
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for relative in files:
+            info = zipfile.ZipInfo(relative.as_posix(), date_time=TIMESTAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, (source / relative).read_bytes())
+    return files
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print(__doc__.strip().splitlines()[-1], file=sys.stderr)
+        return 2
+    for relative in pack(Path(argv[0]), Path(argv[1])):
+        print(relative.as_posix())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
