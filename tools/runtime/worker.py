@@ -77,7 +77,10 @@ def main():
     from tools.models import ToolError
     _restore_pythonpath()
     try:
-        with artifacts.scoped_artifacts(f".mars-runtime/{work.name}/artifacts"):
+        # The work folder's own place under the artifact root: directly under
+        # it for the MCP server, under a session folder for the console.
+        scope = work.resolve().relative_to(Path(artifacts.ARTIFACT_DIR).resolve()) / "artifacts"
+        with artifacts.scoped_artifacts(scope):
             payload = call_tool(name, arguments, {name: function})
     except MemoryError:
         payload = error_payload(ToolError(code="resource_limit", message="Tool worker exhausted its memory budget."))

@@ -110,6 +110,17 @@ def write_artifact():
     return ToolResult(status="ok", artifacts=[ArtifactRef(path=str(path), format="txt")])
 
 
+
+def read_own_artifact(path):
+    # A tool that accepts only an artifact under the artifact directory, as
+    # the variable-star periodogram checks its light curve.
+    from pathlib import Path
+    from tools import artifacts
+    from tools.models import ToolResult
+    if not Path(path).resolve().is_relative_to(Path(artifacts.ARTIFACT_DIR).resolve()):
+        return ToolResult(status="error", errors=[{"code": "invalid_input", "message": "not an artifact"}])
+    return ToolResult(status="ok", count=len(Path(path).read_text()))
+
 def child_pythonpath(out):
     # What a tool's own child process -- a solver's Python helper -- inherits.
     from tools.models import ToolResult

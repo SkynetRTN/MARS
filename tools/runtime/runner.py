@@ -143,7 +143,17 @@ def _worker_command(work: Path, env: dict, *, windows: bool) -> list[str]:
     return [executable, "-m", "tools.runtime.worker", str(work)]
 
 
-async def run_call(name, arguments, functions, artifact_root: Path, limits: CallLimits) -> dict:
+async def run_call(name, arguments, functions, artifact_root: Path, limits: CallLimits,
+                   *, scope: str | None = None) -> dict:
+    """Run one tool call in an owned worker.
+
+    The worker sees ``artifact_root`` as its artifact directory, so a tool
+    checking that an input artifact is its own accepts anything under it.
+    ``scope``, a folder under that root, is where this call's work folder
+    goes instead of the root itself: the console keeps each session's calls
+    in the session, while a later question still reads an earlier one's
+    artifacts.
+    """
     function = functions.get(name)
     if function is None:
         return error_payload(ToolError(code="unknown_tool", message=f"No tool named {name!r} is served."))
@@ -156,7 +166,7 @@ async def run_call(name, arguments, functions, artifact_root: Path, limits: Call
     work = download = proc = birth = windows_job = None
     state = "failed"
     try:
-        root = managed_root(Path(artifact_root))
+        root = managed_root(Path(artifact_root) / scope if scope else Path(artifact_root))
         retained_work = tree_size(root, max_files=100_000)
         if retained_work + limits.work_bytes > limits.retained_bytes:
             raise ValueError("Retained runtime artifacts exceed the 5 GiB budget; run cleanup.")

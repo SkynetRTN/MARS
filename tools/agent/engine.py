@@ -467,6 +467,11 @@ def _run_tool_turn(
         )
         stopped = fault is None and _stopped(should_stop)
         denied = fault is None and not stopped and approver(proposed) is Decision.DENY
+        if denied and _stopped(should_stop):
+            # The person stopped the run while this call awaited approval: the
+            # console answers open approvals Deny to release them, and the
+            # record must say who ended the call, not blame the policy.
+            stopped, denied = True, False
 
         if fault is not None:
             session.record_fault(turn=turn_number, fault=fault)

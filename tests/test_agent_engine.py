@@ -938,6 +938,35 @@ def test_a_stop_during_a_tool_turn_refuses_the_call_but_still_answers_it():
     assert json.loads(results["blocks"][0]["content"])["errors"][0]["code"] == "interrupted"
 
 
+def test_a_stop_that_releases_an_open_approval_is_recorded_as_a_stop():
+    """The console answers open approvals Deny when the person stops the run.
+    The record said the approval policy refused the call."""
+
+    stop = {"requested": False}
+
+    def stop_while_asking(_proposed) -> Decision:
+        stop["requested"] = True
+        return Decision.DENY
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="unreached"),
+        ]
+    )
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": lambda **_: ToolResult(status="ok")},
+        approver=stop_while_asking,
+        should_stop=lambda: stop["requested"],
+    )
+
+    denied = [e for e in stream if isinstance(e, events.ToolCallDenied)]
+    assert [e.reason for e in denied] == ["stopped by the user"]
+    result = json.loads(session.history[-1]["blocks"][0]["content"])
+    assert result["errors"][0]["code"] == "interrupted"
+
+
 def test_a_stop_hook_that_raises_cannot_end_a_session():
     """A broken stop button must not be able to stop a run."""
 
