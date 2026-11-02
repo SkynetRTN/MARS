@@ -62,6 +62,7 @@ For the preservation tests, three conventions apply:
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
 | `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
 | `test_m5_geometry_investigation.py` | M5's 29 original probes converted to correctness regressions: fallback decimal RA, alternate-WCS scales, ATLAS triangles/polar coverage, projection/reader/matrix/FOV helpers and real SEP ellipses. |
+| `test_m5_flux_investigation.py`, `test_m5_positions_investigation.py`, `test_m5_uncertainty_investigation.py`, `test_m5_overlap_investigation.py` | M5's 33 measured-flux/source-position characterization cases pin current defects, not correctness. Public zero-image calibration, unusable annuli, wrong-star saturation, isophotal/boundary origins, matching/SNR, real-frame zero errors, optimizer RMS/variance, crowding and bounded native ellipse corruption/crash. See the linked investigation in the master plan; convert bug assertions when fixing. |
 | `test_m5_header_fixes.py`, `test_m5_shape_fixes.py` | Header unit/coordinate contracts, scaled/degenerate triangle controls and ellipse canonicalization before source cuts. |
 | `test_m5_catalog_readers.py`, `test_m5_catalog_geometry.py` | Independently packed UCAC metadata, real full-turn span generation, shared spherical queries, motion halos/epochs, candidate budgets, downstream references and legacy-box coverage. |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |

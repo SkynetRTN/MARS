@@ -188,8 +188,12 @@ cases** and both configured algorithm-level native checks. The full suite ran
 outside the sandbox after a restricted attempt failed the socket-restoration
 guard and stalled in subprocess MCP calls. Those paths pass in the unrestricted
 run. Compilation, generated guidance and whitespace checks pass. The master
-continuation plan's first M5 checkbox is closed locally; the changes remain
-unpublished, and other M5/M4 items remain separate.
+continuation plan's first M5 checkbox is closed. The changes were committed
+and pushed on 2026-11-02 as `fab8b21` on `feature/m5-geometry`; other M5/M4
+items remain separate. The subsequent [flux/position investigation](m5-measured-flux-source-position.md)
+also found an ellipse-clipping crash with axes above M1's existing floor;
+this does not reopen the corrected WCS geometry, but limits the earlier
+general overlap-containment claim.
 
 Earlier failed checks remain part of the evidence: the first full integration
 run failed `test_every_declared_code_is_constructed` and

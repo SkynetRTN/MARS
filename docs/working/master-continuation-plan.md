@@ -464,13 +464,30 @@ reachable now, what it does, and whether the release needs a change or caveat.
   the two algorithm-level native checks passed separately as above.
   The public-tool native checks were not separately enabled. Compilation,
   generated guidance and whitespace checks pass. Independent review has no
-  remaining findings. Changes remain local and unpublished; other M5 and M4
-  items are not closed by this result.
+  remaining findings in that correction scope. Committed and pushed on
+  2026-11-02 as `fab8b21` on `feature/m5-geometry`; other M5 and M4 items are
+  not closed by this result.
 - [ ] **Measured flux and source position.** Do nonpositive fluxes appear
   valid, empty annuli omit sky subtraction, downsampling misplace saturated
   sources, or growth-curve neighbor checks fail? Check pixel origins,
   matching tolerances, SNR/fit weights and the tentative ellipse-clipping
-  arithmetic report. M1's crash containment is already closed.
+  arithmetic report. M1's original crash cases were contained; newly reachable
+  geometry still needs checking.
+  *Investigated 2026-11-02 against `fab8b21`; numerical fixes remain open.*
+  [The investigation](../analysis/m5-measured-flux-source-position.md) confirms
+  PHOT-01/02/06/07/12/18 and PHOT-13's SNR selection mismatch, while correcting
+  the old mean-RA cause and superseded fit-weight claim. PHOT-19 is confirmed
+  against independent geometry and pinned SEP: it corrupts finite flux and
+  crashes maintained photometry with axes 0.8×0.5 pixels. M1's existing floor
+  therefore contains its original cases, not every fatal ellipse. Additional
+  probes establish a masked-annulus warning gap, last-pixel admission and
+  equal-moment angle errors, a variance/RMS mismatch in the optimal-radius
+  objective, and missing/raw-sum-dependent background noise. The latter
+  explains M4's six zero-error NGC 5128 B candidates. Characterization tests
+  pin these current failures; passing them is not acceptance of a correction.
+  The 33 new cases and related existing tests pass (**431 passed**, 8 FITS
+  notices); compilation/whitespace checks and independent review pass. No
+  production source changed in this investigation.
 - [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
