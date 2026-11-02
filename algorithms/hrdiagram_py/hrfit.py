@@ -366,7 +366,10 @@ def plot_cmd(colour, mag, iso_colour=None, iso_mag=None,
         # that nor a phase label. Joined, the rows drew a line straight from
         # the AGB back to core-helium burning and fanned the AGB pulses into a
         # wedge; no step size separates phase gaps from in-phase steps across
-        # the grid (M4, 2026-10-30), so no break is guessed.
+        # the grid (M4, 2026-10-30), so no break is guessed. The fit's own
+        # TRACK_MAX_GAP_MAG break is not drawn either: on M67's fitted track
+        # it cuts the faint main sequence into pieces and still joins the
+        # AGB pulses.
         ax.scatter(iso_colour, iso_mag, s=6, c="#5b3fd6", label="Isochrone", zorder=3)
     if not ax.yaxis_inverted():
         ax.invert_yaxis()

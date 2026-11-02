@@ -125,14 +125,16 @@ def _calc_solution_with_mask(sources: list[PhotometryData]):
     ])
 
     logger.debug("calc_solution: starting with %d sources", len(sources))
-    indices = np.arange(len(sources))
+    # The pre-fit drop is decided only here, so the plot reading the same
+    # mask cannot drift from it. Without instrumental errors it keeps every
+    # row and there is no SNR.
+    good = _fit_input_mask(sources)
+    indices = np.flatnonzero(good)
+    mags = mags[good]
+    mag_errors = mag_errors[good]
+    ref_mags = ref_mags[good]
+    ref_mag_errors = ref_mag_errors[good]
     if mag_errors.any():
-        good = _fit_input_mask(sources)
-        indices = indices[good]
-        mags = mags[good]
-        mag_errors = mag_errors[good]
-        ref_mags = ref_mags[good]
-        ref_mag_errors = ref_mag_errors[good]
         snr = 1 / (10 ** (mag_errors / 2.5) - 1)
         logger.debug("calc_solution: kept %d sources after mag_error>0 filter", len(mags))
     else:

@@ -225,11 +225,14 @@ def test_the_zero_point_plot_draws_the_solve_it_reports(tmp_path, saved_figures)
 
     residual = ref - mag - m0
     np.testing.assert_allclose(
-        _offsets(_labelled(right, "kept in fit (bars: measurement error)")),
+        _offsets(_labelled(right, "kept in fit")),
         np.c_[mag[kept_rows], residual[kept_rows]],
     )
-    # One bar per fitted star, as long as the error the fit weighed it with.
-    bars = right.containers[0].lines[2][0]
+    # One bar per fitted star, as long as its measurement error; the fit adds
+    # the band's scatter to it in quadrature.
+    (container,) = right.containers
+    assert container.get_label() == "measurement error"
+    bars = container.lines[2][0]
     fitted = ~unfitted_rows
     half_lengths = [abs(segment[1, 1] - segment[0, 1]) / 2 for segment in bars.get_segments()]
     np.testing.assert_allclose(half_lengths, np.hypot(0.01, 0.02) * np.ones(fitted.sum()))
@@ -238,6 +241,31 @@ def test_the_zero_point_plot_draws_the_solve_it_reports(tmp_path, saved_figures)
     band_y = band.get_patch_transform().transform(band.get_path().vertices)[:, 1]
     np.testing.assert_allclose((band_y.min(), band_y.max()), (-scatter, scatter))
     assert "20 kept, 1 rejected, 1 not fitted" in figure.get_suptitle()
+
+
+def test_without_measurement_errors_the_band_is_the_residual_rms(tmp_path, saved_figures):
+    """With no error on any star the solver fits no extra scatter: its scatter
+    is the kept residuals' RMS, and there are no bars to draw."""
+    from algorithms.fieldcal.solution import _calc_solution_with_mask
+    from tools.photometry_pipeline import ZeroPointResolution, plot_zero_point_solution
+
+    rng = np.random.default_rng(11)
+    mags = np.linspace(-10.0, -5.0, 12)
+    stars = [_calibration_star(m, m + 21.0 + rng.normal(0, 0.05), None, None) for m in mags]
+    (m0, m0_error, scatter, _, _), kept = _calc_solution_with_mask(stars)
+    zero_point = ZeroPointResolution(
+        value=m0, source="field-cal", verified=True, calibration_sources=stars,
+        diagnostics={"zero_point_error_mag": m0_error, "zero_point_slop": scatter},
+    )
+
+    assert plot_zero_point_solution(zero_point, tmp_path / "zp.png") is not None
+
+    right = saved_figures[-1].axes[1]
+    residual = np.array([s.ref_mag - s.mag - m0 for s in stars])[kept]
+    np.testing.assert_allclose(scatter, np.sqrt(np.mean(residual**2)))
+    _labelled(right, f"residual RMS ±{scatter:.3f} mag")
+    assert not any("additional" in t.get_text() for t in right.get_legend().get_texts())
+    assert len(right.containers) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +360,51 @@ def test_a_csv_spectrum_is_labelled_with_its_own_columns(artifact_dir, tmp_path,
     assert (axes.get_xlabel(), axes.get_ylabel()) == ("freq_mhz", "flux_mjy")
     np.testing.assert_allclose(_offsets(_labelled(axes, "Measured flux")),
                                np.c_[np.array(_FREQ_HZ) / 1e6, np.array(_FLUX_JY) * 1e3])
+
+
+def test_a_headerless_csv_keeps_its_first_row_and_claims_no_unit(artifact_dir, tmp_path, saved_figures):
+    """pandas reads a headerless file's first row as its header: the row
+    dropped out of the fit and its numbers labelled the axes."""
+    from tools.radio_sources import analyze_source_spectrum
+
+    path = tmp_path / "spectrum.csv"
+    path.write_text("".join(f"{f:.0f},{s}\n" for f, s in zip(_FREQ_HZ, _FLUX_JY)))
+
+    result = analyze_source_spectrum(csv_path=str(path))
+
+    assert result.status == "ok"
+    assert result.preview[0]["n_points"] == len(_FREQ_HZ)
+    axes = saved_figures[-1].axes[0]
+    assert (axes.get_xlabel(), axes.get_ylabel()) == ("Frequency", "Flux density")
+    np.testing.assert_allclose(_offsets(_labelled(axes, "Measured flux")), np.c_[_FREQ_HZ, _FLUX_JY])
+
+
+def test_a_csv_error_column_weights_the_fit_and_draws_bars(artifact_dir, tmp_path, saved_figures):
+    """The documented error column was read and dropped, so a noisy point
+    pulled the spectral index as hard as a precise one."""
+    from algorithms.radio import spectral_fitting
+    from tools.radio_sources import analyze_source_spectrum
+
+    flux = np.array(_FLUX_JY)
+    flux[0] *= 3.0  # a badly measured low-frequency point
+    error = 0.02 * flux
+    error[0] = 0.5 * flux[0]
+    path = tmp_path / "spectrum.csv"
+    pd.DataFrame({"freq_hz": _FREQ_HZ, "flux_jy": flux, "err_jy": error}).to_csv(path, index=False)
+
+    result = analyze_source_spectrum(csv_path=str(path))
+
+    assert result.status == "ok"
+    alpha = result.preview[0]["power_law"]["spectral_index"]
+    weighted = spectral_fitting.fit_power_law(_FREQ_HZ, flux, error)["spectral_index"]
+    unweighted = spectral_fitting.fit_power_law(_FREQ_HZ, flux)["spectral_index"]
+    assert alpha == pytest.approx(weighted)
+    assert abs(weighted - unweighted) > 0.02
+    axes = saved_figures[-1].axes[0]
+    (container,) = axes.containers
+    assert container.get_label() == "Flux error"
+    half_lengths = [abs(seg[1, 1] - seg[0, 1]) / 2 for seg in container.lines[2][0].get_segments()]
+    np.testing.assert_allclose(half_lengths, error)
 
 
 def test_a_field_sed_draws_each_source_with_its_own_fit(tmp_path, saved_figures):

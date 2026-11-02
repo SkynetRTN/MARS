@@ -660,9 +660,12 @@ def plot_zero_point_solution(
       zero point, not a free two-parameter regression (see
       ``algorithms/fieldcal/solution.py::calc_solution``).
     - right: each star's residual from that fit (``ref_mag - mag -
-      zero_point``) vs. instrumental magnitude, with the measurement error
-      the weighted fit gave it (instrumental and catalog errors in
-      quadrature) as an error bar, and the fitted additional scatter shaded.
+      zero_point``) vs. instrumental magnitude, with each star's measurement
+      error (instrumental and catalog errors in quadrature) as an error bar
+      and the fitted additional scatter shaded; the fit weighs each star by
+      the two in quadrature. With no measurement error on any star there is
+      nothing for extra scatter to add to: the solve's scatter is then the
+      kept residuals' RMS, labelled as such, and no bars are drawn.
 
     In both panels, stars the solve kept are blue; stars its Chauvenet loop
     rejected as outliers are red crosses; stars it never fitted -- no
@@ -745,22 +748,29 @@ def plot_zero_point_solution(
     axes[0].legend(loc="best", fontsize=8)
     axes[0].grid(True, alpha=0.3)
 
+    # The solver fits extra scatter only on top of measurement errors; with
+    # none on any fitted star its scatter is the kept residuals' RMS.
+    has_errors = bool(sigma_total[fitted].any())
     axes[1].axhline(0.0, color="black", linewidth=1.0)
     if sigma:
+        band = "additional scatter" if has_errors else "residual RMS"
         axes[1].axhspan(
             -sigma, sigma, color="gray", alpha=0.15,
-            label=f"additional scatter ±{sigma:.3f} mag",
+            label=f"{band} ±{sigma:.3f} mag",
         )
-    # The error each star was weighed with; without it a kept star far from
-    # the line reads as a bad fit when its catalog error simply covers it.
-    axes[1].errorbar(
-        mag[fitted], resid[fitted], yerr=sigma_total[fitted],
-        fmt="none", ecolor="gray", elinewidth=0.8, alpha=0.7, zorder=1,
-    )
+    # Each star's measurement error. The fit weighs a star by this and the
+    # band's scatter in quadrature; without the bar a kept star far from the
+    # line reads as a bad fit when its catalog error simply covers it.
+    if has_errors:
+        axes[1].errorbar(
+            mag[fitted], resid[fitted], yerr=sigma_total[fitted],
+            fmt="none", ecolor="gray", elinewidth=0.8, alpha=0.7, zorder=1,
+            label="measurement error",
+        )
     axes[1].scatter(
         mag[kept], resid[kept],
         c="steelblue", s=35, edgecolors="k", linewidths=0.4, alpha=0.85,
-        label="kept in fit (bars: measurement error)", zorder=2,
+        label="kept in fit", zorder=2,
     )
     if rejected.any():
         axes[1].scatter(
