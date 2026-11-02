@@ -96,3 +96,36 @@ def test_a_workers_artifacts_are_listed_with_the_session(tmp_path, monkeypatch):
     listed = [Path(item.file.path).name for item in session_artifacts(session)]
     assert "session_manifest.json" in listed
     assert any(name.startswith("made_in_a_worker") for name in listed)
+
+
+@posix_only
+def test_a_later_question_reads_an_earlier_questions_artifact(tmp_path, monkeypatch):
+    """Each question is a new session folder. Workers saw only their own
+    session's folder as the artifact directory, so a follow-up question could
+    not run a periodogram on the light curve the last one loaded."""
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", tmp_path)
+    calls = owned_tool_functions(
+        {"write": fake.write_artifact, "read": fake.read_own_artifact}, threading.Event())
+
+    with artifacts.scoped_artifacts("sessions/q1"):
+        written = calls["write"]()["artifacts"][0]["path"]
+    with artifacts.scoped_artifacts("sessions/q2"):
+        reread = calls["read"](path=written)
+
+    assert reread["status"] == "ok"
+    # Each call's work folder still sits in its own session's folder.
+    assert Path(written).resolve().is_relative_to((tmp_path / "sessions" / "q1" / ".mars-runtime").resolve())
+
+
+def test_worker_artifacts_are_listed_in_the_order_the_calls_ran(tmp_path):
+    from tools.runtime.storage import CALL_FILE
+
+    runtime = tmp_path / ".mars-runtime"
+    for name, created in (("f" * 32, 1.0), ("0" * 32, 2.0)):  # names sort the other way
+        (runtime / name / "artifacts").mkdir(parents=True)
+        (runtime / name / CALL_FILE).write_text(f'{{"created": {created}}}')
+        (runtime / name / "artifacts" / f"made_at_{created:g}.txt").write_text("x")
+
+    listed = [Path(item.file.path).name for item in session_artifacts(tmp_path)]
+
+    assert listed == ["made_at_1.txt", "made_at_2.txt"]

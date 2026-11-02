@@ -1022,7 +1022,8 @@ class MARSApp(App[None]):
         status.update(self._status_text(status.size.width or None))
 
     def on_resize(self, event: events.Resize) -> None:
-        self._refresh_status()
+        # After the layout pass: the status line is fitted to its new width.
+        self.call_after_refresh(self._refresh_status)
 
     def _append_transcript(self, text: str) -> None:
         self.query_one("#transcript", Transcript).append_notice(text)

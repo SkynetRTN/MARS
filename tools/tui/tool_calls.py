@@ -22,6 +22,7 @@ the session's own files.
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
@@ -82,8 +83,12 @@ def owned_tool_functions(
         def call(**arguments: Any) -> dict[str, Any]:
             if interrupt.is_set():
                 return dict(INTERRUPTED)
-            root = Path(artifacts.ARTIFACT_DIR) / (artifacts.current_artifact_subdir() or "")
-            return asyncio.run(_run_stoppable(name, arguments, functions, root, limits, interrupt))
+            # The worker sees the whole artifact root, so a follow-up question
+            # (a new session folder) or a resumed session still reads earlier
+            # questions' artifacts; its work folder goes in this session's.
+            scope = artifacts.current_artifact_subdir() or None
+            return asyncio.run(_run_stoppable(
+                name, arguments, functions, Path(artifacts.ARTIFACT_DIR), scope, limits, interrupt))
 
         call.__name__ = name
         return call
@@ -99,6 +104,7 @@ async def _run_stoppable(
     arguments: Mapping[str, Any],
     functions: Mapping[str, Callable[..., Any]],
     root: Path,
+    scope: str | None,
     limits: CallLimits,
     interrupt: threading.Event,
 ) -> dict[str, Any]:
@@ -106,7 +112,7 @@ async def _run_stoppable(
     # session that never calls a slow tool does not need.
     from tools.runtime.runner import run_call
 
-    task = asyncio.ensure_future(run_call(name, dict(arguments), functions, root, limits))
+    task = asyncio.ensure_future(run_call(name, dict(arguments), functions, root, limits, scope=scope))
     while not task.done():
         if interrupt.is_set():
             # The runner's cleanup is shielded: it stops the worker and its
@@ -130,10 +136,23 @@ def session_artifacts(directory: Path) -> list["ArtifactMetadata"]:
     if runtime.is_dir() and not runtime.is_symlink():
         written = [
             path
-            for call in sorted(runtime.iterdir())
+            for call in sorted(runtime.iterdir(), key=_started)
             if (call / "artifacts").is_dir() and not (call / "artifacts").is_symlink()
             for path in sorted((call / "artifacts").rglob("*"))
             if path.is_file() and not path.is_symlink()
         ]
         found.extend(describe_artifact(path) for path in written)
     return found
+
+
+def _started(call: Path) -> tuple[float, str]:
+    """When a worker's call began, for listing calls in the order they ran:
+    their folder names are random."""
+
+    from tools.runtime.storage import CALL_FILE
+
+    try:
+        started = float(json.loads((call / CALL_FILE).read_text())["created"])
+    except (OSError, ValueError, KeyError, TypeError):
+        started = float("inf")
+    return started, call.name
