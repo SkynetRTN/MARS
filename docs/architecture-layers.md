@@ -1,8 +1,8 @@
 # MARS's Layers: Tools, Turn-Taking, and the Harness
 
 Date: 2026-11-01
-Status: current-state reference, except §6, which is proposed work and is
-labelled as such in its figure
+Status: current-state reference, except §6 and one box in the first figure,
+which are proposed work and are labelled as such
 
 Three separable things in MARS (MCP Astronomy Research Suite) get called by the same words. This
 document draws the difference, because the distinction decides where a change
@@ -31,8 +31,8 @@ own tests against independent references (`tests/README.md`).
 
 The five figures below are generated, and every count printed in them is
 read from the checkout when they are drawn (see the end of this document).
-The first figure, §1, §2 and §5 describe MARS as it is; §6 is proposed
-work.
+The first figure, §1, §2 and §5 describe MARS as it is, apart from one box
+in the first figure labelled as proposed; §6 is proposed work.
 
 ---
 
@@ -40,24 +40,27 @@ work.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture/fig-4-agent-loop-dark.svg">
-  <img src="assets/architecture/fig-4-agent-loop-light.svg" alt="The MARS agent loop as a ring of five steps (propose, validate, approve, execute, observe) between a language model from any provider and 55 tested astronomy tools. Four numbered call-outs show real traffic produced by MARS: a proposed call, a malformed argument caught by validation, a download that needs a person's approval, and a structured result. Below, every pass is logged to the session record, and a benchmark of 144 recorded sessions reports the share of correct answers per model." width="1000">
+  <img src="assets/architecture/fig-4-agent-loop-light.svg" alt="A swimlane diagram in four lanes: user, MARS agent, model and tools. A question enters from the MARS console, the Python API or the benchmark harness and becomes the conversation. The agent's model port sends the messages and tool schemas to one of four model providers (Anthropic, OpenAI, Gemini, Ollama) and receives proposed tool calls. Each call passes schema validation, an approval policy that asks a researcher before risk-tagged calls, and a repeat-call cache, then tool dispatch runs it on one of 55 tools in five groups; a Skynet 2 observing interface is shown as proposed. A call that fails validation or is refused returns to the conversation as an error without running. Results go to the session record and return to the model for the next turn, by default at most 20. The answer and artifacts go to the console, the Python caller and the benchmark graders; answers and saved sessions inform follow-up questions." width="1000">
 </picture>
 
-The rest of this document is the machinery; this is what it does, on one
-page. A language model from any provider proposes a tool call. The agent loop
-checks it against the tool's schema, applies the approval policy, runs it on
-one of the 55 tools, and hands the structured result back for the model to
-read: one pass per call, at most 20 turns, interruptible throughout (§2). The
-computation happens in the tools, not in the model. Every pass is written to
-the session record, and recorded sessions are graded by the benchmark (§5).
+The rest of this document is the machinery; this is the path one question
+takes through it. The question enters from the console, a Python caller or
+the benchmark harness and becomes the conversation. The model port sends the
+conversation and the tool schemas to whichever provider is configured, and
+gets back the calls the model proposes. Each call then passes schema
+validation, the approval policy (which asks the researcher before a slow,
+keyed or writing call, and by default refuses one when there is nobody to
+ask) and the repeat-call cache, before tool dispatch runs it on one of the 55
+tools. A call that fails validation or is refused goes back to the
+conversation as an error, unrun. Every result is written to the session
+record and returned to the model for the next turn, by default at most 20
+(§2). The computation happens in the tools, not in the model. The answer and
+its artifacts go back to whoever asked; the benchmark grades recorded
+sessions (§5).
 
-The four call-outs are not illustrations. Each is produced by MARS when the
-figure is drawn: the call is a real `compute_pulsar_periodogram` on a bundled
-Green Bank 20 m scan, and its result is that run's output; the caught call is
-what `validate_tool_call` returns for the string `"None"` where JSON `null` is
-meant; the approval call-out is the risk the policy gives a download. The
-benchmark bars are the September 2026 sweep, graded before the attribution
-checks were added (§5).
+The providers, the tool groups and the turn limit are read from the code when
+the figure is drawn. The Skynet 2 box is the observing interface proposed in
+§6.
 
 ---
 
@@ -307,6 +310,7 @@ Both are true of different layers.
 | The twelve events consumers read | `tools/agent/events.py` |
 | Approval, and risk carried by an argument | `tools/agent/policy.py` — `TOOL_RISK`, `DOWNLOAD_FLAGS`, `risk_tags` |
 | Pre-dispatch validation | `tools/llm/validation.py` — `validate_tool_call` |
+| The four model providers | `tools/llm/factory.py` — `RECOGNIZED_PROVIDERS` |
 | The MCP server's strict check | `tools/mcp/server.py` — `_StrictValidator` |
 | The 55 schemas and the 55 callables | `tools/registry.py` — `TOOL_SCHEMAS`, `TOOL_FUNCTIONS` |
 | The five groups | `tools/mcp/groups.py` — `GROUPS` |
@@ -324,9 +328,8 @@ Both are true of different layers.
 The ten SVGs under `assets/architecture/` are generated by
 `assets/architecture/make.py` — one geometry per figure, a `-light`/`-dark`
 pair behind a `<picture>` element, the same pattern the README banner uses.
-It imports the registry to count the tools, and runs one period search on a
-bundled pulsar scan for the first figure's example (a few seconds, offline),
-so run it in the project environment:
+It imports the registry to count the tools, so run it in the project
+environment:
 
 ```bash
 uv run python docs/assets/architecture/make.py
@@ -335,15 +338,15 @@ uv run python docs/assets/architecture/make.py
 Every number a figure prints is measured from the checkout at that moment —
 tool counts and classes, marker counts, test functions, frames and scans,
 download caps, CI Pythons, the sweep in `report.json`, the engine's
-enumerations and the first figure's examples — so re-run it after a change
-that moves one. Labels are fitted against CMU Serif's metrics and the
+enumerations, the model providers and the tool groups — so re-run it after a
+change that moves one; a new provider or tool group fails the run until the
+first figure names it. Labels are fitted against CMU Serif's metrics and the
 run fails if one overflows its box or uses a glyph the font lacks; each SVG
 embeds a subset of the face, so a browser renders it in the font it was fitted
-to. The fit check needs the fonts installed — CMU (`/usr/share/fonts/cm-unicode`
-on the development host), Open Sans and Adwaita Mono for the agent loop — and
-is skipped with a warning without them.
+to. The fit check needs the CMU fonts installed (`/usr/share/fonts/cm-unicode`
+on the development host) and is skipped with a warning without them.
 
 `--print DIR` also writes a print set — SVG, PDF and a 600-dpi PNG, 6.5
-inches wide, greyscale except the agent loop and the engine — for documents
-outside the repository. It needs
+inches wide, greyscale except the engine — for documents outside the
+repository. It needs
 `rsvg-convert` (librsvg), and its output is not committed.
