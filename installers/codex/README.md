@@ -5,7 +5,9 @@ threads), the Codex CLI and the Codex IDE extension. All three share
 `~/.codex`, so one install serves all of them. The plugin carries the MCP
 server's launch configuration and the `mars-tools` skill. It carries no Python,
 no dependencies and no MARS version. Codex starts the server with
-`uv run --no-project --python 3.13 python -c <launcher>`, where the launcher
+`uv run --no-project --no-config --isolated --python 3.13 python -I -c <launcher>`,
+which runs in a throwaway environment of its own, so a `.venv`, `uv.toml` or
+module in the folder Codex starts in plays no part, and the launcher
 is the Claude Desktop extension's own
 [`src/server.py`](../claude-desktop/src/server.py), copied into `.mcp.json` by
 `.github/scripts/sync_codex_launcher.py` (a test keeps them identical). It
@@ -112,8 +114,9 @@ started with them:
 | `MARS_CATALOG_DIR` | The folder holding your plate-solving catalogs: astrometry.net index files and the UCAC catalogue ([plate solving](../../docs/installing.md#plate-solving)) |
 | `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' own settings; the two paths name their data folders directly and win over `MARS_CATALOG_DIR` |
 
-Codex forwards a variable as the app has it, an empty value included. An
-`ADS_DEV_KEY` exported empty therefore hides `~/.ads/dev_key`.
+Codex forwards a variable as the app has it, an empty value included. The
+launcher removes an empty or unfilled setting before MARS starts, so an
+`ADS_DEV_KEY` exported empty does not hide `~/.ads/dev_key`.
 
 A desktop app does not see your shell's variables. To restrict tools without
 one, add a policy to `~/.codex/config.toml`:
@@ -133,6 +136,8 @@ export UV_PYTHON_DOWNLOADS=automatic             # as the plugin does, for Fedor
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp fetch-data optical   # or: isochrones, all
 ```
+
+On Windows on ARM, put `--python cpython-3.13-windows-x86_64-none` in place of `--python 3.13`: that is the x64 Python the launcher runs MARS on there, and the native one cannot install it.
 
 On a slow connection, running the self-test once before the first thread also
 installs the release ahead of time. If you set `MARS_HOME` for the app, set it

@@ -12,8 +12,9 @@ Claude Code, Cursor, VS Code or a hand-written config, see
 Verified on Windows 11 ARM64 on 2026-10-27 through the routes' own launch
 command: a first start from nothing in 86 s (1.7 GB of Pythons and
 packages), an offline start and a pinned release, each serving 55 tools.
-The maintainer verified both apps on Windows on 2026-10-23, before the
-launcher chose the x64 Python.
+The maintainer verified both apps by hand on this Windows on ARM machine
+on 2026-11-02. (The earlier check, on 2026-10-23, was on x64 Windows, which
+is no longer tested.)
 
 ## Claude Desktop
 
@@ -24,9 +25,11 @@ launcher chose the x64 Python.
 3. Double-click `mars.mcpb`, or use *Settings → Extensions → Advanced
    settings → Install Extension…*. Claude says the extension is unsigned;
    accept. No Python or uv is needed first.
-4. The three settings are optional: an *ADS API token* for the literature
+4. The five settings are optional: an *ADS API token* for the literature
    tools ([get one](https://ui.adsabs.harvard.edu/user/settings/token)),
-   *Tool groups* to serve fewer tools, and a *MARS home* for where files go.
+   *Tool groups* to serve fewer tools, a *MARS home* for where files go, a
+   *MARS release* to run one release instead of the newest, and a *Catalog
+   folder* for plate solving (below).
 5. Open a new conversation. The first start downloads Python 3.13 and about
    700 MB of packages, so MARS takes a minute or more to show as connected;
    later starts are quick.

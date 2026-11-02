@@ -340,7 +340,10 @@ Claude Desktop folder picker and `MARS_CATALOG_DIR` hand it folders the user
 named, and an ASCII write raised `UnicodeEncodeError` on the first non-ASCII
 one. The engine takes the rest of an `add_path` line as the path, spaces
 included; a bounded M15 solve through `Catalogs José/4200` recovers the
-fixture's pointing.
+fixture's pointing. A name that is not valid UTF-8 is written back as its own
+bytes (`surrogateescape`), and `engine.validate_index_dirs` refuses a name
+with a line break, which would add configuration lines of its own (a third,
+small divergence there).
 
 ATLAS's finite allowance still covers only the blind matcher loop, not catalog
 loading, extraction, its oriented path or all retry work. MCP dispatch additionally
@@ -1407,7 +1410,10 @@ plot (`tools/photometry_pipeline.py`) reads it beside the survivor mask, so a
 star dropped before fitting is drawn as "not fitted", not as a rejected
 outlier. On NGC 5128 B's recorded APASS replay all six non-survivors were
 such drops and the outlier loop rejected none; the plot had called all six
-outliers. No fit arithmetic changes.
+outliers. No fit arithmetic changes. The solve's own rejection percentage
+(`rejection_percent`, upstream's `(1 - kept / sources) * 100`) still counts
+those drops as rejected; it is kept for parity, and the plot is where the two
+are told apart.
 
 ---
 

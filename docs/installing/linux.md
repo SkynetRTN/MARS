@@ -49,7 +49,7 @@ Codex's app server.
 5. Open ChatGPT from the applications menu (restart it if it was open),
    check that MARS is installed in the **Plugins** tab, and start a Codex
    thread. The first start downloads Python 3.13 and about 700 MB of
-   packages and compiles `photutils`, so it takes a minute or more. Codex
+   packages, so it takes a minute or more. Codex
    asks before any tool that writes a file.
 
 More: [`installers/codex/`](../../installers/codex/README.md), including

@@ -21,9 +21,11 @@ verified on [Linux](linux.md).
 3. Double-click `mars.mcpb`, or use *Settings → Extensions → Advanced
    settings → Install Extension…*. Claude says the extension is unsigned;
    accept. No Python or uv is needed first.
-4. The three settings are optional: an *ADS API token* for the literature
+4. The five settings are optional: an *ADS API token* for the literature
    tools ([get one](https://ui.adsabs.harvard.edu/user/settings/token)),
-   *Tool groups* to serve fewer tools, and a *MARS home* for where files go.
+   *Tool groups* to serve fewer tools, a *MARS home* for where files go, a
+   *MARS release* to run one release instead of the newest, and a *Catalog
+   folder* for plate solving (below).
 5. Open a new conversation. The first start downloads Python 3.13 and about
    700 MB of packages, so MARS takes a minute or more to show as connected;
    later starts are quick.
