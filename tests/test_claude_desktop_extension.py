@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -135,38 +136,136 @@ def test_the_extension_names_no_mars_version():
     assert not [v for v in _VERSION.findall(server) if v != "3.13"], "only the Python version may appear"
 
 
+def _done(returncode=0, stdout=""):
+    return type("Done", (), {"returncode": returncode, "stdout": stdout})()
+
+
 def test_the_entry_point_refreshes_to_the_latest_release_then_serves_it():
-    """Step 1 asks PyPI for the newest release, with its output kept off
-    stdout (the MCP stream); step 2 starts the newest one in uv's cache."""
+    """Step 1 asks PyPI for the newest release and prints its version, with
+    uv's output kept off stdout (the MCP stream); step 2 serves exactly that
+    release, not whatever the bare name finds first."""
 
     entry = _entry_point()
     calls = []
 
     def run(command, **kwargs):
         calls.append((command, kwargs))
-        return type("Done", (), {"returncode": 0})()
+        return _done(stdout="0.1.0rc7\n")
 
     environ = {"UV": "/opt/uv/bin/uv", "ADS_DEV_KEY": ""}
     code = entry.main(["--tools", "databases"], environ=environ, run=run, execv=lambda path, argv: calls.append((argv, path)))
     refresh, _ = calls[0]
     assert refresh[:3] == ["/opt/uv/bin/uv", "tool", "run"]
     assert "skynet-mars[mcp]@latest" in refresh and "--offline" not in refresh
-    assert calls[0][1]["stdout"] is sys.stderr
+    assert calls[0][1]["stdout"] is subprocess.PIPE
+    assert refresh[refresh.index("python") + 1] == "-I"
     serve = calls[1][0]
-    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]" and "--offline" in serve
+    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc7" and "--offline" in serve
     assert serve[-3:] == ["mars-mcp", "--tools", "databases"]
     assert "ADS_DEV_KEY" not in environ
     assert code in (0, None)
 
 
-def test_without_a_network_the_last_release_fetched_still_starts(capsys):
+def test_without_a_network_the_newest_cached_release_starts(capsys):
     entry = _entry_point()
     commands = []
 
     def run(command, **kwargs):
         commands.append(command)
-        return type("Done", (), {"returncode": 2 if "skynet-mars[mcp]@latest" in command else 0})()
+        return _done(0, "0.1.0rc6\n") if "--offline" in command else _done(2)
 
     entry.main([], environ={"UV": "uv"}, run=run, execv=lambda path, argv: commands.append(argv))
-    assert "--offline" in commands[-1]
-    assert "starting the last one fetched" in capsys.readouterr().err
+    online, offline, serve = commands[:3]
+    assert "--offline" not in online and "--offline" in offline
+    assert offline[offline.index("--from") + 1] == "skynet-mars[mcp]@latest"
+    assert "--offline" in serve and serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc6"
+    assert "starting the newest one on this machine" in capsys.readouterr().err
+
+
+def test_with_nothing_cached_the_bare_name_starts_what_is_installed():
+    entry = _entry_point()
+    commands = []
+    entry.main([], environ={"UV": "uv"}, run=lambda c, **k: commands.append(c) or _done(2), execv=lambda p, a: commands.append(a))
+    assert commands[-1][commands[-1].index("--from") + 1] == "skynet-mars[mcp]"
+
+
+def test_a_refresh_that_prints_no_version_serves_the_bare_name():
+    entry = _entry_point()
+    commands = []
+    entry.main([], environ={"UV": "uv"}, run=lambda c, **k: commands.append(c) or _done(stdout="warning\n0.1"), execv=lambda p, a: commands.append(a))
+    assert commands[-1][commands[-1].index("--from") + 1] == "skynet-mars[mcp]"
+
+
+
+def test_a_pinned_release_is_fetched_and_served_exactly():
+    """MARS_VERSION (the *MARS release* setting) is the rollback route: both
+    steps name that release, so the newest is neither fetched nor served."""
+
+    entry = _entry_point()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return _done(stdout="0.1.0rc5\n")
+
+    entry.main([], environ={"UV": "uv", "MARS_VERSION": " 0.1.0rc5 "}, run=run, execv=lambda path, argv: calls.append(argv))
+    refresh, serve = calls[:2]
+    assert refresh[refresh.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc5"
+    assert serve[serve.index("--from") + 1] == "skynet-mars[mcp]==0.1.0rc5"
+    assert "--offline" in serve
+
+
+def test_a_pin_that_is_not_a_version_stops_with_a_message(capsys):
+    entry = _entry_point()
+    calls = []
+
+    code = entry.main([], environ={"UV": "uv", "MARS_VERSION": ">=0.1"}, run=lambda c, **k: calls.append(c), execv=lambda p, a: calls.append(a))
+
+    assert code == 2
+    assert calls == []
+    assert "not an exact release number" in capsys.readouterr().err
+
+
+def test_an_unfilled_release_setting_means_the_newest():
+    entry = _entry_point()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return _done(stdout="0.1.0rc6\n")
+
+    environ = {"UV": "uv", "MARS_VERSION": "${user_config.mars_version}"}
+    entry.main([], environ=environ, run=run, execv=lambda path, argv: calls.append(argv))
+    assert "skynet-mars[mcp]@latest" in calls[0]
+    assert "MARS_VERSION" not in environ
+
+
+
+def test_no_uv_call_reads_a_config_file_from_the_starting_folder():
+    """The host may start the launcher anywhere; a uv.toml there must not
+    choose the index MARS comes from."""
+
+    entry = _entry_point()
+    assert "--no-config" in entry.refresh_command("uv")
+    assert "--no-config" in entry.serve_command("uv", [])
+
+
+def test_windows_on_arm_runs_mars_on_the_x64_python():
+    """sep and pyerfa have no Windows ARM64 wheels; the x64 build runs under
+    Windows' own emulation (verified on Windows 11 ARM64, 2026-10-27)."""
+
+    entry = _entry_point()
+    assert entry.python_request("win32", "ARM64") == "cpython-3.13-windows-x86_64-none"
+    assert entry.python_request("win32", "AMD64") == "3.13"
+    assert entry.python_request("darwin", "arm64") == "3.13"
+    assert entry.python_request("linux", "aarch64") == "3.13"
+
+
+def test_both_steps_run_on_the_same_python(monkeypatch):
+    """uv keys a tool environment by its interpreter: a refresh on one Python
+    and a serve on another would serve a release never fetched."""
+
+    entry = _entry_point()
+    monkeypatch.setattr(entry, "python_request", lambda: "cpython-3.13-windows-x86_64-none")
+    for command in (entry.refresh_command("uv"), entry.refresh_command("uv", offline=True), entry.serve_command("uv", [])):
+        assert command[command.index("--python") + 1] == "cpython-3.13-windows-x86_64-none"

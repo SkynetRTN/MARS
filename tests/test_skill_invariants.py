@@ -222,9 +222,94 @@ def test_installed_native_skill_is_idempotent_and_never_overwrites(tmp_path):
     assert check_repository_copy(target) == []
     assert install_native_skill(target) is False
     (target / "SKILL.md").write_text("user edits", encoding="utf-8")
-    with pytest.raises(FileExistsError, match="different contents"):
+    with pytest.raises(FileExistsError, match="your changes in SKILL.md"):
         install_native_skill(target)
     assert (target / "SKILL.md").read_text() == "user edits"
+
+
+def _as_older_release(target):
+    """Make an installed copy look like an unedited install of an older
+    release: different text, and a record that says the installer wrote it."""
+    import hashlib
+    import json
+
+    from tools.skill import INSTALL_RECORD
+
+    older = "---\nname: mars-tools\ndescription: older\n---\nAn older skill.\n"
+    (target / "SKILL.md").write_text(older, encoding="utf-8")
+    record = json.loads((target / INSTALL_RECORD).read_text(encoding="utf-8"))
+    record["files"]["SKILL.md"] = hashlib.sha256(older.encode()).hexdigest()
+    (target / INSTALL_RECORD).write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_an_unedited_older_skill_is_upgraded_in_place(tmp_path):
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+
+    assert install_native_skill(target) is True
+    assert check_repository_copy(target) == []
+    assert sorted(p.name for p in target.parent.iterdir()) == [SKILL_NAME]
+
+
+def test_an_edit_to_an_older_skill_is_kept_and_named(tmp_path):
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    (target / "references").mkdir(exist_ok=True)
+    (target / "references" / "mine.md").write_text("my notes", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="references/mine.md"):
+        install_native_skill(target)
+    assert (target / "references" / "mine.md").read_text() == "my notes"
+
+
+def test_a_file_added_to_an_older_skill_is_kept_whatever_its_kind(tmp_path):
+    """The upgrade swaps the whole directory, so a script or note the user
+    added must stop it, not only an edited Markdown file."""
+
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    (target / "scripts").mkdir()
+    (target / "scripts" / "helper.py").write_text("print('mine')", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="scripts/helper.py"):
+        install_native_skill(target)
+    assert (target / "scripts" / "helper.py").read_text() == "print('mine')"
+
+
+def test_desktop_metadata_does_not_block_an_upgrade(tmp_path):
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    (target / ".DS_Store").write_bytes(b"x")
+
+    assert install_native_skill(target) is True
+    assert check_repository_copy(target) == []
+
+
+def test_a_copy_without_a_record_is_refused_with_how_to_proceed(tmp_path):
+    from tools.skill import INSTALL_RECORD
+
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    (target / INSTALL_RECORD).unlink()
+    (target / "SKILL.md").write_text("older or edited: cannot tell", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="kept no record"):
+        install_native_skill(target)
+
+
+def test_a_current_copy_without_a_record_gains_one(tmp_path):
+    from tools.skill import INSTALL_RECORD
+
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    (target / INSTALL_RECORD).unlink()
+
+    assert install_native_skill(target) is False
+    assert (target / INSTALL_RECORD).is_file()
 
 
 def test_the_claude_skill_link_points_at_the_repository_copy():
