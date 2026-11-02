@@ -322,12 +322,18 @@ def install_native_skill(target: Path) -> bool:
     staging = target.with_name(f".{target.name}.new-{os.getpid()}")
     previous = target.with_name(f".{target.name}.old-{os.getpid()}")
     shutil.rmtree(staging, ignore_errors=True)
-    _write_skill(staging, rendered)
-    os.replace(target, previous)
     try:
-        os.replace(staging, target)
-    except OSError:
-        os.replace(previous, target)
+        _write_skill(staging, rendered)
+        os.replace(target, previous)
+        try:
+            os.replace(staging, target)
+        except OSError:
+            os.replace(previous, target)
+            raise
+    except BaseException:
+        # A copy left beside the skill is a second, hidden skill an agent's
+        # scanner may load (a file in use stops the swap on Windows).
+        shutil.rmtree(staging, ignore_errors=True)
         raise
     shutil.rmtree(previous, ignore_errors=True)
     return True
