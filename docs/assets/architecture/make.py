@@ -454,7 +454,7 @@ def fig1(m: dict) -> tuple[Canvas, str, str]:
         ("provider-neutral", "ti"),
         ("Anthropic", "ts"),
         ("OpenAI-compatible", "ts"),
-        ("Gemini", "ts"),
+        ("Google", "ts"),
         ("Ollama (local)", "ts"),
     ])
     c.arrow((604, 152), (628, 152), both=True)
@@ -950,7 +950,7 @@ LOOP_STYLE = """
 """
 
 # Display names, keyed by the factory's provider prefix.
-PROVIDER_NAMES = {"anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Gemini",
+PROVIDER_NAMES = {"anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Google",
                   "ollama": "Ollama"}
 # What each MCP tool group does, keyed by group name.
 GROUP_NAMES = {
