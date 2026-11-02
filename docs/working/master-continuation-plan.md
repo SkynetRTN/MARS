@@ -405,8 +405,9 @@ Evidence: [query backends](../../algorithms/query/),
   physical Mac when one is available.
 - [x] **Desktop install guides.** Once real desktop use is verified, archive
   the desktop guide and fold its Claude Desktop and Codex install steps into
-  per-platform guides under `../installing/`: Windows (x64), macOS (Apple
-  Silicon) and Linux (ARM), with the verified OS and app versions.
+  per-platform guides under `../installing/`: Windows (x64; Windows on ARM
+  since 2026-10-27, see that item), macOS (Apple Silicon) and Linux (ARM),
+  with the verified OS and app versions.
   *Done 2026-10-23:* [Windows](../installing/windows.md),
   [macOS](../installing/macos.md) and [Linux](../installing/linux.md), linked
   from `../installing.md`, which stays where it is because shipped wheels and
@@ -692,18 +693,24 @@ Evidence: [query backends](../../algorithms/query/),
     clients as a success. `WcsSummary.status` is now computed, `error`
     whenever `errors` is not empty; a genuine miss stays `ok` with its
     `no_solution` warning (`tests/test_m3_wcs_failures.py`).
-  - **The other result models (2026-10-28, the maintainer's decision).** 20
+  - **The other result models (2026-10-28, the maintainer's decision).** 19
     more models carried `errors` but no `status` (pulsar, variable-star,
     zero-point, photometry, optical-frame, field-calibration and
     reference-band results), so their failures were shown and reported as
     successes too. Checked model by model: every place they are built with
     errors returns no usable result alongside them (a listing that found
-    nothing, or the caller's own input echoed back), so all 20 now share
-    `StatusFromErrors`: no errors is `ok`, only `not_found`/`target_not_found`
-    is `not_found` (a lookup with no match, as elsewhere), anything else is
-    `error`. `tests/test_result_status.py` exercises real failures in each
-    family and requires a status on every registered tool's result that can
-    carry errors.
+    nothing, or the caller's own input echoed back), so all 20, `WcsSummary`
+    included, now share `StatusFromErrors`: no errors is `ok`, only
+    `not_found`/`target_not_found` is `not_found` (a lookup with no match, as
+    elsewhere), anything else is `error`. `tests/test_result_status.py`
+    exercises real failures in each family and requires a status on every
+    registered tool's result that can carry errors.
+    *Corrected 2026-11-02 (PR review, maintainer's decisions):* an ambiguous
+    name does return a usable result, the candidates it matched, so
+    only-`ambiguous` is `ok`; and an unknown photometry target is
+    `not_found` like any lookup's miss, where `PhotometryRunResult`'s own
+    rule had said `error` (the merge note calling the change result-neutral
+    was wrong).
 - [x] **Plate solving is documented as a machine dependency.** The
   maintainer's request (2026-10-28): the install guides say that plate
   solving needs astrometry.net and its index files installed on the user's
@@ -753,7 +760,7 @@ Evidence: [query backends](../../algorithms/query/),
   wrong instead of advising a setting already made, and the engine
   configuration UTF-8 (a bounded solve through `Catalogs José/4200`
   works).
-- [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
+- [x] **Split the M4 branch into PRs.** The last M4 checkbox, once every
   other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
   documentation and behavior changes, which the repository keeps in
   separate, narrow PRs (CLAUDE.md, Conventions). Split it by kind, in an
@@ -763,6 +770,35 @@ Evidence: [query backends](../../algorithms/query/),
   decision (2026-10-28), not the usual `dev`. Some commits mix kinds and
   split by hunk: `3e90733` alone carries four separate plot fixes
   (zero-point, overlay, radio, HR) with documentation and plan edits.
+  *Done 2026-11-02:* split by file into eight PRs to `main`, each passing
+  the full suite alone from `main`: #128 Ollama truncation, #129 the shared
+  launcher and skill installer, #130 the console and the tool runtime,
+  #131 plate solving and result statuses, #132 plot content, #133
+  `mars-bench`, #134 workflows, #135 documentation. Merged onto `main`
+  together they reproduce this branch exactly; `tests/runtime_fakes.py`
+  was first in two PRs, identically. Merge #128-#133 in any order, #134
+  after #129 (its release job packs that launcher), #135 last.
+  - **Review of the eight PRs (2026-11-02),** findings checked against the
+    code before fixing. Reproduced and fixed: a follow-up console question
+    could not read an earlier question's artifacts (workers saw only the
+    session folder; `run_call` now takes a `scope`, and the runtime moved
+    to the console PR); Codex's launch ran inside a `.venv` in its starting
+    folder, executing its `.pth` files (`--isolated`); an Ollama answer was
+    shown before its truncation refusal. Also fixed: `--no-config` dropped
+    the user's own uv configuration and guarded nothing (`uv tool` reads no
+    folder `uv.toml`); a failed skill upgrade left a hidden copy; a stop
+    during an approval was recorded as a policy refusal; the status line
+    used the pre-resize width; worker artifacts listed in random order; a
+    partly filled radio error column fitted the two models on different
+    points; a headerless CSV repeating a value lost its first row;
+    `mars-bench compare` and a mistyped suite still ended in tracebacks;
+    the packer's ignore rules were not `.gitignore`'s; the release check
+    would block a prerelease after a stable release; index folder names
+    with a line break or non-UTF-8 bytes; and a dozen documentation
+    mismatches. Not reproduced: Ollama under-reporting cached prompts
+    (0.33 reports 1,588 then 1,612 tokens, the whole prompt), dropping
+    `inparallel` slowing solves (measured faster), a NaN zero-point axis
+    (filtered before the fit).
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of

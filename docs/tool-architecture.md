@@ -624,14 +624,16 @@ uv run mars --max-turns 40         # with a higher ceiling than 20
  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎
  ▊  Ask MARS…                                                             ▎
  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎
-  2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
+  ctrl+q quit • F3 artifacts • F4 sessions • 2/20 turns • 1 artifact • halfblock graphics
 ```
 
-The header names the session's `provider/model`; the status bar starts with
-the keys (`esc stop` while a turn runs, `ctrl+q quit`, `F3`, `F4`), so a
-narrow terminal never cuts them, then adds what fits of: turns against the
-ceiling, token usage once a turn reports it, the artifacts written, and the
-graphics tier detected for this terminal. It needs a backend
+The header names the session's `provider/model`. The status bar starts with
+the keys someone acts on, which a narrow terminal never cuts: `ctrl+q quit`,
+and while a turn runs `ctrl+c stop` and `esc stop after step` before it
+(`stopping` once a stop is under way). It then adds, in order and only as
+they fit: `F3 artifacts`, `F4 sessions`, turns against the ceiling, token
+usage once a turn reports it, the artifacts written, and the graphics tier
+detected for this terminal. It needs a backend
 before it will answer anything — a key for the provider it opens on, or a
 local Ollama daemon, which needs none. If the backend it starts on cannot be
 used, `mars` exits before the interface opens and names the next step: where

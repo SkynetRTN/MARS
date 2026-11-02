@@ -68,6 +68,8 @@ The extension does not fetch the optional data bundles. With
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp fetch-data optical
 ```
 
+On Windows on ARM, put `--python cpython-3.13-windows-x86_64-none` in place of `--python 3.13`: that is the x64 Python the launcher runs MARS on there, and the native one cannot install it.
+
 `@latest` is the release the extension runs, so the bundle matches what it
 expects. If you set the extension's MARS home, run this with the same
 directory in `MARS_HOME`. Otherwise the bundle lands where the server does

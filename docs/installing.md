@@ -90,9 +90,10 @@ talks to it over stdin/stdout, with no port and no network listener. So it
 works in the agent CLIs, the IDEs, Claude Desktop and the ChatGPT desktop app
 (in its Codex threads, not its ordinary chats), but not in a browser chat (claude.ai, ChatGPT on the web). See the
 [dated host proposal](analysis/mcp-desktop-hosts.md) §6. The maintainer
-verified Claude Desktop on macOS and Windows and the ChatGPT app on Windows
-and Linux on 2026-10-23 ([record](archive/desktop-acceptance.md)); the
-ChatGPT app on macOS, Cursor, VS Code and Gemini CLI are untested.
+verified Claude Desktop on macOS and the ChatGPT app on Linux on 2026-10-23
+([record](archive/desktop-acceptance.md)), and both apps on Windows on ARM
+on 2026-11-02 (the 2026-10-23 Windows check was on x64, no longer tested);
+the ChatGPT app on macOS, Cursor, VS Code and Gemini CLI are untested.
 
 In the examples below, replace `/path/to/mars-mcp` with the full path from
 [Install](#install).
@@ -182,9 +183,12 @@ mars-mcp install-skill ~/.claude/skills/mars-tools
 ```
 
 **If the server does not appear**, run `mars-mcp self-test` first. When it
-passes, the problem is the host config. Claude Desktop logs the server's
-output to `~/Library/Logs/Claude/mcp-server-MARS — MCP Astronomy Research Suite.log` on macOS, and under
-`%APPDATA%\Claude\logs\` on Windows.
+passes, the problem is the host config. Claude Desktop logs a server's
+output to `~/Library/Logs/Claude/mcp-server-<name>.log` on macOS, and under
+`%APPDATA%\Claude\logs\` on Windows: `<name>` is the extension's display
+name (`MARS — MCP Astronomy Research Suite`) for the extension, or the key
+you gave it under `mcpServers` (such as `mars`) for a server you added by
+hand.
 
 ## Updates, offline use and rollback
 
@@ -198,6 +202,8 @@ output to `~/Library/Logs/Claude/mcp-server-MARS — MCP Astronomy Research Suit
 ```bash
 uvx --python 3.13 --from "skynet-mars[mcp]@latest" mars-mcp self-test
 ```
+
+On Windows on ARM, put `--python cpython-3.13-windows-x86_64-none` in place of `--python 3.13`: that is the x64 Python the launcher runs MARS on there, and the native one cannot install it. The same goes for the rollback command.
 
 An update never touches your files. Artifacts, downloads and bundles stay in
 the MARS home; after an upgrade, `mars-mcp fetch-data` re-checks installed

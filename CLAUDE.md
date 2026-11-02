@@ -428,8 +428,11 @@ index sets (2MASS 4200-series, TYCHO2, UCAC5) are under
 `/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
 UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
 selected by the repository's default environment. Set
-`MARS_CATALOG_DIR=/srv/agents/catalogs` to opt in to all of it, or
-`ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` for one solver.
+`MARS_CATALOG_DIR=/srv/agents/catalogs` to opt in to the three index sets
+and the UCAC5 catalogue, or `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` for
+one solver. The packaged 4107-4119 indexes are not under that folder; to use
+them too, name every index folder in `ANET_INDEX_PATH`, which replaces the
+folder's index sets rather than adding to them.
 `ANET_INDEX_PATH` must name directories that hold index files *directly*
 (`os.pathsep`-join the three leaf directories above; the `astrometry/` root
 alone is rejected as holding no index files). `tests/conftest.py` takes
@@ -441,13 +444,16 @@ fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
 backend without producing a solution. With the 4200-series set the M15
 fixture solves: in ~14 s with explicit bounds (`solve_astrometry(...,
 search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8)`, P6) and in
-~285 s all-sky, to the same solution. The bounds are opt-in; the default
+~285 s all-sky, to the same solution (both measured before the engine stopped
+loading every index up front, 2026-10-28; bounded it now takes ~5 s against
+the 4200 series). The bounds are opt-in; the default
 stays the extracted all-sky search. The
 `solver_data`-marked tests gate this path. A known-solution check (M4,
 2026-10-26) strips NGC 3628 V's recorded WCS and requires each backend to
 land back on it within 1 arcsec, 0.5% in scale and 0.25 deg in rotation:
-astrometry.net bounded (~4 s) and all-sky (~150 s), and ATLAS bounded
-(~20 s). ATLAS is a pointed solver, not a blind one: with no scale or
+with all three index sets, astrometry.net bounded in ~2.6 s and all-sky in
+18-19 s since 2026-10-28 (4 s and ~150 s before; `docs/extraction.md`, WCS
+§5), and ATLAS bounded in ~20 s. ATLAS is a pointed solver, not a blind one: with no scale or
 pointing it refuses its 2-degree footprint budget. Missing data skips by
 name; a miss with the data configured fails. Both backends still degrade to
 "unavailable" when unconfigured.
