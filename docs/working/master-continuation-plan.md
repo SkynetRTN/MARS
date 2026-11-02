@@ -1,16 +1,14 @@
 # MARS release closure gate
 
-Updated 2026-10-28 against `main` at `fb8b19e` (M3 PRs #122 and #123), with all
-ten M2 checkpoints closed locally on the single working branch `feature/m2`.
-It includes the channels-and-axes checkpoint at `27bdceb`.
-M0, M1 and M3 are closed. M1 merged through PR #118 and M3 through PRs #122
-and #123; their changes are absent from the published `0.1.0rc6`.
+Updated 2026-11-02 from `main` at `fb09774` on `feature/m5-geometry`.
+M0 through M3 are closed and merged: M1 through PR #118, M2 through PR #124,
+and M3 through PRs #122 and #123. Their changes are absent from the published `0.1.0rc6`.
 Publication remains deferred until the remaining gates below have been worked
 through. The next release needs a new version.
 
-M2 is closed locally after the final review corrections and regression checks.
-Its changes remain unmerged into main and unpublished. Live provider failures remain
-recorded below.
+M2 is merged and unpublished. Its detailed evidence below retains the dated
+pre-merge branch history; those historical "unmerged" statements do not describe
+current main. Live provider failures remain recorded below.
 M4 and subsequent release gates remain open. PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
@@ -423,7 +421,7 @@ Evidence: [installation guide](../installing.md),
 These are questions to check, not newly confirmed bugs. Record whether each is
 reachable now, what it does, and whether the release needs a change or caveat.
 
-- [ ] **Coordinates and image geometry.** Check whether RA strings are read
+- [x] **Coordinates and image geometry.** Check whether RA strings are read
   as hours instead of degrees, scale keywords get wrong units, or rotated and
   unequally binned images lose sky coverage. Other reports describe lost stars
   near poles/RA zero, CRPIX at image edges failing, fields wider than 360 degrees
@@ -431,6 +429,43 @@ reachable now, what it does, and whether the release needs a change or caveat.
   whether valid small-field triangles are rejected, far-side stars project
   nearby, source ellipses keep wrong axes, or catalog depth/epoch mismatch loses
   usable stars.
+  *Investigated 2026-11-01 against merged main `fb09774`, on
+  `feature/m5-geometry`:* confirmed fallback decimal-RA misparsing (WCS-06),
+  alternate-WCS scale units/inverted ATLAS bounds (WCS-08), small-field
+  triangle rejection (WCS-07), and polar undercoverage in both ATLAS
+  pre-solve searches (WCS-10). The subsequent authorized remediation fixes
+  those four defects plus far-side projection, full-turn UCAC4/UCAC5 queries,
+  PC matrices/metadata, ellipse normalization and non-celestial FOV inference
+  (WCS-09/11/12/16/24). The old CAT-07/09 helpers now use the maintained
+  spherical enclosure; M2's CAT-11 polar handling remains. UCAC5 G magnitudes
+  drive capped selection, and observation-epoch positions use verified binary
+  proper motions with bounded query halos (WCS-17). Missing data produces
+  registered warnings, not fabricated epochs or brightness. See
+  [the investigation and corrections](../analysis/m5-coordinates-image-geometry.md).
+  *Closed locally 2026-11-02.* The converted original probes
+  failed in 22 cases before corrections; new header, shape and reader tests
+  also failed first. The 145-case M5 correctness group now passes. Review
+  corrections have regressions for downstream UTC epochs, candidate budgets,
+  UCAC5 duplicate spans and incomplete epoch/duration data. Native bounded
+  ATLAS recovered NGC 3628 within 0.17 arcsec at centre / 0.38 arcsec across
+  the detector, 0.026% in scale and 0.017 degrees in rotation, with 67
+  motion-bearing references. An initial blind astrometry.net check using
+  only the 2MASS indexes timed out at 330 seconds; the documented full index
+  configuration (2MASS 4200, TYCHO2 and UCAC5) then passed both configured
+  native checks in 52.18 seconds. The initial failure remains recorded; a
+  subset of those indexes has no guaranteed convergence/time envelope.
+  Final Python 3.13.15 suite with MCP: **4,428 passed, 90 skipped, 214 FITS
+  notices**, no failures (425.35 seconds). The final run used the existing
+  locked environment outside the sandbox: its socket restriction failed
+  `test_the_guard_actually_refuses`, and subprocess MCP calls stalled in an
+  interrupted sandboxed attempt; those paths pass in the final unrestricted
+  run. Skips are 80 network cases, one live-model check, four historical
+  benchmark runs, one Windows check and four unconfigured native checks;
+  the two algorithm-level native checks passed separately as above.
+  The public-tool native checks were not separately enabled. Compilation,
+  generated guidance and whitespace checks pass. Independent review has no
+  remaining findings. Changes remain local and unpublished; other M5 and M4
+  items are not closed by this result.
 - [ ] **Measured flux and source position.** Do nonpositive fluxes appear
   valid, empty annuli omit sky subtraction, downsampling misplace saturated
   sources, or growth-curve neighbor checks fail? Check pixel origins,

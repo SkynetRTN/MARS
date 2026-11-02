@@ -183,43 +183,14 @@ def infer_image_shape(
 
 
 def boxes_from_wcs(wcs: WCS) -> list[tuple[float, float, float, float]]:
-    """Return ``[(ra_deg, dec_deg, width_deg, height_deg)]`` for a WCS footprint.
+    """Return a conservative angular sky box enclosing the detector.
 
-    The width has to be the *catalog-query* width — an angular extent already
-    multiplied by cos(dec) — not the raw span of corner RAs, which inflates as
-    the field moves toward a pole.
-
-    The trick, preserved from upstream: copy the WCS, move ``CRVAL`` to
-    (0, 0), and project the four corners there. At the equator the RA span is
-    the true angular width. The relocated box is guaranteed to straddle RA=0,
-    so the left edge is the smallest corner RA above 180 and the right edge the
-    largest below 180, and the width is their difference plus 360.
-
-    Declination is simpler: max minus min over the corners, which stays correct
-    even for a field crossing a pole.
-
-    KNOWN LIMITATION, from upstream: the RA reconstruction can fail for a highly
-    skewed field whose relocated corners do not split cleanly around 180. It is
-    left as-is because the geometry is not reachable from any real detector.
-
-    Compare ``image_boxes_from_wcs``, which computes the same thing from pixel
-    scales instead and does not handle rotation.
+    M5: both legacy box entry points use the same spherical cone as maintained
+    queries, avoiding relocated-CRPIX failures, rotation and swapped scales.
+    Width/height are angular extents, not unscaled RA-coordinate spans.
     """
-    height, width = wcs_array_shape(wcs)
-    center = wcs.all_pix2world((width - 1) / 2, (height - 1) / 2, 0)
-    center[0] %= 360
-
-    wcs0 = wcs.deepcopy()
-    wcs0.wcs.crval = [0, 0]
-    ras, decs = wcs0.all_pix2world(
-        [(0, 0), (width - 1, 0), (width - 1, height - 1), (0, height - 1)],
-        0,
-    ).T
-    ras %= 360
-    width_deg = ras[ras < 180].max() - ras[ras >= 180].min() + 360
-    height_deg = decs.max() - decs.min()
-
-    return [(center[0], center[1], width_deg, height_deg)]
+    ra, dec, radius = cone_from_wcs(wcs)
+    return [(ra, dec, 2 * radius, 2 * radius)]
 
 
 def cone_from_wcs(wcs: WCS, *, shape: tuple[int, int] | None = None) -> tuple[float, float, float]:
@@ -267,29 +238,15 @@ def image_boxes_from_wcs(
     header=None,
     data: Optional[np.ndarray] = None,
 ) -> list[tuple[float, float, float, float]]:
-    """Return ``[(ra_deg, dec_deg, width_deg, height_deg)]`` from pixel scales.
+    """Enclose a detector with a conservative angular sky box.
 
-    The second of upstream's two footprint implementations. It multiplies the
-    per-axis pixel scale by the axis length rather than projecting corners,
-    which makes it tolerant of a missing ``array_shape`` (it accepts a header or
-    data array instead) but blind to rotation and to the cos(dec) narrowing that
-    ``boxes_from_wcs`` handles.
-
-    Prefer ``boxes_from_wcs`` when the WCS carries its shape. This exists for
-    the image-oriented entry point, where callers may only have a header.
+    Accept explicit/header/data dimensions when the WCS has no array shape.
+    The spherical enclosure accounts for rotation, shear, unequal scales and
+    off-detector CRPIX; distorted coverage retains cone_from_wcs disclosures.
     """
-    h, w = infer_image_shape(wcs, shape=shape, header=header, data=data)
-
-    ra_c, dec_c = wcs.all_pix2world((w - 1) / 2.0, (h - 1) / 2.0, 0)
-    ra_c = float(ra_c) % 360.0
-    dec_c = float(dec_c)
-
-    # proj_plane_pixel_scales returns degrees/pixel, y axis first
-    scale_y, scale_x = proj_plane_pixel_scales(wcs)[:2]
-    width_deg = float(scale_x) * float(w)
-    height_deg = float(scale_y) * float(h)
-
-    return [(ra_c, dec_c, width_deg, height_deg)]
+    dimensions = infer_image_shape(wcs, shape=shape, header=header, data=data)
+    ra, dec, radius = cone_from_wcs(wcs, shape=dimensions)
+    return [(ra, dec, 2 * radius, 2 * radius)]
 
 
 def combined_bounding_box(

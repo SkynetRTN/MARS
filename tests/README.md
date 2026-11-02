@@ -61,6 +61,9 @@ For the preservation tests, three conventions apply:
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
 | `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
+| `test_m5_geometry_investigation.py` | M5's 29 original probes converted to correctness regressions: fallback decimal RA, alternate-WCS scales, ATLAS triangles/polar coverage, projection/reader/matrix/FOV helpers and real SEP ellipses. |
+| `test_m5_header_fixes.py`, `test_m5_shape_fixes.py` | Header unit/coordinate contracts, scaled/degenerate triangle controls and ellipse canonicalization before source cuts. |
+| `test_m5_catalog_readers.py`, `test_m5_catalog_geometry.py` | Independently packed UCAC metadata, real full-turn span generation, shared spherical queries, motion halos/epochs, candidate budgets, downstream references and legacy-box coverage. |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_wcs_accepted_positions.py` | M2 solved-footprint acceptance and ATLAS reference coverage, nonfinite/rank-one CD/PC rejection, preserved headers, small valid anisotropic scales, seams/poles and SIP edges; native boundaries stubbed |
 | `test_wcs_timeout_limits.py` | M1 WCS-02: finite default/validated attempt budgets at direct config, duck-typed builder, mutable backend and public/environment boundaries; CPU/backstop and retry propagation; actual POSIX owned-group termination with stubborn children and an exited leader, pipe closure and structured timeout diagnostics. Whole-call/ATLAS preprocessing/cancellation budgets remain WCS-21/MCP-01. |

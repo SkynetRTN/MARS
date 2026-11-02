@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
+from astropy.time import Time
 
 # EXTRACTED: the `skylib.astrometry.*` imports below were absolute imports of the
 # installed skylib package. That package's astrometry stack is vendored under
@@ -58,6 +59,9 @@ from algorithms.skylib_lite.astrometry.anet.backend import (
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
 from algorithms.skylib_lite.astrometry.atlas.catalog.limits import check_query_budget, validate_catalog_radius
+from algorithms.skylib_lite.astrometry.atlas.catalog.geometry import (
+    catalog_indices, gnomonic_projection, observation_epoch, query_spherical_catalog,
+)
 from algorithms.skylib_lite.astrometry.limits import normalize_solver_timeout
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
@@ -152,7 +156,7 @@ def _wcs_matrix(wcs_obj: WCS) -> np.ndarray | None:
         wcs_p = wcs_obj.wcs
         if wcs_p.has_cd():
             return np.array(wcs_p.cd, dtype=float)
-        return wcs_p.get_pc() @ np.diag([wcs_p.cdelt[0], wcs_p.cdelt[1]])
+        return np.diag(wcs_p.cdelt[:2]) @ wcs_p.get_pc()
     except MemoryError:
         raise
     except Exception:
@@ -427,14 +431,7 @@ def _gnomonic_projection(
         ra0_deg: float,
         dec0_deg: float,
 ) -> np.ndarray:
-    ra = np.deg2rad(ra_deg)
-    dec = np.deg2rad(dec_deg)
-    ra0 = np.deg2rad(ra0_deg)
-    dec0 = np.deg2rad(dec0_deg)
-    cosc = np.sin(dec0) * np.sin(dec) + np.cos(dec0) * np.cos(dec) * np.cos(ra - ra0)
-    xi = np.cos(dec) * np.sin(ra - ra0) / cosc
-    eta = (np.cos(dec0) * np.sin(dec) - np.sin(dec0) * np.cos(dec) * np.cos(ra - ra0)) / cosc
-    return np.stack([xi, eta], axis=1)
+    return gnomonic_projection(ra_deg, dec_deg, ra0_deg, dec0_deg)
 
 
 def _limit_catalog_sources(
@@ -444,11 +441,10 @@ def _limit_catalog_sources(
         ra0_deg: float,
         dec0_deg: float,
         max_catalog_stars: int,
+        mag=None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    if len(ra_deg) <= max_catalog_stars:
-        return ra_deg, dec_deg
     cat_xy = _gnomonic_projection(ra_deg, dec_deg, ra0_deg, dec0_deg)
-    order = np.argsort(np.hypot(cat_xy[:, 0], cat_xy[:, 1]))[:max_catalog_stars]
+    order = catalog_indices(cat_xy, max_catalog_stars, mag)
     return ra_deg[order], dec_deg[order]
 
 
@@ -459,6 +455,7 @@ def _load_atlas_catalog_sources(
         width: int,
         height: int,
         file_id: int | None,
+        epoch_jyear: float | None = None,
 ) -> list[CatalogSource]:
     ra0_deg, dec0_deg, radius = _solution_footprint(wcs_obj, width, height)
     radius *= 1.0 + float(atlas_config.catalog_pad_frac)
@@ -473,19 +470,10 @@ def _load_atlas_catalog_sources(
         logger.exception("Failed to initialize Atlas catalog index")
         return []
 
-    dec_min, dec_max = max(-90.0, dec0_deg - radius), min(90.0, dec0_deg + radius)
-    if abs(dec0_deg) + radius >= 90.0:
-        # Two non-full-turn intervals also work with UCAC4, whose legacy
-        # modulo handling collapses a single [0, 360] interval to one meridian.
-        ra_intervals = [(0.0, 180.0), (180.0, 360.0)]
-    else:
-        ra_half = math.degrees(math.asin(min(1.0, math.sin(math.radians(radius)) /
-                                            math.cos(math.radians(dec0_deg)))))
-        ra_intervals = [(ra0_deg - ra_half, ra0_deg + ra_half)]
-
     try:
-        catalogs = [catalog_index.query_box(lo, hi, dec_min, dec_max, thin=atlas_config.thin)
-                    for lo, hi in ra_intervals]
+        cat = query_spherical_catalog(catalog_index, ra0_deg, dec0_deg, radius,
+                                      thin=atlas_config.thin, epoch_jyear=epoch_jyear,
+                                      max_radius_deg=atlas_config.catalog_max_radius_deg)
     except ValueError:
         raise  # Operational budgets must not masquerade as an empty catalog.
     except MemoryError:
@@ -494,24 +482,12 @@ def _load_atlas_catalog_sources(
         logger.exception("Failed to query Atlas catalog %s", catalog_name)
         return []
 
-    catalogs = [cat for cat in catalogs if getattr(cat, "ra_deg", None) is not None and cat.ra_deg.size]
-    if not catalogs:
+    if not cat.ra_deg.size:
         return []
-
-    check_query_budget(0, sum(len(cat.ra_deg) for cat in catalogs))
-    ra_vals = np.concatenate([cat.ra_deg for cat in catalogs])
-    dec_vals = np.concatenate([cat.dec_deg for cat in catalogs])
-    if len(catalogs) > 1:
-        # Inclusive intervals can return the same meridian twice.
-        _, indices = np.unique(np.column_stack((ra_vals, dec_vals)), axis=0, return_index=True)
-        indices.sort()
-        ra_vals, dec_vals = ra_vals[indices], dec_vals[indices]
-    if atlas_config.max_catalog_stars and len(ra_vals) > atlas_config.max_catalog_stars:
-        ra_vals, dec_vals = _limit_catalog_sources(
-            ra_vals, dec_vals,
-            ra0_deg=ra0_deg, dec0_deg=dec0_deg,
-            max_catalog_stars=atlas_config.max_catalog_stars,
-        )
+    check_query_budget(0, len(cat.ra_deg))
+    order = catalog_indices(_gnomonic_projection(cat.ra_deg, cat.dec_deg, ra0_deg, dec0_deg),
+                            atlas_config.max_catalog_stars, cat.mag)
+    ra_vals, dec_vals = cat.ra_deg[order], cat.dec_deg[order]
 
     return [
         CatalogSource(
@@ -519,8 +495,18 @@ def _load_atlas_catalog_sources(
             file_id=file_id,
             ra_hours=float(ra) / 15.0,
             dec_degs=float(dec),
+            **({
+                "pm_sky": float(np.hypot(cat.pm_ra_cosdec_mas_per_year[i], cat.pm_dec_mas_per_year[i]))
+                          / 3_600_000 / (365.25 * 86400),
+                "pm_pos_angle_sky": float(np.degrees(np.arctan2(
+                    cat.pm_ra_cosdec_mas_per_year[i], cat.pm_dec_mas_per_year[i]))) % 360,
+                # Existing extraction/calibration epochs are naive UTC.
+                "pm_epoch": Time(cat.epoch_jyear, format="jyear", scale="utc").to_datetime(),
+            } if cat.epoch_jyear is not None and cat.pm_ra_cosdec_mas_per_year is not None
+                 and cat.pm_dec_mas_per_year is not None
+                 and np.isfinite([cat.pm_ra_cosdec_mas_per_year[i], cat.pm_dec_mas_per_year[i]]).all() else {}),
         )
-        for ra, dec in zip(ra_vals, dec_vals)
+        for i, ra, dec in zip(order, ra_vals, dec_vals)
     ]
 
 
@@ -942,6 +928,7 @@ def solve_wcs(
                         width=width,
                         height=height,
                         file_id=file_id,
+                        epoch_jyear=observation_epoch(header),
                     )
                 else:
                     logger.warning(
@@ -996,7 +983,7 @@ def solve_wcs(
     if wcs_params.has_cd():
         A = wcs_params.cd
     else:
-        A = wcs_params.get_pc() @ np.diag([wcs_params.cdelt[0], wcs_params.cdelt[1]])
+        A = np.diag(wcs_params.cdelt[:2]) @ wcs_params.get_pc()
     cd11 = float(A[0, 0])
     cd12 = float(A[0, 1])
     cd21 = float(A[1, 0])

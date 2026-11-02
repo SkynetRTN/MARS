@@ -572,6 +572,44 @@ keeps `no_solution` for exactly that case. Tests:
 `tests/test_m3_wcs_failures.py` (stubbed backends); the real-solver runs above
 and the `solver_data` tests were also run with the operator data configured.
 
+#### 10. M5 coordinate and geometry corrections (2026-11-01)
+
+The [M5 investigation and correction record](analysis/m5-coordinates-image-geometry.md)
+documents intentional departures from the extraction for WCS-06/07/08/09/10/
+11/12/16/17/24 and the old CAT-07/09 helpers. Decimal RA strings now follow
+the numeric hours/degrees heuristic; explicitly scaled celestial WCS A
+provides angular scales through its actual CUNIT and PC/CD transform. The
+disabled primary-WCS/optics hint policies remain disabled. PC result metadata
+uses `diag(CDELT) @ PC`; non-celestial default pixel increments cannot supply
+an angular FOV. Triangles use normalized, dimensionless area for collinearity.
+
+The general and oriented ATLAS searches and post-solve reference query share
+`atlas/catalog/geometry.py`: a spherical-cap box handles RA zero and both
+poles, with one full-turn query at a pole so candidate and returned-row caps
+remain per operation. UCAC4 also preserves spans of a full turn or more before
+wrapping. Far-side/horizon positions become NaN in gnomonic projection and
+cannot enter matching or source caps. Original row/work limits remain.
+
+UCAC5 retains Gaia G and proper motions from the authors' 52-byte u5z layout:
+signed 16-bit PM components at offsets 32/34 in 0.1 mas/year and Gaia G at
+offset 40 in mmag, with Gaia positions at epoch 2015.0. The unchanged
+record dtype is viewed at the verified offsets, preserving `rest`, chunking,
+thinning and row order. Magnitude and motion arrays remain aligned with
+positions. The published binary description specifies no PM/G missing sentinel.
+See [readmeU5.txt section 4c](https://vizier.cfa.harvard.edu/ftp/cats/I/340/readmeU5.txt).
+
+Capped matching catalogs now prefer measured bright stars with deterministic
+distance ties. Recorded exposure midpoints select the observation epoch;
+queries expand by the conservative motion bound from the signed encoding
+before querying, propagate constant tangential motion along a great circle,
+and clip to the requested cap. The enlarged cap must fit the same radius
+budget. No distance/radial velocity/perspective acceleration is assumed.
+Reference sources carry propagated motion and a naive UTC epoch consistent
+with existing calibration/extraction consumers. Absent dates or catalog
+motion and unknown brightness at a cap produce registered public warnings.
+These corrections do not certify completeness or band-independent source
+detectability, and do not validate the disputed UCAC4 native record layout.
+
 ## Photometry
 
 _Former source: `algorithms/photometry/EXTRACTION.md`._
@@ -909,10 +947,11 @@ parity with legacy output.
    `y[:] = y + 1` uses the input `y` rather than the windowed result `y1`.
    Unreached on this photometry path: `run_photometry` calls `centroid_sources`
    with the default `method='iraf'`.
-4. `skylib/extraction/main.py:257–261` — the "Make sure that a >= b" block assigns
-   through `sources[s][...]` where `s` is a boolean mask. Boolean indexing returns
-   a copy, so those three statements are no-ops. The adjacent
-   `sources['theta'] %= np.pi` (line 260) is a field view and does take effect.
+4. **Corrected by M5 (WCS-16, 2026-11-01):** the "Make sure that a >= b"
+   block now selects structured fields before masking, so axis swaps, the
+   quarter-turn and final angle normalization update the table. Real SEP
+   ellipses retain their geometry; reversed axes now reach FWHM/ellipticity
+   cuts in canonical order. Flux/downsampling behavior is unchanged.
 5. `skylib/extraction/main.py:105–106, 280–286` — the `centroid` parameter is
    documented as using "the windowed algorithm (SExtractor's XWIN_IMAGE,
    YWIN_IMAGE)" but the code calls `centroid_iraf` / `centroid_iraf_masked`. The
@@ -1864,9 +1903,9 @@ own validation.
 
 ##### 5.10 M2 enclosing-cone WCS queries (2026-10-23)
 
-The two historical box helpers remain callable for extraction comparisons.
-Their limitations include off-detector CRPIX failures, the image helper's
-transposed anisotropic scales and rotation, and polar undercoverage. Both live
+The two historical box helpers remain callable. M5 subsequently makes both
+wrap the same enclosing cone, returning conservative angular sky boxes and
+removing their off-detector CRPIX, rotation and anisotropic-scale defects. Both live
 WCS runner entry points now query enclosing spherical cones and clip to the
 detector. Undistorted TAN fields use the four outer detector vertices; a cap
 smaller than a hemisphere containing those vertices contains the gnomonic

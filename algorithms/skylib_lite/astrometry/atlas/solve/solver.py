@@ -16,6 +16,7 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 # EXTRACTED: were absolute `skylib.astrometry.atlas.*` imports — made relative.
 from ..catalog import CatalogIndex, get_catalog_spec
 from ..catalog.limits import validate_catalog_radius
+from ..catalog.geometry import catalog_indices, gnomonic_projection, image_epoch, query_spherical_catalog
 from ..config import AtlasConfig
 from ..extract.sources import ExtractedSources, extract_sources
 from ..match.triangles import TriangleSet, build_kdtree, sample_triangles
@@ -169,27 +170,11 @@ def solve(
 
     validate_catalog_radius(float(half_diag_deg), catalog_max_radius_deg)
 
-    # Convert "radius" into a RA/Dec box (box is conservative; good for your zone-based catalog query)
-    cos_dec = np.cos(np.deg2rad(dec0_deg))
-    cos_dec = max(0.2, float(abs(cos_dec)))
-
-    dec_half = half_diag_deg
-    ra_half = half_diag_deg / cos_dec
-
-    LOGGER.info(
-        "searching: %s",
-        (ra0_deg, dec0_deg, ra_half*2*60, dec_half*2*60),
-    )
-
     catalog_name, catalog_root = config.resolve_catalog()
     catalog_index = _catalog_index(catalog_name, catalog_root)
-    cat = catalog_index.query_box(
-        ra0_deg - ra_half,
-        ra0_deg + ra_half,
-        dec0_deg - dec_half,
-        dec0_deg + dec_half,
-        thin=config.thin,
-    )
+    cat = query_spherical_catalog(catalog_index, ra0_deg, dec0_deg, half_diag_deg,
+                                  thin=config.thin, epoch_jyear=image_epoch(fits_path),
+                                  max_radius_deg=catalog_max_radius_deg)
     if cat.ra_deg.size == 0:
         return _miss("empty_catalog", start=start, n_extracted=n_sources, n_catalog=0)
 
@@ -199,6 +184,7 @@ def solve(
         cat.ra_deg,
         cat.dec_deg,
         config.max_catalog_stars,
+        mag=cat.mag,
     )
 
     if len(cat_xy) < 3:
@@ -598,7 +584,11 @@ def _estimate_fov(
     if header is not None:
         try:
             wcs = WCS(header)
-            scales = proj_plane_pixel_scales(wcs)
+            if not wcs.has_celestial:
+                raise ValueError("No celestial WCS for angular field size")
+            celestial = wcs.celestial
+            scales = np.array([float((value * unit).to_value("deg")) for value, unit in
+                               zip(proj_plane_pixel_scales(celestial), celestial.wcs.cunit)])
             if scales is not None and len(scales) >= 2:
                 fov_w = abs(scales[0]) * width
                 fov_h = abs(scales[1]) * height
@@ -624,15 +614,7 @@ def _gnomonic_projection(
     ra0_deg: float,
     dec0_deg: float,
 ) -> np.ndarray:
-    ra = np.deg2rad(ra_deg)
-    dec = np.deg2rad(dec_deg)
-    ra0 = np.deg2rad(ra0_deg)
-    dec0 = np.deg2rad(dec0_deg)
-
-    cosc = np.sin(dec0) * np.sin(dec) + np.cos(dec0) * np.cos(dec) * np.cos(ra - ra0)
-    xi = np.cos(dec) * np.sin(ra - ra0) / cosc
-    eta = (np.cos(dec0) * np.sin(dec) - np.sin(dec0) * np.cos(dec) * np.cos(ra - ra0)) / cosc
-    return np.stack([xi, eta], axis=1)
+    return gnomonic_projection(ra_deg, dec_deg, ra0_deg, dec0_deg)
 
 
 def _limit_catalog(
@@ -640,12 +622,9 @@ def _limit_catalog(
     ra_deg: np.ndarray,
     dec_deg: np.ndarray,
     max_catalog_stars: int,
+    mag=None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    if len(cat_xy) <= max_catalog_stars:
-        return cat_xy, np.stack([ra_deg, dec_deg], axis=1)
-    dist = np.hypot(cat_xy[:, 0], cat_xy[:, 1])
-    order = np.argsort(dist)
-    order = order[:max_catalog_stars]
+    order = catalog_indices(cat_xy, max_catalog_stars, mag)
     return cat_xy[order], np.stack([ra_deg[order], dec_deg[order]], axis=1)
 
 

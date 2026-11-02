@@ -33,6 +33,10 @@ def capture_numerical_warnings(warnings: list[ToolWarning]):
                         warning = ToolWarning(code="magnitude_error_snr_cut", message=notice.message)
                     case "ra_seam_matching_approximation":
                         warning = ToolWarning(code="ra_seam_matching_approximation", message=notice.message)
+                    case "astrometry_catalog_epoch_unverified":
+                        warning = ToolWarning(code="astrometry_catalog_epoch_unverified", message=notice.message)
+                    case "astrometry_catalog_brightness_unavailable":
+                        warning = ToolWarning(code="astrometry_catalog_brightness_unavailable", message=notice.message)
                     case _:
                         raise ValueError(f"Unknown numerical notice: {notice.code}")
                 if warning not in warnings:

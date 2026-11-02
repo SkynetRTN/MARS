@@ -260,10 +260,12 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
 
     # Make sure that a >= b
     s = sources['a'] < sources['b']
-    sources[s]['a'], sources[s]['b'] = sources[s]['b'], sources[s]['a']
-    sources[s]['theta'] += np.pi/2
+    # MARS WCS-16: select the field first so masked assignments update the
+    # source table rather than a temporary structured-array copy.
+    sources['a'][s], sources['b'][s] = sources['b'][s], sources['a'][s]
+    sources['theta'][s] += np.pi/2
     sources['theta'] %= np.pi
-    sources[sources['theta'] > np.pi/2]['theta'] -= np.pi
+    sources['theta'][sources['theta'] > np.pi/2] -= np.pi
 
     # Discard sources with FWHM or ellipticity outside the limits
     if min_fwhm:

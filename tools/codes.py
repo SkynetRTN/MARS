@@ -94,6 +94,8 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "isophotal_origin_approximation": "Retained adaptive isophotal remeasurement has a one-pixel origin mismatch that can bias shape and flux.",
     "aperture_correction_crowding": "The enabled growth-curve correction retains an ineffective neighbour guard and can be crowding-biased.",
     "saturation_count_unreliable": "Downsampled source extraction can lose saturation counts, so zero counts and filtering are unreliable.",
+    "astrometry_catalog_epoch_unverified": "Reference positions lack the observation date or catalog epoch/proper motion needed for verified epoch agreement.",
+    "astrometry_catalog_brightness_unavailable": "Some reference stars lack brightness, so a catalog cap cannot establish complete depth agreement.",
     "limiting_magnitude_unvalidated": "The 5-sigma limit is an unvalidated SNR-line extrapolation and can be implausible for near-flat inputs.",
     "limiting_magnitude_unidentifiable": "The calibration sample cannot identify a log-SNR line, so no limiting magnitude is reported.",
     "magnitude_error_snr_cut": "Calibration selection uses inverse magnitude error rather than exact flux/error SNR.",

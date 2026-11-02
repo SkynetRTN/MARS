@@ -23,6 +23,18 @@ _UCAC5_U5Z_DTYPE = np.dtype(
     ]
 )
 
+# Authors' readmeU5.txt v2.0 (170224), section 4c, gives the Fortran
+# INTEGER*2 fields at byte offsets 32/34 (0.1 mas/yr) and 40 (Gaia G mmag):
+# https://vizier.cfa.harvard.edu/ftp/cats/I/340/readmeU5.txt
+# A same-size view preserves the existing record dtype, including ``rest``.
+# No missing-value sentinel is specified for these fields; zero PM is valid.
+_UCAC5_U5Z_METADATA_DTYPE = np.dtype({
+    "names": ["pm_ra_cosdec", "pm_dec", "gmag"],
+    "formats": ["<i2", "<i2", "<i2"],
+    "offsets": [32, 34, 40],
+    "itemsize": _UCAC5_ZONE_RECORD_SIZE,
+})
+
 _UCAC5_ZONES = 900
 _UCAC5_BINS_PER_ZONE = 1440
 _UCAC5_ZONE_HEIGHT_DEG = 180.0 / _UCAC5_ZONES        # 0.2 deg
@@ -41,6 +53,10 @@ class Ucac5Span:
 class Ucac5QueryResult:
     ra_deg: np.ndarray
     dec_deg: np.ndarray
+    mag: np.ndarray | None = None
+    pm_ra_cosdec_mas_per_year: np.ndarray | None = None
+    pm_dec_mas_per_year: np.ndarray | None = None
+    epoch_jyear: float = 2015.0
 
 
 class Ucac5Index:
@@ -56,6 +72,11 @@ class Ucac5Index:
     Detected by where ``u5index.asc`` is found (the ``u5z`` subdir is tried
     first), so pointing ``SKYLIB_UCAC5_ROOT`` at either path works.
     """
+
+    epoch_jyear = 2015.0
+    # Each signed INTEGER*2 component permits abs(PM) <= 32768 * 0.1 mas/yr.
+    # This encoding bound safely covers both components for pre-query halos.
+    max_pm_mas_per_year = math.nextafter(math.hypot(3276.8, 3276.8), math.inf)
 
     def __init__(self, root: str | Path, *, u5z_subdir: str = "u5z", cache_size: int = 4):
         self.root = Path(root)
@@ -219,7 +240,9 @@ class Ucac5Index:
         a0 = self._wrap_ra_deg(ra_min_deg)
         b0 = self._wrap_ra_deg(ra_max_deg)
 
-        if a0 <= b0 and abs(ra_max_deg - ra_min_deg) < 360.0:
+        if abs(ra_max_deg - ra_min_deg) >= 360.0:
+            intervals = [(0.0, 360.0)]
+        elif a0 <= b0:
             intervals = [(a0, b0)]
         else:
             intervals = [(a0, 360.0), (0.0, b0)]
@@ -274,17 +297,22 @@ class Ucac5Index:
 
         a0 = self._wrap_ra_deg(ra_min_deg)
         b0 = self._wrap_ra_deg(ra_max_deg)
-        if a0 <= b0 and abs(ra_max_deg - ra_min_deg) < 360.0:
+        if abs(ra_max_deg - ra_min_deg) >= 360.0:
+            ra_intervals = [(0.0, 360.0)]
+        elif a0 <= b0:
             ra_intervals = [(a0, b0)]
         else:
             ra_intervals = [(a0, 360.0), (0.0, b0)]
 
         spans = self.spans_for_radec_box(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
         if not spans:
-            return Ucac5QueryResult(np.empty(0), np.empty(0))
+            return Ucac5QueryResult(*(np.empty(0) for _ in range(5)))
 
         ra_out: list[np.ndarray] = []
         dec_out: list[np.ndarray] = []
+        mag_out: list[np.ndarray] = []
+        pm_ra_out: list[np.ndarray] = []
+        pm_dec_out: list[np.ndarray] = []
         candidates = rows = 0
 
         for span in spans:
@@ -314,8 +342,15 @@ class Ucac5Index:
                 if np.any(mask):
                     ra_out.append(ra_deg[mask])
                     dec_out.append(dec_deg[mask])
+                    metadata = chunk.view(_UCAC5_U5Z_METADATA_DTYPE)
+                    mag_out.append(metadata["gmag"][mask].astype(np.float64) / 1000.0)
+                    pm_ra_out.append(metadata["pm_ra_cosdec"][mask].astype(np.float64) / 10.0)
+                    pm_dec_out.append(metadata["pm_dec"][mask].astype(np.float64) / 10.0)
 
         if not ra_out:
-            return Ucac5QueryResult(np.empty(0), np.empty(0))
+            return Ucac5QueryResult(*(np.empty(0) for _ in range(5)))
 
-        return Ucac5QueryResult(np.concatenate(ra_out), np.concatenate(dec_out))
+        return Ucac5QueryResult(
+            np.concatenate(ra_out), np.concatenate(dec_out), np.concatenate(mag_out),
+            np.concatenate(pm_ra_out), np.concatenate(pm_dec_out),
+        )

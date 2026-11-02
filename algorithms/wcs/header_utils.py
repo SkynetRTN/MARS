@@ -18,6 +18,8 @@ extraction. See docs/extraction.md, WCS.
 
 from __future__ import annotations
 
+from math import isfinite
+
 import astropy.units as u
 from astropy.coordinates import SkyCoord, FK5, FK4, ICRS, Angle
 from astropy.wcs import WCS
@@ -118,8 +120,8 @@ def _arcsec_from_direct_keywords(header, xbin: int, ybin: int):
         except Exception:
             pass
 
-    xk = _get_any(header, ["PIXSCALE1", "SECPIX1", "CDELT1A"], None)
-    yk = _get_any(header, ["PIXSCALE2", "SECPIX2", "CDELT2A"], None)
+    xk = _get_any(header, ["PIXSCALE1", "SECPIX1"], None)
+    yk = _get_any(header, ["PIXSCALE2", "SECPIX2"], None)
     try:
         if xk is not None and yk is not None:
             sx = abs(float(xk))
@@ -131,6 +133,44 @@ def _arcsec_from_direct_keywords(header, xbin: int, ybin: int):
     except Exception:
         pass
 
+    # M5 (WCS-08): alternate-WCS increments are world-coordinate units,
+    # unlike the arcsec/pixel keywords above. Require celestial axes and let
+    # Astropy apply CUNIT and the complete PC/CD matrix before conversion.
+    return _arcsec_from_alternate_wcs(header)
+
+
+def _arcsec_from_alternate_wcs(header):
+    """Read an explicitly scaled celestial WCS A, without inventing defaults."""
+    has_cd = any(f"CD{i}_{j}A" in header for i in (1, 2) for j in (1, 2))
+    if not has_cd and not all(f"CDELT{i}A" in header for i in (1, 2)):
+        return None
+    try:
+        # WCSLIB can ignore a malformed numeric card and substitute 1 degree;
+        # an unreadable hint must never become a plausible default scale.
+        matrix_keys = [f"{kind}{i}_{j}A" for kind in ("CD", "PC")
+                       for i in (1, 2) for j in (1, 2)]
+        scale_keys = matrix_keys + ["CDELT1A", "CDELT2A"]
+        if any(not isfinite(float(header[key])) for key in scale_keys if key in header):
+            return None
+        # No manual fallback: linear axes and invalid celestial units cannot
+        # establish an angular scale. Keep the primary-WCS path disabled.
+        w = WCS(header, key="A", fix=False)
+        if not w.has_celestial:
+            return None
+        celestial = w.celestial
+        matrix = celestial.pixel_scale_matrix
+        determinant = matrix[0, 0] * matrix[1, 1] - matrix[0, 1] * matrix[1, 0]
+        if not isfinite(determinant) or determinant == 0:
+            return None
+        scales = proj_plane_pixel_scales(celestial)
+        sx, sy = [float((scale * unit).to_value(u.arcsec))
+                  for scale, unit in zip(scales, celestial.wcs.cunit)]
+        if all(isfinite(scale) and scale > 0 for scale in (sx, sy)):
+            return (sx, sy, 0.5 * (sx + sy))
+    except MemoryError:
+        raise
+    except Exception:
+        pass
     return None
 
 def _arcsec_from_optics(header, xbin: int, ybin: int):
@@ -222,7 +262,9 @@ def _parse_ra_dec_values(ra_val, dec_val):
     """
     Parse RA/Dec that may be sexagesimal strings or floats.
     Returns (ra_deg, dec_deg) in ICRS-equivalent numeric degrees (no frame transform here).
-    Heuristic: if RA is numeric and <= 24, treat as hours; else degrees.
+    Heuristic: unitless RA numbers (including numeric strings) with absolute
+    value <= 24 are hours; larger values are degrees. Sexagesimal RA defaults
+    to hours; explicit angular units override that default. Dec is degrees.
     """
     # Normalize unicode minus, stray spaces
     def _norm(x):
@@ -232,27 +274,29 @@ def _parse_ra_dec_values(ra_val, dec_val):
 
     ra_val, dec_val = _norm(ra_val), _norm(dec_val)
 
-    # If strings, let Angle parse with appropriate units
-    if isinstance(ra_val, str) or isinstance(dec_val, str):
-        ra = Angle(ra_val, unit=u.hourangle) if isinstance(ra_val, str) else Angle(float(ra_val), unit=u.deg)
-        dec = Angle(dec_val, unit=u.deg) if isinstance(dec_val, str) else Angle(float(dec_val), unit=u.deg)
-        return ra.to(u.deg).value, dec.to(u.deg).value
-
-    # Both numeric
+    # M5 (WCS-06): parse each axis independently. FITS strings containing a
+    # plain decimal use the same heuristic as numbers; Dec's storage type
+    # must not decide whether a numeric RA is interpreted as hours.
     try:
         ra_f = float(ra_val)
-        dec_f = float(dec_val)
     except MemoryError:
         raise
     except Exception:
-        return None, None
-
-    # If RA likely in hours (≤ 24), convert; DEC is degrees
-    if 0.0 <= abs(ra_f) <= 24.0:
-        ra_deg = (ra_f * 15.0)
+        if not isinstance(ra_val, str):
+            return None, None
+        ra_deg = Angle(ra_val, unit=u.hourangle).to_value(u.deg)
     else:
-        ra_deg = ra_f
-    return ra_deg, dec_f
+        ra_deg = ra_f * 15.0 if abs(ra_f) <= 24.0 else ra_f
+
+    try:
+        dec_deg = float(dec_val)
+    except MemoryError:
+        raise
+    except Exception:
+        if not isinstance(dec_val, str):
+            return None, None
+        dec_deg = Angle(dec_val, unit=u.deg).to_value(u.deg)
+    return ra_deg, dec_deg
 
 def _equinox_year(value) -> tuple[str | None, float] | None:
     """Return ``(prefix, year)`` for an EQUINOX value, or ``None`` if unreadable.
