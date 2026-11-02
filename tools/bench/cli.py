@@ -174,13 +174,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    # `record` writes into its fixture root and creates what it needs, so
-    # only the verbs that read their inputs are checked here.
-    if args.verb != "record":
-        for root in (getattr(args, "suite_root", None), getattr(args, "fixture_root", None)):
-            if root is not None and not Path(root).is_dir():
-                print(_no_suites_message(Path(root)), file=sys.stderr)
-                return 2
+    try:
+        return _dispatch(args)
+    except FileNotFoundError as exc:
+        # One catch for every verb: an input missing for any reason (run
+        # outside a checkout, a mistyped suite or path, no replay transcript)
+        # used to end in a traceback.
+        print(_missing_input_message(exc), file=sys.stderr)
+        return 2
+
+
+def _dispatch(args: Any) -> int:
     if args.verb == "run":
         return _run(args)
     if args.verb == "grade":
@@ -196,19 +200,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise SystemExit(f"unknown verb {args.verb!r}")
 
 
-def _no_suites_message(suite_root: Path) -> str:
-    """Why an installed ``mars-bench`` finds nothing to run, and what to do.
+def _missing_input_message(exc: FileNotFoundError) -> str:
+    """What is missing, and where benchmark inputs live.
 
-    The suites, answer keys and recorded fixtures are inputs kept in the
-    repository's ``benchmarks/``, which the package does not ship. The
-    defaults are relative to the working directory, so a run from anywhere
-    but a checkout's root used to end in a ``FileNotFoundError`` traceback.
+    The suites, answer keys, recorded fixtures and replay transcripts are
+    kept in a checkout's ``benchmarks/``, which the package does not ship,
+    and their defaults are relative to the working directory.
     """
 
+    missing = exc.filename if exc.filename is not None else str(exc)
     return (
-        f"mars-bench: no benchmark inputs at {suite_root}. The suites and "
-        "fixtures live in a MARS checkout (benchmarks/), not in the installed "
-        "package. Run mars-bench from the root of a clone "
+        f"mars-bench: {missing} does not exist. Check the path or suite name. "
+        "Benchmark suites, fixtures and replay transcripts live in a MARS "
+        "checkout's benchmarks/ folder, not in the installed package: run "
+        "mars-bench from the root of a clone "
         "(git clone https://github.com/SkynetRTN/MARS), or pass --suite-root "
         "and --fixture-root."
     )

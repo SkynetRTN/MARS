@@ -22,10 +22,13 @@ So a value check names its source instead, and the loader resolves it:
     A field of a repository data file -- a curated literature period, a
     recorded zero-point solve. Independent ground truth that predates the
     benchmark and is not written by it. Resolved at load time, and confined to
-    the **repository's own** ``data/`` tree: pinned like ``tools.wcs``'s
-    fixture guard rather than following ``MARS_DATA_DIR``, because an answer
-    key that moved with an operator's environment variable would not be a
-    fixed reference at all.
+    the package's **own bundled** data: the repository's ``data/`` in a
+    checkout, but only the shipped core (``pulsar/``, ``fieldcal/``,
+    ``afterglow/``, ``variable_star/``) under an installed wheel, so a
+    ``dataset`` source elsewhere in ``data/`` resolves only in a checkout.
+    Pinned like ``tools.wcs``'s fixture guard rather than following
+    ``MARS_DATA_DIR``, because an answer key that moved with an operator's
+    environment variable would not be a fixed reference at all.
 ``tool_result``
     A field a deterministic MARS tool returned *in the session being
     graded* -- the fidelity case. Resolved at grade time, because the value is
@@ -220,7 +223,9 @@ def _resolve_fixture(
 #: not exist. Deliberately **not** ``tools.config.DATA_DIR``: that one is an
 #: operator setting, and a ground-truth reference that moves when an operator
 #: repoints a directory is not ground truth. ``tools/wcs.py`` pins its
-#: fixture-subtree guard to the bundled data for the same reason.
+#: fixture-subtree guard to the bundled data for the same reason. The same
+#: call as ``tools.config.BUNDLED_DATA_DIR``, without importing the module
+#: whose settings are fixed at import.
 REPO_DATA_ROOT = bundled_data_dir()
 
 
