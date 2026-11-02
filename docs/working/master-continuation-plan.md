@@ -539,7 +539,19 @@ Evidence: [query backends](../../algorithms/query/),
     M67's tracks) and the thermally pulsing AGB fanned into a wedge. Across
     the grid's 4,307 tracks no step size separates phase gaps from in-phase
     steps, so the rows are drawn as points rather than joined by a guessed
-    break; the fit never used the line.
+    break. The fit's own 0.5 mag joining rule is no better a drawing: on
+    M67's fitted track it cuts the faint main sequence into pieces and
+    still joins most AGB pulse steps (`../extraction.md`, HR Diagram).
+  - **Review corrections (2026-11-01):** the zero-point band reads
+    "residual RMS" when no star has a measurement error, since the solver
+    then fits no extra scatter, and draws no bars; the bars are labelled
+    as each star's measurement error, which the fit adds to the scatter in
+    quadrature. A radio CSV with no header row keeps its first row and
+    gets unitless axes, rather than losing that row to pandas and labelling
+    the axes with its numbers. A CSV's flux-error column, documented but
+    read and dropped since the tool was added (`7621b7d`), now weights the
+    power-law fit and draws error bars. The solver decides its pre-fit drop
+    in one place, `_fit_input_mask`, which the plot reads.
 - [x] **Console first launch.** An installed `mars` with no key or reachable
   model exits before its interface opens, telling the user to edit "the
   repository's .env", which an installed copy has neither of nor reads.
@@ -716,7 +728,9 @@ Evidence: [query backends](../../algorithms/query/),
   order each PR can merge in: behavior (launcher, console, model port,
   skill installer, `mars-bench`), workflow (`ci.yml`, `release.yml`, the
   packer), then documentation. Target `main`, by the maintainer's
-  decision (2026-10-28), not the usual `dev`.
+  decision (2026-10-28), not the usual `dev`. Some commits mix kinds and
+  split by hunk: `3e90733` alone carries four separate plot fixes
+  (zero-point, overlay, radio, HR) with documentation and plan edits.
 
 Animations, Markdown rendering, input history, notifications, inline
 scrollback and theme memory are polish, not release requirements; add any of
@@ -759,6 +773,11 @@ reachable now, what it does, and whether the release needs a change or caveat.
   channels paired by index rather than phase and prefolded-file axes. Legacy
   isochrone splicing drops a point; luminosity framing and edge-on projection
   scales also need their intended meaning established.
+  *Found 2026-11-01 (M4 plot review):* the HR fit joins track rows no more
+  than 0.5 mag apart (`TRACK_MAX_GAP_MAG`). On M67's fitted track that
+  leaves the main sequence unjoined between M_G 6.94 and 7.48, where 27 of
+  548 members are scored against the two end rows only, and joins most
+  AGB pulse steps. The effect on the fitted parameters is unmeasured.
 - [ ] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding

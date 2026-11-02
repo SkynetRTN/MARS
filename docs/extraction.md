@@ -1393,7 +1393,9 @@ These defects are disclosed rather than repaired; see the
 
 `solution._fit_input_mask` is the existing pre-fit drop, factored out of
 `_calc_solution_with_mask` unchanged: once any star carries an instrumental
-error, a star without a positive one never enters the fit. The zero-point
+error, a star without a positive one never enters the fit. The solver now
+applies it unconditionally (a no-op without instrumental errors) instead of
+inside its own `mag_errors.any()` branch, so the rule is decided once. The zero-point
 plot (`tools/photometry_pipeline.py`) reads it beside the survivor mask, so a
 star dropped before fitting is drawn as "not fitted", not as a rejected
 outlier. On NGC 5128 B's recorded APASS replay all six non-survivors were
@@ -2577,7 +2579,16 @@ gap; the local Girardi grid carries neither that nor a phase label, so the
 joined rows drew a line straight from the AGB back to core-helium burning
 (3.1-3.5 mag on M67's tracks) and fanned the AGB pulses into a wedge. No step
 size separates phase gaps from in-phase steps across the grid's 4,307 tracks,
-so no break is guessed. The fit is unchanged: it never used the line.
+so no break is guessed. The fit is unchanged and keeps its own rule: it
+joins rows no more than `TRACK_MAX_GAP_MAG` (0.5 mag) apart. Drawn with that
+rule, M67's fitted track (log age 9.6) breaks at 43 steps: the one real phase
+gap (3.37 mag); ten on the faint main sequence, whose rows there are 0.5-0.84
+mag apart; and 32 inside the AGB pulses, whose other 166 steps stay joined in
+the wedge. The plot therefore does not draw it. The fit inherits both effects:
+between M_G 6.94 and 7.48 it scores stars against the two end rows only, and
+27 of M67's 548 members sit there, while its AGB segments join pulse to pulse.
+Each star's cost is capped (`CHI2_CAP`); the effect on the fitted distance,
+reddening and age has not been measured (M5, Light-curve and HR boundaries).
 
 It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
 `fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting
