@@ -5,7 +5,8 @@ The console marks a call, and the MCP surface flags it to the client, from
 a tool that failed -- a crashed ``solve-field``, a periodogram given an
 impossible grid -- was shown and reported as a success. They now derive it
 (``tools.models.StatusFromErrors``): none is ``ok``, only "found nothing" codes
-is ``not_found``, anything else is ``error``.
+is ``not_found``, only "ambiguous" (which returns its candidates) is ``ok``,
+anything else is ``error``.
 """
 
 from __future__ import annotations
@@ -72,6 +73,24 @@ def test_a_lookup_that_found_nothing_is_not_found_not_an_error(tool, arguments):
     assert [error["code"] for error in payload["errors"]] == ["not_found"]
     assert payload["status"] == "not_found"
     assert not result_is_error(payload)
+
+
+def test_an_ambiguous_name_returns_its_candidates_as_a_result():
+    """The candidates are what the caller chooses from; marking the call a
+    failure told MCP clients to discard them."""
+    payload = _payload("resolve_optical_frame", name="ngc5128")
+
+    assert [error["code"] for error in payload["errors"]] == ["ambiguous"]
+    assert len(payload["frames"]) > 1
+    assert payload["status"] == "ok"
+    assert not result_is_error(payload)
+
+
+def test_an_unknown_photometry_target_is_not_found_like_any_lookup():
+    payload = _payload("run_photometry_on_target", target="no such target anywhere")
+
+    assert [error["code"] for error in payload["errors"]] == ["target_not_found"]
+    assert payload["status"] == "not_found"
 
 
 def test_a_call_that_worked_is_ok():

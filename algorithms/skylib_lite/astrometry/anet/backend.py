@@ -110,8 +110,10 @@ class AstrometryNetBackend:
         # MARS divergence (2026-11-02): upstream wrote ASCII, so a folder the
         # user picked with a non-ASCII name raised UnicodeEncodeError. The
         # engine reads add_path's rest of line as bytes; UTF-8 is the path's
-        # own encoding on macOS and Linux, and spaces need no quoting.
-        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # own encoding on macOS and Linux, a name that is not valid UTF-8 is
+        # written back as its own bytes (surrogateescape), and spaces need no
+        # quoting. validate_index_dirs refuses a name with a line break.
+        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8", errors="surrogateescape")
         return cfg
 
     @staticmethod

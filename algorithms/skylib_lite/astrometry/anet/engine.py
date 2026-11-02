@@ -171,6 +171,12 @@ def validate_index_dirs(dirs: Sequence[str]) -> Tuple[List[str], List[str]]:
     problems: List[str] = []
     for raw in dirs:
         path = Path(raw)
+        # MARS divergence (2026-11-02): each folder becomes one ``add_path``
+        # line of solve-field's configuration, so a line break in its name
+        # would add lines of its own.
+        if "\n" in str(raw) or "\r" in str(raw):
+            problems.append(f"{raw!r}: a folder name with a line break cannot be passed to solve-field")
+            continue
         if not path.exists():
             problems.append(f"{raw}: does not exist")
             continue

@@ -67,6 +67,10 @@ class ToolError(MARSToolModel):
 #: Error codes that mean a lookup found nothing to return, rather than failed.
 NOT_FOUND_CODES = frozenset({"not_found", "target_not_found"})
 
+#: Error codes that come with a usable result: an ambiguous name returns the
+#: candidates it matched, for the caller to choose from.
+CHOICE_CODES = frozenset({"ambiguous"})
+
 
 class StatusFromErrors(MARSToolModel):
     """A result whose ``status`` is decided by its ``errors``.
@@ -76,10 +80,13 @@ class StatusFromErrors(MARSToolModel):
     error in ``errors`` -- a crashed ``solve-field``, a periodogram given bad
     steps -- was shown, and reported to MCP clients, as a success. Every place
     these models are built with errors returns no usable result alongside
-    them (checked model by model, 2026-10-28), so the status follows the
-    errors: none is ``ok``; only "found nothing" codes (:data:`NOT_FOUND_CODES`)
-    is ``not_found``, as a lookup with no match reports elsewhere; anything
-    else is ``error``. Warnings never change it.
+    them (checked model by model, 2026-10-28), except an ambiguous name, which
+    returns its candidates. So the status follows the errors: none is ``ok``;
+    only "found nothing" codes (:data:`NOT_FOUND_CODES`) is ``not_found``, as
+    a lookup with no match reports elsewhere -- an unknown photometry target
+    included, which ``PhotometryRunResult``'s own rule had called ``error``;
+    only choice codes (:data:`CHOICE_CODES`) is ``ok``, since the candidates
+    are the result; anything else is ``error``. Warnings never change it.
     """
 
     @computed_field  # type: ignore[prop-decorator]
@@ -90,6 +97,8 @@ class StatusFromErrors(MARSToolModel):
             return "ok"
         if all(error.code in NOT_FOUND_CODES for error in errors):
             return "not_found"
+        if all(error.code in CHOICE_CODES for error in errors):
+            return "ok"
         return "error"
 
 class ArtifactRef(MARSToolModel):
