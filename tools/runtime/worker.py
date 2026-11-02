@@ -8,8 +8,30 @@ import signal
 import sys
 
 
+#: The caller's own PYTHONPATH, or empty when it had none. The runner sets
+#: PYTHONPATH to its sys.path so this process can import MARS.
+INHERITED_PYTHONPATH_ENV = "MARS_RUNTIME_INHERITED_PYTHONPATH"
+
+
 def _interrupt(signum, frame):
     raise KeyboardInterrupt
+
+
+def _restore_pythonpath(environ=os.environ):
+    """Give the tool's own child processes the caller's PYTHONPATH.
+
+    This process's imports are settled by now. A solver's Python helpers --
+    astrometry.net's ``removelines``, a script run by the system's Python --
+    inherited the MARS environment's path and imported its compiled packages
+    for another Python version, so ``solve-field`` failed in every worker
+    (2026-10-28, Fedora's Python 3.14 against MARS's 3.13 numpy).
+    """
+
+    inherited = environ.pop(INHERITED_PYTHONPATH_ENV, "")
+    if inherited:
+        environ["PYTHONPATH"] = inherited
+    else:
+        environ.pop("PYTHONPATH", None)
 
 
 def _limits(limits):
@@ -53,6 +75,7 @@ def main():
     from tools import artifacts
     from tools.mcp.surface import call_tool, error_payload
     from tools.models import ToolError
+    _restore_pythonpath()
     try:
         with artifacts.scoped_artifacts(f".mars-runtime/{work.name}/artifacts"):
             payload = call_tool(name, arguments, {name: function})

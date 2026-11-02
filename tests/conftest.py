@@ -16,7 +16,9 @@ skylib suite handles its S3-hosted fixtures.
 
 from __future__ import annotations
 
+import copy
 import csv
+import functools
 import json
 import os
 import shutil
@@ -465,10 +467,50 @@ def anet_available() -> bool:
     return shutil.which("solve-field") is not None
 
 
+#: The developer's own plate-solving data settings, as exported in the shell
+#: (the suite does not read ``.env``), read once at collection.
+#: ``MARS_CATALOG_DIR`` is then taken out of every test's environment (see
+#: ``_no_catalog_dir``): a test that expects no solver data must not find the
+#: developer's catalogs. The ``solver_data`` tests get them back from here.
+OPERATOR_SOLVER_ENV = {
+    name: os.environ[name]
+    for name in ("MARS_CATALOG_DIR", "ANET_INDEX_PATH", "ATLAS_CATALOG_ROOT", "ATLAS_CATALOG")
+    if os.environ.get(name)
+}
+
+
+@functools.cache
+def _operator_solver_settings():
+    from tools.wcs import _solver_settings
+
+    return _solver_settings(OPERATOR_SOLVER_ENV)[0]
+
+
+def operator_solver_settings():
+    """The solver settings MARS itself resolves from the developer's
+    environment, catalog folder included. The folder is searched once a
+    session; each caller gets its own copy, since the tool layer edits one
+    in place."""
+    return copy.copy(_operator_solver_settings())
+
+
+@pytest.fixture(autouse=True)
+def _no_catalog_dir(monkeypatch):
+    monkeypatch.delenv("MARS_CATALOG_DIR", raising=False)
+
+
+@pytest.fixture
+def operator_solver_env(monkeypatch):
+    """The developer's solver settings in the environment the tools read,
+    so a public tool resolves them as it would for a user."""
+    for name, value in OPERATOR_SOLVER_ENV.items():
+        monkeypatch.setenv(name, value)
+
+
 @pytest.fixture(scope="session")
 def atlas_catalog_root() -> str | None:
     """Root of a local UCAC4/UCAC5 tree, or ``None`` if not configured."""
-    root = os.environ.get("ATLAS_CATALOG_ROOT")
+    root = operator_solver_settings().ATLAS_CATALOG_ROOT
     return root if root and Path(root).is_dir() else None
 
 

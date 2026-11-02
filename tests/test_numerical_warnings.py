@@ -174,7 +174,7 @@ def test_solver_failure_keeps_source_extraction_notices(frame_path, tmp_path, mo
     from algorithms.diagnostics import note_numerical_issue
     from tools import wcs
 
-    def configured(settings):
+    def configured(settings, *_):
         settings.ANET_INDEX_PATH = str(tmp_path)
         return ["astrometry.net"], []
 

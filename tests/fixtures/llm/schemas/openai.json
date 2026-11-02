@@ -1233,7 +1233,7 @@
           },
           "index_path": {
             "type": "string",
-            "description": "astrometry.net index directory. Defaults to ANET_INDEX_PATH."
+            "description": "astrometry.net index directory. Defaults to ANET_INDEX_PATH, else the index folders under MARS_CATALOG_DIR."
           },
           "write_header": {
             "type": "boolean",
