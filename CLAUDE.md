@@ -435,7 +435,7 @@ selected by the repository's default environment. Set
 alone is rejected as holding no index files). `tests/conftest.py` takes
 `MARS_CATALOG_DIR` out of every test's environment and gives it only to the
 `solver_data` tests, so a developer's catalogs never reach the default
-suite.
+suite. The suite reads it from the exported environment, not `.env`.
 The packaged 4107-4119 indexes start at a wider scale than the ~10-arcminute
 fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
 backend without producing a solution. With the 4200-series set the M15

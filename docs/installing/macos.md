@@ -92,8 +92,9 @@ Then download index files into one catalog folder and set
 `MARS_CATALOG_DIR` to it: in Claude Desktop, the extension's **Catalog
 folder** setting; elsewhere, your shell. See
 [Plate solving](../installing.md#plate-solving) for which index files to get.
-Claude Desktop must also find `solve-field`, which Homebrew puts in
-`/opt/homebrew/bin`; without it the extension solves only with ATLAS.
+Claude Desktop starts MARS with your login shell's `PATH`, so it finds
+Homebrew's `solve-field` once the `brew shellenv` line Homebrew's installer
+asks you to add is in `~/.zprofile`. Restart Claude Desktop after adding it.
 
 ## Logs
 

@@ -734,9 +734,23 @@ Evidence: [query backends](../../algorithms/query/),
   `tests/conftest.py` keeps a developer's folder out of the default suite
   and gives it to the `solver_data` tests: with only
   `MARS_CATALOG_DIR=/srv/agents/catalogs` set, all six pass (101 s);
-  `tests/test_catalog_dir.py` covers the rest. Not yet checked: whether
-  Claude Desktop's environment finds a Homebrew `solve-field` on a Mac
-  (the guides say ATLAS still works without it).
+  `tests/test_catalog_dir.py` covers the rest.
+  *macOS, 2026-11-02:* on the Mac VM (macOS 27.2, arm64), Homebrew's
+  `astrometry-net` 0.97 with index scales 4204-4210 under
+  `MARS_CATALOG_DIR=~/catalogs` solves the M15 frame bounded (322.49,
+  +12.17, 0.593 arcsec/px) directly in 19.8 s and through the MCP worker
+  (600 s, 4 GiB) in 13.5 s. Claude Desktop 4.29 starts MCP servers with
+  the login shell's PATH (`/opt/homebrew/bin` included, read from a probe
+  server's environment), so the `brew shellenv` line Homebrew's installer
+  adds to `~/.zprofile` is what makes `solve-field` visible to the
+  extension. A review pass then made the search breadth-first (a folder
+  first reached at the depth limit through one link is still searched
+  from a shallower one), the paths absolute (solve-field runs in a
+  temporary folder), an unknown `ATLAS_CATALOG` a reported problem rather
+  than a guessed root, one `solver_unavailable` message that names what is
+  wrong instead of advising a setting already made, and the engine
+  configuration UTF-8 (a bounded solve through `Catalogs José/4200`
+  works).
 - [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
   other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
   documentation and behavior changes, which the repository keeps in

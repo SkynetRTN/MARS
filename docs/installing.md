@@ -321,6 +321,10 @@ the **Catalog folder** setting for the Claude Desktop extension. A desktop
 app must also find `solve-field` (step 1); without it the extension still
 solves with ATLAS.
 
+Every index series under the folder is searched, and an all-sky solve
+against several of them is slow: give a solve the frame's scale and a search
+radius when you know them, or keep only the series your images need.
+
 `ANET_INDEX_PATH` and `ATLAS_CATALOG_ROOT` name the folders themselves
 instead, and win over `MARS_CATALOG_DIR` for their own solver.
 `ANET_INDEX_PATH` takes the folder, or folders, that hold the index files

@@ -335,6 +335,13 @@ solution, all-sky in 18-19 s against 50-64 s with `inparallel` (the engine no
 longer loads every index before the one that solves), bounded in 2.6 s
 against 1.6 s.
 
+**It is written as UTF-8, not ASCII (2026-11-02), a second divergence.** The
+Claude Desktop folder picker and `MARS_CATALOG_DIR` hand it folders the user
+named, and an ASCII write raised `UnicodeEncodeError` on the first non-ASCII
+one. The engine takes the rest of an `add_path` line as the path, spaces
+included; a bounded M15 solve through `Catalogs José/4200` recovers the
+fixture's pointing.
+
 ATLAS's finite allowance still covers only the blind matcher loop, not catalog
 loading, extraction, its oriented path or all retry work. MCP dispatch additionally
 contains the complete call in an owned worker with a 600-second default and
