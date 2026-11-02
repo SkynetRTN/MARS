@@ -400,12 +400,57 @@ def test_a_csv_error_column_weights_the_fit_and_draws_bars(artifact_dir, tmp_pat
     unweighted = spectral_fitting.fit_power_law(_FREQ_HZ, flux)["spectral_index"]
     assert alpha == pytest.approx(weighted)
     assert abs(weighted - unweighted) > 0.02
+    assert result.preview[0]["weighted"] is True
+    assert result.warnings == []
     axes = saved_figures[-1].axes[0]
     (container,) = axes.containers
     assert container.get_label() == "Flux error"
     half_lengths = [abs(seg[1, 1] - seg[0, 1]) / 2 for seg in container.lines[2][0].get_segments()]
     np.testing.assert_allclose(half_lengths, error)
 
+
+
+def test_an_incomplete_error_column_is_ignored_not_fitted_on_a_subset(artifact_dir, tmp_path, saved_figures):
+    """Weighted, both fits drop a point without an error: over a partly filled
+    column the power law fitted two points (R^2 = 1 trivially) against a
+    log-parabola over all of them, and an empty column failed outright."""
+    from algorithms.radio import spectral_fitting
+    from tools.radio_sources import analyze_source_spectrum
+
+    error = [""] * len(_FREQ_HZ)
+    error[0], error[1] = "3.0", "2.5"
+    path = tmp_path / "spectrum.csv"
+    path.write_text("freq_hz,flux_jy,err_jy\n" + "".join(
+        f"{f:.0f},{s},{e}\n" for f, s, e in zip(_FREQ_HZ, _FLUX_JY, error)))
+
+    result = analyze_source_spectrum(csv_path=str(path))
+
+    assert result.status == "ok"
+    fit = result.preview[0]
+    assert fit["weighted"] is False and fit["n_points"] == len(_FREQ_HZ)
+    assert fit["log_parabola"]["n_points"] == len(_FREQ_HZ)
+    assert fit["power_law"]["spectral_index"] == pytest.approx(
+        spectral_fitting.fit_power_law(_FREQ_HZ, _FLUX_JY)["spectral_index"])
+    (warning,) = result.warnings
+    assert warning.code == "flux_errors_incomplete"
+    assert warning.message.startswith(f"{len(_FREQ_HZ) - 2} of {len(_FREQ_HZ)} points")
+    assert len(saved_figures[-1].axes[0].containers) == 0
+
+
+def test_a_headerless_csv_whose_first_row_repeats_a_value_keeps_it(artifact_dir, tmp_path, saved_figures):
+    """pandas renames a repeated header value ("2.5" and "2.5.1"), and the
+    second name is not a number, so the row was taken for a header."""
+    from tools.radio_sources import analyze_source_spectrum
+
+    rows = [(2.5e9, 2.5e9), (5.0e9, 1.2e9), (1.0e10, 6.0e8), (2.0e10, 3.0e8)]
+    path = tmp_path / "spectrum.csv"
+    path.write_text("".join(f"{f:g},{s:g}\n" for f, s in rows))
+
+    result = analyze_source_spectrum(csv_path=str(path))
+
+    assert result.status == "ok" and result.preview[0]["n_points"] == len(rows)
+    axes = saved_figures[-1].axes[0]
+    assert (axes.get_xlabel(), axes.get_ylabel()) == ("Frequency", "Flux density")
 
 def test_a_field_sed_draws_each_source_with_its_own_fit(tmp_path, saved_figures):
     from matplotlib.colors import to_rgba

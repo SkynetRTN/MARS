@@ -673,6 +673,8 @@ def plot_zero_point_solution(
     rings (see ``_replicate_zero_point_rejection`` and
     ``_zero_point_fit_inputs``, which read the solver's own masks, since
     ``calc_solution`` itself reports only an aggregate rejection percentage).
+    That percentage keeps upstream's arithmetic and counts the stars dropped
+    before the fit as rejected; the plot tells the two apart.
 
     Returns ``None`` (after a stderr message) if ``zero_point`` was not a
     verified field-cal solve, or carries fewer than 2 usable calibration

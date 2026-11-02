@@ -391,15 +391,19 @@ def _load_spectrum_csv(
 
     A file with no header row is read from its first row, and its axes get no
     unit. pandas would otherwise take that row for the header, dropping it
-    from the fit and labelling the axes with its numbers."""
-    df = pd.read_csv(csv_path)
+    from the fit and labelling the axes with its numbers. The first row is
+    judged by its own values, read raw: pandas renames a repeated header
+    value (``2.5,2.5`` becomes ``2.5`` and ``2.5.1``)."""
+    df = pd.read_csv(csv_path, header=None, dtype=str, keep_default_na=False)
     if df.shape[1] < 2:
         raise ValueError(f"{csv_path!r} needs at least two columns: frequency, flux")
-    if all(_is_number(column) for column in df.columns[:2]):
-        df = pd.read_csv(csv_path, header=None)
+    first = [str(value).strip() for value in df.iloc[0, :2]]
+    if all(_is_number(value) for value in first):
         axis_labels = ("Frequency", "Flux density")
     else:
-        axis_labels = (str(df.columns[0]), str(df.columns[1]))
+        axis_labels = (first[0], first[1])
+        df = df.iloc[1:]
+    df = df.apply(pd.to_numeric, errors="coerce")
     freq = df.iloc[:, 0].to_numpy(dtype=float)
     flux = df.iloc[:, 1].to_numpy(dtype=float)
     flux_err = df.iloc[:, 2].to_numpy(dtype=float) if df.shape[1] >= 3 else None
@@ -442,8 +446,9 @@ def analyze_source_spectrum(
     Exactly one input is used, in this priority order: explicit
     ``frequencies_hz``/``fluxes_jy`` arrays, then ``csv_path`` (columns:
     frequency, flux[, flux error] -- any units, consistent across rows; an
-    error column weights the power-law fit, and a row without a positive,
-    finite error is left out of it), then
+    error column weights both fits when every point has a positive error,
+    and is otherwise ignored, with a ``flux_errors_incomplete`` warning),
+    then
     ``name`` resolved through NED's photometry table (homogenized units,
     filtered to ``max_frequency_hz`` -- the conventional radio-continuum
     cutoff). Fits both a pure power law (spectral index) and a log-parabola
@@ -480,6 +485,22 @@ def analyze_source_spectrum(
     except (RuntimeError, ValueError) as exc:
         return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
 
+    warnings: list[ToolWarning] = []
+    if flux_err is not None:
+        # Weighted, both fits drop a point without a usable error. Over a
+        # partly filled column they would fit, and compare, a subset; so the
+        # errors weight the fit only when every point has one.
+        measured = np.isfinite(freq) & np.isfinite(flux) & (freq > 0) & (flux > 0)
+        missing = int((measured & ~(np.isfinite(flux_err) & (flux_err > 0))).sum())
+        if missing:
+            warnings.append(ToolWarning(
+                code="flux_errors_incomplete",
+                message=(f"{missing} of {int(measured.sum())} points have no usable flux "
+                         "error, so the errors were ignored and the fit is unweighted; "
+                         "give every point a positive error to weight it."),
+            ))
+            flux_err = None
+
     try:
         fit = spectral_fitting.analyze_spectrum(freq, flux, flux_err)
     except ValueError as exc:
@@ -497,11 +518,13 @@ def analyze_source_spectrum(
 
     fit["source_name"] = source_label
     fit["n_points"] = fit["power_law"]["n_points"]
+    fit["weighted"] = flux_err is not None
     return ToolResult(
         status="ok",
         count=1,
         preview=[fit],
         artifacts=[ArtifactRef(path=str(plot_path), format="png")],
+        warnings=warnings,
     )
 
 

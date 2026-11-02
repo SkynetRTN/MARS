@@ -101,10 +101,13 @@ def evaluate_power_law(freq_hz, amplitude: float, spectral_index: float) -> np.n
     return amplitude * np.power(np.asarray(freq_hz, dtype=float), spectral_index)
 
 
-def fit_log_parabola(freq_hz, flux) -> dict | None:
+def fit_log_parabola(freq_hz, flux, flux_err=None) -> dict | None:
     """Fit ``log10(S_nu) = curvature*x**2 + spectral_index_at_ref*x + log_amplitude``,
     ``x = log10(nu)`` -- a quadratic in log-log space, for spectral turnover
     (self-absorption at low frequencies, or a high-frequency cutoff).
+
+    ``flux_err`` weights it exactly as it weights :func:`fit_power_law`, so
+    the two fits use the same points and weights and their R^2 compare.
 
     Returns ``None`` with fewer than 4 valid points: a 3-parameter fit to 3
     points is exact (R^2 = 1 by construction) and reports nothing about
@@ -113,11 +116,17 @@ def fit_log_parabola(freq_hz, flux) -> dict | None:
     freq_hz = np.asarray(freq_hz, dtype=float)
     flux = np.asarray(flux, dtype=float)
     mask = _valid_mask(freq_hz, flux)
+    if flux_err is not None:
+        flux_err = np.asarray(flux_err, dtype=float)
+        mask &= np.isfinite(flux_err) & (flux_err > 0)
     if mask.sum() < 4:
         return None
 
     x = np.log10(freq_hz[mask])
     y = np.log10(flux[mask])
+    weights = None
+    if flux_err is not None:
+        weights = 1.0 / (flux_err[mask] / (flux[mask] * np.log(10.0)))
 
     # Same "not available" fallback as fit_power_law -- the 4-point floor
     # above is exactly enough for cov=True (order=2 needs n>2), but a
@@ -126,11 +135,11 @@ def fit_log_parabola(freq_hz, flux) -> dict | None:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            (curvature, spectral_index_at_ref, log_amplitude), cov = np.polyfit(x, y, 2, cov=True)
+            (curvature, spectral_index_at_ref, log_amplitude), cov = np.polyfit(x, y, 2, w=weights, cov=True)
         if np.all(np.isfinite(cov)):
             spectral_index_at_ref_error = float(np.sqrt(cov[1, 1]))
     except (ValueError, np.linalg.LinAlgError):
-        curvature, spectral_index_at_ref, log_amplitude = np.polyfit(x, y, 2)
+        curvature, spectral_index_at_ref, log_amplitude = np.polyfit(x, y, 2, w=weights)
 
     y_pred = curvature * x**2 + spectral_index_at_ref * x + log_amplitude
     ss_res = float(np.sum((y - y_pred) ** 2))
@@ -164,7 +173,7 @@ def analyze_spectrum(freq_hz, flux, flux_err=None,
     directly meaningful ``spectral_index``) is reported.
     """
     power_law = fit_power_law(freq_hz, flux, flux_err)
-    log_parabola = fit_log_parabola(freq_hz, flux)
+    log_parabola = fit_log_parabola(freq_hz, flux, flux_err)
 
     best_model = "power_law"
     if log_parabola is not None and (log_parabola["r_squared"] - power_law["r_squared"]) > curvature_r2_margin:
