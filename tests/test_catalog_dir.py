@@ -243,3 +243,24 @@ def test_the_developers_catalog_folder_does_not_reach_ordinary_tests():
     tests read it from ``OPERATOR_SOLVER_ENV`` instead."""
     assert "MARS_CATALOG_DIR" not in os.environ
     assert _solver_settings(os.environ)[1] == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file names")
+def test_a_folder_name_that_is_not_utf8_is_written_as_its_own_bytes(tmp_path):
+    from algorithms.skylib_lite.astrometry.anet.backend import AstrometryNetBackend
+
+    name = os.fsdecode(b"/catalogs/caf\xe9/4200")  # Latin-1, not UTF-8
+
+    config = AstrometryNetBackend._write_index_config([name], tmp_path)
+
+    assert config.read_bytes().splitlines()[-1] == b"add_path /catalogs/caf\xe9/4200"
+
+
+def test_a_folder_name_with_a_line_break_is_refused_not_written():
+    from algorithms.skylib_lite.astrometry.anet.engine import validate_index_dirs
+
+    usable, problems = validate_index_dirs(["/catalogs/4200\ninparallel"])
+
+    assert usable == []
+    assert "line break" in problems[0]
+
