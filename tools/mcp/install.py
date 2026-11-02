@@ -49,14 +49,9 @@ def _isochrones_present() -> bool:
 
 
 def _plate_solving_available(environ: Mapping[str, str]) -> bool:
-    from algorithms.wcs.config import SolverSettings
-    from tools.wcs import _configured_backend_warnings
+    from tools.wcs import _configured_backend_warnings, _solver_settings
 
-    settings = SolverSettings(
-        anet_index_path=environ.get("ANET_INDEX_PATH") or None,
-        atlas_catalog_root=environ.get("ATLAS_CATALOG_ROOT") or None,
-        atlas_catalog=environ.get("ATLAS_CATALOG") or None,
-    )
+    settings, _problems = _solver_settings(environ)
     available, _warnings = _configured_backend_warnings(settings)
     return bool(available)
 

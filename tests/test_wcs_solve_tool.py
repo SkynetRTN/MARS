@@ -20,14 +20,19 @@ from algorithms.wcs.results import WcsSolveMetadata, WcsSolveResult
 from algorithms.wcs.wcs import build_anet_config
 from tools.wcs import solve_astrometry
 
+from .conftest import operator_solver_settings
+
 
 ROOT = Path(__file__).resolve().parents[1]
 OPEN_FRAME = ROOT / "data" / "optical" / "m15_globular_open_000.fits"
 SOLVED_FRAME = ROOT / "data" / "optical" / "ngc5128_galaxy_b_001.fits"
 
+#: The developer's index folders, from ANET_INDEX_PATH or MARS_CATALOG_DIR.
+OPERATOR_INDEX_PATH = operator_solver_settings().ANET_INDEX_PATH
+
 solver_available = pytest.mark.skipif(
-    shutil.which("solve-field") is None or not os.environ.get("ANET_INDEX_PATH"),
-    reason="needs solve-field on PATH and ANET_INDEX_PATH set",
+    shutil.which("solve-field") is None or not OPERATOR_INDEX_PATH,
+    reason="needs solve-field on PATH and MARS_CATALOG_DIR or ANET_INDEX_PATH set",
 )
 
 
@@ -497,7 +502,7 @@ def test_the_solver_runs_and_reports_its_outcome_either_way():
 
     summary = solve_astrometry(
         OPEN_FRAME,
-        index_path=os.environ["ANET_INDEX_PATH"],
+        index_path=OPERATOR_INDEX_PATH,
         timeout_s=900,
     )
 
@@ -751,7 +756,7 @@ def test_an_explicit_scale_window_runs_a_bounded_solve():
 
     summary = solve_astrometry(
         OPEN_FRAME,
-        index_path=os.environ["ANET_INDEX_PATH"],
+        index_path=OPERATOR_INDEX_PATH,
         timeout_s=300,
         search_radius_deg=1.0,
         min_scale_arcsec=0.4,

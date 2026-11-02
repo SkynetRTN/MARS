@@ -43,7 +43,7 @@ from algorithms.wcs.wcs import (
     solve_wcs,
 )
 
-from .conftest import ALL_FRAMES
+from .conftest import ALL_FRAMES, operator_solver_settings
 
 WCS_FRAMES = [f for f in ALL_FRAMES if f != "m15_globular_open_000.fits"]
 PC_FRAMES = [
@@ -605,12 +605,13 @@ def _atlas_operator_settings_or_skip():
     from algorithms.wcs.config import SolverSettings
     from tools.wcs import _atlas_catalog_problem
 
-    catalog_root = os.environ.get("ATLAS_CATALOG_ROOT")
-    catalog = (os.environ.get("ATLAS_CATALOG") or "ucac5").strip().lower()
+    operator = operator_solver_settings()
+    catalog_root = operator.ATLAS_CATALOG_ROOT
+    catalog = (operator.ATLAS_CATALOG or "ucac5").strip().lower()
     if not catalog_root:
         pytest.skip(
-            "set ATLAS_CATALOG_ROOT to a UCAC4/UCAC5 tree and "
-            "ATLAS_CATALOG to ucac4 or ucac5"
+            "set MARS_CATALOG_DIR to a folder holding a UCAC4/UCAC5 tree (or "
+            "ATLAS_CATALOG_ROOT to the tree), and ATLAS_CATALOG to ucac4 or ucac5"
         )
 
     root = Path(catalog_root)
@@ -692,11 +693,12 @@ def _anet_operator_settings_or_skip():
 
     if find_solve_field() is None:
         pytest.skip("missing data: solve-field is not on PATH")
-    configured = os.environ.get("ANET_INDEX_PATH")
+    configured = operator_solver_settings().ANET_INDEX_PATH
     if not configured:
         pytest.skip(
-            "missing data: set ANET_INDEX_PATH to index directories covering "
-            "a ~10 arcmin field (the 4200 series)"
+            "missing data: set MARS_CATALOG_DIR to a folder holding (or "
+            "ANET_INDEX_PATH to) index directories covering a ~10 arcmin field "
+            "(the 4200 series)"
         )
     usable, rejected = validate_index_dirs(resolve_index_dirs(configured))
     if not usable:

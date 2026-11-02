@@ -465,10 +465,34 @@ def anet_available() -> bool:
     return shutil.which("solve-field") is not None
 
 
+#: The developer's own plate-solving data settings, read once at collection.
+#: ``MARS_CATALOG_DIR`` is then taken out of every test's environment (see
+#: ``_no_catalog_dir``): a test that expects no solver data must not find the
+#: developer's catalogs. The ``solver_data`` tests read their data from here.
+OPERATOR_SOLVER_ENV = {
+    name: os.environ[name]
+    for name in ("MARS_CATALOG_DIR", "ANET_INDEX_PATH", "ATLAS_CATALOG_ROOT", "ATLAS_CATALOG")
+    if os.environ.get(name)
+}
+
+
+def operator_solver_settings():
+    """The solver settings MARS itself resolves from the developer's
+    environment, catalog folder included."""
+    from tools.wcs import _solver_settings
+
+    return _solver_settings(OPERATOR_SOLVER_ENV)[0]
+
+
+@pytest.fixture(autouse=True)
+def _no_catalog_dir(monkeypatch):
+    monkeypatch.delenv("MARS_CATALOG_DIR", raising=False)
+
+
 @pytest.fixture(scope="session")
 def atlas_catalog_root() -> str | None:
     """Root of a local UCAC4/UCAC5 tree, or ``None`` if not configured."""
-    root = os.environ.get("ATLAS_CATALOG_ROOT")
+    root = operator_solver_settings().ATLAS_CATALOG_ROOT
     return root if root and Path(root).is_dir() else None
 
 
