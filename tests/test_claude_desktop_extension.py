@@ -241,13 +241,16 @@ def test_an_unfilled_release_setting_means_the_newest():
 
 
 
-def test_no_uv_call_reads_a_config_file_from_the_starting_folder():
+def test_both_steps_read_the_users_uv_configuration_but_no_folders():
     """The host may start the launcher anywhere; a uv.toml there must not
-    choose the index MARS comes from."""
+    choose the index MARS comes from. ``uv tool`` commands never read one
+    (checked with a planted index, 2026-11-02), and ``--no-config`` would also
+    have dropped the user's own mirror, proxy certificates and cache folder."""
 
     entry = _entry_point()
-    assert "--no-config" in entry.refresh_command("uv")
-    assert "--no-config" in entry.serve_command("uv", [])
+    for command in (entry.refresh_command("uv"), entry.serve_command("uv", [])):
+        assert command[:3] == ["uv", "tool", "run"]
+        assert "--no-config" not in command
 
 
 def test_windows_on_arm_runs_mars_on_the_x64_python():

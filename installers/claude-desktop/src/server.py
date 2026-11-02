@@ -23,10 +23,12 @@ release can be stepped back from without reinstalling anything. Empty means
 the newest. A value that is not a version stops here with a message rather
 than silently serving the newest.
 
-uv is whichever binary ran this file: ``uv run`` names it in ``UV``. Every
-uv call passes ``--no-config``: the host may start this in any folder, and a
-``uv.toml`` there must not choose the index MARS is installed from. (uv's
-``UV_*`` environment variables still apply.)
+uv is whichever binary ran this file: ``uv run`` names it in ``UV``. Both
+steps are ``uv tool`` commands, which read only the user's and the system's
+uv configuration, never a ``uv.toml`` in the folder the host starts this in
+(checked with a planted index, 2026-11-02), so that folder cannot choose the
+index MARS is installed from, while a user's own configured mirror, proxy
+certificates or cache folder still apply.
 
 The manifest maps each optional ``user_config`` field to an environment
 variable. A field the user left empty can arrive as an empty string, or as
@@ -101,7 +103,7 @@ def refresh_command(uv, pin=None, offline=False):
     Offline it fetches nothing: ``@latest`` then names the newest release cached."""
     fetch, _ = requirements(pin)
     network = ["--offline"] if offline else []
-    return [uv, "tool", "run", "--no-config", *network, "--python", python_request(), "--from", fetch, "python", "-I", "-c", PRINT_VERSION]
+    return [uv, "tool", "run", *network, "--python", python_request(), "--from", fetch, "python", "-I", "-c", PRINT_VERSION]
 
 
 def fetched_version(run, command, environ):
@@ -113,7 +115,7 @@ def fetched_version(run, command, environ):
 
 def serve_command(uv, args, pin=None):
     _, serve = requirements(pin)
-    return [uv, "tool", "run", "--no-config", "--offline", "--python", python_request(), "--from", serve, "mars-mcp", *args]
+    return [uv, "tool", "run", "--offline", "--python", python_request(), "--from", serve, "mars-mcp", *args]
 
 
 def main(args, environ=os.environ, run=subprocess.run, execv=os.execv):

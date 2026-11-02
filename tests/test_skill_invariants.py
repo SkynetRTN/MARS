@@ -252,6 +252,28 @@ def test_an_unedited_older_skill_is_upgraded_in_place(tmp_path):
     assert sorted(p.name for p in target.parent.iterdir()) == [SKILL_NAME]
 
 
+def test_a_failed_upgrade_leaves_the_old_skill_and_no_hidden_copy(tmp_path, monkeypatch):
+    """On Windows a file the agent holds open stops the swap. The staged
+    copy beside the skill was left behind: a second skill a scanner loads."""
+    import os
+
+    target = tmp_path / "skills" / SKILL_NAME
+    install_native_skill(target)
+    _as_older_release(target)
+    real_replace = os.replace
+
+    def held_open(source, destination):
+        if Path(source) == target:
+            raise PermissionError("in use")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", held_open)
+    with pytest.raises(PermissionError):
+        install_native_skill(target)
+
+    assert sorted(p.name for p in target.parent.iterdir()) == [SKILL_NAME]
+
+
 def test_an_edit_to_an_older_skill_is_kept_and_named(tmp_path):
     target = tmp_path / "skills" / SKILL_NAME
     install_native_skill(target)
