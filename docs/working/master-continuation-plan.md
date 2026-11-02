@@ -413,7 +413,7 @@ Evidence: [query backends](../../algorithms/query/),
   the `.mcpb` manifest link to it; the guide is
   [archived](../archive/desktop-acceptance.md). No OS or app versions were
   recorded, so the guides name none.
-- [ ] **Windows on ARM.** The maintainer's decision (2026-10-27): Windows
+- [x] **Windows on ARM.** The maintainer's decision (2026-10-27): Windows
   support is ARM64, and x64 Windows is no longer tested. `sep` and `pyerfa`
   publish no Windows ARM64 wheels, so MARS runs on the x64 build of
   Python 3.13 under Windows' own emulation, which the launcher (both routes)
@@ -431,8 +431,9 @@ Evidence: [query backends](../../algorithms/query/),
   `windows-11-arm` with the x64 Python (run 40608763583, 2026-10-27, 146 s).
   The Release dry run (run 40611174066) passed both jobs moved to
   `windows-11-arm`: the extension's self-test, on the x64 Python, and the
-  bundle checks. Remaining: both apps on the ARM64 VM.
-- [ ] **Updates and offline startup.** Both launchers follow the latest
+  bundle checks. *Done 2026-11-02:* the maintainer checked both apps on
+  the ARM64 VM by hand (no versions recorded).
+- [x] **Updates and offline startup.** Both launchers follow the latest
   release; only Claude has a cached offline fallback. Plugin skills can lag
   behind the server, and the native skill installer rejects older pristine
   copies. Upgrade, startup failure, offline use and rollback need documented,
@@ -467,9 +468,9 @@ Evidence: [query backends](../../algorithms/query/),
     offline with a pin served rc5, a malformed pin exited 2. The Codex
     command, started from a folder holding a planted `re.py` and `uv.toml`,
     used neither and served 55 tools.
-  - **Remaining:** re-check the changed Codex launch in the ChatGPT app on
-    Windows and Linux, and the *MARS release* setting in Claude Desktop's
-    own settings screen (the launcher behind it is verified above).
+  - **Done 2026-11-02:** the maintainer re-checked the changed Codex launch
+    in the ChatGPT app on Windows and Linux, and the *MARS release* setting
+    in Claude Desktop's own settings screen, by hand (no versions recorded).
 - [x] **Installed commands and data.** `mars-bench` ships without its
   checkout-only assets. Verify its installed behavior and cross-platform bundle
   installation, interruption and recovery. Record current cold/warm startup
@@ -594,7 +595,7 @@ Evidence: [query backends](../../algorithms/query/),
     installer: install 14 s, `self-test` 22 s, the same two messages.
     A model session on Linux was not rerun; the console is developed and
     tested on this Fedora host.
-- [ ] **Console terminals and long runs.** Nothing records the console in
+- [x] **Console terminals and long runs.** Nothing records the console in
   Windows Terminal, macOS Terminal or iTerm2, tmux or over SSH. Open
   questions: F-keys on macOS, Esc delay under tmux, the graphics probe, the
   forced dark theme on light terminals, `NO_COLOR`, and an 80-column status
@@ -623,8 +624,9 @@ Evidence: [query backends](../../algorithms/query/),
   counts only as they fit, so 80 columns keep them. Superseded by the next
   item: Ctrl+C now stops a step, and Ctrl+Q quits at once.
   **Supported terminals (maintainer's decision, 2026-10-27):** on macOS,
-  Terminal.app, the default; iTerm2 is not supported. Terminal.app needs a
-  person at the Mac.
+  Terminal.app, the default; iTerm2 is not supported. *Done 2026-11-02:*
+  the maintainer checked the console in Terminal.app at the Mac by hand
+  (no versions recorded).
 - [x] **Console failures and commands.** A tool that returns an error is
   marked ✓, and a backend failure mid-turn reports only "Session finished:
   error." `/status`, `/tools`, `/approve`, `/prompt` and `/new` are listed
