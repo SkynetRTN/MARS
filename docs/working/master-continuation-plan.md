@@ -712,7 +712,7 @@ Evidence: [query backends](../../algorithms/query/),
   `ANET_INDEX_PATH`; the memory limit; ATLAS), a pointer from Install, and a
   short section in each platform guide. Package names checked against
   Homebrew's and Debian's package indexes and this host's Fedora packages.
-- [ ] **Catalog location setting** (deferred). One environment variable,
+- [x] **Catalog location setting.** One environment variable,
   set once when MARS is installed (in the shell or a `.env`), names the
   folder that holds the user's own catalogs -- astrometry.net index files,
   the UCAC catalogue -- and MARS finds the solvers' data under it, instead
@@ -721,6 +721,22 @@ Evidence: [query backends](../../algorithms/query/),
   say that catalogs are set with this variable, and the Claude Desktop
   extension gains a setting for it: today it passes none, so plate solving
   cannot be configured there.
+  *Done 2026-11-01 (maintainer's go-ahead):* `MARS_CATALOG_DIR`.
+  `tools.wcs._solver_settings` searches it four folder levels deep, links
+  followed without looping, for every folder of index files and the first
+  UCAC5 root (UCAC4 when `ATLAS_CATALOG` asks); the two explicit variables
+  and the `index_path` argument still win for their own solver. A missing
+  folder, or one holding neither, is a `solver_backend_unavailable`
+  warning, and the no-solver message names the setting first. The MCP
+  install facts read the same function. Claude Desktop gains a **Catalog
+  folder** setting (the launcher drops it unfilled), the Codex plugin
+  forwards the variable, and the install guides and platform pages use it.
+  `tests/conftest.py` keeps a developer's folder out of the default suite
+  and gives it to the `solver_data` tests: with only
+  `MARS_CATALOG_DIR=/srv/agents/catalogs` set, all six pass (101 s);
+  `tests/test_catalog_dir.py` covers the rest. Not yet checked: whether
+  Claude Desktop's environment finds a Homebrew `solve-field` on a Mac
+  (the guides say ATLAS still works without it).
 - [ ] **Split the M4 branch into PRs.** The last M4 checkbox, once every
   other one is ticked. `docs/m4-desktop-acceptance` mixes workflow,
   documentation and behavior changes, which the repository keeps in

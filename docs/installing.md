@@ -295,26 +295,44 @@ rule is indexes whose sizes run from about 10% to 100% of the image's width:
 The bundled frames are about 10 arcmin wide and need the narrow series; the
 4200 series solves them.
 
-**3. Point MARS at them** with `ANET_INDEX_PATH`: the folder, or folders,
-that hold the `index-*.fits` files directly (a parent folder is refused),
-joined with `:` (`;` on Windows). For example, with Fedora's package:
+**3. Point MARS at them** with `MARS_CATALOG_DIR`, set once: the one folder
+that holds your plate-solving catalogs, the index files and the UCAC catalogue
+for ATLAS below. MARS looks for them up to four folders deep, so each set can
+keep its own subfolder. It uses every folder holding index files, and the
+first holding the UCAC catalogue. For example, with Fedora's package:
 
 ```bash
-export ANET_INDEX_PATH=/usr/share/astrometry/data
+export MARS_CATALOG_DIR=/usr/share/astrometry
+```
+
+or a folder of your own, laid out however you like:
+
+```text
+~/catalogs/
+  astrometry/4200/index-4208.fits ...
+  astrometry/TYCHO2/index-110 ...
+  ATLAS/UCAC5/u5z/u5index.asc ...
 ```
 
 Set it where the program that runs MARS reads its environment: your shell
-for `mars`, `mars-mcp` and Claude Code; the environment the ChatGPT app starts
-in for the Codex plugin, which forwards it. The Claude Desktop extension has
-no setting for it yet, so plate solving is not available there.
+(or a checkout's `.env`) for `mars`, `mars-mcp` and Claude Code; the
+environment the ChatGPT app starts in for the Codex plugin, which forwards it;
+the **Catalog folder** setting for the Claude Desktop extension. A desktop
+app must also find `solve-field` (step 1); without it the extension still
+solves with ATLAS.
+
+`ANET_INDEX_PATH` and `ATLAS_CATALOG_ROOT` name the folders themselves
+instead, and win over `MARS_CATALOG_DIR` for their own solver.
+`ANET_INDEX_PATH` takes the folder, or folders, that hold the index files
+directly (a parent folder is refused), joined with `:` (`;` on Windows).
 
 A full catalog is fine: MARS has astrometry.net load one index at a time,
 so a large set (the whole 4200 series is about 32 GB) fits within the 4 GiB
 memory limit MARS runs a solve under.
 
 **ATLAS** is MARS's second solver: pure Python, so it needs no program, only a
-local UCAC4 or UCAC5 catalogue (`ATLAS_CATALOG_ROOT`, and `ATLAS_CATALOG` for
-UCAC4). It solves only near a known pointing and scale, never blind. It has
+local UCAC4 or UCAC5 catalogue, found under `MARS_CATALOG_DIR` (or named by
+`ATLAS_CATALOG_ROOT`; set `ATLAS_CATALOG=ucac4` for UCAC4). It solves only near a known pointing and scale, never blind. It has
 not been tested on Windows.
 
 ## Where things go

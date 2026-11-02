@@ -365,7 +365,10 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG` (default `ucac5`), and
   `ATLAS_TIMEOUT_S` from the environment. `solve_wcs(..., solver_settings=...)`
   accepts a per-call settings object; callers using the builders directly can
-  likewise pass any object exposing the relevant attributes.
+  likewise pass any object exposing the relevant attributes. The tool layer
+  builds it (`tools.wcs._solver_settings`, which the MCP install facts share)
+  and fills the two data paths from `MARS_CATALOG_DIR`, the user's one
+  catalog folder, searched four levels deep, when the variables are unset.
 - `algorithms/wcs/results.py` — solve output as two *frozen* dataclasses,
   `WcsSolveMetadata` and `WcsSolveResult`. This replaced `state.py`, which held
   plain-dataclass stand-ins for the Skynet ORM rows; the stateless rollout
@@ -424,10 +427,15 @@ indexes 4107-4119 are under `/usr/share/astrometry/data`, three further
 index sets (2MASS 4200-series, TYCHO2, UCAC5) are under
 `/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
 UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
-selected by the repository's default environment. Set `ANET_INDEX_PATH` and/or
-`ATLAS_CATALOG_ROOT` to opt in. `ANET_INDEX_PATH` must name directories that
-hold index files *directly* (`os.pathsep`-join the three leaf directories
-above; the `astrometry/` root alone is rejected as holding no index files).
+selected by the repository's default environment. Set
+`MARS_CATALOG_DIR=/srv/agents/catalogs` to opt in to all of it, or
+`ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` for one solver.
+`ANET_INDEX_PATH` must name directories that hold index files *directly*
+(`os.pathsep`-join the three leaf directories above; the `astrometry/` root
+alone is rejected as holding no index files). `tests/conftest.py` takes
+`MARS_CATALOG_DIR` out of every test's environment and gives it only to the
+`solver_data` tests, so a developer's catalogs never reach the default
+suite.
 The packaged 4107-4119 indexes start at a wider scale than the ~10-arcminute
 fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
 backend without producing a solution. With the 4200-series set the M15

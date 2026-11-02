@@ -88,10 +88,12 @@ brew install astrometry-net
 solve-field --help        # check it is installed
 ```
 
-Then download index files and set `ANET_INDEX_PATH` to their folder, as
-described in [Plate solving](../installing.md#plate-solving). The Claude
-Desktop extension has no setting for it yet, so plate solving works through
-Codex, Claude Code or the `mars` console, not in Claude Desktop.
+Then download index files into one catalog folder and set
+`MARS_CATALOG_DIR` to it: in Claude Desktop, the extension's **Catalog
+folder** setting; elsewhere, your shell. See
+[Plate solving](../installing.md#plate-solving) for which index files to get.
+Claude Desktop must also find `solve-field`, which Homebrew puts in
+`/opt/homebrew/bin`; without it the extension solves only with ATLAS.
 
 ## Logs
 

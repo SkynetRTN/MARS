@@ -86,8 +86,9 @@ the machine rather than part of MARS, and it has no native Windows build.
 MARS has not been run against it under WSL or Cygwin, so on Windows plate
 solving is limited to MARS's ATLAS solver, which needs a local UCAC4 or UCAC5
 catalogue and solves only near a known pointing; it has not been tested on
-Windows. Everything else in MARS works without either. See
-[Plate solving](../installing.md#plate-solving).
+Windows. Put the catalogue in a folder and set `MARS_CATALOG_DIR` to it (the
+Claude Desktop extension's **Catalog folder** setting). Everything else in
+MARS works without either. See [Plate solving](../installing.md#plate-solving).
 
 ## Logs
 

@@ -85,12 +85,13 @@ no solver is available.
 sudo dnf install astrometry astrometry-data-4107-4119   # Fedora; wide-field indexes
 sudo apt install astrometry.net astrometry-data-tycho2  # Debian, Ubuntu
 solve-field --help                                      # check it is installed
-export ANET_INDEX_PATH=/usr/share/astrometry/data       # Fedora's index folder
+export MARS_CATALOG_DIR=/usr/share/astrometry           # Fedora's catalog folder
 ```
 
 The packaged indexes serve fields 22 arcmin and wider; narrower fields need
-the 5200 or 4200 series. See [Plate solving](../installing.md#plate-solving)
-for which to get and how to set `ANET_INDEX_PATH` for Codex.
+the 5200 or 4200 series. Keep every set under one catalog folder and point
+`MARS_CATALOG_DIR` at it. See [Plate solving](../installing.md#plate-solving)
+for which to get and how to set `MARS_CATALOG_DIR` for Codex.
 
 ## Logs
 

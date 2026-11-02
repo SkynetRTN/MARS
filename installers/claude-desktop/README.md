@@ -28,7 +28,7 @@ this same file (see [its README](../codex/README.md)); after changing it, run
 
 | File | What |
 | --- | --- |
-| `manifest.json` | Name, the extension's own version, the `uv run` command, and four optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, the MARS home, and a MARS release to pin |
+| `manifest.json` | Name, the extension's own version, the `uv run` command, and five optional settings shown in Claude Desktop: the ADS token (stored as a secret), the tool groups, the MARS home, a MARS release to pin, and the catalog folder for plate solving (`MARS_CATALOG_DIR`) |
 | `pyproject.toml`, `uv.lock` | The entry point's environment, empty on purpose: MARS comes from `uv tool run` |
 | `src/server.py` | Removes settings the user left empty, then runs the newest `mars-mcp` |
 | `icon.png` | The 512 px mark, exported by `docs/assets/make_brand.py` |
