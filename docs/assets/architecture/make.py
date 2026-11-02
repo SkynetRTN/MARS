@@ -8,27 +8,28 @@ Five figures, each drawn once and rendered in three palettes:
   element, not as one file with an internal ``prefers-color-scheme`` query:
   GitHub picks between the two from *its own* theme setting, which an SVG's
   internal media query cannot see.
-- ``print`` -- greyscale and set in CMU Serif, for documents outside the
-  repository; the overview (Fig. 4) prints in its light colours. Written
-  only with ``--print DIR``, as SVG, PDF and a 600-dpi PNG, and never
-  committed.
+- ``print`` -- greyscale, for documents outside the repository; Figs. 4 and
+  5 print in their light colours. Written only with ``--print DIR``, as SVG,
+  PDF and a 600-dpi PNG, and never committed.
 
 Every count a figure prints is measured from this checkout when it is drawn
 (:func:`measure`), never typed in, so a re-run picks up any change that moves
-one. Measuring imports the registry, so run it in the project environment:
+one. Measuring imports the registry and runs one period search for Fig. 4's
+example, offline, so run it in the project environment:
 
     uv run python docs/assets/architecture/make.py
     uv run python docs/assets/architecture/make.py --print ~/figures
 
-Labels are fitted against CMU Serif's own metrics, and the run fails if one
-overflows its box or uses a glyph the face lacks; each SVG embeds a subset of
-the face (:func:`embedded_faces`). Without the CMU fonts installed the check
-and the embedding are skipped with a warning. The ``print`` exports need
-``rsvg-convert`` (librsvg) on PATH.
+Labels are fitted against the metrics of the face they are set in -- CMU
+Serif and Typewriter for the diagrams, Open Sans and Adwaita Mono for Fig. 4
+-- and the run fails if one overflows its box or uses a glyph the face lacks;
+each SVG embeds a subset of its faces (:func:`embedded_faces`). Without those
+fonts installed the check and the embedding are skipped with a warning. The
+``print`` exports need ``rsvg-convert`` (librsvg) on PATH.
 
 The figures are sized for a 6.5-inch column: one SVG unit is
-6.5 in / 1000 = 0.468 pt in print, so the smallest label (16 units) prints
-at 7.5 pt. Cut detail before shrinking type below that.
+6.5 in / 1000 = 0.468 pt in print, so a 15-unit label prints at 7 pt and
+Fig. 4's 14-unit code at 6.6 pt. Cut detail before shrinking type further.
 """
 
 from __future__ import annotations
@@ -37,10 +38,12 @@ import argparse
 import ast
 import collections
 import inspect
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -53,6 +56,17 @@ if str(ROOT) not in sys.path:
 
 PRINT_WIDTH_IN = 6.5
 FONT_DIR = Path("/usr/share/fonts/cm-unicode")
+# Fig. 4 is set the way machine-learning papers set their figures: a sans for
+# text and a sans monospace for code. Both licences permit embedding (Open
+# Sans: Apache 2.0; Adwaita Mono: SIL OFL 1.1).
+SANS_DIR = Path("/usr/share/fonts/open-sans")
+CODE_FONT = Path("/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf")
+
+
+def _font_path(filename: str) -> Path:
+    """A font named by file: absolute as given, or in the CMU directory."""
+
+    return Path(filename) if filename.startswith("/") else FONT_DIR / filename
 SERIF = '"CMU Serif", "Latin Modern Roman", "Computer Modern Serif", Georgia, "Times New Roman", serif'
 
 PALETTES = {
@@ -61,16 +75,20 @@ PALETTES = {
         "ink": "#0F1619", "ink2": "#46565D", "rule": "#AEBBB9", "line": "#56656B",
         "accent": "#0C6B78", "accentSoft": "#E1F0F1",
         "warn": "#A8500C", "warnSoft": "#F7EADF",
-        "data": "#0C6B78", "data2": "#D9730D", "dots": "#5F7480", "mark": "#F5A623",
-        "skynet": "#3D5A80", "skynetSoft": "#E6ECF4",
+        "mlV": "#6741D9", "mlVs": "#F3F0FF", "mlT": "#0B7285", "mlTs": "#E3F4F7",
+        "mlG": "#2B8A3E", "mlGs": "#EBFBEE", "mlO": "#D9480F", "mlOs": "#FFF4E6",
+        "mlB": "#1864AB", "mlBs": "#E7F5FF", "mlR": "#C92A2A", "mlRs": "#FFF5F5",
+        "codeBg": "#F8F9FA", "badgeText": "#FFFFFF",
     },
     "dark": {
         "bg": "#0D1117", "lane": "#151E23", "box": "#0D1117",
         "ink": "#E7EDEB", "ink2": "#A8B8BD", "rule": "#3A4D55", "line": "#8EA0A6",
         "accent": "#4FBECA", "accentSoft": "#0E3238",
         "warn": "#DE9A52", "warnSoft": "#38281A",
-        "data": "#4FBECA", "data2": "#F0A04B", "dots": "#9AAEB7", "mark": "#F5A623",
-        "skynet": "#8FB0D9", "skynetSoft": "#17222F",
+        "mlV": "#B197FC", "mlVs": "#1F1A33", "mlT": "#66D9E8", "mlTs": "#0E2A30",
+        "mlG": "#8CE99A", "mlGs": "#13291A", "mlO": "#FFA94D", "mlOs": "#2E2012",
+        "mlB": "#74C0FC", "mlBs": "#0F2233", "mlR": "#FF8787", "mlRs": "#331616",
+        "codeBg": "#161B22", "badgeText": "#0D1117",
     },
     # Grey lanes, white boxes, black type. Emphasis is carried by weight and
     # fill, never by colour alone.
@@ -79,10 +97,15 @@ PALETTES = {
         "ink": "#000000", "ink2": "#333333", "rule": "#8A8A8A", "line": "#3F3F3F",
         "accent": "#000000", "accentSoft": "#DCDCDC",
         "warn": "#000000", "warnSoft": "#F4F4F4",
-        "data": "#000000", "data2": "#000000", "dots": "#555555", "mark": "#FFFFFF",
-        "skynet": "#000000", "skynetSoft": "#F4F4F4",
+        "mlV": "#6741D9", "mlVs": "#F3F0FF", "mlT": "#0B7285", "mlTs": "#E3F4F7",
+        "mlG": "#2B8A3E", "mlGs": "#EBFBEE", "mlO": "#D9480F", "mlOs": "#FFF4E6",
+        "mlB": "#1864AB", "mlBs": "#E7F5FF", "mlR": "#C92A2A", "mlRs": "#FFF5F5",
+        "codeBg": "#F8F9FA", "badgeText": "#FFFFFF",
     },
 }
+
+_SANS = 'font-family: "MARS Figure Sans", "Open Sans", "Helvetica Neue", Arial, sans-serif; '
+_CODE = 'font-family: "MARS Figure Code", "Adwaita Mono", Menlo, Consolas, monospace; '
 
 # Text classes: (font file, size in SVG units, CSS weight/style, colour key).
 TEXT = {
@@ -92,16 +115,32 @@ TEXT = {
     "ti": ("cmunti.otf", 16, "font-style: italic;", "ink2"),
     "tl": ("cmunti.otf", 17, "font-style: italic;", "ink2"),
     "tw": ("cmunti.otf", 16, "font-style: italic;", "warn"),
-    "tq": ("cmunti.otf", 18, "font-style: italic;", "ink"),
-    "tH": ("cmunbx.otf", 40, "font-weight: bold;", "accent"),
     # Code: identifiers as the source spells them.
     "tm": ("cmuntt.otf", 15, 'font-family: "MARS Figure Mono", "CMU Typewriter Text", '
            'ui-monospace, Menlo, Consolas, monospace;', "ink"),
     "tmA": ("cmuntt.otf", 15, 'font-family: "MARS Figure Mono", "CMU Typewriter Text", '
             'ui-monospace, Menlo, Consolas, monospace;', "accent"),
+    # The loop figure's sans and code faces.
+    "s": (str(SANS_DIR / "OpenSans-Regular.ttf"), 15, _SANS + "font-weight: 400;", "ink"),
+    "s2": (str(SANS_DIR / "OpenSans-Regular.ttf"), 14, _SANS + "font-weight: 400;", "ink2"),
+    "si": (str(SANS_DIR / "OpenSans-Italic.ttf"), 14, _SANS + "font-style: italic;", "ink2"),
+    "sb": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15, _SANS + "font-weight: 600;", "ink"),
+    "sH": (str(SANS_DIR / "OpenSans-Bold.ttf"), 20, _SANS + "font-weight: 700;", "mlT"),
+    "sbV": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15.5, _SANS + "font-weight: 600;", "mlV"),
+    "sbT": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15, _SANS + "font-weight: 600;", "mlT"),
+    "sbG": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15.5, _SANS + "font-weight: 600;", "mlG"),
+    "sbO": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15.5, _SANS + "font-weight: 600;", "mlO"),
+    "sbB": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15.5, _SANS + "font-weight: 600;", "mlB"),
+    "sbR": (str(SANS_DIR / "OpenSans-Semibold.ttf"), 15.5, _SANS + "font-weight: 600;", "mlR"),
+    "sN": (str(SANS_DIR / "OpenSans-Bold.ttf"), 13, _SANS + "font-weight: 700;", "badgeText"),
+    "c": (str(CODE_FONT), 14, _CODE, "ink"),
+    "cR": (str(CODE_FONT), 14, _CODE, "mlR"),
+    "cM": (str(CODE_FONT), 14, _CODE, "ink2"),
 }
-LINE_HEIGHT = {"t": 21, "tb": 21, "ts": 19, "ti": 19, "tl": 20, "tw": 19, "tq": 22, "tH": 44,
-               "tm": 18, "tmA": 18}
+LINE_HEIGHT = {"t": 21, "tb": 21, "ts": 19, "ti": 19, "tl": 20, "tw": 19,
+               "tm": 18, "tmA": 18, "s": 20, "s2": 19, "si": 19, "sb": 20, "sH": 26,
+               "sbV": 21, "sbT": 20, "sbG": 21, "sbO": 21, "sbB": 21, "sbR": 21, "sN": 16,
+               "c": 18, "cR": 18, "cM": 18}
 
 STYLE = """{faces}
   text {{ font-family: {serif}; }}
@@ -121,17 +160,6 @@ STYLE = """{faces}
   .hdA {{ fill: {accent}; }}
   .halo {{ paint-order: stroke; stroke: {bg}; stroke-width: 5; stroke-linejoin: round; }}
   .haloL {{ paint-order: stroke; stroke: {lane}; stroke-width: 5; stroke-linejoin: round; }}
-  .axis {{ fill: none; stroke: {ink2}; stroke-width: 1; }}
-  .pData {{ fill: none; stroke: {data}; stroke-width: 2; stroke-linejoin: round; }}
-  .pData2 {{ fill: none; stroke: {data2}; stroke-width: 2.4; stroke-linejoin: round; }}
-  .pDot {{ fill: {dots}; fill-opacity: .75; }}
-  .pMark {{ fill: none; stroke: {mark}; stroke-width: 1.6; }}
-  .boxS {{ fill: {skynetSoft}; stroke: {skynet}; stroke-width: 1.4; }}
-  .pill {{ fill: {box}; stroke: {accent}; stroke-width: 1.4; }}
-  .none {{ fill: none; stroke: none; }}
-  .ring {{ fill: {accentSoft}; stroke: none; }}
-  .icon {{ fill: {data2}; }}
-  .iconL {{ fill: none; stroke: {skynet}; stroke-width: 2.4; stroke-linecap: round; }}
   .lnR {{ fill: none; stroke: {line}; stroke-width: 1.2; stroke-dasharray: 5 3; }}
   .act {{ fill: {accentSoft}; stroke: {accent}; stroke-width: 1; }}
   .frag {{ fill: none; stroke: {line}; stroke-width: 1; }}
@@ -231,6 +259,42 @@ def _engine() -> dict[str, object]:
     }
 
 
+EXAMPLE_SCAN = "psr_b0329_54"
+
+
+def _examples() -> dict[str, object]:
+    """Fig. 4's code snippets, produced by MARS itself when the figure is drawn.
+
+    Each is real output of the code it illustrates: the fault the validator
+    returns for a stringified null, the risk tags policy.py gives a download,
+    and the result a period search returns on a bundled Green Bank scan.
+    """
+
+    from tools import pulsar
+    from tools.agent.policy import risk_tags
+    from tools.llm.validation import index_schemas, validate_tool_call
+    from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+
+    schemas = index_schemas(TOOL_SCHEMAS)
+    bad_args = {"target": "M67", "max_catalogs": "None"}
+    fault = validate_tool_call("search_vizier", bad_args, schemas, call_id="figure",
+                               func=TOOL_FUNCTIONS["search_vizier"])
+    download = {"target": "M67", "download": True}
+    scan = next(s for s in pulsar.list_pulsar_scans().scans if s.source_name == EXAMPLE_SCAN)
+    gram = pulsar.compute_pulsar_periodogram(scan.path)
+    if fault is None or gram.errors:
+        raise RuntimeError("an example no longer behaves as the figure says")
+    return {
+        "fault_type": fault.type,
+        "risk": sorted(risk_tags("search_mast", download)),
+        "scan_file": Path(scan.path).name,
+        "source_name": gram.source_name,
+        "peak_period_s": gram.peak_period_s,
+        "peak_fold_snr": gram.peak_fold_snr,
+        "artifact": Path(gram.artifact.path).name,
+    }
+
+
 def measure() -> dict[str, object]:
     """Every number the figures print, read from the checkout."""
 
@@ -264,6 +328,7 @@ def measure() -> dict[str, object]:
         ).group(1).replace('"', "").split(", "),
         "sweep": _sweep(),
         "engine": _engine(),
+        "examples": _examples(),
     }
 
 
@@ -271,7 +336,7 @@ def measure() -> dict[str, object]:
 
 
 class _Metrics:
-    """CMU Serif advance widths, for the overflow check."""
+    """Advance widths of every face the figures use, for the overflow check."""
 
     def __init__(self) -> None:
         self.fonts = {}
@@ -282,7 +347,7 @@ class _Metrics:
         except ImportError:  # pragma: no cover - both ship with matplotlib
             return
         for cls, (filename, size, _, _) in TEXT.items():
-            path = FONT_DIR / filename
+            path = _font_path(filename)
             if path.exists():
                 # Measure at 10x and scale back: sub-unit sizes stay exact.
                 self.fonts[cls] = (ImageFont.truetype(str(path), size * 10), 10.0)
@@ -309,9 +374,14 @@ class Canvas:
     overflows: list[str] = field(default_factory=list)
     #: Characters drawn per font file, for the embedded subsets.
     used: dict[str, set[str]] = field(default_factory=lambda: collections.defaultdict(set))
+    #: Text classes drawn: only these are written into the figure's style.
+    classes: set[str] = field(default_factory=set)
+    #: CSS only this figure needs, formatted with the palette like STYLE.
+    style: str = ""
 
     def _use(self, text: str, cls: str) -> None:
         filename = TEXT[cls][0]
+        self.classes.add(cls)
         self.used[filename].update(text)
         if METRICS.available:
             missing = sorted({ch for ch in text if ord(ch) not in METRICS.cmaps[filename]})
@@ -759,159 +829,6 @@ def fig3(m: dict) -> tuple[Canvas, str, str]:
     return c, title, alt
 
 
-# --- Fig. 4 -- the agentic system and the workflow it serves ----------------
-#
-# One figure for a reader who sees only one: the scientific workflow on top,
-# the machinery that carries out each step underneath. Dashed outlines are
-# work to be built (Aim 2), as in Fig. 2; everything solid exists.
-
-
-def _person(c: Canvas, x: float, y: float) -> None:
-    """A small person glyph centred on (x, y): the human-approval points."""
-
-    c.raw(f'<g class="icon"><circle cx="{x}" cy="{y - 7}" r="5"/>'
-          f'<path d="M {x - 9} {y + 10} Q {x - 9} {y} {x} {y} Q {x + 9} {y} {x + 9} {y + 10} Z"/></g>')
-
-
-def _telescope(c: Canvas, x: float, y: float) -> None:
-    """A small telescope glyph with its base at (x, y)."""
-
-    c.raw(f'<g class="iconL"><path d="M {x - 22} {y - 22} L {x + 16} {y - 40}"/>'
-          f'<path d="M {x - 4} {y - 31} L {x - 14} {y} M {x - 4} {y - 31} L {x + 6} {y}"/></g>'
-          f'<rect class="icon" x="{x - 6}" y="{y - 51}" width="34" height="11" rx="2" '
-          f'transform="rotate(-25 {x + 11} {y - 45})"/>')
-
-
-def fig4(m: dict) -> tuple[Canvas, str, str]:
-    import math
-
-    sw = m["sweep"]
-    c = Canvas(1000, 640)
-
-    # Two bands: what a researcher does, and what MARS does to carry it out.
-    c.raw(f'<rect class="lane" x="0" y="0" width="1000" height="268"/>')
-    c.raw(f'<rect class="lane" x="0" y="300" width="1000" height="340"/>')
-    c.text(20, 24, "The scientific workflow", "tl", room=300)
-    c.text(20, 324, "The MARS engine that carries out each step", "tl", room=500)
-
-    # --- Workflow: a closed loop, objective to evidence and back. -----------
-    row1, row2, h = 40, 178, 70
-    c.box(20, row1, 186, h, [("Research objective", "t"), ("in natural language", "ti"),
-                             ("“a period to 1%”", "ts")])
-    c.box(250, row1, 186, h, [("Measurement plan", "t"), ("cadence, precision,", "ts"),
-                              ("bands", "ts")], kind="boxD")
-    c.box(526, row1, 170, h, [("Observing request", "t"), ("instrument-agnostic", "ti")],
-          kind="boxD")
-    c.box(746, row1, 234, row2 + h - row1, [], kind="boxS")
-    c.text(863, row1 + 28, "Skynet 2", "tb", anchor="middle", room=200)
-    c.text(863, row1 + 52, "matches, schedules and", "ts", anchor="middle", room=214)
-    c.text(863, row1 + 72, "observes on its telescopes", "ts", anchor="middle", room=214)
-    _telescope(c, 863, row1 + 150)
-    c.box(526, row2, 170, h, [("Returned data", "t"), ("images, spectra, QA", "ts")],
-          kind="boxD")
-    c.box(250, row2, 186, h, [("Analysis", "t"), ("validated tools", "ti")])
-    c.box(20, row2, 186, h, [("Scientific adequacy", "t"), ("is the requirement met?", "ts")],
-          kind="boxD", pad=6)
-
-    mid1, mid2 = row1 + h / 2, row2 + h / 2
-    c.arrow((206, mid1), (250, mid1))
-    c.arrow((436, mid1), (526, mid1))
-    _person(c, 481, mid1 - 22)
-    c.text(481, mid1 + 22, "approves", "tw", anchor="middle", halo="haloL", room=80)
-    c.arrow((696, mid1), (746, mid1))
-    c.arrow((746, mid2), (696, mid2))
-    c.arrow((526, mid2), (436, mid2))
-    c.arrow((250, mid2), (206, mid2))
-    c.arrow((113, row2), (113, row1 + h))
-    _person(c, 140, (row1 + h + row2) / 2 - 6)
-    c.text(156, (row1 + h + row2) / 2, "accepts the result,", "tw", room=170)
-    c.text(156, (row1 + h + row2) / 2 + 19, "or a follow-up", "tw", room=170)
-
-    # --- Between the bands: how the two relate. ------------------------------
-    c.text(500, 290, "every step is a sequence of tool calls: the model chooses them, "
-           "tested software computes", "ti", anchor="middle", room=940)
-
-    # --- Engine: model, loop, tools, record, evaluation. --------------------
-    c.box(20, 362, 200, 112, [("Language model", "t"), ("any provider", "ti"),
-                              ("Claude · GPT · Gemini", "ts"),
-                              ("or local (Ollama)", "ts")])
-
-    # The agent loop: five steps on a ring, one pass per tool call. The
-    # bottom of the ring is left free for the record it writes.
-    cx, cy, r = 430, 450, 100
-    c.raw(f'<circle class="ring" cx="{cx}" cy="{cy}" r="{r}"/>')
-    steps = (("propose", 198), ("validate", 270), ("approve", 342),
-             ("execute", 414), ("observe", 486))
-    centre = {}
-    for label, angle in steps:
-        a = math.radians(angle)
-        px, py = cx + r * math.cos(a), cy + r * math.sin(a)
-        centre[label] = (px, py)
-        c.box(round(px - 42), round(py - 13), 84, 26, [(label, "ts")], kind="pill", pad=4)
-    for _, angle in steps:
-        a0, a1 = math.radians(angle + 25), math.radians(angle + 47)
-        x0, y0 = cx + r * math.cos(a0), cy + r * math.sin(a0)
-        x1, y1 = cx + r * math.cos(a1), cy + r * math.sin(a1)
-        c.raw(f'<path class="lnA" d="M {x0:.1f} {y0:.1f} A {r} {r} 0 0 1 {x1:.1f} {y1:.1f}" '
-              f'marker-end="url(#aA)"/>')
-    c.text(cx, cy - 6, "Agent loop", "tb", anchor="middle", room=120)
-    c.text(cx, cy + 16, f"at most {m['max_turns']} turns,", "ti", anchor="middle", room=140)
-    c.text(cx, cy + 35, "interruptible", "ti", anchor="middle", room=120)
-
-    # Model <-> loop: the model proposes each call and reads what came back.
-    py = round(centre["propose"][1])
-    c.arrow((220, py), (round(centre["propose"][0]) - 42, py))
-    ox, oy = round(centre["observe"][0]) - 42, round(centre["observe"][1])
-    c.arrow((ox, oy), (170, oy), (170, 474))
-    c.text(256, oy - 8, "results", "ti", anchor="middle", halo="haloL", room=80)
-
-    # Loop <-> tools.
-    c.raw('<rect class="box" x="620" y="350" width="360" height="206" rx="2"/>')
-    c.text(800, 376, f"{m['tools']} validated astronomy tools", "tb", anchor="middle", room=340)
-    c.box(636, 388, 328, 30, [("planning: Skynet 2 capabilities", "ts")], kind="boxD", pad=6)
-    c.box(636, 426, 328, 46, [("analysis: astrometry, photometry,", "ts"),
-                              ("time series, HR diagrams, radio", "ts")], pad=6)
-    c.box(636, 480, 328, 46, [("catalogs and archives: SIMBAD,", "ts"),
-                              ("VizieR, MAST, ADS and more", "ts")], pad=6)
-    c.text(800, 546, "also served over MCP to other AI agents", "ti", anchor="middle", room=340)
-    ex, ey = round(centre["execute"][0]) + 42, round(centre["execute"][1])
-    c.arrow((ex, ey), (620, ey), both=True, kind="lnA")
-
-    # Record and evaluation: every step is kept, and recorded runs are graded.
-    c.arrow((cx, cy + r), (cx, 578))
-    c.box(300, 578, 260, 52, [("Session record", "t"), ("every call, argument, decision", "ts")])
-    c.box(600, 578, 380, 52, [
-        ("Evaluation harness", "t"),
-        (f"{sw['sessions']} sessions, {sw['backends']} models, deterministic grading", "ts")],
-        pad=6)
-    c.arrow((560, 604), (600, 604))
-
-    # Legend.
-    c.raw('<rect class="boxD" x="20" y="584" width="24" height="13"/>')
-    c.text(52, 596, "built in Aim 2", "ts", room=180)
-    c.raw('<rect class="box" x="20" y="608" width="24" height="13"/>')
-    c.text(52, 620, "exists", "ts", room=180)
-
-    title = ("MARS architecture and scientific workflow: research objectives to "
-             "human-approved actions")
-    alt = (
-        "Two bands. Top, the scientific workflow as a loop: a research objective in natural "
-        "language becomes a measurement plan; a person approves it; MARS sends an "
-        "instrument-agnostic observing request to Skynet 2, which matches, schedules and "
-        "observes on its telescopes; the returned data are analysed with validated tools and "
-        "checked for scientific adequacy; a person accepts the result or a follow-up, which "
-        "starts the loop again. Bottom, the MARS engine that carries out each step: a "
-        "language model from any provider proposes tool calls to a bounded, interruptible "
-        "agent loop that proposes, validates, approves, executes and observes each call; "
-        f"{m['tools']} validated astronomy tools for planning, analysis and catalogs and "
-        "archives, also served over MCP to other AI agents; a session record "
-        f"of every call; and an evaluation harness of {sw['sessions']} recorded sessions over "
-        f"{sw['backends']} models with deterministic grading. Dashed outlines are to be built "
-        "in Aim 2."
-    )
-    return c, title, alt
-
-
 # --- Fig. 5 -- the agent engine, one turn at a time --------------------------
 #
 # The engine on its own, drawn the way a design document would: a sequence
@@ -1070,14 +987,264 @@ def fig5(m: dict) -> tuple[Canvas, str, str]:
     return c, title, alt
 
 
+# --- Fig. 4 -- the agent loop, in the style of an ML paper ------------------
+#
+# The loop drawn the way agent papers draw theirs: the cycle large and in the
+# middle, the model and the tools either side, and numbered call-outs showing
+# real traffic. Every snippet is MARS's own output when the figure is drawn
+# (:func:`_examples`); the benchmark bars are the recorded sweep.
+
+LOOP_STYLE = """
+  .pV {{ fill: {mlVs}; stroke: {mlV}; stroke-width: 1.5; }}
+  .pT {{ fill: {mlTs}; stroke: {mlT}; stroke-width: 1.5; }}
+  .pG {{ fill: {mlGs}; stroke: {mlG}; stroke-width: 1.5; }}
+  .pO {{ fill: {mlOs}; stroke: {mlO}; stroke-width: 1.5; }}
+  .pB {{ fill: {mlBs}; stroke: {mlB}; stroke-width: 1.5; }}
+  .pR {{ fill: {mlRs}; stroke: {mlR}; stroke-width: 1.5; }}
+  .chip {{ fill: {bg}; stroke: {rule}; stroke-width: 1; }}
+  .ringBase {{ fill: none; stroke: {mlTs}; stroke-width: 18; }}
+  .ringArc {{ fill: none; stroke: {mlT}; stroke-width: 2.6; }}
+  .node {{ fill: {bg}; stroke: {mlT}; stroke-width: 2.2; }}
+  .iT {{ fill: none; stroke: {mlT}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }}
+  .iV {{ fill: none; stroke: {mlV}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }}
+  .iG {{ fill: none; stroke: {mlG}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }}
+  .iB {{ fill: none; stroke: {mlB}; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }}
+  .fT {{ fill: {mlT}; }} .fV {{ fill: {mlV}; }} .fG {{ fill: {mlG}; }} .fB {{ fill: {mlB}; }}
+  .fO {{ fill: {mlO}; }} .fR {{ fill: {mlR}; }}
+  .aV {{ fill: none; stroke: {mlV}; stroke-width: 2; }}
+  .aG {{ fill: none; stroke: {mlG}; stroke-width: 2; }}
+  .aB {{ fill: none; stroke: {mlB}; stroke-width: 2; }}
+  .conn {{ fill: none; stroke: {ink2}; stroke-width: 1.2; stroke-dasharray: 3 3; }}
+  .bar {{ fill: {mlB}; }}
+  .barBg {{ fill: {lane}; }}
+  .whisk {{ fill: none; stroke: {ink}; stroke-width: 1.2; }}
+"""
+
+# Display names for the sweep's backends.
+BACKEND_NAMES = {
+    "anthropic/claude-sonnet-5": "Claude Sonnet 5",
+    "ollama/qwen3.8:27b-mlx": "Qwen 3.8 27B",
+    "ollama/qwen3.5:9b": "Qwen 3.5 9B",
+}
+
+
+def _sweep_rows() -> list[tuple[str, float, float, float]]:
+    import json
+
+    report = json.loads((ROOT / "docs" / "benchmarking" / "report.json").read_text())
+    rows = sorted(report["boards"]["correctness"], key=lambda row: row["rank"])
+    return [(BACKEND_NAMES.get(row["backend"], row["backend"]), row["value"],
+             row["interval"][0], row["interval"][1]) for row in rows]
+
+
+def _icon(c: Canvas, kind: str, x: float, y: float, cls: str = "iT") -> None:
+    """Small line icons, centred on (x, y), about 24 units across."""
+
+    if kind == "propose":    # a speech bubble
+        c.raw(f'<path class="{cls}" d="M {x-11} {y-8} h 22 a 3 3 0 0 1 3 3 v 9 a 3 3 0 0 1 -3 3 '
+              f'h -12 l -6 5 v -5 h -4 a 3 3 0 0 1 -3 -3 v -9 a 3 3 0 0 1 3 -3 z"/>')
+        for dx in (-6, 0, 6):
+            c.raw(f'<circle class="{cls.replace("i", "f")}" cx="{x + dx}" cy="{y - 1.5}" r="1.6"/>')
+    elif kind == "validate":  # a shield with a tick
+        c.raw(f'<path class="{cls}" d="M {x} {y-12} L {x+10} {y-8} V {y} C {x+10} {y+7} {x+5} '
+              f'{y+10} {x} {y+12} C {x-5} {y+10} {x-10} {y+7} {x-10} {y} V {y-8} Z"/>')
+        c.raw(f'<path class="{cls}" d="M {x-5} {y} L {x-1} {y+4} L {x+6} {y-4}"/>')
+    elif kind == "approve":   # a person
+        c.raw(f'<circle class="{cls}" cx="{x}" cy="{y-6}" r="5"/>')
+        c.raw(f'<path class="{cls}" d="M {x-10} {y+11} C {x-10} {y+2} {x+10} {y+2} {x+10} {y+11}"/>')
+    elif kind == "execute":   # a play button
+        c.raw(f'<path class="{cls.replace("i", "f")}" d="M {x-6} {y-10} L {x+10} {y} L {x-6} {y+10} Z"/>')
+    elif kind == "observe":   # an eye
+        c.raw(f'<path class="{cls}" d="M {x-12} {y} Q {x} {y-11} {x+12} {y} Q {x} {y+11} {x-12} {y} Z"/>')
+        c.raw(f'<circle class="{cls.replace("i", "f")}" cx="{x}" cy="{y}" r="3.6"/>')
+    elif kind == "spark":     # the model
+        c.raw(f'<path class="{cls.replace("i", "f")}" d="M {x} {y-12} Q {x+2} {y-2} {x+12} {y} '
+              f'Q {x+2} {y+2} {x} {y+12} Q {x-2} {y+2} {x-12} {y} Q {x-2} {y-2} {x} {y-12} Z"/>')
+    elif kind == "gear":      # the tools
+        import math
+        for k in range(8):
+            a = math.radians(k * 45)
+            c.raw(f'<line class="{cls}" x1="{x + 7 * math.cos(a):.1f}" y1="{y + 7 * math.sin(a):.1f}" '
+                  f'x2="{x + 11 * math.cos(a):.1f}" y2="{y + 11 * math.sin(a):.1f}"/>')
+        c.raw(f'<circle class="{cls}" cx="{x}" cy="{y}" r="7"/>')
+        c.raw(f'<circle class="{cls}" cx="{x}" cy="{y}" r="2.5"/>')
+    elif kind == "log":       # a page of lines
+        c.raw(f'<path class="{cls}" d="M {x-8} {y-11} h 11 l 5 5 v 17 h -16 Z"/>')
+        for dy in (-2, 2, 6):
+            c.raw(f'<line class="{cls}" x1="{x-4}" y1="{y+dy}" x2="{x+4}" y2="{y+dy}"/>')
+    elif kind == "chart":     # bars
+        for dx, h in ((-7, 8), (0, 14), (7, 11)):
+            c.raw(f'<rect class="{cls.replace("i", "f")}" x="{x + dx - 2.5}" y="{y + 9 - h}" '
+                  f'width="5" height="{h}"/>')
+
+
+def fig_loop(m: dict) -> tuple[Canvas, str, str]:
+    import math
+
+    ex = m["examples"]
+    c = Canvas(1000, 702)
+    c.style = LOOP_STYLE
+    c.raw('<defs>' + "".join(
+        f'<marker id="m{k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" '
+        f'markerHeight="6.5" orient="auto-start-reverse"><path class="f{k}" d="M0,1 L10,5 L0,9 z"/></marker>'
+        for k in "TVGB") + '</defs>')
+
+    def panel(x, y, w, h, kind, r=12):
+        c.raw(f'<rect class="p{kind}" x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}"/>')
+
+    def badge(x, y, n, kind):
+        c.raw(f'<circle class="f{kind}" cx="{x}" cy="{y}" r="11"/>')
+        c.text(x, y + 5, str(n), "sN", anchor="middle", room=20)
+
+    # --- The ring. -------------------------------------------------------------
+    cx, cy, r = 500, 304, 128
+    c.raw(f'<circle class="ringBase" cx="{cx}" cy="{cy}" r="{r}"/>')
+    steps = (("propose", 180), ("validate", 252), ("approve", 324), ("execute", 396),
+             ("observe", 468))
+    at = {}
+    for name, angle in steps:
+        a = math.radians(angle)
+        at[name] = (cx + r * math.cos(a), cy + r * math.sin(a))
+    for _, angle in steps:
+        a0, a1 = math.radians(angle + 15), math.radians(angle + 57)
+        c.raw(f'<path class="ringArc" d="M {cx + r * math.cos(a0):.1f} {cy + r * math.sin(a0):.1f} '
+              f'A {r} {r} 0 0 1 {cx + r * math.cos(a1):.1f} {cy + r * math.sin(a1):.1f}" '
+              f'marker-end="url(#mT)"/>')
+    for name, (x, y) in at.items():
+        c.raw(f'<circle class="node" cx="{x:.1f}" cy="{y:.1f}" r="27"/>')
+        _icon(c, name, round(x, 1), round(y, 1))
+        c.text(x, y + 46, name, "sbT", anchor="middle", halo="halo", room=90)
+    c.text(cx, cy - 4, "Agent loop", "sH", anchor="middle", room=170)
+    c.text(cx, cy + 18, "one pass per tool call", "s2", anchor="middle", room=170)
+    c.text(cx, cy + 38, f"≤ {m['max_turns']} turns · interruptible", "s2",
+           anchor="middle", room=170)
+
+    # --- The model, left. -----------------------------------------------------
+    panel(14, 196, 230, 214, "V")
+    _icon(c, "spark", 40, 225, "iV")
+    c.text(60, 231, "Language model", "sbV", room=176)
+    c.text(34, 258, "any provider, cloud or local", "si", room=200)
+    for i, name in enumerate(("Claude", "GPT", "Gemini", "Ollama")):
+        x, y = 34 + (i % 2) * 100, 274 + (i // 2) * 40
+        c.raw(f'<rect class="chip" x="{x}" y="{y}" width="90" height="30" rx="15"/>')
+        c.text(x + 45, y + 20, name, "s", anchor="middle", room=80)
+    c.text(34, 380, "proposes calls; never", "si", room=200)
+    c.text(34, 398, "runs them itself", "si", room=200)
+    px, py = at["propose"]
+    c.raw(f'<path class="aV" d="M 244 {py:.1f} L {px - 31:.1f} {py:.1f}" marker-end="url(#mV)"/>')
+    c.text(296, py - 8, "tool call", "s2", anchor="middle", halo="halo", room=90)
+    ox, oy = at["observe"]
+    c.raw(f'<path class="aV" d="M {ox - 30:.1f} {oy:.1f} L 128 {oy:.1f} L 128 414" '
+          f'marker-end="url(#mV)"/>')
+    c.text(300, oy + 20, "structured result", "s2", anchor="middle", halo="halo", room=150)
+
+    # --- The tools, right. ----------------------------------------------------
+    panel(756, 170, 230, 252, "G")
+    _icon(c, "gear", 782, 198, "iG")
+    c.text(802, 204, f"{m['tools']} tested tools", "sbG", room=176)
+    groups = (("Optical", "optical"), ("Databases", "databases"), ("Time series", "timeseries"),
+              ("HR diagram", "hr"), ("Radio", "radio"))
+    for i, (label, key) in enumerate(groups):
+        y = 218 + i * 34
+        c.raw(f'<rect class="chip" x="772" y="{y}" width="198" height="28" rx="14"/>')
+        c.text(786, y + 19, label, "s", room=130)
+        c.text(956, y + 19, str(m["groups"][key]), "sb", anchor="end", room=40)
+    c.text(772, 410, "also served over MCP", "si", room=200)
+    ex_x, ex_y = at["execute"]
+    c.raw(f'<path class="aG" d="M {ex_x + 30:.1f} {ex_y:.1f} L 756 {ex_y:.1f}" '
+          f'marker-start="url(#mG)" marker-end="url(#mG)"/>')
+    c.text(700, ex_y - 8, "run", "s2", anchor="middle", halo="halo", room=60)
+
+    # --- Numbered call-outs: real traffic through the loop. ------------------
+    def callout(x, y, w, n, kind, title, lines, target, start=None):
+        h = 38 + 18 * len(lines) + 6
+        panel(x, y, w, h, kind, r=10)
+        badge(x + 20, y + 19, n, kind)
+        c.text(x + 38, y + 25, title, f"sb{kind}", room=w - 48)
+        for i, line in enumerate(lines):
+            text, cls, indent = (*line, 0)[:3]
+            # Indent by character cells: SVG collapses leading spaces.
+            dx = indent * (METRICS.width("x", cls) if METRICS.available else 8.4)
+            c.text(round(x + 14 + dx, 1), y + 50 + 18 * i, text, cls, room=w - 24 - dx)
+        sx, sy = target
+        bx, by = start or ((x + w / 2, y + h) if sy > y + h else (x, y + h / 2))
+        mx, my = (bx + sx) / 2, (by + sy) / 2
+        c.raw(f'<path class="conn" d="M {bx:.1f} {by:.1f} Q {bx:.1f} {my:.1f} {sx:.1f} {sy:.1f}"/>')
+        c.raw(f'<circle class="f{kind}" cx="{sx:.1f}" cy="{sy:.1f}" r="3"/>')
+
+    vx, vy = at["validate"]
+    ax, ay = at["approve"]
+    callout(14, 14, 318, 1, "V", "Proposed tool call", [
+        ("compute_pulsar_periodogram(", "c"),
+        (f'path="…{EXAMPLE_SCAN}….cal.txt")', "c", 2),
+        ("# a call as a model proposes it", "cM"),
+    ], (px - 20, py - 20), start=(292, 112))
+    callout(341, 14, 318, 2, "R", "Caught before it runs", [
+        ('search_vizier(max_catalogs="None")', "c"),
+        (f"✗ {ex['fault_type']}", "cR"),
+        ("# error to the model; tool not run", "cM"),
+    ], (vx, vy - 27))
+    callout(668, 14, 318, 3, "O", "Asks a person first", [
+        ("search_mast(download=True)", "c"),
+        ("risk: " + ", ".join(ex["risk"]), "c"),
+        ("# console asks; headless denies", "cM"),
+    ], (ax + 19, ay - 19), start=(708, 112))
+    callout(668, 444, 318, 4, "G", "Structured result", [
+        (f'source_name="{ex["source_name"]}"', "c"),
+        (f"peak_period_s={ex['peak_period_s']:.5f}", "c"),
+        (f"peak_fold_snr={ex['peak_fold_snr']:.0f}, errors=[]", "c"),
+    ], (ox + 27, oy))
+
+    # --- Record and benchmark, below. ----------------------------------------
+    c.raw(f'<path class="aB" d="M {ox:.1f} {oy + 56:.1f} L {ox:.1f} 588" marker-end="url(#mB)"/>')
+    c.text(ox + 8, 560, "every pass logged", "si", halo="halo", room=150)
+    panel(14, 590, 562, 100, "B")
+    _icon(c, "log", 40, 618, "iB")
+    c.text(60, 624, "Session record", "sbB", room=300)
+    c.text(34, 650, "every call, argument, decision and result, saved after each call",
+           "s2", room=530)
+    c.text(34, 674, "ToolCallProposed → ToolCallStarted → ToolCallFinished", "c", room=530)
+
+    panel(590, 590, 396, 100, "B")
+    _icon(c, "chart", 616, 616, "iB")
+    c.text(636, 622, f"Benchmark: {m['sweep']['sessions']} sessions", "sbB", room=220)
+    c.text(974, 622, "correct, 95% CI", "si", anchor="end", room=120)
+    rows = _sweep_rows()
+    x0, x1 = 740, 926
+    for i, (name, value, lo, hi) in enumerate(rows):
+        y = 640 + i * 16
+        c.text(606, y + 4, name, "s2", room=128)
+        c.raw(f'<rect class="barBg" x="{x0}" y="{y - 5}" width="{x1 - x0}" height="10" rx="2"/>')
+        c.raw(f'<rect class="bar" x="{x0}" y="{y - 5}" width="{value * (x1 - x0):.1f}" height="10" rx="2"/>')
+        c.raw(f'<path class="whisk" d="M {x0 + lo * (x1 - x0):.1f} {y} H {x0 + hi * (x1 - x0):.1f} '
+              f'M {x0 + lo * (x1 - x0):.1f} {y - 4} V {y + 4} M {x0 + hi * (x1 - x0):.1f} {y - 4} V {y + 4}"/>')
+        c.text(x1 + 8, y + 4, f"{value * 100:.0f}%", "s2", room=44)
+
+    title = "The MARS agent loop: how a language model's tool calls are checked, run and recorded"
+    alt = (
+        "A ring of five steps sits at the centre: propose, validate, approve, execute and "
+        f"observe, one pass per tool call and at most {m['max_turns']} turns. On the left, a "
+        "language model from any provider (Claude, GPT, Gemini, or Ollama locally) proposes a "
+        "tool call and receives a structured result. On the right, "
+        f"{m['tools']} tested tools in five groups run the call; the same tools are served over "
+        "MCP. Four numbered call-outs show real traffic produced by MARS: a proposed call to "
+        "compute_pulsar_periodogram; a call caught by validation as "
+        f"{ex['fault_type']}; a download that needs a person's approval (risk tags "
+        f"{', '.join(ex['risk'])}); and the structured result, a period of "
+        f"{ex['peak_period_s']:.5f} s. Below, every pass is written to the session record, and "
+        f"a benchmark of {m['sweep']['sessions']} recorded sessions reports the share of correct "
+        "answers per model with 95% intervals."
+    )
+    return c, title, alt
+
+
 # (file stem, drawing function, palette of the --print export). The diagrams
-# print in greyscale; the overview keeps its colour, because it is meant to
-# stand alone.
+# print in greyscale; the loop and the engine keep their colour.
 FIGURES = [
     ("fig-1-mars-as-built", fig1, "print"),
     ("fig-2-aim-2-proposed", fig2, "print"),
     ("fig-3-validation", fig3, "print"),
-    ("fig-4-mars-workflow", fig4, "light"),
+    ("fig-4-agent-loop", fig_loop, "light"),
     ("fig-5-agent-engine", fig5, "light"),
 ]
 
@@ -1093,6 +1260,11 @@ FACES = (
     ("cmunbx.otf", EMBEDDED, "bold", "normal"),
     ("cmunti.otf", EMBEDDED, "normal", "italic"),
     ("cmuntt.otf", "MARS Figure Mono", "normal", "normal"),
+    (str(SANS_DIR / "OpenSans-Regular.ttf"), "MARS Figure Sans", "400", "normal"),
+    (str(SANS_DIR / "OpenSans-Semibold.ttf"), "MARS Figure Sans", "600", "normal"),
+    (str(SANS_DIR / "OpenSans-Bold.ttf"), "MARS Figure Sans", "700", "normal"),
+    (str(SANS_DIR / "OpenSans-Italic.ttf"), "MARS Figure Sans", "400", "italic"),
+    (str(CODE_FONT), "MARS Figure Code", "400", "normal"),
 )
 
 
@@ -1125,7 +1297,7 @@ def embedded_faces(canvas: Canvas) -> str:
             continue
         # A recalculated head.modified would make every run's bytes differ
         # and every regeneration a diff.
-        font = TTFont(FONT_DIR / filename, recalcTimestamp=False)
+        font = TTFont(_font_path(filename), recalcTimestamp=False)
         options = subset.Options()
         options.flavor = "woff"
         subsetter = subset.Subsetter(options)
@@ -1146,10 +1318,13 @@ def render(canvas: Canvas, title: str, alt: str, theme: str, *, for_print: bool 
     text_classes = "\n".join(
         f"  .{cls} {{ font-size: {size}px; {css} fill: {palette[colour]}; }}"
         for cls, (_, size, css, colour) in TEXT.items()
+        if cls in canvas.classes
     )
     faces = embedded_faces(canvas)
     serif = f'"{EMBEDDED}", {SERIF}' if faces else SERIF
     style = STYLE.format(serif=serif, faces=faces, text_classes=text_classes, **palette)
+    if canvas.style:
+        style += canvas.style.format(**palette)
     if for_print:
         pw = f"{PRINT_WIDTH_IN}in"
         ph = f"{PRINT_WIDTH_IN * canvas.height / canvas.width:.3f}in"
@@ -1188,9 +1363,13 @@ def main() -> None:
     args = parser.parse_args()
 
     if not METRICS.available:
-        print(f"warning: CMU Serif not found under {FONT_DIR}; "
-              "labels not fitted, face not embedded", file=sys.stderr)
-    m = measure()
+        print("warning: a figure font is not installed; "
+              "labels not fitted, faces not embedded", file=sys.stderr)
+    # Fig. 4 runs one MARS tool for its example, which writes an artifact;
+    # keep it out of the tree.
+    with tempfile.TemporaryDirectory() as artifacts:
+        os.environ["MARS_ARTIFACT_DIR"] = artifacts
+        m = measure()
     failed = False
     for name, draw, print_palette in FIGURES:
         canvas, title, alt = draw(m)

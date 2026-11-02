@@ -22,17 +22,6 @@
   .hdA { fill: #0C6B78; }
   .halo { paint-order: stroke; stroke: #FFFFFF; stroke-width: 5; stroke-linejoin: round; }
   .haloL { paint-order: stroke; stroke: #F1F5F4; stroke-width: 5; stroke-linejoin: round; }
-  .axis { fill: none; stroke: #46565D; stroke-width: 1; }
-  .pData { fill: none; stroke: #0C6B78; stroke-width: 2; stroke-linejoin: round; }
-  .pData2 { fill: none; stroke: #D9730D; stroke-width: 2.4; stroke-linejoin: round; }
-  .pDot { fill: #5F7480; fill-opacity: .75; }
-  .pMark { fill: none; stroke: #F5A623; stroke-width: 1.6; }
-  .boxS { fill: #E6ECF4; stroke: #3D5A80; stroke-width: 1.4; }
-  .pill { fill: #FFFFFF; stroke: #0C6B78; stroke-width: 1.4; }
-  .none { fill: none; stroke: none; }
-  .ring { fill: #E1F0F1; stroke: none; }
-  .icon { fill: #D9730D; }
-  .iconL { fill: none; stroke: #3D5A80; stroke-width: 2.4; stroke-linecap: round; }
   .lnR { fill: none; stroke: #56656B; stroke-width: 1.2; stroke-dasharray: 5 3; }
   .act { fill: #E1F0F1; stroke: #0C6B78; stroke-width: 1; }
   .frag { fill: none; stroke: #56656B; stroke-width: 1; }
@@ -44,11 +33,7 @@
   .ts { font-size: 16px;  fill: #46565D; }
   .ti { font-size: 16px; font-style: italic; fill: #46565D; }
   .tl { font-size: 17px; font-style: italic; fill: #46565D; }
-  .tw { font-size: 16px; font-style: italic; fill: #A8500C; }
-  .tq { font-size: 18px; font-style: italic; fill: #0F1619; }
-  .tH { font-size: 40px; font-weight: bold; fill: #0C6B78; }
-  .tm { font-size: 15px; font-family: "MARS Figure Mono", "CMU Typewriter Text", ui-monospace, Menlo, Consolas, monospace; fill: #0F1619; }
-  .tmA { font-size: 15px; font-family: "MARS Figure Mono", "CMU Typewriter Text", ui-monospace, Menlo, Consolas, monospace; fill: #0C6B78; }</style>
+  .tw { font-size: 16px; font-style: italic; fill: #A8500C; }</style>
 <defs>
   <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,1 L10,5 L0,9 z"/></marker>
   <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hdA" d="M0,1 L10,5 L0,9 z"/></marker>
