@@ -626,9 +626,12 @@ async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
         assert result["status"] == "ok", result
         assert result["preview"][0]["child"] == pid
         if os.name == "nt":
-            # Check the retained helper handle immediately: no reused PID and
-            # no extra grace period can disguise an incomplete job cleanup.
-            assert kernel.WaitForSingleObject(handle, 0) == 0
+            # Check the retained helper handle, not a PID, so no reused PID can
+            # disguise an incomplete job cleanup. The job reports no live
+            # process before run_call returns; under Windows on ARM's x64
+            # emulation the handle can signal a moment later. The helper sleeps
+            # for 60 s, so it cannot exit on its own within this bound.
+            assert kernel.WaitForSingleObject(handle, 2000) == 0
         else:
             with anyio.fail_after(5):
                 while _running(pid):
