@@ -103,6 +103,8 @@ WCS_REGEX = re.compile(
     r'(LATPOLE[A-Z]?)|'
     r'(RADESYS[A-Z]?)|'
     r'(C[PQ]DIS[1-9]\d?[A-Z]?)|'
+    r'(AXISCORR)|'
+    r'(D2IM(DIS)?[12])|'
     r'(D[PQ][1-9]\d?[A-Z]?)|'
     r'(C[PQ]ERR[1-9]\d?[A-Z]?)|'
     r'(DVERR[1-9]\d?[A-Z]?)|'
@@ -116,7 +118,8 @@ WCS_REGEX = re.compile(
     r'$'
 )
 
-_OBS_TIME_KEYS = ("DATE-OBS", "MJD-OBS", "DATEREF", "MJDREFI", "MJDREFF")
+_TIME_REFERENCE_KEYS = ("DATEREF", "MJDREF", "MJDREFI", "MJDREFF")
+_OBS_TIME_KEYS = ("DATE-OBS", "MJD-OBS", *_TIME_REFERENCE_KEYS)
 
 
 #: The pointing sources ``solve_wcs`` reads a hint from, for its messages.
@@ -296,18 +299,28 @@ def _accept_solution(
 # Header write-back
 # ---------------------------------------------------------------------------
 
-def _write_wcs_to_header(header: fits.Header, wcs_obj: WCS, *, solution=None) -> None:
+def _write_wcs_to_header(
+    header: fits.Header, wcs_obj: WCS, *, solution=None,
+    history: str = "WCS calibration applied",
+) -> None:
     """Remove stale WCS keywords and write accepted solution into header in-place.
 
-    Preserves observation-time keywords across the rewrite.
+    Preserves source observation times, including the original time-origin
+    representation, rather than mixing it with serialized candidate defaults.
+    Serialize first so a serialization failure leaves the header unchanged.
     """
+    replacement = wcs_obj.to_header(relax=True)
     obs_time = {k: (header[k], header.comments[k]) for k in _OBS_TIME_KEYS if k in header}
+    if any(key in obs_time for key in _TIME_REFERENCE_KEYS):
+        for key in _TIME_REFERENCE_KEYS:
+            if key in replacement:
+                del replacement[key]
 
     for key in list(header.keys()):
         if WCS_REGEX.match(key):
             del header[key]
 
-    hist = "WCS calibration applied"
+    hist = history
     if solution is not None:
         parts = []
         for attr, label in [("index_name", "index"), ("n_field", "n_field"), ("n_match", "n_match")]:
@@ -318,12 +331,10 @@ def _write_wcs_to_header(header: fits.Header, wcs_obj: WCS, *, solution=None) ->
             hist += ": " + ", ".join(parts)
     header.add_history(hist)
 
-    header.update(wcs_obj.to_header(relax=True))
+    header.update(replacement)
 
     for k, (v, comment) in obs_time.items():
-        header[k] = v
-        if comment:
-            header.comments[k] = comment
+        header[k] = (v, comment)
 
 
 # ---------------------------------------------------------------------------
@@ -572,8 +583,11 @@ def solve_wcs(
     if wcs_settings.max_sources is not None and wcs_settings.max_sources < 1:
         raise ValueError('wcs_settings.max_sources', 'Maximum number of sources must be positive', 422)
 
-    extraction_settings = extraction_settings or SourceExtractionSettings()
-    extraction_settings.discard_saturated = 0
+    # Astrometry includes saturated stars locally; callers may reuse their
+    # original settings later for saturation-rejecting photometry.
+    extraction_settings = (extraction_settings or SourceExtractionSettings()).model_copy(
+        update={"discard_saturated": 0},
+    )
 
     image = np.asarray(data, dtype=np.float32)
     width = int(header.get("NAXIS1", image.shape[1]))

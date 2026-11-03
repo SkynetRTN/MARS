@@ -3,12 +3,12 @@
 Investigated 2026-11-02 against `a4d429a` on `feature/m5-geometry`, after the
 first two M5 squares and their review fixes. The [master plan](../working/master-continuation-plan.md#m5-resolve-the-specific-older-reports-that-remain-unverified)
 defines the questions; the [investigation plan](../superpowers/plans/2026-11-02-m5-repeated-calls-fits-writes.md)
-records the probes. **No production behavior changes in this investigation.**
-Passing characterization tests below deliberately preserve observed defects;
-they are not acceptance tests for repairs. The M5 square remains open pending
-fixes or an explicit disposition of its remaining contracts.
+records the probes. The original investigation changed no production behavior.
+Its six confirmed findings now have fixes and converted correctness regressions;
+see [the correction record](#corrections-2026-11-03). The historical findings and
+their original validation remain below as evidence of the pre-fix behavior.
 
-## Findings and reachability
+## Findings and reachability at the investigation baseline
 
 | Finding | Current evidence | Reachability and priority |
 |---|---|---|
@@ -180,3 +180,82 @@ on Python 3.13.15. The four additional skips are the opt-in native parity cases,
 which passed separately as recorded above. Source, tests and guidance stayed
 unchanged throughout the full run outside the socket-restricted sandbox.
 Compilation, generated-copy consistency and whitespace checks pass.
+
+## Corrections (2026-11-03)
+
+The authorized remediation fixes all six confirmed findings on the existing
+feature branch. The [fix plan](../superpowers/plans/2026-11-03-m5-reuse-fits-fixes.md)
+tracks their tests and verification. The relevant bug-pinning expectations
+are now independent correctness checks; the original reproduction values above
+remain historical rather than required output.
+
+1. **WCS-28:** `solve_wcs` copies extraction settings before overriding
+   saturation rejection for its own measurement. The native no-backend miss
+   still includes both stars, while the caller and its later extraction retain
+   their one-star rejection behavior. An extraction exception also preserves
+   the caller's settings.
+2. **M5-REUSE-01:** aperture photometry copies its input table and retains
+   original/computed isophotal weights in a separate `iso_flux` column before
+   either fixed or automatic measurement can replace `flux`. Adaptive reuse of
+   either raw inputs or returned tables now repeats the original aperture and
+   flux, including fixed→adaptive changes and read-only inputs. An independent
+   planted-impulse control keeps radius 6 even when both measured aperture flux
+   and SEP `cflux` would choose radius 4. `cflux` is not substituted for missing
+   isophotal provenance. First-call values of all 45 pre-existing output fields
+   remain bit-exact against `472424e` in fixed circle/ellipse, shared/individual
+   adaptive, and optimized `k=0` native controls. Legacy measured tables without
+   `iso_flux` cannot recover already overwritten weights; retain the raw
+   extraction table or re-extract rather than inferring that missing history.
+3. **M5-REUSE-02:** the current kernel's aperture bits replace prior aperture
+   bits, preserving extraction and unknown bits. Nonpositive flags are combined
+   before dtype conversion. Signed/unsigned 8-, 16- and 64-bit controls cover
+   failed→valid measurements, current masks, high unknown bits and unchanged
+   caller arrays. An intermediate signed-int8 casting failure received its own
+   failing regression before correction. Public model/schema conversion still
+   produces the same valid detections.
+4. **M5-WRITE-01:** both writers use the shared header rewrite, which removes
+   modern D2IM references and legacy `AXISCORR` activation. Full-HDU reopens
+   now agree with the clean accepted WCS across repeated writes, while primary
+   pixels and unreferenced lookup payloads remain intact. Review found that the
+   initial modern-only cleanup missed `AXISCORR`: four new native cases exposed
+   roughly 3-arcsec errors across both writers and axes before correction. The
+   reviewer independently rechecked all four at zero offset. The independent
+   (+1,+2)-pixel/2-arcsec control's previous 4.472-arcsec offset is also now zero.
+5. **M5-WRITE-02:** both writers preserve source `DATE-OBS`/`MJD-OBS` and the
+   original single/split MJDREF or DATEREF form and comments. Candidate
+   time-origin forms are suppressed when a source origin exists, so default
+   zero or conflicting split values cannot override or mix with it. Reopened
+   effective origins match `[61041, .75]`, not merely the card strings.
+   Serialization happens before in-memory header mutation; the file writer
+   retains its staging, version, fsync and atomic replacement guards. Injected
+   serialization failure preserves both the header and original file.
+6. **WCS-26:** the xylist writer applies the cap whether or not flux is supplied,
+   selecting rows before copying output vectors. Missing flux preserves input
+   order; finite flux preserves brightest-first selection. Empty/short arrays,
+   unlimited settings, actual written rows and native parity controls cover the
+   changed branch. No brightness is fabricated.
+
+The latent explicit-parity contract, injected nonfinite-flux behavior and
+ancillary epoch/SIP metadata gaps keep their documented scope. Automatic parity
+and the maintained wrapper's independent cap were already correct. No new
+solver preferences or historical fixture changes are introduced.
+
+Red evidence: settings/cap controls initially had four failures; the converted
+reuse group had 21 failures, plus three signed-int8 failures during dtype review;
+the converted FITS group had 17 failures and its later legacy group four.
+All have passed after their respective corrections. Independent code review
+has no outstanding actionable findings after the legacy recheck; additional
+gain-change, endian, read-only-result and signed/unsigned probes passed.
+Final combined verification is recorded below.
+
+Final validation: **860 related tests pass, eight skip**, with 68 existing
+fixture FITS warnings (16.33 seconds). The separate native-enabled solver group
+passes **56 tests**, with two expected synthetic NAXIS warnings (3.37 seconds).
+The three repaired investigation suites now contain **123 offline cases and
+four opt-in native cases**, including 44 added cases beyond the investigation.
+The final locked offline suite passed **4,664 tests, 94 skips, 214 FITS
+normalization warnings**, no failures, in 422.62 seconds on Python 3.13.15.
+Source, tests and guidance stayed unchanged throughout that unrestricted run.
+Compilation, generated guidance consistency and whitespace checks pass.
+The repeated-call/FITS-write square is complete on `feature/m5-geometry`;
+the next M5 squares remain separate.

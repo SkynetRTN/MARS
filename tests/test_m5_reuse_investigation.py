@@ -1,7 +1,6 @@
-"""M5 input-reuse characterization at a4d429a; wrong results are explicit.
+"""Native correctness regressions for M5 input and measurement-table reuse.
 
-The defect probes pin observed stateful behavior, not acceptance criteria for
-a future repair. Controls use fresh inputs and actual SEP/Numba measurements.
+Controls use fresh inputs and actual SEP/Numba measurements.
 """
 import copy
 
@@ -30,7 +29,7 @@ def _saturated_field():
     return image
 
 
-def test_wcs28_failed_solve_mutates_shared_saturation_settings(tmp_path):
+def test_wcs28_saturation_override_is_local_to_failed_solve(tmp_path):
     image = _saturated_field()
     header = fits.Header({"EXPTIME": 1})
     before_header = header.copy()
@@ -48,46 +47,87 @@ def test_wcs28_failed_solve_mutates_shared_saturation_settings(tmp_path):
     assert result.wcs is None
     assert result.metadata.n_field == 2
     assert header == before_header  # A miss itself does not rewrite the header.
-    # Known wrong: astrometry's local saturation override escapes to the caller.
-    assert settings.discard_saturated == 0
+    # Including saturated stars for this solve must not affect later extraction.
+    assert settings.model_dump() == original.model_dump()
     assert original.discard_saturated == 1
     after, _, _ = run_source_extraction(image, header, settings)
     control, _, _ = run_source_extraction(image, header, original)
     assert np.count_nonzero(image >= 8000) == 13
-    assert len(after) == 2
-    # With discard disabled the wrapper no longer builds a saturation mask,
-    # so the newly admitted saturated source also reports zero sat_pixels.
-    assert [s.sat_pixels for s in after] == [0, 0]
+    assert len(after) == 1 and after[0].sat_pixels == 0
     assert len(control) == 1 and control[0].sat_pixels == 0
 
 
-@pytest.mark.parametrize("first_failure", ["nonpositive", "empty_annulus"])
-def test_reusing_measurement_table_keeps_failure_flags_after_valid_measurement(first_failure):
+def test_wcs28_extraction_failure_preserves_caller_settings(monkeypatch, tmp_path):
+    def fail(*args, **kwargs):
+        raise RuntimeError("extraction failed")
+
+    monkeypatch.setattr("algorithms.wcs.wcs.run_source_extraction", fail)
+    settings = SourceExtractionSettings(discard_saturated=1)
+    original = settings.model_dump()
+    with pytest.raises(RuntimeError, match="extraction failed"):
+        solve_wcs(fits.Header(), np.zeros((8, 8)), tmp_path,
+                  extraction_settings=settings, solver_settings=SolverSettings())
+    assert settings.model_dump() == original
+
+
+@pytest.mark.parametrize("flag_dtype", [np.int8, np.uint8, np.int16, np.uint16, np.int64, np.uint64])
+@pytest.mark.parametrize("first_failure", ["nonpositive", "empty_annulus", "masked"])
+def test_valid_remeasurement_clears_aperture_flags_and_keeps_other_flags(first_failure, flag_dtype):
     image = np.zeros((41, 41))
     image[20, 20] = 300
-    source = np.array([(21., 21.)], dtype=[("x", float), ("y", float)])
+    flag_info = np.iinfo(flag_dtype)
+    high_bit = 1 << (flag_info.bits - (2 if flag_info.min < 0 else 1))
+    retained_flags = int(sep.OBJ_MERGED) | int(sep.OBJ_TRUNC)
+    if flag_info.bits > 8:
+        retained_flags |= 0x100 | high_bit
+    source = np.array([(21., 21., retained_flags)],
+                      dtype=[("x", float), ("y", float), ("flag", flag_dtype)])
     if first_failure == "nonpositive":
         failed = aperture_photometry(
             np.zeros_like(image), source, background=np.zeros_like(image),
             background_rms=np.ones_like(image), a=2, apcorr_tol=0,
         )
         expected_failure = sep.APER_NONPOSITIVE
-    else:
+    elif first_failure == "empty_annulus":
         failed = aperture_photometry(
             image, source, a=2, a_in=30, a_out=35, apcorr_tol=0,
         )
         expected_failure = sep.APER_ALLMASKED | sep.APER_TRUNC
-    assert failed["flag"][0] & expected_failure == expected_failure
+    else:
+        failed = aperture_photometry(
+            np.ma.array(image, mask=np.ones_like(image, dtype=bool)), source,
+            background=np.zeros_like(image), background_rms=np.ones_like(image),
+            a=2, apcorr_tol=0,
+        )
+        expected_failure = sep.APER_ALLMASKED | sep.APER_HASMASKED
+    assert int(failed["flag"][0]) & int(expected_failure) == expected_failure
     assert not np.isfinite(failed["mag"][0])
+    before_failed = failed.tobytes()
     kwargs = dict(background=np.zeros_like(image), background_rms=np.ones_like(image), a=2, apcorr_tol=0)
     recovered = aperture_photometry(image, failed, **kwargs)
     fresh = aperture_photometry(image, source.copy(), **kwargs)
-    # Independent planted impulse: current counts/magnitudes are valid, while
-    # the reused table alone still carries a rejecting flag from the old call.
+    # The independent planted impulse has a valid current measurement.
     assert recovered["flux"][0] == fresh["flux"][0] == pytest.approx(300.)
     assert recovered["mag"][0] == fresh["mag"][0] == pytest.approx(-2.5*np.log10(300))
-    assert fresh["flag"][0] == 0
-    assert recovered["flag"][0] & expected_failure == expected_failure
+    assert recovered["flag"][0] == fresh["flag"][0] == retained_flags
+    assert recovered["flag"].dtype == np.dtype(flag_dtype)
+    assert failed.tobytes() == before_failed
+
+
+def test_remeasurement_recomputes_current_mask_flags():
+    image = np.zeros((41, 41))
+    image[20, 20] = 300
+    source = np.array([(21., 21., sep.OBJ_MERGED | 0x100 | 0xF0)],
+                      dtype=[("x", float), ("y", float), ("flag", np.uint16)])
+    mask = np.zeros_like(image, dtype=bool)
+    mask[20, 21] = True
+    result = aperture_photometry(
+        np.ma.array(image, mask=mask), source,
+        background=np.zeros_like(image), background_rms=np.ones_like(image),
+        a=2, apcorr_tol=0,
+    )
+    assert np.isfinite(result["mag"][0])
+    assert result["flag"][0] == sep.OBJ_MERGED | 0x100 | sep.APER_HASMASKED
 
 
 def _adaptive_field():
@@ -104,7 +144,7 @@ def _adaptive_field():
 
 
 @pytest.mark.parametrize("reuse", ["input", "output"])
-def test_adaptive_weight_feedback_changes_apertures_when_table_is_reused(reuse):
+def test_adaptive_table_reuse_retains_original_isophotal_weights(reuse):
     image, sources, background, rms = _adaptive_field()
     original = sources.copy()
     kwargs = dict(background=background, background_rms=rms, k=2,
@@ -114,13 +154,74 @@ def test_adaptive_weight_feedback_changes_apertures_when_table_is_reused(reuse):
     second = aperture_photometry(image, sources if reuse == "input" else first, **kwargs)
     control = aperture_photometry(image, original.copy(), **kwargs)
     np.testing.assert_array_equal(control, snapshot)
-    # Isophotal weights favored the wider star. The first measurement replaces
-    # them with aperture flux, which now favors the narrower star on reuse.
+    # Isophotal weights favor the wider star, but measured aperture flux favors
+    # the narrower star. Reusing a measured table must retain the former.
     assert original["flux"][1] > original["flux"][0]
     assert snapshot["flux"][0] > snapshot["flux"][1]
     np.testing.assert_allclose(snapshot["aper_a"], 5.87879944, atol=1e-7)
-    np.testing.assert_allclose(second["aper_a"], 3.94784188, atol=1e-7)
-    np.testing.assert_allclose(second["mag"]-snapshot["mag"], [.13690663, .28314708], atol=1e-7)
+    np.testing.assert_array_equal(second, snapshot)
+    np.testing.assert_array_equal(first, snapshot)
+    np.testing.assert_array_equal(sources, original)
+    np.testing.assert_array_equal(first["iso_flux"], original["flux"])
+
+
+def test_raw_isophotal_weights_are_preserved_instead_of_sep_cflux():
+    image = np.zeros((65, 65))
+    image[20, 20], image[44, 44] = 300, 200
+    sources = np.array([
+        (21., 21., 2., 2., 0., 100., 1e5),
+        (45., 45., 3., 3., 0., 200., 1.),
+    ], dtype=[(name, float) for name in ("x", "y", "a", "b", "theta", "flux", "cflux")])
+    kwargs = dict(background=np.zeros_like(image), background_rms=np.ones_like(image),
+                  k=2, fix_aper=True, apcorr_tol=0)
+    first = aperture_photometry(image, sources, **kwargs)
+    # Input isophotal weights favor radius 6; cflux and aperture flux both favor
+    # radius 4, so either mistaken substitution breaks this independent oracle.
+    np.testing.assert_array_equal(first["aper_a"], [6., 6.])
+    second = aperture_photometry(image, first, **kwargs)
+    np.testing.assert_array_equal(second["aper_a"], [6., 6.])
+    np.testing.assert_array_equal(first["flux"], [300., 200.])
+    np.testing.assert_array_equal(first["iso_flux"], [100., 200.])
+    np.testing.assert_array_equal(second, first)
+
+
+@pytest.mark.parametrize("have_isophotal_data", [False, True])
+def test_fixed_to_adaptive_reuse_matches_a_fresh_input(have_isophotal_data):
+    image, sources, background, rms = _adaptive_field()
+    if not have_isophotal_data:
+        sources = sources[["x", "y"]].copy()
+    original = sources.copy()
+    fixed = aperture_photometry(
+        image, sources, background=background, background_rms=rms,
+        a=3, apcorr_tol=0,
+    )
+    before_fixed = fixed.tobytes()
+    kwargs = dict(background=background, background_rms=rms, k=2,
+                  fix_aper=True, fix_ell=True, fix_rot=True, apcorr_tol=0)
+    reused = aperture_photometry(image, fixed, **kwargs)
+    fresh = aperture_photometry(image, original, **kwargs)
+    np.testing.assert_array_equal(reused["aper_a"], fresh["aper_a"])
+    np.testing.assert_array_equal(reused["flux"], fresh["flux"])
+    np.testing.assert_array_equal(reused["mag"], fresh["mag"])
+    np.testing.assert_array_equal(reused["iso_flux"], fresh["iso_flux"])
+    assert fixed.tobytes() == before_fixed
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+@pytest.mark.parametrize("mode", ["fixed", "adaptive"])
+def test_low_level_measurement_does_not_mutate_input_table(mode, readonly):
+    image, sources, background, rms = _adaptive_field()
+    original = sources.copy()
+    sources.flags.writeable = not readonly
+    kwargs = dict(background=background, background_rms=rms, apcorr_tol=0)
+    if mode == "fixed":
+        kwargs["a"] = 3
+    else:
+        kwargs.update(k=2, fix_aper=True)
+    result = aperture_photometry(image, sources, **kwargs)
+    np.testing.assert_array_equal(sources, original)
+    assert not np.shares_memory(result, sources)
+    assert sources.flags.writeable is not readonly
 
 
 def test_public_photometry_rebuilds_tables_and_is_repeatable_without_input_mutation():
@@ -137,6 +238,7 @@ def test_public_photometry_rebuilds_tables_and_is_repeatable_without_input_mutat
     before_header = header.copy()
     first = run_photometry(image, header, sources, settings, background=background, background_rms=rms)
     second = run_photometry(image, header, sources, settings, background=background, background_rms=rms)
+    assert len(first) == len(second) == 2
     assert [s.model_dump() for s in first] == [s.model_dump() for s in second]
     assert [s.model_dump() for s in sources] == before_sources
     assert settings.model_dump() == before_settings and header == before_header

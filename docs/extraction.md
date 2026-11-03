@@ -610,6 +610,27 @@ motion and unknown brightness at a cap produce registered public warnings.
 These corrections do not certify completeness or band-independent source
 detectability, and do not validate the disputed UCAC4 native record layout.
 
+#### 11. M5 repeated calls and FITS writes (2026-11-03)
+
+WCS-28, WCS-26 and M5-WRITE-01/02 intentionally depart from the copied
+behavior. `solve_wcs` copies source-extraction settings before disabling
+saturation rejection locally, so a later caller keeps its original policy.
+The astrometry.net xylist writer caps coordinates independently of optional
+brightness, retaining input order without flux and brightest-first order
+with it; no brightness values are synthesized.
+
+Both algorithm and staged tool writers now share WCS replacement policy.
+Modern D2IM records and legacy `AXISCORR` references are cleared, preventing
+retained lookup HDUs from being reapplied to the accepted new geometry.
+Their unreferenced data payloads remain. Source observation dates and original
+single/split MJDREF or DATEREF values/comments are preserved without mixing
+in candidate time-origin defaults. Serialization precedes in-memory mutation;
+the tool's existing file version and atomic replacement guards remain.
+Native full-HDU round trips, effective time origins, failure paths and bounded
+parity controls are recorded in the
+[investigation and corrections](analysis/m5-repeated-calls-fits-writes.md).
+The documented latent explicit-parity contract is not exposed by new settings.
+
 ## Photometry
 
 _Former source: `algorithms/photometry/EXTRACTION.md`._
@@ -1073,6 +1094,26 @@ six uncertainty-free rows in the recorded NGC 5128 replay (35 to 29).
 Propagated annulus truncation excludes edge measurements (35 to 34 in its
 selected-row pixel measurement; 35 to 33 in the NGC 3628 default-annulus test).
 These are deliberate validity changes, not widened parity tolerances.
+
+#### 12. M5 source-table reuse (2026-11-03)
+
+M5-REUSE-01/02 intentionally change low-level table ownership and measurement
+status. `aperture_photometry` returns an independent table and leaves the
+caller's array unchanged, including read-only inputs. The additive `iso_flux`
+column retains original/computed isophotal weights in input-count units while
+`flux` continues to hold current measured aperture electrons. Adaptive reuse
+and fixed-to-adaptive changes use those isophotal weights rather than feeding
+the previous aperture flux back into aperture selection. SEP `cflux` is a
+different quantity. Old measured tables without retained isophotal data cannot
+recover vanished weights; keep raw extraction inputs or re-extract.
+
+Only prior aperture flag bits are replaced by the current measurement;
+extraction and unknown bits survive. Signed/unsigned 8-, 16- and 64-bit native
+tests cover invalid-to-valid calls, masks and high bits. Public photometry still
+builds its own tables and schema results. First-call values of all pre-existing
+fields remain bit-exact in five tested native aperture modes; repeated results
+now agree with fresh inputs. See the same correction record above for scope,
+independent controls and validation.
 
 ## Field Calibration
 

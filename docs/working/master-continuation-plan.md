@@ -512,7 +512,7 @@ reachable now, what it does, and whether the release needs a change or caveat.
   **4,541 passed, 90 skipped, 214 FITS notices**, no failures (409.33 seconds).
   The report preserves the failing probes and six stale HR warning expectations
   replaced with clean-frame and deterministic actual-noise notice checks.
-- [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
+- [x] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
   image parity differently; or omitting flux bypasses the source-count limit.
@@ -533,6 +533,21 @@ reachable now, what it does, and whether the release needs a change or caveat.
   related passes and 51 native-enabled control passes. Independent review has
   no actionable findings in the investigation. Final locked offline suite:
   **4,620 passed, 94 skipped, 214 FITS notices**, no failures (425.22 seconds).
+  *Corrected and validated 2026-11-03.* All six confirmed findings now have
+  correctness regressions. Saturation settings are copied; source tables retain
+  isophotal weights and caller ownership; current aperture flags replace old
+  measurement bits while retaining extraction/unknown flags. Both writers clear
+  modern and legacy detector-map references and preserve effective source time
+  origins/comments. The direct xylist cap applies independently of flux. Review
+  caught a legacy `AXISCORR` path; four native regressions failed before its
+  correction and the reviewer independently rechecked zero offsets. No
+  actionable review findings remain. Related checks: 860 passed, eight skipped;
+  native-enabled controls: 56 passed. Final locked suite: **4,664 passed,
+  94 skipped, 214 FITS notices**, no failures (422.62 seconds). Compilation,
+  guidance consistency and whitespace checks pass. Legacy measured tables
+  lacking original isophotal weights require raw extraction data or re-extraction
+  for adaptive reuse. Latent explicit parity and inert ancillary metadata keep
+  their documented dispositions; no new solver preferences are exposed.
 - [ ] **Light-curve and HR boundaries.** Check period steps rounded to zero,
   maximum-time samples lost in binning, exact multiples assigned phase one,
   channels paired by index rather than phase and prefolded-file axes. Legacy

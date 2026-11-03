@@ -17,6 +17,8 @@ from .aperture_numba import (
     _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX,
     _sum_circle,
     _sum_ellipse,
+    SEP_APER_TRUNC,
+    SEP_APER_HASMASKED,
     SEP_APER_NONPOSITIVE,
     SEP_APER_ALLMASKED,
     sum_circle,
@@ -183,7 +185,9 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
 
     :param img: input 2D image array
     :param sources: record array of sources extracted with :func:`skylib.extraction.extract_sources`; should contain
-        at least "x" and "y" columns
+        at least "x" and "y" columns; the caller's array is never modified. On first use, "flux" supplies the
+        isophotal weights, retained as "iso_flux" in the result. Reused results use "iso_flux" rather than the
+        measured aperture "flux"; missing isophotal data are calculated from the image during automatic photometry.
     :param background: optional sky background map; if omitted, extract background from the annulus around the aperture,
         see `a_in` below
     :param background_rms: optional sky background RMS map; if omitted, calculate RMS over the annulus around
@@ -221,14 +225,17 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     :param reject_outliers: if using annulus for background estimation, reject outlying pixels in the annulus; jgnored
         if `background` is supplied
 
-    :return: record array containing the input sources, with the following fields added or updated: "flux", "flux_err",
+    :return: independent record array containing the input sources, with the following fields added or updated:
+        "iso_flux", "flux", "flux_err",
         "mag", "mag_err", "aper_a", "aper_b", "aper_theta", "aper_a_in", "aper_a_out", "aper_b_out", "aper_theta_out",
-        "aper_area", "background_area", "background", "background_rms", "phot_flag"
+        "aper_area", "background_area", "background", "background_rms", "flag". Aperture flag bits describe only
+        this measurement; extraction and unknown flag bits are preserved.
     """
     nsource = len(sources)
     if not nsource:
         return np.empty((0,), np.float64)
 
+    sources = sources.copy()
     img = sep_compatible(img)
 
     texp = float(texp)
@@ -298,6 +305,13 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     # Will need this to fill the newly added source table columns
     z = np.zeros(nsource, np.float64)
 
+    # Preserve the original isophotal weights before either aperture mode can
+    # replace flux with its current measurement. SEP cflux is a different
+    # quantity and cannot recover these weights from an older result table.
+    if 'iso_flux' not in sources.dtype.names:
+        iso_flux = sources['flux'] if 'flux' in sources.dtype.names else z
+        sources = append_fields(sources, 'iso_flux', iso_flux, usemask=False)
+
     fixed_aper = bool(a)
     if fixed_aper:
         # Use the same fixed aperture and annulus parameters for all sources
@@ -346,11 +360,11 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         else:
             tmp_back, tmp_rms = background, background_rms
         img_back = img - tmp_back
-        for name in ['a', 'b', 'theta', 'flux']:
+        for name in ['a', 'b', 'theta']:
             if name not in sources.dtype.names:
                 sources = append_fields(sources, name, z, usemask=False)
         a, b, theta = sources['a'], sources['b'], sources['theta']
-        flux = sources['flux']
+        flux = sources['iso_flux'].copy()
         bad = (a <= 0) | (b <= 0) | (flux <= 0)
         if bad.any():
             # Do isophotal analysis to compute ellipse parameters if missing
@@ -365,7 +379,7 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
         sources['a'] = a
         sources['b'] = b
         sources['theta'] = theta
-        sources['flux'] = flux
+        sources['iso_flux'] = flux
 
         # Obtain the optimal aperture radius from the brightest non-saturated source
         if not k:
@@ -630,8 +644,16 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
     else:
         sources = append_fields(sources, 'flux_err', flux_err, usemask=False)
 
+    nonpositive = flux <= 0
+    flags[nonpositive] |= SEP_APER_NONPOSITIVE
     if 'flag' in sources.dtype.names:
-        sources['flag'] |= flags
+        # Keep extraction and unrecognized bits, replacing only flags belonging
+        # to the previous aperture measurement. Cast the complement to the
+        # column's dtype so unsigned high bits and signed 8-bit flags work too.
+        flag_dtype = sources.dtype['flag']
+        aperture_flags = SEP_APER_TRUNC | SEP_APER_HASMASKED | SEP_APER_ALLMASKED | SEP_APER_NONPOSITIVE
+        sources['flag'] &= np.bitwise_not(np.array(aperture_flags)).astype(flag_dtype)
+        sources['flag'] |= flags.astype(flag_dtype, copy=False)
     else:
         sources = append_fields(sources, 'flag', flags, usemask=False)
 
@@ -642,8 +664,6 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
 
     sources['mag'] = np.nan
     sources['mag_err'] = np.nan
-    nonpositive = flux <= 0
-    sources['flag'][nonpositive] |= SEP_APER_NONPOSITIVE
     good = (np.isfinite(flux) & (flux > 0) & np.isfinite(flux_err)).nonzero()
     if np.any(flux <= 0):
         note_numerical_issue("nonpositive_aperture_flux",

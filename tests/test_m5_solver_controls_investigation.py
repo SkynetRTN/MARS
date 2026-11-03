@@ -1,4 +1,4 @@
-"""M5 solver-control evidence; characterization only, no production fixes.
+"""M5 solver-control evidence and corrected source-cap regressions.
 
 The default probes write/read actual xylist FITS tables and run real wrapper/
 backend control flow with deterministic solver seams. An explicitly enabled
@@ -283,13 +283,13 @@ def test_actual_oriented_cd_agrees_with_independent_sky_reflection(sign):
 @pytest.mark.parametrize(
     "flux,expected_x,expected_flux",
     [
-        (None, [1, 2, 3, 4], None),
+        (None, [1, 2], None),
         ([10, 40, 20, 30], [2, 4], [40, 30]),
         ([10, np.nan, np.inf, -np.inf], [2, 3], [np.nan, np.inf]),
     ],
-    ids=["missing-flux-ignores-cap", "finite-brightest-cap", "nonfinite-kept-first"],
+    ids=["missing-flux-keeps-order-with-cap", "finite-brightest-cap", "nonfinite-kept-first"],
 )
-def test_actual_xylist_source_cap_depends_on_flux(tmp_path, flux, expected_x, expected_flux):
+def test_actual_xylist_source_cap_orders_by_optional_flux(tmp_path, flux, expected_x, expected_flux):
     request = SolveRequest(xy=np.column_stack((np.arange(1, 5), np.ones(4))),
                            flux=flux, max_sources=2)
     table = Table.read(AstrometryNetBackend._write_xylist(request, tmp_path))
@@ -307,6 +307,18 @@ def test_actual_xylist_partial_flux_vector_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="flux must match xy length"):
         AstrometryNetBackend._write_xylist(request, tmp_path)
     assert not (tmp_path / "field.xyls").exists()
+
+
+@pytest.mark.parametrize("size,cap,expected_x", [
+    (0, 2, []), (2, 10, [1, 2]), (4, None, [1, 2, 3, 4]),
+    (4, 0, [1, 2, 3, 4]), (4, 1, [1]),
+])
+def test_xylist_without_flux_handles_short_empty_and_unlimited_inputs(tmp_path, size, cap, expected_x):
+    request = SolveRequest(xy=np.column_stack((np.arange(1, size+1), np.ones(size))),
+                           flux=None, max_sources=cap)
+    table = Table.read(AstrometryNetBackend._write_xylist(request, tmp_path))
+    assert list(table["X"]) == expected_x
+    assert table.colnames == ["X", "Y"]
 
 
 @pytest.mark.parametrize("kind", ["none", "partial", "finite", "nonfinite"])

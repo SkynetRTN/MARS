@@ -1,10 +1,10 @@
-"""M5 FITS write investigation at a4d429a: controls and bug characterizations.
+"""M5 FITS write regressions, independent controls and ancillary characterizations.
 
 These bounded, synthetic frames exercise real Astropy serialization and both
-maintained writers. Tests named ``characterization`` deliberately pin surviving
-cards or incorrect output; their passing is not evidence that those defects
-are fixed. The public-tool test replaces the solver seam only and provides no
-evidence of native solver success. TAN/SIP controls compute their own detector
+maintained writers. Tests named ``characterization`` deliberately pin ancillary
+cards outside the accepted repairs. The public-tool test replaces the solver
+seam only and provides no evidence of native solver success. TAN/SIP controls
+compute their own detector
 polynomial and inverse gnomonic projection, independently of WCSLIB.
 """
 
@@ -17,6 +17,7 @@ import pytest
 from astropy import units as u
 from astropy.coordinates import FK4, FK5, ICRS, SkyCoord
 from astropy.io import fits
+from astropy.utils.exceptions import AstropyDeprecationWarning
 from astropy.wcs import DistortionLookupTable, FITSFixedWarning, Sip, WCS
 
 from algorithms.wcs.header_utils import guess_icrs_radec_from_header
@@ -174,12 +175,12 @@ def _create_lookup_frame(path, kind):
 
 @pytest.mark.parametrize("writer", ["algorithm", "tool"])
 @pytest.mark.parametrize("kind", ["det2im", "cpdis"])
-def test_characterization_lookup_cards_can_reapply_old_detector_distortion(tmp_path, writer, kind):
-    """BUG for D2IM: a clean accepted WCS reopens with the previous lookup map.
+def test_lookup_references_are_replaced_without_changing_hdu_payloads(tmp_path, writer, kind):
+    """A clean accepted WCS must reopen without the previous detector map.
 
     The CPDIS case is the working cleanup control. Both use real lookup HDUs;
-    the manual TAN calculation independently measures the surviving D2IM map.
-    Header-only WCS construction hides the bug, as maintained tool readers do.
+    the manual TAN calculation independently checks the accepted coordinates.
+    Full-HDU construction catches distortion that header-only readers conceal.
     """
     path = tmp_path / f"{kind}.fits"
     _create_lookup_frame(path, kind)
@@ -205,14 +206,11 @@ def test_characterization_lookup_cards_can_reapply_old_detector_distortion(tmp_p
             reopened = WCS(hdul[0].header, hdul)
             header_only = build_wcs_from_header(hdul[0].header)
             _assert_control(header_only)
-            actual = reopened.pixel_to_world(PIXELS[:, 0], PIXELS[:, 1]).icrs
+            _assert_control(reopened)
             if kind == "det2im":
-                assert "D2IMDIS1" in hdul[0].header
-                assert reopened.det2im1 is not None
-                expected_old_map = _expected_icrs(detector_shift=(3., -4.))
-                assert np.max(actual.separation(expected_old_map).arcsec) < 2e-7
-                error = actual[-1].separation(_expected_icrs()[-1]).arcsec
-                assert error == pytest.approx(5., abs=2e-7)
+                assert not any(key.startswith("D2IM") for key in hdul[0].header)
+                assert reopened.det2im1 is None
+                assert reopened.det2im2 is None
             else:
                 assert "CPDIS1" not in hdul[0].header
                 assert not any(key.startswith("DP1") for key in hdul[0].header)
@@ -220,7 +218,46 @@ def test_characterization_lookup_cards_can_reapply_old_detector_distortion(tmp_p
                 _assert_control(reopened)
 
 
-def test_characterization_public_write_boundary_preserves_old_d2im(tmp_path, monkeypatch):
+@pytest.mark.parametrize("writer", ["algorithm", "tool"])
+@pytest.mark.parametrize("axis,shift", [(1, (3., 0.)), (2, (0., 3.))])
+def test_legacy_detector_lookup_is_replaced_without_changing_hdu_payloads(
+    tmp_path, writer, axis, shift,
+):
+    """AXISCORR independently activates the legacy one-dimensional D2IM table."""
+    accepted = _accepted_wcs()
+    header = accepted.to_header()
+    header["AXISCORR"] = axis
+    pixels = np.arange(SIDE**2, dtype=np.float32).reshape(SIDE, SIDE)
+    lookup = fits.ImageHDU(np.full(SIDE, 3., dtype=np.float32), name="D2IMARR")
+    lookup.header["EXTVER"] = 1
+    path = tmp_path / "legacy-d2im.fits"
+    fits.HDUList([fits.PrimaryHDU(pixels, header), lookup]).writeto(path)
+
+    with fits.open(path) as hdul:
+        lookup_header = hdul[1].header.copy()
+        lookup_data = hdul[1].data.copy()
+        with pytest.warns(AstropyDeprecationWarning, match="AXISCORR"):
+            old = WCS(hdul[0].header, hdul)
+        old_coordinates = old.pixel_to_world(PIXELS[:, 0], PIXELS[:, 1]).icrs
+        assert np.max(old_coordinates.separation(_expected_icrs(detector_shift=shift)).arcsec) < 2e-7
+
+    for _ in range(3):
+        _write_existing(path, accepted, writer)
+        with fits.open(path) as hdul:
+            assert len(hdul) == 2
+            np.testing.assert_array_equal(hdul[0].data, pixels)
+            np.testing.assert_array_equal(hdul[1].data, lookup_data)
+            assert hdul[1].header == lookup_header
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*AXISCORR.*", category=AstropyDeprecationWarning)
+                reopened = WCS(hdul[0].header, hdul)
+            _assert_control(reopened)
+            assert "AXISCORR" not in hdul[0].header
+            assert reopened.det2im1 is None
+            assert reopened.det2im2 is None
+
+
+def test_public_write_boundary_reopens_with_accepted_coordinates(tmp_path, monkeypatch):
     """Real staged public write/read with a mocked solver, not a solver success."""
     path = tmp_path / "public-d2im.fits"
     _create_lookup_frame(path, "det2im")
@@ -246,10 +283,9 @@ def test_characterization_public_write_boundary_preserves_old_d2im(tmp_path, mon
     assert summary.center_dec_deg == pytest.approx(20., abs=1e-10)
     with fits.open(path) as hdul:
         full = WCS(hdul[0].header, hdul)
-        error = full.pixel_to_world(31.5, 31.5).icrs.separation(_expected_icrs()[-1]).arcsec
-        assert error == pytest.approx(5., abs=2e-7)
+        _assert_control(full)
     assert not list(tmp_path.glob(".public-d2im.fits.*"))
-    # A later default call short-circuits using the header-only interpretation.
+    # A later default call reads the same accepted geometry from the header.
     later = public_wcs.solve_astrometry(path)
     assert calls == [True]
     assert later.center_ra_deg == pytest.approx(120., abs=1e-10)
@@ -278,12 +314,11 @@ def test_characterization_alternate_geometry_removed_but_ancillary_cards_survive
 
 
 @pytest.mark.parametrize("writer", ["algorithm", "tool"])
-def test_characterization_observation_time_preservation_differs_between_writers(tmp_path, writer):
+def test_source_observation_times_and_comments_survive_both_writers(tmp_path, writer):
     """Observation dates are independent metadata, not obsolete coordinate epochs.
 
-    The algorithm explicitly restores the source time cards. The staged writer
-    instead accepts conflicting time metadata carried by a supplied WCS. This
-    conditional probe does not establish that a native backend emits those times.
+    Conflicting candidate times exercise preservation directly; this does not
+    establish that a native backend emits those times.
     """
     accepted = _accepted_wcs()
     accepted.wcs.dateobs = "2020-01-02T03:04:05"
@@ -301,39 +336,68 @@ def test_characterization_observation_time_preservation_differs_between_writers(
     _create_frame(path, header)
     _write_existing(path, accepted, writer)
     reread = fits.getheader(path)
-    expected = source_times if writer == "algorithm" else dict(accepted.to_header())
     for key in source_times:
-        if isinstance(expected[key], str):
-            assert reread[key] == expected[key]
+        if isinstance(source_times[key], str):
+            assert reread[key] == source_times[key]
         else:
-            assert reread[key] == pytest.approx(expected[key], abs=1e-9)
-        if writer == "algorithm":
-            assert reread.comments[key] == "original observation"
-    _assert_control(WCS(reread))
+            assert reread[key] == pytest.approx(source_times[key], abs=1e-9)
+        assert reread.comments[key] == "original observation"
+    assert "MJDREF" not in reread
+    reopened = WCS(reread)
+    assert reopened.wcs.mjdref == pytest.approx([61041., .75], abs=1e-9)
+    _assert_control(reopened)
 
 
 @pytest.mark.parametrize("writer", ["algorithm", "tool"])
-def test_characterization_single_mjdref_is_overwritten_by_default_wcs(tmp_path, writer):
-    """Both writers omit the single-card MJDREF form from explicit preservation."""
+@pytest.mark.parametrize("source_origin", ["single", "split", "date"])
+@pytest.mark.parametrize("candidate_origin", ["default", "conflicting"])
+def test_source_time_origin_keeps_its_effective_value_and_card_form(
+    tmp_path, writer, source_origin, candidate_origin,
+):
+    """Candidate defaults/alternate forms must not override the source origin."""
     accepted = _accepted_wcs()
+    if candidate_origin == "conflicting":
+        accepted.wcs.dateref = "2020-01-01T06:00:00"
+        accepted.wcs.mjdref = [58849., .25]
+    source_cards = {
+        "single": [("MJDREF", 61041.75, "observation time origin")],
+        "split": [
+            ("MJDREFI", 61041., "integer observation time origin"),
+            ("MJDREFF", .75, ""),
+        ],
+        "date": [("DATEREF", "2026-01-01T18:00:00", "observation time origin")],
+    }[source_origin]
     path = tmp_path / "mjdref.fits"
-    _create_frame(path, fits.Header([("MJDREF", 61041.75, "observation time origin")]))
-    _write_existing(path, accepted, writer)
-    assert fits.getheader(path)["MJDREF"] == 0.
+    _create_frame(path, fits.Header(source_cards))
+    for _ in range(3):
+        _write_existing(path, accepted, writer)
+        with fits.open(path) as hdul:
+            reread = hdul[0].header
+            with warnings.catch_warnings():
+                # WCSLIB derives the equivalent missing date/numeric form.
+                warnings.filterwarnings("ignore", message=".*datfix.*", category=FITSFixedWarning)
+                reopened = WCS(reread, hdul)
+            assert reopened.wcs.mjdref == pytest.approx([61041., .75], abs=1e-9)
+            _assert_control(reopened)
+            for key, value, comment in source_cards:
+                assert reread[key] == value
+                assert reread.comments[key] == comment
+            assert set(reread) & {"MJDREF", "MJDREFI", "MJDREFF", "DATEREF"} == {
+                key for key, _, _ in source_cards
+            }
 
 
-def test_algorithm_serialization_failure_mutates_header_but_staged_tool_preserves_file(tmp_path):
-    """Failure-path characterization: only the file writer stages its rewrite."""
+def test_serialization_failure_preserves_header_and_staged_file(tmp_path):
+    """A failed serializer must leave both write boundaries unchanged."""
     class BrokenSerialization:
         def to_header(self, **kwargs):
             raise RuntimeError("characterization: cannot serialize solution")
 
     header = _accepted_wcs().to_header()
+    original_header = header.copy()
     with pytest.raises(RuntimeError, match="cannot serialize"):
         _write_wcs_to_header(header, BrokenSerialization())
-    assert "CRVAL1" not in header
-    assert "CTYPE1" not in header
-    assert "WCS calibration applied" in str(header["HISTORY"])
+    assert header == original_header
 
     path = tmp_path / "atomic.fits"
     _create_lookup_frame(path, "det2im")
