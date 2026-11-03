@@ -16,6 +16,7 @@ so the native chat endpoint fallback was not taken. See
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 from typing import Any, Sequence
 
@@ -25,7 +26,7 @@ from tools.llm.base import (
     OnText,
     OnThinking,
 )
-from tools.llm.openai_backend import OpenAIBackend, _CAPABILITIES
+from tools.llm.openai_backend import OpenAIBackend, _CAPABILITIES, _render_messages
 from tools.llm.types import Message, ModelResponse
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "OLLAMA_DEFAULT_TIMEOUT_S",
     "OLLAMA_PROBE_TIMEOUT_S",
     "OLLAMA_TIMEOUT_ENV",
+    "OLLAMA_CONTEXT_ENV",
 ]
 
 OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1"
@@ -62,6 +64,18 @@ OLLAMA_TIMEOUT_ENV = "OLLAMA_TIMEOUT_S"
 #: mean one Tab against a host that accepts connections and then says nothing
 #: freezes the interface for ten minutes.
 OLLAMA_PROBE_TIMEOUT_S = 5.0
+
+#: The daemon's own setting for its context window. The OpenAI-compatible
+#: endpoint has no way to ask for a size per request, and the daemon's default
+#: depends on the host's memory: 4,096 tokens on a small machine, against the
+#: ~16,000 that MARS's prompt and 55 tool schemas take. Over its window the
+#: daemon does not refuse: it keeps the *end* of the prompt and drops the
+#: rest, so the model answers without most of the system prompt or tools.
+OLLAMA_CONTEXT_ENV = "OLLAMA_CONTEXT_LENGTH"
+
+#: Characters per token for the size estimate below: JSON and English both
+#: run about 3-4, so 4 understates the tokens sent, never overstates them.
+_CHARS_PER_TOKEN = 4
 
 _OLLAMA_CAPABILITIES = dataclasses.replace(
     _CAPABILITIES, streaming=False, max_output_tokens=OLLAMA_MAX_OUTPUT_TOKENS
@@ -171,14 +185,15 @@ class OllamaBackend(OpenAIBackend):
         import httpx
 
         try:
-            return super().complete(
+            # No hooks yet: an answer from a truncated prompt must not reach
+            # the screen before it is refused. They are replayed below, in the
+            # order the parent would have called them.
+            response = super().complete(
                 messages=messages,
                 tools=tools,
                 system=system,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                on_text=on_text,
-                on_thinking=on_thinking,
             )
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise BackendUnavailableError(
@@ -197,6 +212,59 @@ class OllamaBackend(OpenAIBackend):
                 f"{self._timeout_s:g}s; a larger model or a slower host needs "
                 f"a higher {OLLAMA_TIMEOUT_ENV}",
             ) from exc
+        _refuse_a_truncated_prompt(response, messages, tools, system)
+        if on_thinking is not None:
+            for block in response.thinking:
+                if block.text:
+                    on_thinking(block.text)
+        if on_text is not None and response.text:
+            on_text(response.text)
+        return response
+
+
+class PromptTruncated(BackendUnavailableError):
+    """The daemon answered, but read only part of the prompt.
+
+    Still a :class:`BackendUnavailableError` naming ``OLLAMA_CONTEXT_LENGTH``,
+    so callers that act on the variable keep working; the message is its own,
+    since the daemon was reachable and the variable may be set, only too small.
+    """
+
+    def __init__(self, counted: int, estimate: int) -> None:
+        super().__init__(OLLAMA_CONTEXT_ENV)
+        self.counted = counted
+        self.estimate = estimate
+        self.args = (
+            f"Ollama read {counted} of about {estimate} prompt tokens and dropped "
+            "the rest: its context window is too small for MARS's instructions "
+            "and tools. Restart the daemon with a larger one, such as "
+            f"`{OLLAMA_CONTEXT_ENV}=32768 ollama serve`.",
+        )
+
+
+def _refuse_a_truncated_prompt(
+    response: ModelResponse, messages: Sequence[Message], tools: object, system: str
+) -> None:
+    """Raise when the daemon read far fewer tokens than it was sent.
+
+    The daemon truncates silently (see ``OLLAMA_CONTEXT_ENV``), and the answer
+    it returns reads like an ordinary one from a model that ignored its tools.
+    The usage it reports is the one sign: under half the estimated size means
+    most of the request was dropped.
+    """
+
+    counted = response.usage.input_tokens if response.usage else None
+    if not counted:
+        return
+    # ensure_ascii=False: an escaped "°" is six characters, one token.
+    sent = json.dumps(
+        {"messages": _render_messages(messages, system), "tools": list(tools or ())},
+        default=str,
+        ensure_ascii=False,
+    )
+    estimate = len(sent) // _CHARS_PER_TOKEN
+    if counted < estimate // 2:
+        raise PromptTruncated(counted, estimate)
 
 
 def _resolve_timeout(explicit: float | None) -> float:
