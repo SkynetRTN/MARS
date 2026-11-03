@@ -4,6 +4,9 @@
 
 <p align="center">
   <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://img.shields.io/github/check-runs/SkynetRTN/MARS/main?nameFilter=runtime%20containment%20%28windows-11-arm%29&label=Windows%20ARM64" alt="Windows ARM64"></a>
+  <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://img.shields.io/github/check-runs/SkynetRTN/MARS/main?nameFilter=runtime%20containment%20%28macos-latest%29&label=macOS" alt="macOS"></a>
+  <a href="https://github.com/SkynetRTN/MARS/actions/workflows/ci.yml"><img src="https://img.shields.io/github/check-runs/SkynetRTN/MARS/main?nameFilter=python%20tests%20%283.13%29&label=Linux" alt="Linux"></a>
   <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue" alt="Python 3.12 | 3.13">
 </p>
 

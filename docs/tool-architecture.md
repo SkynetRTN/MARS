@@ -298,6 +298,13 @@ class ToolResult(BaseModel):
 
 Important modeling rules:
 
+- Every result that can carry `errors` also carries `status`, because the
+  console and the MCP surface decide a failure from `status` alone. Models
+  without a `status` field derive it (`tools.models.StatusFromErrors`): no
+  errors is `ok`, only "found nothing" codes (`not_found`,
+  `target_not_found`) is `not_found`, anything else is `error`. A test
+  (`tests/test_result_status.py`) holds it for every registered tool's
+  result.
 - Coordinates serialize as decimal degrees plus frame.
 - Quantities serialize with value, unit, and uncertainty when known.
 - Times serialize as ISO strings plus scale where known.
@@ -454,14 +461,15 @@ different kind of claim from its answer — it may contradict the answer — and
 consumer that rendered them alike would let a discarded hypothesis read as a
 finding.
 
-Three optional callables let an interactive caller stay in a run, and the loop
-is unchanged without them:
+Four optional hooks let an interactive caller stay in a run, and the loop is
+unchanged without them:
 
 | Hook | When | What it does |
 | --- | --- | --- |
 | `on_delta` | Inside `complete()`, per chunk | Receives `TextDelta` and `ThinkingDelta` as they stream, **instead of** their being emitted afterwards. A generator cannot yield from a callback, so without it the engine buffers and emits on return. Either way a delta is delivered exactly once. |
 | `pending_input` | Top of every turn | Drained; what it returns is merged into the **trailing user message**, which is the one carrying the tool results. Two consecutive user messages are not a shape every provider accepts, and a note is an addition to what the user last said, not a turn of its own. `UserMessage` announces the turn it landed in. |
 | `should_stop` | Top of every turn, and before each tool call | Ends the session with outcome `interrupted`. A pending tool call takes the denial path with an `interrupted` result rather than being abandoned: every `tool_use` needs a `tool_result` or the conversation cannot be sent again. A hook that raises is read as "keep going". |
+| `interrupt` | While a model request is in flight | A `threading.Event`: set, it ends the session *now*, with outcome `interrupted`. The request runs on a daemon thread the loop stops waiting for (an HTTP call cannot be cancelled from another thread); a reply that arrives later is dropped, with any text it streams after the interrupt. The conversation then ends on the person's message, and the next question joins it. A tool call honours it only through the caller's `tool_functions`: the console's run in owned workers (`tools/tui/tool_calls.py`) that it kills. |
 
 `tools/llm/` is the provider-neutral **model port**. Two rules govern it:
 
@@ -616,16 +624,22 @@ uv run mars --max-turns 40         # with a higher ceiling than 20
  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎
  ▊  Ask MARS…                                                             ▎
  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎
-  2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
+  ctrl+q quit • F3 artifacts • F4 sessions • 2/20 turns • 1 artifact • halfblock graphics
 ```
 
-The header names the session's `provider/model`; the status bar counts turns
-against the ceiling, token usage once a turn reports it, the artifacts
-written, and the graphics tier detected for this terminal. It needs a backend
+The header names the session's `provider/model`. The status bar starts with
+the keys someone acts on, which a narrow terminal never cuts: `ctrl+q quit`,
+and while a turn runs `ctrl+c stop` and `esc stop after step` before it
+(`stopping` once a stop is under way). It then adds, in order and only as
+they fit: `F3 artifacts`, `F4 sessions`, turns against the ceiling, token
+usage once a turn reports it, the artifacts written, and the graphics tier
+detected for this terminal. It needs a backend
 before it will answer anything — a key for the provider it opens on, or a
-local Ollama daemon, which needs none — but if the default cannot be used the
-console still opens and says why, and `/backend` fixes it from inside the
-session (section 10 lists the environment).
+local Ollama daemon, which needs none. If the backend it starts on cannot be
+used, `mars` exits before the interface opens and names the next step: where
+to set the key (a checkout's `.env`, or the shell for an installed copy), or
+`mars --backend ollama/<model>` with the models the daemon holds. Inside the
+session, `/backend` switches (section 10 lists the environment).
 
 | Command | Aliases | Does |
 | --- | --- | --- |
@@ -634,24 +648,31 @@ session (section 10 lists the environment).
 | `/artifacts` | `/a` | Browse what this session wrote, with previews. |
 | `/sessions` | `/s` | Browse saved sessions and resume one. |
 | `/resume <id>` | `/r` | Resume a saved session by id. |
+| `/status` | | The backend, session directory, turns, artifacts, carried conversation and approvals. |
+| `/tools [name]` | `/t` | List the tools, marking those that ask first, or describe one and its parameters. |
+| `/approve [reset]` | | Explain which calls ask first and show what is always allowed; `reset` makes them ask again. |
+| `/prompt` | `/p` | Show the system prompt. |
+| `/new` | `/n` | Start a fresh conversation without restarting; saved sessions stay. |
 | `/quit` | `/q`, `/exit` | Exit. |
 
-`/status`, `/tools`, `/approve`, `/prompt` and `/new` are registered and
-offered by the menu, but not implemented yet: they answer with a notice
-rather than doing anything.
+A test asserts that every registered command has a handler.
 
 | Key | Does |
 | --- | --- |
 | `Tab` | Complete the slash command being typed. |
 | `F3` / `F4` | Artifact browser · session browser. |
 | `Esc` | Stop the running turn at its next safe point; close a browser. |
+| `Ctrl+C` | Stop the step in flight now, and the turn with it; the console stays open. A tool is killed in its worker, with anything it started; a model reply is abandoned. With nothing running, copy the selection. |
 | `o` | In the artifact browser, open the selected file in the desktop handler. |
-| `Ctrl+Q` | Quit. |
+| `Tab` / arrows, `Enter`, `n` | In an approval: move between Allow, Allow always and Deny, press the focused one; `n` or `Esc` denies. Deny has focus when it opens, no letter allows, and every key but `Esc` is held back for the first half second, so typing meant for the prompt cannot answer a call; a click acts at once. |
+| `Ctrl+Q` | Quit now. A running step is stopped as `Ctrl+C` stops it and a pending approval is denied; if anything in-process still holds on, `mars` ends the process after 5 s. |
 
 Everything a run writes is kept: tool artifacts land under
 `artifacts/sessions/<session_id>/`, `F3` browses them with image and waveform
 previews, and the session manifest beside them is what `/sessions` and
-`/resume` read back.
+`/resume` read back. A resumed session shows the conversation's words in
+order, each question or mid-run note (`›`) and the model's answers, but not
+its tool calls or artifacts.
 
 **Threading.** The engine is synchronous, so the console runs it in a Textual
 thread worker and posts each event to the UI thread as a message. Approval runs
@@ -660,7 +681,8 @@ on it, and the UI thread sets it when the modal is answered. Nothing about the
 engine knows a UI exists.
 
 **Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
-`ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
+`ALLOW_ALWAYS` — the last persisting for the current question only; each new
+question asks again), the per-tool risk tags,
 and `policy_approver`. A denied call never dispatches: it returns an error
 result to the model and the loop continues. The headless default denies risky
 calls; trusted callers such as the benchmark replay plane opt in explicitly
@@ -691,6 +713,13 @@ Two properties of the ask itself:
   on a decision cannot be cancelled — it waits on an event only the interface
   sets — and Python joins its executor threads at exit, so an unreleased
   modal turns a quit into a hung process rather than a closed one.
+
+**Failures.** A tool call is marked by its own result: ✓ only for `ok`, ✗
+with the first error's message for `error`, `!` for `partial`, `∅` for
+`not_found`; durations past a second read in seconds and minutes. A session
+the engine could not finish names its cause from the exception's type and
+HTTP status — never its text, which can quote a request back — and the next
+step (`tools/tui/backends.py`, `failure_message`).
 
 **Slash commands** (`tools/tui/commands.py`) are UI-level and never reach the
 model — a mistyped command would otherwise cost a turn and pollute the

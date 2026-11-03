@@ -44,23 +44,40 @@ with the build artifact, installed and self-tested.
    installs the wheel with `[mcp]` and runs
    `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
-3. **data** checks that the `data` release holds every archive
+3. **pack the extension** zips `installers/claude-desktop/` into
+   `mars.mcpb` with `.github/scripts/pack_extension.py`, standard library
+   only, honouring `.mcpbignore` as `mcpb pack` does. **validate the
+   extension manifest** runs `@anthropic-ai/mcpb` 2.1.2's `validate` in a
+   job of its own. npx resolves mcpb's dependency tree unlocked, so npm code
+   never produces the file users install and nothing that job writes reaches
+   another job.
+   **verify the extension** unpacks `mars.mcpb` on macOS (Apple Silicon) and
+   Windows on ARM, the platforms it supports, and runs the manifest's own command
+   with an empty uv cache and only uv-managed Pythons, as a first launch in
+   Claude Desktop would, through `mars-mcp self-test`. The extension installs
+   the newest release it can find; `UV_FIND_LINKS` offers it this build, and
+   on a tag the job fails unless the extension served this build's version. It
+   proves the launch, not the app: installing in Claude Desktop stays a manual
+   check (`installing/`; record in `archive/desktop-acceptance.md`).
+4. **data** checks that the `data` release holds every archive
    `bundles.json` pins, at the pinned size and SHA-256. It reads GitHub's own
    asset digest.
-4. **verify-data** installs the wheel without a checkout, fetches both
+5. **verify-data** installs the wheel without a checkout, fetches both
    optional bundles, rehashes their extracted trees, and runs
    `mars-mcp self-test --with-data` through stdio and the local grid loader.
-5. **publish** creates the GitHub release with the wheel, the sdist and
-   `SHA256SUMS`, only after **verify**, **data** and **verify-data** pass. It is
+6. **publish** adds `mars.mcpb` to `SHA256SUMS` and creates the GitHub
+   release with the wheel, the sdist, `mars.mcpb` and `SHA256SUMS`, only
+   after **verify**, both extension checks, **data** and **verify-data**
+   pass. It is
    the only job with write permission to the repository, and only on a tag.
-6. **publish to TestPyPI** runs in parallel with **publish**, uploading the
+7. **publish to TestPyPI** runs in parallel with **publish**, uploading the
    wheel and the sdist to TestPyPI after the same build and verification jobs
    pass.
-7. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
+8. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
    requires it to be byte-identical to the one **build** made, installs it
    with its dependencies from PyPI -- never from TestPyPI, where anyone can
    register a dependency's name -- and runs `mars-mcp self-test`.
-8. **publish to PyPI** refuses a wheel that declares no licence, then
+9. **publish to PyPI** refuses a wheel that declares no licence, then
    uploads. It runs in the `pypi` environment, so it waits for a reviewer.
 
 The build job and CI's `package` job, which runs on every pull request, both
@@ -83,6 +100,10 @@ manifest bytes and advertised digest were compared on 2026-10-07; the manifest
 includes Linux amd64/arm64. CI and release metadata checks both use exact
 **Twine 6.2.0**, verified against its PyPI metadata (Python >=3.9). Regression
 tests prevent either pin drifting to a tag or a major-only version.
+The release validates the extension's manifest with exact
+**`@anthropic-ai/mcpb` 2.1.2** (npm integrity `sha512-goRbBC8ySo7SWb7tRzr+tL6FxDc4JPTRCdgfD2omba7freofvjq5rom1lBnYHZHo6Mizs1jAHJeN53aZbDoy8A==`,
+checked 2026-10-23), held by a test, as is the rule that npm never packs
+the file.
 The workflow-safety job also pins actionlint **1.7.12** to its byte-verified
 registry manifest digest, checked on the same date.
 
@@ -161,7 +182,9 @@ The first release published this way was `0.1.0rc4`, on 2026-09-28.
 
 The Claude Desktop extension needs nothing: it names no MARS version and
 runs the newest release on PyPI the next time it starts
-(`installers/claude-desktop/README.md`).
+(`installers/claude-desktop/README.md`). Every release attaches the same
+`mars.mcpb`, packed from the tagged commit; its own `version` changes only
+when the extension does.
 
 ## The data release
 
@@ -207,7 +230,7 @@ outside the repository, so run it by hand.
 ## Testing a release
 
 On a machine with no checkout (and a C compiler unless it is Python 3.13 on
-x86_64 Linux, Apple Silicon macOS or x64 Windows; see `installing.md`):
+Linux, Apple Silicon macOS, or x64 Python on Windows; see `installing.md`):
 
 ```bash
 python3.13 -m venv mars-env
