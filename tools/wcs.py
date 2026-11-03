@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 import os
 import shutil
-from collections.abc import Sequence
+from collections import deque
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
@@ -15,6 +16,7 @@ from astropy.wcs import WCS
 from algorithms.wcs.config import SolverSettings, WcsSearchBounds
 from algorithms.wcs.header_utils import estimate_pixel_scale_arcsec_per_pix
 from algorithms.skylib_lite.astrometry.anet.engine import (
+    INDEX_FILE_CONVENTIONS,
     find_solve_field,
     resolve_index_dirs,
     validate_index_dirs,
@@ -303,6 +305,27 @@ def _write_wcs_header(
             staged_path.unlink(missing_ok=True)
 
 
+#: The one folder a user names for their plate-solving catalogs: the
+#: astrometry.net index files and the UCAC catalogue, found under it.
+CATALOG_DIR_ENV = "MARS_CATALOG_DIR"
+#: How many folder levels under it are searched: enough for
+#: ``astrometry/2MASS_ANET/4200`` and ``ATLAS/UCAC5/u5z``, without walking
+#: the whole of an unrelated tree it is pointed at by mistake.
+CATALOG_DIR_DEPTH = 4
+
+
+def _atlas_catalog_missing(root: Path, catalog: str) -> str | None:
+    """What ``root`` lacks to be ``catalog``'s root, or ``None`` if nothing."""
+    if catalog == "ucac5":
+        if not (root / "u5index.asc").is_file() and not (
+            root / "u5z" / "u5index.asc"
+        ).is_file():
+            return "no UCAC5 index"
+    elif catalog == "ucac4" and not next(root.glob("Z*.UC4"), None):
+        return "no UCAC4 zone files"
+    return None
+
+
 def _atlas_catalog_problem(settings: SolverSettings) -> str | None:
     catalog = str(settings.ATLAS_CATALOG or "ucac5").strip().lower()
     root = Path(str(settings.ATLAS_CATALOG_ROOT))
@@ -312,25 +335,127 @@ def _atlas_catalog_problem(settings: SolverSettings) -> str | None:
         return str(exc)
     if not root.is_dir():
         return f"ATLAS_CATALOG_ROOT={root} is not a directory"
-    if catalog == "ucac5":
-        if not (root / "u5index.asc").is_file() and not (
-            root / "u5z" / "u5index.asc"
-        ).is_file():
-            return f"ATLAS_CATALOG_ROOT={root} contains no UCAC5 index"
-    elif catalog == "ucac4" and not next(root.glob("Z*.UC4"), None):
-        return f"ATLAS_CATALOG_ROOT={root} contains no UCAC4 zone files"
-    return None
+    missing = _atlas_catalog_missing(root, catalog)
+    return f"ATLAS_CATALOG_ROOT={root} contains {missing}" if missing else None
+
+
+def _catalog_dir_data(root: Path, catalog: str | None) -> tuple[list[str], str | None]:
+    """The astrometry.net index folders and the ``catalog`` root under ``root``.
+
+    Searched breadth first, in name order, to ``CATALOG_DIR_DEPTH`` levels, so
+    each folder is reached at its shallowest depth and listed once. Links are
+    followed, since a catalog folder is often links to where the data really
+    is, but no folder is entered twice. Every folder holding index files is
+    used; the first holding the catalogue is its root (the UCAC5 folder, a
+    level above its ``u5z`` zone folder). ``catalog`` None looks for none.
+    """
+    index_dirs: list[str] = []
+    atlas_root: str | None = None
+    seen: set[str] = set()
+    queue = deque([(root, 0)])
+    while queue:
+        current, depth = queue.popleft()
+        real = os.path.realpath(current)
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            with os.scandir(current) as scan:
+                entries = sorted(scan, key=lambda entry: entry.name)
+        except OSError:
+            continue
+        files, subdirs = [], []
+        for entry in entries:
+            try:
+                if entry.is_file():
+                    files.append(entry.name)
+                elif entry.is_dir():
+                    subdirs.append(Path(entry.path))
+            except OSError:
+                continue
+        if any(pattern.match(name) for name in files for _, pattern in INDEX_FILE_CONVENTIONS):
+            index_dirs.append(str(current))
+        if catalog and atlas_root is None and _atlas_catalog_missing(current, catalog) is None:
+            atlas_root = str(current)
+        if depth < CATALOG_DIR_DEPTH:
+            queue.extend((subdir, depth + 1) for subdir in subdirs)
+    return index_dirs, atlas_root
+
+
+def _solver_settings(
+    environ: Mapping[str, str],
+    *,
+    index_path: str | Path | Sequence[str | Path] | None = None,
+    timeout_s: float | None = None,
+) -> tuple[SolverSettings, list[str]]:
+    """The solvers' settings from ``environ``, and what was wrong with
+    ``MARS_CATALOG_DIR`` if anything.
+
+    An explicit location wins: the ``index_path`` argument, then
+    ``ANET_INDEX_PATH``, for the index files, and ``ATLAS_CATALOG_ROOT`` for
+    the catalogue. ``MARS_CATALOG_DIR`` is searched only for what none of
+    them sets. The MCP install facts read the same settings, so they cannot
+    disagree with the tool.
+    """
+    anet_index_path = (
+        _normalise_index_path(index_path)
+        if index_path is not None
+        else environ.get("ANET_INDEX_PATH") or None
+    )
+    atlas_catalog = environ.get("ATLAS_CATALOG") or None
+    atlas_catalog_root = environ.get("ATLAS_CATALOG_ROOT") or None
+    problems: list[str] = []
+    catalog_dir = (environ.get(CATALOG_DIR_ENV) or "").strip()
+    if catalog_dir and (anet_index_path is None or atlas_catalog_root is None):
+        # Absolute, because solve-field runs in a temporary folder.
+        root = Path(os.path.abspath(Path(catalog_dir).expanduser()))
+        catalog: str | None = None
+        if atlas_catalog_root is None:
+            catalog = str(atlas_catalog or "ucac5").strip().lower()
+            try:
+                get_catalog_spec(catalog)
+            except ValueError as exc:
+                problems.append(f"ATLAS_CATALOG={atlas_catalog}: {exc}")
+                catalog = None
+        if not root.is_dir():
+            problems.append(f"{CATALOG_DIR_ENV}={catalog_dir} is not a directory")
+        else:
+            index_dirs, found_root = _catalog_dir_data(root, catalog)
+            wanted = []
+            if anet_index_path is None:
+                anet_index_path = index_dirs or None
+                wanted.append((bool(index_dirs), "astrometry.net index files"))
+            if catalog is not None:
+                atlas_catalog_root = found_root
+                wanted.append((found_root is not None, f"{catalog.upper()} catalogue"))
+            if wanted and not any(found for found, _ in wanted):
+                problems.append(
+                    f"{CATALOG_DIR_ENV}={catalog_dir} holds no "
+                    + " or ".join(name for _, name in wanted)
+                    + f" within {CATALOG_DIR_DEPTH} folder levels"
+                )
+    settings = SolverSettings(
+        anet_index_path=anet_index_path,
+        anet_timeout_s=(timeout_s if timeout_s is not None
+                        else environ.get("ANET_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
+        atlas_catalog_root=atlas_catalog_root,
+        atlas_catalog=atlas_catalog,
+        atlas_timeout_s=(timeout_s if timeout_s is not None
+                         else environ.get("ATLAS_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
+    )
+    return settings, problems
 
 
 def _configured_backend_warnings(
     settings: SolverSettings,
+    catalog_dir_problems: Sequence[str] = (),
 ) -> tuple[list[str], list[ToolWarning]]:
     available: list[str] = []
-    problems: list[str] = []
+    problems: list[str] = list(catalog_dir_problems)
 
     if settings.ANET_INDEX_PATH:
         if find_solve_field() is None:
-            problems.append("solve-field is not available on PATH")
+            problems.append("solve-field (astrometry.net) is not on the PATH MARS was started with")
             settings.ANET_INDEX_PATH = None
         else:
             index_dirs = resolve_index_dirs(settings.ANET_INDEX_PATH)
@@ -353,11 +478,16 @@ def _configured_backend_warnings(
             settings.ATLAS_CATALOG_ROOT = None
 
     if not available:
-        detail = "; ".join(problems)
-        message = "No plate-solving backend is available. Set ANET_INDEX_PATH "
-        message += "or ATLAS_CATALOG_ROOT to a usable local data set."
-        if detail:
-            message += f" Configuration problems: {detail}."
+        # Something configured but unusable is named; how to configure is
+        # advice only for an install with nothing configured.
+        if problems:
+            message = "No plate-solving backend is available: " + "; ".join(problems) + "."
+        else:
+            message = (
+                "No plate-solving backend is available. Set MARS_CATALOG_DIR to the "
+                "folder holding your astrometry.net index files or UCAC catalogue, or "
+                "ANET_INDEX_PATH or ATLAS_CATALOG_ROOT to those folders themselves."
+            )
         return available, [ToolWarning(code="solver_unavailable", message=message)]
 
     if problems:
@@ -501,18 +631,8 @@ def solve_astrometry(
             ],
         )
 
-    solver_settings = SolverSettings(
-        anet_index_path=(
-            _normalise_index_path(index_path)
-            if index_path is not None
-            else os.getenv("ANET_INDEX_PATH")
-        ),
-        anet_timeout_s=(timeout_s if timeout_s is not None
-                        else os.getenv("ANET_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
-        atlas_catalog_root=os.getenv("ATLAS_CATALOG_ROOT"),
-        atlas_catalog=os.getenv("ATLAS_CATALOG"),
-        atlas_timeout_s=(timeout_s if timeout_s is not None
-                         else os.getenv("ATLAS_TIMEOUT_S", DEFAULT_SOLVER_TIMEOUT_S)),
+    solver_settings, catalog_dir_problems = _solver_settings(
+        os.environ, index_path=index_path, timeout_s=timeout_s
     )
     timeout_settings = (
         ("ANET_TIMEOUT_S", solver_settings.ANET_TIMEOUT_S, solver_settings.ANET_INDEX_PATH),
@@ -532,7 +652,7 @@ def solve_astrometry(
                     image_shape=image_shape,
                     errors=[timeout_error],
                 )
-    _, configuration_warnings = _configured_backend_warnings(solver_settings)
+    _, configuration_warnings = _configured_backend_warnings(solver_settings, catalog_dir_problems)
     if not solver_settings.ANET_INDEX_PATH and not solver_settings.ATLAS_CATALOG_ROOT:
         return WcsSummary(
             file=file,
