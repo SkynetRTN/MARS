@@ -1022,7 +1022,9 @@ pinned SEP 1.4.1 and analytic/quadrature areas; old small-axis and newer
 guard-passing native recursion cases now complete. The separate public 0.5-pixel
 ellipse floor remains. Saturation counts map each original detector pixel into
 its reduced segmentation cell once, including partial-block cropping and masks.
-Photometry admits FITS pixel centers 1 through width/height. Isophotal analysis
+Photometry admits source centers across the continuous FITS footprint
+`[0.5, width+0.5] × [0.5, height+0.5]`, with aperture truncation handled by
+measurement flags. Isophotal analysis
 receives zero-based centers and uses the covariance `atan2` orientation.
 
 Nonpositive net flux has no finite magnitude; existing magnitude fields are
@@ -1046,13 +1048,22 @@ systematics from reduced pixels.
 Growth curves that reaccelerate beyond the fractional tolerance are rejected
 as correction references; the next suitable source is tried. If none supplies
 a converged correction, the aperture scale is retained with an explicit notice.
+A converged curve requiring zero correction is available and emits no such
+notice. Elliptical growth annuli convert pixel radii to scale factors relative
+to each current aperture; circular annuli retain pixel units, including
+per-source radii in adaptive measurement.
 Field calibration continues to disable aperture correction.
 
 Calibration retains its annular flux convention and forwards extracted RMS.
+If extraction used a region, calibration estimates RMS over the full masked
+measurement image using the extraction background settings, so annuli beyond
+the region have correctly positioned noise data.
 WCS matching uses actual detector pixels, including anisotropic and rotated
 frames. Sky-only matching without WCS requires explicit `source_match_tol_arcsec`
 and uses spherical chord distance. A matched centroid is not projected or moved
-a second time during measurement. SNR selection uses positive finite flux/error
+a second time during measurement. Matched sky-only observations retain their
+observed sky coordinates until header-WCS projection, without applying copied
+catalog motion. SNR selection uses positive finite flux/error
 or the exact inverse logarithmic magnitude error for magnitude-only input.
 Missing/zero errors cannot bypass a constrained SNR window. M2's
 magnitude-variance fitter remains unchanged.

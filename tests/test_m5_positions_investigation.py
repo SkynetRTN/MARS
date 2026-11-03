@@ -1,7 +1,6 @@
-"""Offline characterization of retained M5 position/geometry defects.
+"""Offline correctness regressions for repaired M5 position/geometry defects.
 
-These tests deliberately PIN CURRENT WRONG BEHAVIOR; they are investigation
-artifacts, not acceptance tests for a fix. The independent expectations use
+Converted from the original investigation probes. Independent expectations use
 weighted covariance, spherical haversine distance, or elementary aperture area.
 All photometry/extraction calls use the actual SEP/Numba kernels; no mocks.
 """

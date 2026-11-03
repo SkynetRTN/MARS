@@ -313,3 +313,56 @@ checks pass. Independent review found no remaining actionable findings after
 the mask, custom-annulus and local invalid-RMS rechecks. Asset/network/platform
 skips remain gated; this does not claim live-catalog or additional host coverage.
 The master's measured-flux/source-position square is closed on this branch.
+
+## Follow-up code review corrections (2026-11-02)
+
+A subsequent review of commit `23a964a` found four P2 regressions and one P3
+notice issue. This supersedes the preceding review's no-findings checkpoint.
+All five received failing native regression tests before their corrections:
+
+1. Cropped extraction returned an 80×120 RMS map while calibration measured a
+   120×120 image, raising a broadcasting error. Calibration now estimates RMS
+   over the full masked image with the extraction background settings when
+   those shapes differ. It retains annular sky subtraction, including annuli
+   extending beyond the extraction region. Tests compare measured flux and
+   uncertainty against an independent full-image SEP noise map on a spatially
+   varying noise field, with and without masked contamination.
+2. Matched sky-only observations lost RA/Dec before lazy header-WCS projection.
+   They now retain observed sky positions when detector XY is absent, partial
+   or nonfinite. Copied catalog motion is cleared in every matched measurement;
+   usable detector XY still takes priority over stale sky metadata. Native
+   calibration controls cover all four cases and copied proper motion.
+3. Integer-center bounds rejected fractional centers within the first and last
+   pixels. Admission now uses the continuous FITS footprint from 0.5 through
+   width/height plus 0.5. Analytic contained-circle checks cover all edges and
+   corners of a rectangular detector; outside centers remain excluded.
+4. Elliptical growth annuli passed pixel radii where the dispatcher requires
+   scale factors. Propagated truncation flags then rejected valid references,
+   dropping about 0.46 mag of correction in the reproduced Gaussian case.
+   Initial, growing and alternate-size ellipse apertures now use factors
+   relative to their current axes. The circular adaptive path also selects the
+   current source's outer annulus radius. Rotated ellipse and circular tests
+   recover the planted Gaussian total within 0.1%, including multiple aperture
+   sizes. Genuinely truncated and crowded references still remain unavailable.
+5. A converged reference needing no correction left the correction dictionary
+   empty and emitted `aperture_correction_unavailable`. A valid zero correction
+   is now recorded, leaving the magnitude unchanged without that notice.
+
+The first regression runs failed as expected: six fractional-edge cases, five
+calibration cases and six growth cases, including the adaptive-circle radius
+error. The new suites contain 27 cases with existing-behavior controls. The
+first related run passed 165 cases and failed six stale HR warning expectations:
+the repaired adaptive ellipse curve now has a clean reference on the recorded
+frame. The clean-frame test now excludes false correction notices. Failure-path
+warning tests retain native extraction and generate a real local invalid-RMS
+notice from one controlled negative noise pixel, preserving their propagation
+coverage.
+
+Follow-up validation: **171 related cases pass**. Independent review found no
+actionable findings and repeated all 27 new cases plus eight revised HR warning
+checks successfully. The final locked offline suite passed **4,541 tests,
+90 skips and 214 FITS normalization warnings**, no failures, in 409.33 seconds
+on Python 3.13.15. Source, tests and guidance stayed unchanged throughout that
+run. Compilation, generated guidance consistency and whitespace checks pass.
+This closes all five review findings on `feature/m5-geometry`; the error-model
+limits above and the remaining M5/M4 work are unchanged.

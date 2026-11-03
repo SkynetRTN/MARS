@@ -135,8 +135,9 @@ def run_photometry(
         x, y = get_source_xy(source, epoch, wcs)
         if x is None or y is None:
             continue
-        # Source coordinates and the aperture kernel both use FITS origin 1.
-        if 1 <= x <= data.shape[1] and 1 <= y <= data.shape[0]:
+        # FITS origin 1 places pixel centers at integers; the detector's
+        # continuous footprint extends half a pixel beyond the end centers.
+        if .5 <= x <= data.shape[1] + .5 and .5 <= y <= data.shape[0] + .5:
             update = {
                 "x": float(x),
                 "y": float(y),

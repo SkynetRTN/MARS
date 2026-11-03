@@ -31,6 +31,7 @@ from scipy.spatial import cKDTree
 # now the shared vendored copy under algorithms.skylib_lite.
 from algorithms.skylib_lite.util.angle import angdist
 from algorithms.skylib_lite.util.fits import get_fits_time
+from algorithms.skylib_lite.calibration.background import estimate_background
 
 # EXTRACTED: was `from skynet_db.runners.common.schemas import (...)`
 from .schemas import (
@@ -670,13 +671,26 @@ def perform_field_calibration(
             # mode="auto"; aperture photometry ignores it.
             src_map.update({attr: value for attr, value in shape.items() if value is not None})
             if matched_shapes:
-                # Matching supplies the observed detector position, already at
-                # the frame epoch. Do not reproject a supplied sky position or
-                # apply the catalog's proper motion to that measurement again.
-                for attr in ("ra_hours", "dec_degs", "pm_sky", "pm_pos_angle_sky",
+                # A matched detection is already at the frame epoch. Never
+                # apply copied catalog motion to it again. Prefer its measured
+                # detector position when usable; sky-only observations still
+                # need their sky coordinates for lazy header-WCS projection.
+                for attr in ("pm_sky", "pm_pos_angle_sky",
                              "pm_pixel", "pm_pos_angle_pixel", "pm_epoch"):
                     src_map[attr] = None
+                x, y = src_map.get("x"), src_map.get("y")
+                if x is not None and y is not None and np.isfinite([x, y]).all():
+                    src_map["ra_hours"] = src_map["dec_degs"] = None
             normalized_sources.append(SourceExtractionData(**src_map))
+
+        if background_rms is not None and background_rms.shape != data.shape:
+            # Extraction restores global source coordinates but returns ROI
+            # background maps. Measurement, including annuli outside that ROI,
+            # needs noise estimated across the full masked detector image.
+            _, background_rms = estimate_background(
+                data, size=extraction_settings.bk_size,
+                filter_size=extraction_settings.bk_filter_size,
+            )
 
         # LEGACY AFTERGLOW PARITY — DO NOT "CLEAN UP".  Forcing apcorr_tol to 0
         # is what disables aperture correction for calibration photometry: the

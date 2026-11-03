@@ -545,10 +545,13 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
             # in the aperture) or less than the threshold (i.e. the growth curve reached saturation)
             if ai == bi:
                 f, _, _, fl = sum_circle(
-                    img, xi, yi, ai, mask=mask, bkgann=(ai_in, a_out), reject_outliers=reject_outliers)
+                    img, xi, yi, ai, mask=mask, bkgann=(ai_in, ai_out), reject_outliers=reject_outliers)
             else:
+                # Ellipse annuli take scale factors relative to the current
+                # axes, whereas circle annuli take pixel radii.
                 f, _, _, fl = sum_ellipse(
-                    img, xi, yi, ai, bi, thetai, 1, mask=mask, bkgann=(ai_in, ai_out), reject_outliers=reject_outliers)
+                    img, xi, yi, ai, bi, thetai, 1, mask=mask,
+                    bkgann=(ai_in/ai, ai_out/ai), reject_outliers=reject_outliers)
             if fl[0] or not np.isfinite(f[0]) or f[0] <= 0:
                 continue
             f0 = f_prev = f[0]
@@ -564,7 +567,8 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
                 else:
                     f, _, _, fl = sum_ellipse(
                         img, xi, yi, ai + dap, bi*(1 + dap/ai), thetai, 1, mask=mask,
-                        bkgann=(ai_in + dap, ai_out + dap), reject_outliers=reject_outliers)
+                        bkgann=((ai_in + dap)/(ai + dap), (ai_out + dap)/(ai + dap)),
+                        reject_outliers=reject_outliers)
                 if fl[0]:
                     break
                 f = f[0]
@@ -597,7 +601,7 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
                             img, xi, yi, aj, mask=mask, bkgann=(aj*k_in, aj*k_out), reject_outliers=reject_outliers)
                     else:
                         f, _, _, fl = sum_ellipse(
-                            img, xi, yi, aj, aj*bi/ai, thetai, 1, mask=mask, bkgann=(aj*k_in, aj*k_out),
+                            img, xi, yi, aj, aj*bi/ai, thetai, 1, mask=mask, bkgann=(k_in, k_out),
                             reject_outliers=reject_outliers)
                     if fl[0] or f[0] <= 0:
                         continue
@@ -605,8 +609,10 @@ def aperture_photometry(img: np.ndarray | np.ma.MaskedArray,
 
             # Calculate aperture corrections
             for aj, f in fluxes_for_ap.items():
-                if f < f_tot:
-                    aper_corr[aj] = -2.5*np.log10(f_tot/f)
+                # A converged curve can already contain all measurable flux.
+                # Record its valid zero correction rather than reporting that
+                # no usable reference was found.
+                aper_corr[aj] = -2.5*np.log10(f_tot/f) if f < f_tot else 0.
 
             break
         if not aper_corr:

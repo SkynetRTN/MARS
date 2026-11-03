@@ -5,6 +5,27 @@ import pytest
 from astropy.io import fits
 
 
+@pytest.fixture
+def hr_noise_notice(monkeypatch):
+    """Keep native extraction, then give measurement one unusable RMS pixel.
+
+    Warning propagation must not depend on a particular frame accidentally
+    tripping the growth-curve crowding heuristic.
+    """
+    from algorithms.hrdiagram_py import observations
+
+    extract = observations.run_source_extraction
+
+    def extract_with_bad_noise(*args, **kwargs):
+        sources, background, rms = extract(*args, **kwargs)
+        rms = rms.copy()
+        rms[0, 0] = -1.
+        return sources, background, rms
+
+    monkeypatch.setattr(observations, "run_source_extraction", extract_with_bad_noise)
+    return "background_noise_masked"
+
+
 @pytest.mark.parametrize("phase", ["directory", "plot", "extraction", "measurement"])
 def test_artifact_failure_keeps_catalog_and_sample_notices(phase, frame_path, tmp_path, monkeypatch):
     from algorithms.query.coverage import note_query_issue
@@ -153,14 +174,15 @@ def test_instrumental_public_photometry_does_not_invent_crowding_for_a_clean_ref
     assert "aperture_correction_crowding" not in {warning.code for warning in result.warnings}
 
 
-def test_hr_detection_reports_its_real_aperture_warning(frame_path, tmp_path, monkeypatch):
+def test_hr_detection_does_not_invent_crowding_for_a_clean_reference(frame_path, tmp_path, monkeypatch):
     from tools import artifacts
     from tools.hr_diagram import extract_photometry_from_fits
 
     monkeypatch.setattr(artifacts, "ARTIFACT_DIR", tmp_path)
     result = extract_photometry_from_fits(str(frame_path("ngc5128_b")))
     assert result.errors == [] and result.count > 0
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert not {"aperture_correction_crowding", "aperture_correction_unavailable"} & {
+        warning.code for warning in result.warnings}
 
 
 def test_a_degenerate_fit_keeps_numerical_notices_on_its_error_result():
@@ -231,7 +253,7 @@ def test_public_photometry_keeps_prior_notices_when_a_later_phase_raises(phase, 
     assert result_is_error(reply)
 
 
-def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path, monkeypatch):
+def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path, monkeypatch, hr_noise_notice):
     from tools import hr_diagram
 
     def fail(*args, **kwargs):
@@ -240,7 +262,7 @@ def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path,
     monkeypatch.setattr(hr_diagram, "_fetch_gaia_and_match", fail)
     result = hr_diagram.run_full_hr_pipeline(str(frame_path("ngc5128_b")), "test cluster")
     assert result.status == "error"
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert hr_noise_notice in {warning.code for warning in result.warnings}
 
 
 def test_supplied_reference_magnitudes_do_not_invent_a_landolt_transform():
@@ -281,7 +303,7 @@ def test_public_allocation_failure_keeps_the_resource_limit_code(phase, frame_pa
 
 
 @pytest.mark.parametrize("failure", [OSError, ValueError])
-def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, frame_path, monkeypatch):
+def test_hr_artifact_failure_preserves_the_real_measurement_warning(failure, frame_path, monkeypatch, hr_noise_notice):
     from tools import hr_diagram
     from tools.mcp.surface import call_tool, result_is_error
 
@@ -292,7 +314,7 @@ def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, fram
     reply = call_tool("extract_photometry_from_fits", {"fits_path": str(frame_path("ngc5128_b"))})
     assert result_is_error(reply)
     assert [error["code"] for error in reply["errors"]] == ["tool_exception"]
-    assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}
+    assert hr_noise_notice in {warning["code"] for warning in reply["warnings"]}
 
 
 @pytest.mark.parametrize("tool", ["calibrate_zeropoint", "run_photometry_on_target"])
@@ -330,7 +352,7 @@ def test_inner_calibration_allocation_failure_reaches_resource_limit(
 @pytest.mark.parametrize("phase", ["reserve", "write"])
 @pytest.mark.parametrize("failure", [OSError, MemoryError])
 def test_composite_hr_output_failure_preserves_the_failure_contract(
-    phase, failure, frame_path, tmp_path, monkeypatch,
+    phase, failure, frame_path, tmp_path, monkeypatch, hr_noise_notice,
 ):
     import pandas as pd
     from tools import artifacts, hr_diagram
@@ -359,4 +381,4 @@ def test_composite_hr_output_failure_preserves_the_failure_contract(
     expected = "resource_limit" if failure is MemoryError else "tool_exception"
     assert [error["code"] for error in reply["errors"]] == [expected]
     if failure is not MemoryError:
-        assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}
+        assert hr_noise_notice in {warning["code"] for warning in reply["warnings"]}

@@ -62,3 +62,24 @@ bounded native execution and no retained stale magnitudes on reused tables.
 Completed 2026-11-02. Final locked offline validation: 4,514 passed, 90 skipped;
 independent review and compilation/guidance/whitespace checks passed. Evidence,
 failed intermediate checks and model limitations are in the linked report.
+
+## Code review follow-up
+
+The follow-up review found five regressions in that checkpoint. Fix these on
+the same feature branch, with failing regressions before implementation:
+
+- [x] Recompute full-image background RMS when extraction returned a cropped
+  map, retaining calibration's annular sky measurement.
+- [x] Preserve observed sky-only source positions until WCS projection while
+  clearing copied catalog proper-motion metadata.
+- [x] Admit fractional source centers across the continuous FITS pixel footprint.
+- [x] Convert elliptical growth-annulus pixel radii to ellipse scale factors at
+  every aperture size, retaining genuine truncation flags.
+- [x] Treat a valid, converged zero aperture correction as available.
+- [x] Review the integrated fixes, run related and full locked tests, update
+  the investigation report, and commit/push the feature branch.
+
+Follow-up validation: 27 new cases, 171 related cases, and the full locked
+offline suite (4,541 passed, 90 skipped, 214 FITS notices; 409.33 seconds).
+Independent review repeated the new cases and eight HR warning checks with
+no actionable findings. Compilation, guidance consistency and whitespace pass.

@@ -504,6 +504,14 @@ reachable now, what it does, and whether the release needs a change or caveat.
   documented in the report; compilation, guidance and whitespace checks pass.
   The error model does not infer detector history, resampling covariance or
   sky/correction systematics. Other M5/M4 work remains separate.
+  *Follow-up code review:* four P2 regressions and one P3 notice issue at
+  `23a964a` are now corrected: cropped RMS/full-image measurement, lost sky-only
+  positions, fractional FITS edge centers, ellipse-growth annulus units and
+  valid zero corrections. The new 27 native regression/control cases pass;
+  171 related checks and independent review pass. Final locked follow-up suite:
+  **4,541 passed, 90 skipped, 214 FITS notices**, no failures (409.33 seconds).
+  The report preserves the failing probes and six stale HR warning expectations
+  replaced with clean-frame and deterministic actual-noise notice checks.
 - [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
