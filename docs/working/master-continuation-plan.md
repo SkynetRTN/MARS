@@ -516,6 +516,23 @@ reachable now, what it does, and whether the release needs a change or caveat.
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
   image parity differently; or omitting flux bypasses the source-count limit.
+  *Investigated 2026-11-02 against `a4d429a` on `feature/m5-geometry`:*
+  [The investigation](../analysis/m5-repeated-calls-fits-writes.md) confirms
+  WCS-28's shared saturation-setting mutation, adaptive source-table flux
+  feedback (0.14/0.28-mag repeat changes), retained measurement failure flags,
+  surviving detector lookup distortion (5-arcsec FITS reopen error), and
+  overwritten single-card `MJDREF`. WCS-26 is confirmed in the direct writer,
+  while the maintained wrapper's independent cap remains effective. Automatic
+  parity is correct, including bounded native astrometry.net convention checks;
+  explicit parity remains latent and ATLAS blind request fields are ignored.
+  Old epoch/SIP ancillary cards survive without the previously claimed
+  coordinate error on acceptance-gated controls. Public photometry inputs and
+  copied calibration catalog inputs are stable. These are characterization
+  results, with production source unchanged; fixes/dispositions remain open.
+  Validation: 79 offline probes/controls plus four optional native cases; 786
+  related passes and 51 native-enabled control passes. Independent review has
+  no actionable findings in the investigation. Final locked offline suite:
+  **4,620 passed, 94 skipped, 214 FITS notices**, no failures (425.22 seconds).
 - [ ] **Light-curve and HR boundaries.** Check period steps rounded to zero,
   maximum-time samples lost in binning, exact multiples assigned phase one,
   channels paired by index rather than phase and prefolded-file axes. Legacy
