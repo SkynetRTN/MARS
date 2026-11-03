@@ -87,6 +87,21 @@ def calc_solution(sources: list[PhotometryData]):
     return _calc_solution_with_mask(sources)[0]
 
 
+def _fit_input_mask(sources: list[PhotometryData]) -> np.ndarray:
+    """The rows the fit starts from, before any outlier rejection.
+
+    Once any star carries an instrumental error, a star without a positive one
+    is dropped here: it is never weighed, so it is not an outlier the fit
+    rejected. Without instrumental errors every row enters. MARS: factored out
+    of ``_calc_solution_with_mask`` so the diagnostic plot can tell the two
+    apart; the rule is unchanged.
+    """
+    mag_errors = np.array(
+        [getattr(source, "mag_error", None) or 0 for source in sources], dtype=float
+    )
+    return mag_errors > 0 if mag_errors.any() else np.ones(len(sources), dtype=bool)
+
+
 def _calc_solution_with_mask(sources: list[PhotometryData]):
     """Return the legacy summary and the exact surviving input-row mask.
 
@@ -110,14 +125,16 @@ def _calc_solution_with_mask(sources: list[PhotometryData]):
     ])
 
     logger.debug("calc_solution: starting with %d sources", len(sources))
-    indices = np.arange(len(sources))
+    # The pre-fit drop is decided only here, so the plot reading the same
+    # mask cannot drift from it. Without instrumental errors it keeps every
+    # row and there is no SNR.
+    good = _fit_input_mask(sources)
+    indices = np.flatnonzero(good)
+    mags = mags[good]
+    mag_errors = mag_errors[good]
+    ref_mags = ref_mags[good]
+    ref_mag_errors = ref_mag_errors[good]
     if mag_errors.any():
-        good = mag_errors > 0
-        indices = indices[good]
-        mags = mags[good]
-        mag_errors = mag_errors[good]
-        ref_mags = ref_mags[good]
-        ref_mag_errors = ref_mag_errors[good]
         snr = 1 / (10 ** (mag_errors / 2.5) - 1)
         logger.debug("calc_solution: kept %d sources after mag_error>0 filter", len(mags))
     else:

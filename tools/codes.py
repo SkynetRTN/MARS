@@ -122,6 +122,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "download_root_outside_data_dir": "The download root resolves outside the data directory and is searched flat, not walked.",
     "field_calibration_failed": "The requested field-calibration solve failed, so magnitudes fall back to instrumental; the message says why.",
     "field_radius_capped": "The detected sources span more than the search cap, so catalog coverage is limited to it.",
+    "flux_errors_incomplete": "Some spectrum points have no usable flux error, so the errors were ignored and the fit is unweighted.",
     "flat_light_curve": "The light curve is constant, so the render is silent.",
     "frame_not_bundled": "A frame the replay wanted is not present in the bundled library.",
     "frame_not_checked_out": "A frame is a Git LFS pointer rather than the frame itself.",
