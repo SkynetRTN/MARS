@@ -626,9 +626,12 @@ async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
         assert result["status"] == "ok", result
         assert result["preview"][0]["child"] == pid
         if os.name == "nt":
-            # Check the retained helper handle immediately: no reused PID and
-            # no extra grace period can disguise an incomplete job cleanup.
-            assert kernel.WaitForSingleObject(handle, 0) == 0
+            # Check the retained helper handle, not a PID, so no reused PID can
+            # disguise an incomplete job cleanup. The job reports no live
+            # process before run_call returns; under Windows on ARM's x64
+            # emulation the handle can signal a moment later. The helper sleeps
+            # for 60 s, so it cannot exit on its own within this bound.
+            assert kernel.WaitForSingleObject(handle, 2000) == 0
         else:
             with anyio.fail_after(5):
                 while _running(pid):
@@ -636,3 +639,23 @@ async def test_successful_worker_cannot_leave_a_writing_native_helper(tmp_path):
     finally:
         if handle is not None:
             kernel.CloseHandle(handle)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("inherited", [None, "/opt/site"])
+async def test_a_tools_children_get_the_callers_pythonpath(tmp_path, monkeypatch, inherited):
+    """The worker imports MARS through PYTHONPATH; a solver's Python helpers
+    (astrometry.net's removelines, run by the system Python) must not, or
+    they load MARS's compiled packages for another Python and fail."""
+
+    if inherited is None:
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+    else:
+        monkeypatch.setenv("PYTHONPATH", inherited)
+    out = tmp_path / "pythonpath.txt"
+
+    result = await run_call("child", {"out": str(out)}, {"child": fake.child_pythonpath},
+                            tmp_path / "artifacts", CallLimits(timeout_s=30))
+
+    assert result["status"] == "ok"
+    assert out.read_text() == (inherited or "<unset>")

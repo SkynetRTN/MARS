@@ -114,16 +114,62 @@ class ToolNode(Static):
 
     def _summary(self) -> tuple[str, str]:
         if self.state == "running":
-            return "⠋", f" (running {self._elapsed_ms():.0f} ms)"
+            return "⠋", f" (running {_duration(self._elapsed_ms())})"
         if self.state == "finished":
-            marker = "[cached]" if self.cache_hit else ""
-            duration = "" if self.duration_ms is None else f" ({self.duration_ms:.0f} ms)"
-            return "✓", f" {marker}{duration}"
+            marker = " [cached]" if self.cache_hit else ""
+            duration = "" if self.duration_ms is None else f" ({_duration(self.duration_ms)})"
+            status, note = self._outcome()
+            return status, f"{marker}{duration}{note}"
         if self.state == "denied":
             return "✗", " (denied)"
         return "…", " (proposed)"
+
+    def _outcome(self) -> tuple[str, str]:
+        """The marker and note a finished call earns from its own status.
+
+        A call that ran is not a call that worked: a tool reports its failure
+        as ``status: "error"`` in an ordinary result, and a ✓ beside it told
+        the reader the opposite of what the model was told. Only ``ok`` gets
+        the tick; the first error's message is shown, since it is the cause.
+        """
+
+        result = self.result or {}
+        status = result.get("status")
+        if status == "error":
+            return "✗", f" — {_first_error(result) or 'failed'}"
+        if status == "partial":
+            return "!", f" — partial: {_first_error(result) or 'see result'}"
+        if status == "not_found":
+            return "∅", " — not found"
+        return "✓", ""
 
     def _elapsed_ms(self) -> float:
         if self._started_at is None:
             return 0.0
         return (time.monotonic() - self._started_at) * 1000.0
+
+
+def _duration(ms: float) -> str:
+    """Milliseconds under a second, seconds under a minute, then minutes."""
+
+    if ms < 1000:
+        return f"{ms:.0f} ms"
+    seconds = ms / 1000.0
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes} min {rest:02d} s"
+
+
+def _first_error(result: Mapping[str, Any]) -> str:
+    """The first error or warning message a result carries, bounded to a line."""
+
+    for key in ("errors", "warnings"):
+        entries = result.get(key)
+        if isinstance(entries, list):
+            for entry in entries:
+                message = entry.get("message") if isinstance(entry, Mapping) else entry
+                if message:
+                    text = " ".join(str(message).split())
+                    return text if len(text) <= 120 else text[:119] + "…"
+    return ""
