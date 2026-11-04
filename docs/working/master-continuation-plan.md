@@ -553,6 +553,29 @@ reachable now, what it does, and whether the release needs a change or caveat.
   channels paired by index rather than phase and prefolded-file axes. Legacy
   isochrone splicing drops a point; luminosity framing and edge-on projection
   scales also need their intended meaning established.
+  *Investigated 2026-11-04 against `7375f82`:*
+  [The investigation](../analysis/m5-lightcurve-hr-boundaries.md) reproduces
+  current pulsar endpoint sample loss (including all planted pulse peaks),
+  missing fold diagnostics and duplicated-cycle plot clipping. Endpoint loss
+  depends on ties and float division; it does not always discard exactly one
+  sample. Period-slider rounding remains in an unused helper while real grids
+  validate progress. Current channel support is aligned; independent support
+  remains a direct-helper hazard. The retired index-fold body is unreachable,
+  but the original standard/prefolded coordinate contract remains unverified.
+  HR framing/splice bugs remain in legacy helpers; maintained local-grid Python
+  preserves ordinary model points and does not use those helpers. Edge-on
+  constants are documented pixel rendering, not a demonstrated physical-unit
+  defect. There are 68 new offline characterization/control cases and 494
+  distinct focused/related passes. Production behavior is unchanged and the
+  maintained-path findings remain open.
+  Independent review repeated all 68 new cases with no material findings;
+  illustrative HR numbers were rounded to avoid a float32/64 precision mismatch.
+  An initial full run missed the MCP cancellation test's worker-readiness
+  deadline (4,731 passed, one failed, 94 skipped); all 68 new cases plus that
+  test then passed together (69 passes). The fresh locked full run passed
+  **4,732 tests, 94 skipped, 214 FITS notices**, no failures (428.55 seconds),
+  with code/tests/guidance held fixed. Compilation, guidance and whitespace
+  checks pass. The first failure remains recorded in the report.
 - [ ] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding
