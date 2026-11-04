@@ -1080,13 +1080,29 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
 
 ## M6: record the release decision and its limits
 
-- [ ] **Scope decisions.** Eager domain imports, generic package-name
+- [x] **Scope decisions.** Eager domain imports, generic package-name
   collisions, heavy base dependencies and HR code's dependence on application
   configuration need a failing supported use case before becoming release
   requirements. Output schemas, new transports, local catalog backends and
   new timing capabilities require separate decisions. Browser hosting remains
   deferred. The unpinned external Skynet review does not establish MARS bugs
   and is not a prerequisite for this release.
+  *Investigated 2026-11-04 against `main` at `193d117`, on
+  `docs/m6-release-decision`.* Only the package names have a failing
+  supported use case. Under a wheel install, a Python caller whose project
+  has its own `tools` or `algorithms` package, or a `tools.py`, cannot import
+  MARS. The `mars`, `mars-mcp` and `mars-bench` commands are unaffected, and
+  an editable checkout hides it. Eager imports cost every `--tools` group
+  1.6 s and 280 MB warm, within M4's measured host startup. The console and
+  provider packages are 14 MB of a 664 MB install and are never imported by
+  the server. A Python session that sets `MARS_ISOCHRONE_DIR` after importing
+  MARS gets an error naming that variable; no result is wrong.
+  *Decided 2026-11-04 by the maintainer:* all four limits are retained, and
+  none is a release requirement. MARS runs over MCP or in its own virtual
+  environment, and no namespace move is scheduled. The separate decisions,
+  and the pre-rewrite deferrals the plan no longer names, are kept as
+  recorded with their revisit conditions. See
+  [the investigation and decisions](../analysis/m6-scope-decisions.md).
 - [ ] **Release evidence.** Record the final merged revision and outstanding
   user-visible limitations. Run supported Python suites, installed-wheel
   source/data/skill/protocol checks, native runtime checks and security/workflow
