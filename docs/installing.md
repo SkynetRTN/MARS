@@ -8,7 +8,8 @@ package and its data are built is `tool-architecture.md` §10.3.
 your platform: [Windows on ARM](installing/windows.md),
 [macOS (Apple Silicon)](installing/macos.md) or
 [Linux (ARM)](installing/linux.md). This page is the reference for every
-other host and for what the guides leave out.
+other host and for what the guides leave out. What MARS does not do, or
+does only under a condition, is listed in [Known limitations](limitations.md).
 
 ## Install
 
@@ -62,6 +63,14 @@ python3.13 -m venv ~/mars-env
 ~/mars-env/bin/pip install "skynet-mars[mcp]"
 ~/mars-env/bin/mars-mcp self-test     # Windows: ~\mars-env\Scripts\mars-mcp.exe
 ```
+
+**Calling the tools from Python** in that environment (`from tools.pulsar
+import list_pulsar_scans`) has two conditions. MARS installs two top-level
+packages, `tools` and `algorithms`. If your project has its own package or
+module by either name, Python imports yours instead and MARS fails to
+import; rename yours, or run from another directory. The commands are not
+affected. MARS also reads its `MARS_*` settings once, when first imported,
+so set them before importing it, or restart the kernel.
 
 **Python 3.12 and 3.13** are supported, and CI tests both; the commands above
 use 3.13. On either, on Linux (x86_64 or ARM), Apple Silicon macOS or x64
@@ -169,6 +178,8 @@ or set `MARS_MCP_TOOLS`. The groups are `databases`, `optical`, `timeseries`,
 ([get a token](https://ui.adsabs.harvard.edu/user/settings/token)). Desktop
 apps do not see your shell's environment, so set the key in the host's `env`
 block, or write it to `~/.ads/dev_key`. An installed MARS reads no `.env` file.
+ADS becomes Science Explorer (SciX) on 2026-11-16. Its API and tokens are
+stated to carry over, but MARS's live ADS checks have not been rerun since.
 CASDA downloads need `CASDA_OPAL_USERNAME` and that account's OPAL password
 stored in the system keyring under `astroquery:casda.csiro.au`; the server
 never prompts for it.
@@ -237,6 +248,18 @@ switches inside the console. If the backend it starts on cannot be used,
 `mars` exits and says what to set or which model to name. `/help` lists the
 commands. Sessions and their artifacts are kept in the MARS home
 ([Where things go](#where-things-go)).
+
+What to expect:
+
+- Esc stops the turn once the running step finishes; Ctrl+C stops the step
+  itself, a tool or a model reply, and keeps the console open; Ctrl+Q quits
+  at once.
+- "Allow always" lasts for the current question only.
+- A resumed session shows the questions and answers, not the tool calls or
+  artifacts.
+- Only the Anthropic backend streams. OpenAI-compatible, Gemini and Ollama
+  answers appear when they are complete.
+- On macOS the supported terminal is Terminal.app; iTerm2 is not supported.
 
 ## Optional data
 

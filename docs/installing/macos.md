@@ -6,6 +6,7 @@ from PyPI and need no checkout of this repository. Intel Macs are not
 supported: `numba` and `llvmlite` publish no wheels for them. For Claude
 Code, Cursor, VS Code or a hand-written config, see
 [`../installing.md`](../installing.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../limitations.md).
 
 Verified by the maintainer on 2026-10-23: Claude Desktop with the extension.
 Codex in the ChatGPT app could not be tested in a macOS VM, which blocks

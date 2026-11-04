@@ -1118,6 +1118,21 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   backends" and "ranks first" wording is corrected, and `harness.md`'s
   archive note marks the correction inline. No benchmark claim appears
   outside `docs/benchmarking/`.
+  *Limitations, 2026-11-04:* the user-visible limitations M2–M4 retained and
+  M6 decided are listed in [Known limitations](../limitations.md), each with
+  a link to its details. The README (the PyPI page), `installing.md`, the
+  three platform guides, both installer READMEs, the docs map and the
+  technical summary link to it. `installing.md` now also states the
+  console's stop keys, approvals, resumed sessions, streaming and macOS
+  terminal, the Python package-name and import-time-settings conditions, and
+  the ADS move to SciX. Science limits stay where users meet them, as result
+  warnings that the skill teaches. M5's outcomes are still to be added.
+  *External checks (maintainer decision, 2026-11-04):* not run for this
+  release, and recorded as skipped. They are the `network` live-service
+  tests, the `model_api` live-provider tests, and the post-cutover rerun of
+  the live ADS tests. Codex in the ChatGPT app on a Mac stays untested. The
+  supported suites, installed-wheel and native release jobs, and
+  security/workflow jobs still run at the final merged revision, after M5.
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once

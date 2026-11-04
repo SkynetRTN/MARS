@@ -56,8 +56,21 @@ backend settings are in [§10](https://github.com/SkynetRTN/MARS/blob/main/docs/
 Every tool is also a plain Python function (`from tools.simbad import
 search_simbad`), listed in
 [§2](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md#2-public-tool-layer).
+MARS installs these as top-level `tools` and `algorithms` packages, so a
+project with its own package or module by either name shadows them; and it
+reads its `MARS_*` settings once, when first imported.
 Three optional optical frames are Git LFS objects (`git lfs pull`); see
 [`data/README.md`](https://github.com/SkynetRTN/MARS/blob/main/data/README.md).
+
+## Known Limitations
+
+The results reproduce Skynet and Astromancer, known bugs included; the tests
+pin that parity, not scientific correctness. Plate solving needs astrometry.net
+and index files installed on your machine. The MCP server is a trusted,
+local, single-user stdio interface. Windows is supported on ARM, running an
+x64 Python. Scientific limits that apply to a result come back with it as
+warnings. Every known limitation, with where it is detailed, is in
+[`docs/limitations.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/limitations.md).
 
 ## What's Here
 
@@ -74,6 +87,7 @@ Three optional optical frames are Git LFS objects (`git lfs pull`); see
 
 - [`docs/README.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/README.md) — the documentation map.
 - [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md) — installing with no checkout, registering `mars-mcp`, data bundles.
+- [`docs/limitations.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/limitations.md) — what MARS does not do, or does only under a condition, with links to the details.
 - [`docs/tool-architecture.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md) — the architecture: public tools, algorithm ownership, the agent loop, console, benchmark and MCP server.
 - [`docs/repository-folders.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/repository-folders.md) — every folder, its important files, and its configuration (WCS solver and ATLAS catalog setup, VizieR settings).
 - [`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/extraction.md) — upstream provenance, severed dependencies and preserved parity quirks, per package.

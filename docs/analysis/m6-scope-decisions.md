@@ -108,8 +108,8 @@ entry point and package-data path, and the namespace must not be `mars`.
 
 **Decided 2026-11-04 (maintainer):** retained as is. MARS is normally run
 over MCP or in its own virtual environment, and no namespace move is
-scheduled. Two things stay open: whether to add the caveat below, and any
-later move. A move is cheapest before the first final release, because
+scheduled. The caveat below is now in the README, `installing.md` and
+[Known limitations](../limitations.md). A later move is cheapest before the first final release, because
 `releasing.md` gives pre-releases no compatibility promise.
 It would put both packages under one parent and use relative imports inside
 it, so the code works wherever the parent sits. The scope measured at
@@ -117,8 +117,7 @@ it, so the code works wherever the parent sits. The scope measured at
 117 module-name strings in 24 files, no `importlib.import_module` calls, and
 18 path-scoped `.gitleaks.toml` entries that must move with their files.
 
-Optional caveat, next to the README's "plain Python function" sentence and
-in `installing.md`:
+The caveat, as written for users:
 
 > MARS installs two top-level packages, `tools` and `algorithms`. If your
 > project has its own package or module by either name, Python imports yours
@@ -192,7 +191,8 @@ exception.
 **Decided 2026-11-04 (maintainer):** retained; the layering exception
 produces no wrong result. The error message is unchanged. Python callers are
 told that MARS reads its environment settings when first imported, so they
-must set them before importing or restart the kernel. The durable fix,
+must set them before importing or restart the kernel (the README,
+`installing.md` and [Known limitations](../limitations.md)). The durable fix,
 passing the grid directory in from `tools/hr_diagram.py`, is deferred.
 
 ## 5. Separate decisions

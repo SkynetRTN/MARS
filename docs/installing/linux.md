@@ -5,6 +5,7 @@ on aarch64; the same steps work on x86_64. The route runs the newest MARS
 release from PyPI and needs no checkout of this repository. Claude Desktop
 has no Linux build; for Claude Code, Cursor, VS Code or a hand-written
 config, see [`../installing.md`](../installing.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../limitations.md).
 
 Verified by the maintainer: Codex in the ChatGPT app on Fedora Workstation,
 and earlier in clean Fedora 44 containers (x86_64 and aarch64) through
