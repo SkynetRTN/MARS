@@ -15,10 +15,14 @@
 >
 > The section 14 lifecycle box — fold the outcome into a reference and delete
 > the working documents — is what this archive discharges, with the caveat
-> that box records: the two limits in *Limits* (three of four backends share
-> one schema dialect, and the corpus was authored while watching the backend
-> that now ranks first) are **not** retired by archiving. A second dialect
-> would still be worth a re-run.
+> that box records: the two limits in `results.md`'s *Limits* (the schema
+> dialect is confounded with the provider, and the corpus was written while
+> watching the models it compares) are **not** retired by archiving. A
+> second dialect would still be worth a re-run. *Corrected 2026-11-04:* this
+> said three of four backends share one dialect; in the sweep, two of three
+> do (both Qwen models, `openai_function`), and Claude alone had
+> `json_schema`. It also said the watched backend "now ranks first", but no
+> model ranks first on all three boards.
 >
 > **Three corrections applied at archive**, marked inline: the pulsar task
 > named in §9.3, the `fieldcal` note in §9.2 that P8 has since overtaken, and
@@ -1750,9 +1754,10 @@ adapters; `tools/runner.py`; anything under `algorithms/`.
       `report.json` and `figures/` into `docs/benchmarking/`, the other two
       track documents into `docs/archive/`. The durable outcome is
       `docs/tool-architecture.md` sections 10, 10.1 and 10.2. The archive does
-      **not** retire the two limits in `results.md`: three of four backends
-      share one schema dialect, and the corpus was authored while watching the
-      backend that ranks first. A second dialect is still worth a re-run.
+      **not** retire the two limits in `results.md`: the schema dialect is
+      confounded with the provider, and the corpus was written while watching
+      the models it compares (corrected 2026-11-04; see the archive note at
+      the top). A second dialect is still worth a re-run.
 
 ---
 

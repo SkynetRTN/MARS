@@ -1109,6 +1109,15 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   jobs; identify skipped external checks. Keep benchmark claims within the
   tested corpus and disclose provider-dialect and corpus-selection biases.
   Formal review is not required by the existing maintainer decision.
+  *Benchmark claims, 2026-11-04 (BEN-02):* `results.md`'s *Limits* now
+  states both biases. They had been dropped in the 2026-09-14 rewrite, while
+  the benchmarking README and `harness.md` still cited them there. Claude
+  alone received `json_schema` and both Qwen models `openai_function`, so
+  dialect is confounded with provider. The corpus keys were corrected while
+  watching earlier Qwen and Sonnet runs. The README's "three of four
+  backends" and "ranks first" wording is corrected, and `harness.md`'s
+  archive note marks the correction inline. No benchmark claim appears
+  outside `docs/benchmarking/`.
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once

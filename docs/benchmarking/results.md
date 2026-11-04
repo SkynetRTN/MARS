@@ -551,25 +551,39 @@ by grammar rather than by a list of phrasings.
 
 1. **The corpus is 16 hand-picked probes of documented failure modes**, not a
    sample of everyday tool calls. A rate on this population is not a rate on
-   that one.
-2. **Three backends, one of them hosted.** The speed board measures where a
+   that one, and no result here extends to general astronomy work.
+2. **The schema dialect is confounded with the provider.** Claude received
+   `json_schema`; both Qwen models received `openai_function` through
+   Ollama. The `gemini_openapi` dialect was not swept. A difference between
+   Claude and either Qwen model may come from the model or from the dialect,
+   and this sweep cannot say which; only the two Qwen rows share a dialect.
+   Measuring each model through its provider's dialect is deliberate
+   ([harness §7.1.1](harness.md)), but no result here describes a model apart
+   from its dialect. A second dialect is the run most worth adding.
+3. **The corpus was written while watching these models.** Its tasks and keys
+   were corrected against earlier Qwen and Sonnet sessions, which were then
+   discarded as graded against an adjusted corpus ([the pre-sweep record](https://github.com/SkynetRTN/MARS/blob/293dd7f/docs/working/benchmark-results.md#why-the-earlier-numbers-are-gone)).
+   De-biasing removed the model-specific wording and turn cap it found, and
+   a test rejects any task file that names a model or provider. None of that
+   rules out a remaining fit to the models that were watched.
+4. **Three backends, one of them hosted.** The speed board measures where a
    model runs as much as the model.
-3. **The historical sweep did not check author provenance.** A sourced number
+5. **The historical sweep did not check author provenance.** A sourced number
    did not establish the author attached to it. The current bounded author/year
    check has not been applied to these sessions. Catalogue names, nicknames and
    claims outside its grammar still require separate review.
-4. **Every check is a regex over prose.** Five of the checks that fired in this
+6. **Every check is a regex over prose.** Five of the checks that fired in this
    sweep were the grader being wrong, all found by reading the answers. The
    fixes hold against these 144 transcripts and `falsify`'s probes; that is
    evidence, not proof.
-5. **Four tasks are passed 3/3 with a clean route by every backend**
+7. **Four tasks are passed 3/3 with a clean route by every backend**
    (`abstract-before-attribution`, `ned-formal-designation`,
    `no-identical-retry`, `optical-ambiguous-band`). They
    measure real behaviours and separate nobody. Retiring them would fit the
    corpus to these three models and leave no trace, so they stay — and
    `ned-formal-designation` is where the fabricated attributions live, so
    "separates nobody" is not "measures nothing".
-6. **Sonnet carries all 3 harness errors**, so its 43 scored sessions are not
+8. **Sonnet carries all 3 harness errors**, so its 43 scored sessions are not
    the 48 the others had.
 
 ---

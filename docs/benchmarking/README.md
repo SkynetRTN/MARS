@@ -45,14 +45,18 @@ from importing anything that can reach a model.
 Stated in `results.md` and worth repeating at the front door, because they
 bound what the scoreboard means rather than qualifying a detail:
 
-1. **Three of the four backends share one schema dialect**
-   (`openai_function`), so dialect effects are not isolated. A second dialect
-   is the single thing most worth another run.
-2. **The corpus was authored while watching the backend that now ranks
-   first**, which no test can fully rule out.
+1. **The schema dialect is confounded with the provider.** Claude received
+   `json_schema` and both Qwen models `openai_function`, so a difference
+   between Claude and either Qwen model may be the dialect rather than the
+   model. A second dialect is the single thing most worth another run.
+2. **The corpus was written while watching these models**: its keys were
+   corrected against earlier Qwen and Sonnet sessions. De-biasing removed
+   what it found, but no test can rule out a remaining fit.
 
-`results.md`'s own *Limits* section carries four more, including the largest
-historical hole: the archived sweep did not check author attribution. Its scores,
+The rates cover these 16 probes of documented failure modes, not general
+astronomy work. `results.md`'s *Limits* section carries both of these and
+six more, including the largest historical hole: the archived sweep did not
+check author attribution. Its scores,
 JSON and figures remain **attribution-unchecked**, without a new regrade; the
 original paid transcripts are absent here. The current bounded author/year
 check is enabled on two core tasks. It does not verify all non-numeric prose,
