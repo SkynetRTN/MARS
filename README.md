@@ -39,7 +39,7 @@ claude mcp add --scope user mars -- /full/path/to/mars-mcp
 ```
 
 Other hosts, the optional data bundles (`mars-mcp fetch-data`), credentials
-and where files go are in [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/installing.md).
+and where files go are in [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md).
 
 **From a checkout**, run the console. It needs a model backend — Anthropic by
 default (`ANTHROPIC_API_KEY`), or OpenAI-compatible, Gemini, or a local Ollama
@@ -51,13 +51,13 @@ uv run mars
 ```
 
 The console's commands, keys and flags are in
-[`docs/tool-architecture.md` §10.2](https://github.com/SkynetRTN/MARS/blob/dev/docs/tool-architecture.md#102-the-mars-console);
-backend settings are in [§10](https://github.com/SkynetRTN/MARS/blob/dev/docs/tool-architecture.md#10-the-agent-loop-and-model-port).
+[`docs/tool-architecture.md` §10.2](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md#102-the-mars-console);
+backend settings are in [§10](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md#10-the-agent-loop-and-model-port).
 Every tool is also a plain Python function (`from tools.simbad import
 search_simbad`), listed in
-[§2](https://github.com/SkynetRTN/MARS/blob/dev/docs/tool-architecture.md#2-public-tool-layer).
+[§2](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md#2-public-tool-layer).
 Three optional optical frames are Git LFS objects (`git lfs pull`); see
-[`data/README.md`](https://github.com/SkynetRTN/MARS/blob/dev/data/README.md).
+[`data/README.md`](https://github.com/SkynetRTN/MARS/blob/main/data/README.md).
 
 ## What's Here
 
@@ -72,23 +72,23 @@ Three optional optical frames are Git LFS objects (`git lfs pull`); see
 
 ## Documentation
 
-- [`docs/README.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/README.md) — the documentation map.
-- [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/installing.md) — installing with no checkout, registering `mars-mcp`, data bundles.
-- [`docs/tool-architecture.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/tool-architecture.md) — the architecture: public tools, algorithm ownership, the agent loop, console, benchmark and MCP server.
-- [`docs/repository-folders.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/repository-folders.md) — every folder, its important files, and its configuration (WCS solver and ATLAS catalog setup, VizieR settings).
-- [`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/extraction.md) — upstream provenance, severed dependencies and preserved parity quirks, per package.
-- [`docs/pulsar-tool-pipeline.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/pulsar-tool-pipeline.md) — the four-stage pulsar chain.
-- [`docs/benchmarking/README.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/benchmarking/README.md) — the model benchmark and its results.
-- [`docs/releasing.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/releasing.md) — how releases and data bundles are cut.
-- [`tests/README.md`](https://github.com/SkynetRTN/MARS/blob/dev/tests/README.md) — what the test suite proves and what it does not cover.
+- [`docs/README.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/README.md) — the documentation map.
+- [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md) — installing with no checkout, registering `mars-mcp`, data bundles.
+- [`docs/tool-architecture.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/tool-architecture.md) — the architecture: public tools, algorithm ownership, the agent loop, console, benchmark and MCP server.
+- [`docs/repository-folders.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/repository-folders.md) — every folder, its important files, and its configuration (WCS solver and ATLAS catalog setup, VizieR settings).
+- [`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/extraction.md) — upstream provenance, severed dependencies and preserved parity quirks, per package.
+- [`docs/pulsar-tool-pipeline.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/pulsar-tool-pipeline.md) — the four-stage pulsar chain.
+- [`docs/benchmarking/README.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/benchmarking/README.md) — the model benchmark and its results.
+- [`docs/releasing.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/releasing.md) — how releases and data bundles are cut.
+- [`tests/README.md`](https://github.com/SkynetRTN/MARS/blob/main/tests/README.md) — what the test suite proves and what it does not cover.
 
 ## Contributing
 
 Target `dev`, keep changes narrow, and run the checks CI enforces
 (`uv run pytest`, `python3 -m compileall tools algorithms tests`,
 `git diff --check`). See
-[`CONTRIBUTING.md`](https://github.com/SkynetRTN/MARS/blob/dev/CONTRIBUTING.md),
-and [`AGENTS.md`](https://github.com/SkynetRTN/MARS/blob/dev/AGENTS.md) for
+[`CONTRIBUTING.md`](https://github.com/SkynetRTN/MARS/blob/main/CONTRIBUTING.md),
+and [`AGENTS.md`](https://github.com/SkynetRTN/MARS/blob/main/AGENTS.md) for
 agentic contributors.
 
 ## License
@@ -96,11 +96,11 @@ agentic contributors.
 Copyright (C) 2026 Skynet Robotic Telescope Network.
 
 MARS is licensed under the **GNU General Public License v3.0 only**
-(`GPL-3.0-only`); the full text is [`LICENSE`](https://github.com/SkynetRTN/MARS/blob/dev/LICENSE). It is the licence of
+(`GPL-3.0-only`); the full text is [`LICENSE`](https://github.com/SkynetRTN/MARS/blob/main/LICENSE). It is the licence of
 the Skynet projects it grew from: Astromancer and Skycat carry the same text.
 
 The code under `algorithms/` comes from three places (provenance per file in
-[`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/dev/docs/extraction.md)):
+[`docs/extraction.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/extraction.md)):
 
 - **Skynet**, by the same group as MARS: `skylib` and the optical processing
   in `skynet-db`, extracted into `algorithms/skylib_lite/`, `wcs/`,
