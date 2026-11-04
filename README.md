@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SkynetRTN/MARS/dev/docs/assets/mars-banner.png" alt="MARS — MCP Astronomy Research Suite" width="880">
+  <img src="https://raw.githubusercontent.com/SkynetRTN/MARS/main/docs/assets/mars-banner.png" alt="MARS — MCP Astronomy Research Suite" width="880">
 </p>
 
 <p align="center">
