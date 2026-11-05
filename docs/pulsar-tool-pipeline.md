@@ -72,9 +72,11 @@ reads one off the audio, gets a plausible-looking null result with nothing
 marking it as wrong. That is why:
 
 - `fold_pulsar_lightcurve` reports `pulse_snr` for the combined profile and warns
-  below the inherited empirical cutoff of 8;
+  below the inherited empirical cutoff of 8, or when concentration is unavailable
+  (flat, fewer than four occupied phase bins or numerically unresolved);
 - `compute_pulsar_periodogram` folds the searched channel at its own peak and
-  reports `peak_fold_snr`, warning `peak_does_not_fold` below 8. It also reports
+  reports `peak_fold_snr`, warning `peak_does_not_fold` below 8 or when unavailable.
+  It also reports
   `false_alarm_probability_upper_bound`, conditional on iid Gaussian noise
   and a fixed grid. Read its assumptions; neither that bound nor the empirical
   fold concentration establishes a pulsar or correct period;
@@ -122,12 +124,23 @@ equivalent.
 | Input | folded, phase-binned profile | raw background-subtracted scan |
 | One pass is | one rotation, looped | the whole scan, once |
 | Faint source | pulse builds up across rotations | stays buried in noise |
-| Audio vs sky time | quantized only (~0.4%) | quantized **and** gap-compressed (~3%) |
+| Audio vs sky time | quantized; sparse occupied bins also compress relative phase gaps | quantized **and** gap-compressed (~3% on B0329+54) |
 
 Both report `playback_stretch`: audio seconds per second of sky. Neither is
 exactly 1.0, because `samplesPerPoint` is floored to a whole number of output
-samples rather than fitted to elapsed time. The folded path avoids only the
-gap-compression term. **No period should ever be read off the audio.**
+samples rather than fitted to elapsed time. Folded audio plays occupied phase
+bins at equal intervals. Missing phase bins change relative timing even when
+the whole-loop duration matches; `playback_not_real_time` warns for sparse
+profiles as well as duration drift above 1%. A global stretch does not recover
+unequal phase gaps. **No period should ever be read off the audio.**
+
+M5 corrects the fold's endpoint loss: phases are in `[0, P)`, bin boundaries
+cover the full cycle, and every sample contributes, including the origin and
+exact endpoints. Empty bins remain absent rather than receiving fabricated
+flux. Phase shifts follow binning and optional duplication follows shifting.
+Folded ECSV carries `period_s`, `bins`, `phase`, `cal` and `display_period`, so
+`plot_pulsar` displays both cycles when requested. Display duplication does not
+create additional independent phase bins for the concentration diagnostic.
 
 ---
 

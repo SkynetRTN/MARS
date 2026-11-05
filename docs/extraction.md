@@ -3585,6 +3585,31 @@ The four tools that sit on these are documented in
    scans; explicit-path failures return `read_failed` or `parse_error`.
    `test_pulsar_registry_failures.py` pins this first-party recovery contract.
 
+#### M5 folding boundary correction (2026-11-04, TS-24/25)
+
+The Python fold now represents phases in `[0, P)` without adding P before
+wrapping, which could coalesce the float immediately below P with the endpoint.
+It retains the bounded repeated-subtraction sequence in `float_mod`, including
+its direct-helper contract; the fold maps its P endpoint to zero. Bins cover
+the full physical cycle rather than the observed extrema. Every sample
+contributes, including tied maxima, and a degenerate generic `bin_data` range
+returns its single occupied mean. Generic binning includes its right endpoint;
+empty bins remain omitted. Calibration, bin-before-shift ordering and display
+duplication retain their roles. Two displayed cycles do not count twice toward
+the empirical concentration diagnostic's four-bin minimum.
+Derived non-finite bin means are rejected before writing artifacts, including
+finite flux whose accumulation overflows. Fractional-cycle shifting avoids
+overflow from adding a whole period to a near-maximum finite bin coordinate.
+
+The tool warns when fold concentration is unavailable as well as weak, using
+`weak_or_absent_pulse` and `peak_does_not_fold`. Its folded ECSV persists phase,
+calibration and display extent along with period/bin count, fixing a reload
+that clipped the second cycle. Small literal profiles, actual ECSV/PNG/PCM
+handoffs and synchronized-channel controls replace the endpoint-loss bug pins.
+See [the investigation and repair record](analysis/m5-lightcurve-hr-boundaries.md).
+These are intentional corrections to the M1-era phase/bin behavior above;
+they do not change source-file units or introduce timing corrections.
+
 ### 7. Preserved upstream behaviours (do not "fix")
 
 1. **The polarization labels are transposed.** Skynet cal files write
@@ -3606,7 +3631,9 @@ The four tools that sit on these are documented in
 
    Consequence for callers: **a period measured off the audio is not the
    pulsar's period.** `tools/pulsar.py` reports this as `playback_stretch` and
-   warns `playback_not_real_time` when it exceeds 1%.
+   warns `playback_not_real_time` when duration drift exceeds 1%, or whenever
+   a folded profile omits phase bins. Occupied bins play at equal intervals;
+   a global stretch cannot describe unequal relative phase gaps.
 
 3. **The leading noise-diode block is dropped by the last-column filter**, not
    by reading the `Cal` flag — `lastValue !== 0`. On the fixtures that removes
@@ -3773,11 +3800,12 @@ narrower:
 - **No barycentric correction**, so periods are topocentric and differ from an
   ATNF `P0` in the fourth decimal. Upstream has none either.
 
-Note the time-axis caveat in §7.2 is specific to the light-curve rendering. A
-binned phase profile is uniform in phase by construction, so the folded
-rendering does not inherit the gap-compression term — but it is still subject
-to the `samplesPerPoint` floor, so its `playback_stretch` is near 1.0 (~0.4%
-on the B0329+54 fixture) rather than exactly 1.0.
+The time-axis caveat in §7.2 also applies to sparse folded profiles: equal-width
+binning omits empty bins, and the synthesis plays occupied bins by index. A
+complete profile avoids that relative gap compression but is still subject to
+the `samplesPerPoint` floor; `playback_stretch` can be near 1.0 (~0.4% on the
+B0329+54 fixture) rather than exactly 1.0. Sparse audio is qualitative and is
+explicitly disclosed, including when its whole-loop stretch happens to equal 1.
 
 ---
 

@@ -3,13 +3,81 @@
 Investigated 2026-11-04 against `7375f82` on `feature/m5-geometry`, following
 the first three completed M5 squares. The [master plan](../working/master-continuation-plan.md#m5-resolve-the-specific-older-reports-that-remain-unverified)
 defines the scope; the [investigation plan](../superpowers/plans/2026-11-04-m5-lightcurve-hr-boundaries.md)
-records the probes. **Production behavior is unchanged.** Characterization
-tests explicitly pin current defects or conventions; passing them does not
-accept a repair. This M5 square remains open for its unresolved findings.
+records the probes. At that checkpoint production behavior was unchanged;
+passing characterization tests did not accept a repair. The observations below
+retain that historical baseline. The subsequent repair is recorded next.
 
-## Findings and dispositions
+## Maintained-path repair (2026-11-04)
 
-| Report | Current result | Reachability/disposition |
+The [repair plan](../superpowers/plans/2026-11-04-m5-pulsar-boundary-fixes.md)
+implements TS-24/25 and M5-LC-01 on the same feature branch. Fold phases now
+lie in `[0,P)` without adding P before wrapping. The low-level `float_mod`
+contract and bounded repeated-subtraction sequence remain unchanged; decimal
+subtraction drift remains possible and is not hidden by epsilon snapping.
+Fold bins span the full cycle instead of observed extrema. Represented edge
+comparisons retain every sample, including tied maxima and the float immediately
+below P. Generic bins include their final endpoint and equal-coordinate input
+returns one real mean. Empty bins remain omitted.
+Non-finite derived bin means return a validation error before artifact/audio
+output, including finite flux whose sum overflows. Phase shifts discard whole
+cycles first and wrap without adding near-maximum coordinates together.
+
+For the nine-sample planted-pulse control below, saved phases are now
+`[.125,.375,.625,.875]`, flux `[9,0,0,0]`; all three phase-zero pulse samples
+contribute. The actual WAV is non-silent. The empirical concentration is
+`4/sqrt(3)`, below the conventional cutoff of 8; retaining a pulse is not a
+claim of strong significance. The same finite diagnostic and warning reach
+the fixed one-trial periodogram. The all-boundary `[3,6,9]` input retains
+mean 6 in one occupied bin instead of writing an empty profile.
+
+Unavailable concentration now warns in periodogram, fold and audio callers,
+using `peak_does_not_fold` or `weak_or_absent_pulse`. Flat, fewer than four
+occupied phase bins or unresolved arithmetic cannot validate a pulse. A
+two-cycle display evaluates only the first cycle, so duplicated rows cannot
+invent independent phase support or change whether a diagnostic exists.
+
+Folded ECSV now persists `phase`, `cal` and `display_period` alongside period
+and bin count. A two-second/two-cycle control retains all eight bins through
+3.75 s; the real PNG spans `(0,4.2)` using the existing padding convention.
+Both cycles are visible. Old artifacts lacking that metadata should be
+regenerated to record their intended display extent.
+
+Sparse folded audio retains qualitative index-based playback. It now warns
+about omitted relative phase gaps even when its whole-loop stretch equals 1;
+the scalar describes loop duration, not within-loop timing. Documentation,
+schemas, warning descriptions and served guidance state this limitation.
+No timestamps, missing flux or new timing capability are invented.
+
+The 13 investigation cases were converted to correctness regressions where
+maintained behavior changed. Seven new handoff cases and 20 new numerical cases
+bring the focused pulsar boundary group to **40 passes**. The first numerical
+run failed all 12 initial controls before implementation; the additional display
+support tests also failed as expected. The first handoff run failed all six
+cases for missing metadata/diagnostics and the old numerical behavior. The
+repaired oracles are literal circular-bin means/coordinates, actual ECSV/PNG
+traces and decoded PCM, independent of production binning.
+
+Independent review found two extreme-scale gaps: the new equal-coordinate
+mean could overflow, and a whole-cycle shift could overflow a finite phase.
+New regression probes failed before their corrections. The mean guard also
+covers populated bins through public artifact/audio calls; finite inputs with
+overflowed intermediate sums are conservatively rejected. These guards do not
+promise stable arithmetic for every representable mathematical mean.
+
+The original standard/prefolded coordinate contract is still unverified.
+Current column-zero-as-seconds interpretation is unchanged; no conversion is
+inferred from synthetic index-like input. TS-12 and legacy HR helper defects
+retain the dispositions below. Current public channel support stays aligned,
+and the maintained HR model/fitter path already preserves ordinary points.
+Legacy pixel rendering remains a documented convention. These are explicit
+scope limits rather than unimplemented maintained-path repairs.
+
+## Investigation findings and dispositions
+
+This table and the following observations describe `7375f82`, before the
+maintained-path repair above. Historical line locators refer to that revision.
+
+| Report | Observed before repair | Reachability/disposition |
 |---|---|---|
 | TS-12: period step rounds to zero | `get_period_step(.1, 5)` returns 0 although its unrounded step is 0.00002 days; `.2,10` likewise erases 0.00004. | Confirmed retained helper defect, P3. No maintained production caller uses it; actual public grids validate progress and compute independently. |
 | TS-24 + TS-25: maximum-bin endpoint and phase-one mapping | Pulsar folding maps the origin and exact period multiples to P, then binning can exclude every tied maximum sample. Three planted pulses disappear completely through real load/fold/audio stages. | Confirmed maintained-path defect, P2. The old wording “always drops one sample” is too narrow and too absolute: tie multiplicity and float division affect the result. |
@@ -169,7 +237,7 @@ The historical source and extraction record identify the 32/16/±500 values
 as rendering constants. No equal-aspect physical measurement requirement or
 current HR-tool caller was found; do not “correct” them as units by assumption.
 
-## Reproduction, validation and remaining work
+## Investigation validation (before repairs)
 
 The three `tests/test_m5_{lightcurve,pulsar,hr}_boundary_investigation.py`
 files contain **68 new offline cases**. They include actual CSV/ECSV, PNG and
@@ -208,8 +276,37 @@ The 94 skips retain the existing external/asset/platform gates, including
 four optional native solver cases from the previous square. This investigation
 adds no production behavior change and does not close the light-curve/HR box.
 
-Priorities are the maintained pulsar sample-loss/missing-diagnostic path and
-two-cycle artifact/plot handoff. Convert their bug-pinning assertions into
-correctness regressions when repairing them. Keep helper-only and already
-corrected reports separate; resolve the original standard-coordinate contract
-before changing source units, and record HR display choices explicitly.
+The investigation handed off the maintained pulsar sample-loss/missing-diagnostic
+path and two-cycle artifact/plot handoff as repair priorities. Their bug pins
+are now correctness regressions, as recorded above. Helper-only and already
+corrected reports keep their separate dispositions. The original standard-file
+contract remains necessary before any source-unit conversion; HR display
+choices are explicit.
+
+## Repair integration validation
+
+The related pulsar suite passed **360 tests** in 62.13 seconds before the
+extreme-scale review corrections. The final boundary/limit suite then passed
+**73 tests** in 3.12 seconds. Independent review checked actual ECSV/PNG/PCM
+handoffs, repeated 80 integer/dyadic phase-index oracle combinations, found the
+two arithmetic gaps above and rechecked their corrections. The final populated
+mean guard and its public regression were separately reviewed; 27 numerical
+and handoff tests passed in that final review. No actionable findings remain
+within the repair scope.
+
+Final locked integration on Python 3.13.15:
+
+```bash
+uv run --locked pytest -q --junitxml=/tmp/m5-pulsar-boundary-fixes-full-results.xml
+```
+
+**4,759 passed, 94 skipped, 214 FITS normalization notices**, no failures,
+in 416.07 seconds. The suite ran outside the filesystem/socket sandbox, as in
+the prior validated checkpoint. All 434 snapshotted algorithm/tool/test/guidance
+files remained byte-identical through the run. Compilation, generated guidance
+consistency and whitespace checks pass. The existing external/asset/platform
+skip gates remain; no remote inputs or generated artifacts were committed.
+
+The fourth M5 square is closed on `feature/m5-geometry` with its explicit
+helper/format/display dispositions. The catalog parsing/cache/identity and
+obsolete-reports squares remain separate. This is not an M6 release decision.

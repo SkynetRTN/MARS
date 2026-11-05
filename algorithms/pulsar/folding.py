@@ -83,12 +83,17 @@ class FoldedProfile:
         deciding whether a candidate period is real needs it more than a plot.
         Median-absolute-deviation based, so a narrow pulse does not inflate the
         noise estimate it is measured against. Flat, non-finite or numerically
-        unresolvable profiles return no diagnostic.
+        unresolvable profiles return no diagnostic. A two-cycle display repeats
+        the same evidence, so only its first cycle enters this diagnostic.
         """
         values = self.sum if self.sum is not None else self.source1
-        if values is None or values.size < 4:
+        if values is None:
             return None
         values = np.asarray(values, dtype=np.float64)
+        if self.display_period == 2:
+            values = values[:values.size // 2]
+        if values.size < 4:
+            return None
         if not np.isfinite(values).all():
             return None
         low, high = float(np.min(values)), float(np.max(values))
@@ -184,6 +189,11 @@ def fold_to_phase(
     Note this does **not** apply the phase shift and does not duplicate for a
     two-period display — the pulsar tool does both after binning, unlike its
     variable-star sibling.
+
+    M5 correction: phases are in ``[0, period_s)``. Keep the legacy repeated
+    subtractions and their work bounds, but map their exact upper endpoint to
+    zero directly. Adding the period first would also round its immediate
+    predecessor up to the endpoint. Decimal-cycle subtraction drift remains.
     """
     time_s = limits.vector(time_s, "time_s")
     source1 = limits.vector(source1, "source1")
@@ -212,25 +222,32 @@ def fold_to_phase(
 
     min_jd = time_s[0]
 
-    temp_x = period_s + float_mod(time_s - min_jd, period_s)
-    # `if (temp_x > period) temp_x -= period`
-    over = temp_x > period_s
-    temp_x[over] -= period_s
+    temp_x = float_mod(time_s - min_jd, period_s)
+    temp_x[temp_x == period_s] = 0.
 
     # `.sort((a, b) => b[0] - a[0])` — descending, upstream's plotting order.
     order = np.argsort(-temp_x, kind="stable")
     return temp_x[order], source1[order], (source2[order] if source2 is not None else None)
 
 
-def bin_data(x: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray]:
+def bin_data(
+    x: np.ndarray,
+    y: np.ndarray,
+    bins: int,
+    *,
+    domain: Optional[tuple[float, float]] = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """``binData(data, bins)`` — fixed-width binning with bin averaging.
 
-    Empty bins are dropped, so the result can be shorter than ``bins``.
+    Empty bins are dropped, so the result can be shorter than ``bins``. By
+    default the domain spans the observations; equal coordinates form one bin
+    at that coordinate. ``domain`` supplies fixed bounds instead, used for a
+    full folded cycle even when some phases are unobserved. Coordinates outside
+    an explicit domain are rejected.
 
-    PRESERVED: the bin index is ``floor((x - xMin) / binSize)`` guarded by
-    ``binIndex < bins``, so the single point at ``x == xMax`` computes an index
-    of exactly ``bins`` and is **discarded**. Upstream does the same; the lost
-    point is one sample out of thousands.
+    M5 correction: bins are left-closed/right-open except the final bin, which
+    includes the domain's right endpoint and every tie there. Non-finite
+    derived means are rejected, including finite inputs whose sums overflow.
     """
     limits.integer(bins, "bins", limits.MAX_BINS)
     x = limits.vector(x, "phase_s")
@@ -242,27 +259,38 @@ def bin_data(x: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.nd
     if bins <= 0:
         raise ValueError(f"bins must be positive, got {bins!r}")
 
-    x_min = float(np.min(x))
-    x_max = float(np.max(x))
+    x_min, x_max = (
+        (float(np.min(x)), float(np.max(x))) if domain is None else domain
+    )
+    limits.finite(x_min, "bin domain minimum")
+    limits.finite(x_max, "bin domain maximum")
+    if x_min > x_max or np.any((x < x_min) | (x > x_max)):
+        raise ValueError("phase samples must lie inside the bin domain")
     bin_size = (x_max - x_min) / bins
     limits.finite(bin_size, "bin size")
 
-    centres = x_min + np.arange(bins, dtype=np.float64) * bin_size + bin_size / 2
-
+    if x_min == x_max:
+        with np.errstate(over="ignore", invalid="ignore"):
+            mean = float(np.mean(y))
+        limits.finite(mean, "bin mean")
+        return np.array([x_min]), np.array([mean])
     if bin_size == 0:
-        # Degenerate: every point at one x. Upstream divides by zero here and
-        # every index becomes NaN -> the guard drops them all, yielding [].
-        return np.empty(0), np.empty(0)
+        raise ValueError("bin width is not representable")
 
-    index = np.floor((x - x_min) / bin_size).astype(np.int64)
-    keep = (index >= 0) & (index < bins)
-    index = index[keep]
+    edges = np.linspace(x_min, x_max, bins + 1)
+    centres = edges[:-1] + np.diff(edges) / 2
+    # Compare against the represented edges rather than dividing by bin_size:
+    # division can round an endpoint's index to bins or merge adjacent floats.
+    index = np.searchsorted(edges, x, side="right") - 1
+    index = np.minimum(index, bins - 1)
 
-    y_sum = np.bincount(index, weights=y[keep], minlength=bins)
+    y_sum = np.bincount(index, weights=y, minlength=bins)
     count = np.bincount(index, minlength=bins)
 
     non_empty = count > 0
-    return centres[non_empty], y_sum[non_empty] / count[non_empty]
+    values = y_sum[non_empty] / count[non_empty]
+    limits.vector(values, "bin mean")
+    return centres[non_empty], values
 
 
 def fold_and_bin(
@@ -274,16 +302,24 @@ def fold_and_bin(
 ) -> tuple[np.ndarray, np.ndarray]:
     """``foldAndBin(points, binsPerPeriod, period, phase, binData)``.
 
-    Bins **first**, then applies the phase shift and wraps into ``[0, period)``
-    with ``((shifted % period) + period) % period``, then sorts ascending.
+    Uses fixed equal-width bins over the full ``[0, period]`` cycle, omitting
+    unoccupied bins. Bins **first**, then applies the phase shift into
+    ``[0, period)`` using the fractional-cycle offset, then sorts ascending.
     That ordering is upstream's and is why :func:`bin_data` does no shifting.
     """
-    centres, values = bin_data(x, y, bins_per_period)
+    centres, values = bin_data(x, y, bins_per_period, domain=(0., period))
     if centres.size == 0:
         return centres, values
 
-    shifted = centres + (phase * period)
-    wrapped = np.mod(np.mod(shifted, period) + period, period)
+    # Whole cycles are identity shifts. Wrap by comparing to the remaining
+    # distance instead of adding two near-maximum finite coordinates first.
+    offset = (phase % 1.) * period
+    remaining = period - offset
+    wraps = centres >= remaining
+    wrapped = centres.copy()
+    wrapped[wraps] -= remaining
+    wrapped[~wraps] += offset
+    wrapped[wrapped == period] = 0.
 
     order = np.argsort(wrapped, kind="stable")
     return wrapped[order], values[order]

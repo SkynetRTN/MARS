@@ -151,9 +151,9 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "legacy_confidence_uncalibrated": "A spectrum's saved thresholds lack supported calibration provenance and are shown only as uncalibrated legacy levels.",
     "sampling_limit_heuristic": "Irregular epochs have no asserted Nyquist limit; twice median positive spacing is only a default search suggestion.",
     "search_above_nyquist": "Explicit search bounds exceed the uniform-sampling Nyquist frequency; peaks there may be aliases.",
-    "peak_does_not_fold": "The strongest candidate has weak empirical fold concentration and needs further checks.",
+    "peak_does_not_fold": "The strongest candidate's empirical fold concentration is weak or unavailable and needs further checks.",
     "period_exceeds_baseline": "The fold period is longer than the observation, so it covers less than one rotation.",
-    "playback_not_real_time": "The rendered audio drifts against the observation clock; do not read a period off it.",
+    "playback_not_real_time": "Audio loop duration or relative sample timing differs from sky time; do not read a period off it.",
     "products_downloaded": "Files were downloaded and now resolve through the local frame registry.",
     "resolved_from_truncated_listing": "The match was made among the frames read; frames past the cap were not considered.",
     "scan_unreadable": "A scan could not be read or inspected and was omitted; the listing may be incomplete.",
@@ -170,5 +170,5 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "variable_sources_not_recorded": "The recorded run's variable-star filter is skipped, so the selection may differ.",
     "wcs_from_header": "The header already carried a celestial WCS, so solving was skipped.",
     "wcs_projection_failed": "A WCS is present but the field centre could not be projected.",
-    "weak_or_absent_pulse": "The folded profile peaks weakly: either the period is wrong or the source is too faint.",
+    "weak_or_absent_pulse": "The profile's empirical pulse concentration is weak or unavailable; inspect the data and period.",
 }

@@ -677,6 +677,8 @@ class PulsarPeriodogram(PulsarObservationInfo):
 
     The conventional warning cutoff is 8. This is neither a calibrated
     detection significance nor a source classifier; periodic RFI can fold too.
+    Null also warns: flat, insufficient or numerically unresolved phase support
+    cannot validate a pulse.
     """
 
     confidence_thresholds: dict[str, float] = Field(default_factory=dict)
@@ -721,6 +723,8 @@ class PulsarFoldedProfile(PulsarObservationInfo):
     The warning cutoff of 8 is empirical, not a calibrated detection
     significance. A weak fold may mean a wrong period or a faint source;
     coherent interference can also produce a strong fold.
+    Null warns for flat, fewer than four occupied bins or numerically unresolved
+    profiles. A two-cycle display does not add independent phase support.
     """
 
     channels: int = 1
@@ -754,7 +758,7 @@ class PulsarSonification(MARSToolModel):
     back_scale_s: float | None = None
 
     # Which rendering. "folded" is upstream's primary path -- the scan folded
-    # at a period into a profile, looped at the true pulse rate. "lightcurve"
+    # at a period into a profile, looped with the requested duration. "lightcurve"
     # plays the scan through once and needs no period.
     rendering: Literal["lightcurve", "folded"] = "lightcurve"
     period_s: float | None = None
@@ -768,10 +772,12 @@ class PulsarSonification(MARSToolModel):
     mode: Literal["burst", "waveform"] | None = None
     pass_seconds: float | None = None
     playback_stretch: float | None = None
-    """Audio seconds per second of observation. 1.0 is real time; 1.03 means a
-    feature recurring every 1.000 s in the sky is heard every 1.030 s. The
-    synthesis ignores sample timestamps, so this is never exactly 1.0 -- do not
-    read a pulsar period off the audio, use ``search_atnf``."""
+    """Whole-loop audio duration divided by its represented sky duration.
+
+    Speed affects this ratio. Integer output sampling quantizes loop duration;
+    sparse folded audio also compresses missing relative phase gaps. Even 1.0
+    does not establish correct within-loop timing. Do not measure periods from audio.
+    """
 
     speed: float | None = None
     cal: float | None = None

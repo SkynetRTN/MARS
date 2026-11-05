@@ -548,34 +548,41 @@ reachable now, what it does, and whether the release needs a change or caveat.
   lacking original isophotal weights require raw extraction data or re-extraction
   for adaptive reuse. Latent explicit parity and inert ancillary metadata keep
   their documented dispositions; no new solver preferences are exposed.
-- [ ] **Light-curve and HR boundaries.** Check period steps rounded to zero,
+- [x] **Light-curve and HR boundaries.** Check period steps rounded to zero,
   maximum-time samples lost in binning, exact multiples assigned phase one,
   channels paired by index rather than phase and prefolded-file axes. Legacy
   isochrone splicing drops a point; luminosity framing and edge-on projection
   scales also need their intended meaning established.
-  *Investigated 2026-11-04 against `7375f82`:*
-  [The investigation](../analysis/m5-lightcurve-hr-boundaries.md) reproduces
-  current pulsar endpoint sample loss (including all planted pulse peaks),
-  missing fold diagnostics and duplicated-cycle plot clipping. Endpoint loss
-  depends on ties and float division; it does not always discard exactly one
-  sample. Period-slider rounding remains in an unused helper while real grids
-  validate progress. Current channel support is aligned; independent support
-  remains a direct-helper hazard. The retired index-fold body is unreachable,
-  but the original standard/prefolded coordinate contract remains unverified.
-  HR framing/splice bugs remain in legacy helpers; maintained local-grid Python
-  preserves ordinary model points and does not use those helpers. Edge-on
-  constants are documented pixel rendering, not a demonstrated physical-unit
-  defect. There are 68 new offline characterization/control cases and 494
-  distinct focused/related passes. Production behavior is unchanged and the
-  maintained-path findings remain open.
-  Independent review repeated all 68 new cases with no material findings;
-  illustrative HR numbers were rounded to avoid a float32/64 precision mismatch.
-  An initial full run missed the MCP cancellation test's worker-readiness
-  deadline (4,731 passed, one failed, 94 skipped); all 68 new cases plus that
-  test then passed together (69 passes). The fresh locked full run passed
-  **4,732 tests, 94 skipped, 214 FITS notices**, no failures (428.55 seconds),
-  with code/tests/guidance held fixed. Compilation, guidance and whitespace
-  checks pass. The first failure remains recorded in the report.
+  *Investigated and repaired 2026-11-04 on `feature/m5-geometry`:*
+  [The evidence and repair record](../analysis/m5-lightcurve-hr-boundaries.md)
+  preserves the investigation at `7375f82` and the subsequent corrections.
+  Pulsar TS-24/25 now retain every endpoint/tied-maximum sample in full-cycle
+  bins; folded artifact/audio and the periodogram's diagnostic use those data.
+  Unavailable concentration warns, and duplicated display rows cannot invent
+  diagnostic support. M5-LC-01 saves display extent so a real two-cycle PNG
+  shows every bin. Review found two extreme-scale arithmetic gaps; derived
+  non-finite means are now rejected before output and fractional-cycle shifts
+  wrap without coordinate overflow. Sparse qualitative audio explicitly warns
+  of relative phase compression even when whole-loop stretch equals 1.
+  The related pulsar group passed 360 tests; the final boundary/limit group
+  passed 73 after review corrections, with no remaining review findings.
+
+  The unused period-slider helper retains its rounding defect; actual grids
+  validate progress. Public channel support is aligned; independently supported
+  value-only helper inputs still require caller alignment. The retired index
+  fold is unreachable; the original standard/prefolded coordinate contract
+  remains unverified and current column-zero-as-seconds behavior is unchanged.
+  Legacy HR framing/splice helpers are outside maintained tools; current
+  local-grid Python preserves ordinary model points. Edge-on constants are
+  documented pixel rendering; visible model-gap policy is separate from
+  fitting, which already refuses interpolation across large gaps. These are
+  explicit dispositions and limitations, not pending maintained-path repairs.
+  Final locked suite: **4,759 passed, 94 skipped, 214 FITS notices**, no
+  failures (416.07 seconds, Python 3.13.15). All 434 snapshotted algorithm,
+  tool, test and guidance files stayed unchanged through the run. Compilation,
+  generated-guidance consistency and whitespace checks pass. This closes the
+  fourth square with the documented helper/format/display limitations; catalog
+  parsing/cache/identity and obsolete reports remain separate.
 - [ ] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding
