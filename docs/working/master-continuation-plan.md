@@ -583,6 +583,12 @@ reachable now, what it does, and whether the release needs a change or caveat.
   generated-guidance consistency and whitespace checks pass. This closes the
   fourth square with the documented helper/format/display limitations; catalog
   parsing/cache/identity and obsolete reports remain separate.
+  *Follow-up 2026-11-06:* reject non-finite combined-channel sums/differences
+  before profile/artifact/audio output. Ten regressions cover both overflow
+  directions and retained finite values; 83 focused passes, independent review
+  clear. Full locked suite: **4,769 passed, 94 skipped, 214 FITS notices**, no
+  failures (442.47 seconds), with all 435 snapshotted code/test/guidance files
+  unchanged. Compilation, guidance and whitespace checks pass.
 - [ ] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding

@@ -310,3 +310,29 @@ skip gates remain; no remote inputs or generated artifacts were committed.
 The fourth M5 square is closed on `feature/m5-geometry` with its explicit
 helper/format/display dispositions. The catalog parsing/cache/identity and
 obsolete-reports squares remain separate. This is not an M6 release decision.
+
+## Combined-channel follow-up (2026-11-06)
+
+A fresh review of `bce1c59` found one P3 gap after the finite-mean guard:
+combining two finite channels could overflow. With times `[0,.25,.5,.75]`,
+P=1, four bins and both channels `[1e308,1,1,1]`, the fold returned success
+and wrote `sum=[inf,2,2,2]` into ECSV and preview. Opposite-sign origin
+channels similarly overflowed the difference. The unchecked combination
+predated M5, but retained origin samples newly exposed this input.
+
+The maintained fold now checks both derived arrays before returning its
+profile. Unrepresentable combinations raise `ValueError`; public fold/audio
+return `invalid_input` without writing an artifact. This guard also works
+when a caller configures NumPy to raise on overflow. Ordinary channel math,
+alignment, calibration and the direct legacy pairing helper are unchanged.
+
+Ten new cases cover both overflow directions, one-/two-cycle artifacts,
+folded audio, strict NumPy error mode and large representable combinations.
+Before the fix seven failed and three passed (two valid controls and the
+opposite-sign audio case, which already failed at a later normalization guard).
+The final focused boundary/limit group passes **83 tests** (3.65 seconds).
+Independent review found no actionable issues and repeated all ten new cases.
+The locked full suite passes **4,769 tests, 94 skips and 214 FITS notices**,
+no failures (442.47 seconds, Python 3.13.15). All 435 snapshotted algorithm,
+tool, test and guidance files remained unchanged through full validation.
+Compilation, generated-guidance consistency and whitespace checks pass.

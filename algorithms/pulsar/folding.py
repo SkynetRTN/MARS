@@ -399,7 +399,12 @@ def fold_lightcurve(
     if folded2 is not None:
         x2, y2 = fold_and_bin(phase_x, folded2, bins, period_s, phase)
         _, y2 = duplicate_if_needed(x2, y2, display_period, period_s)
-        diff, total = difference_and_sum(y1, y2)
+        # Finite channel means can still overflow when combined. Reject the
+        # derived profile before callers serialize it or synthesize audio.
+        with np.errstate(over="ignore", invalid="ignore"):
+            diff, total = difference_and_sum(y1, y2)
+        limits.vector(diff, "folded difference")
+        limits.vector(total, "folded sum")
 
     return FoldedProfile(
         phase_s=x1,
