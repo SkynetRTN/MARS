@@ -421,6 +421,12 @@ Evidence: [installation guide](../installing.md),
 These are questions to check, not newly confirmed bugs. Record whether each is
 reachable now, what it does, and whether the release needs a change or caveat.
 
+*Completed-work review 2026-11-08:* the combined changes `fb09774..a1b57fa`
+received three independent passes covering the first four squares, with no
+confirmed actionable findings. The [review record](../analysis/m5-completed-work-review-2026-11-08.md)
+preserves per-pass tests, independent numerical controls, expected native skips
+and the distinction from the prior full-suite run. The fifth square follows.
+
 - [x] **Coordinates and image geometry.** Check whether RA strings are read
   as hours instead of degrees, scale keywords get wrong units, or rotated and
   unequally binned images lose sky coverage. Other reports describe lost stars
@@ -595,6 +601,29 @@ reachable now, what it does, and whether the release needs a change or caveat.
   omit edge stars, cache failures break queries, invalid values look absent,
   or APASS IDs change after re-ingestion? Confirm UCAC disk layout against an
   actual zone and its specification before claiming a reader defect.
+  *Investigated 2026-11-08 against `a1b57fa`:*
+  [The evidence and dispositions](../analysis/m5-catalog-parsing-cache-identity.md)
+  confirm remaining cached-box undercoverage in both catalog backends (the
+  maintained WCS/cone paths remain protected), cache-directory and direct SDSS
+  eviction failures outside the patched SDK hooks, SIMBAD type-label loss,
+  invalid Landolt/Stetson requested columns, derived zero-error omission and
+  a conditional custom-column schema gap. Caching defaults to enabled.
+  Padded/composed filters and base-mapper zero values are already corrected;
+  null serialization does not change tested reference eligibility/solutions.
+  Pruning frequency is a policy/work observation, not measured bad latency.
+  Current APASS metadata lacks `recno`; ordinal/dedup and masked-ID cases retain
+  explicit conditional scope, without an observed live re-ingestion failure.
+  The maintainer confirms this deployment uses UCAC5, not UCAC4. No native
+  UCAC4 defect is claimed without actual zone/product evidence; it remains an
+  unverified legacy path rather than a deployment blocker.
+  There are 105 new offline characterization/control cases; production catalog
+  behavior is unchanged. This square remains open for remediation/dispositions.
+  Independent investigation review has no remaining test-oracle findings;
+  direct SDSS cache-eviction recovery gained a separately reproduced bug pin
+  and working control. Final locked suite: **4,874 passed, 94 skipped, 214 FITS
+  notices**, no failures (426.28 seconds, Python 3.13.15). All 438 snapshotted
+  code/test/guidance files stayed unchanged; compilation, generated guidance
+  and whitespace checks pass. Passing bug pins is not repair acceptance.
 - [ ] **Obsolete reports and instructions.** Close retired helper reports
   after checking for surviving callers. Reconcile Python 3.13-only agent-guide
   wording with current Python 3.12/3.13 support and remove stale execution
