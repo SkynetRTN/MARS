@@ -25,8 +25,13 @@ Nothing here runs Codex or uv, builds anything or opens a socket.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from tools.mcp.groups import TOOLS_ENV
 from tools.paths import MARS_HOME_ENV
@@ -56,20 +61,69 @@ def test_the_plugin_names_no_mars_version():
 
 
 def test_the_server_is_the_newest_release_run_from_uvs_cache():
-    """``@latest`` asks PyPI for the newest release each start and installs it
-    into uv's cache if needed; Python 3.13 is the newest version every MARS
-    dependency ships wheels for. No ``cwd``, and no environment in the plugin:
-    nothing may depend on the plugin's directory, which Codex replaces.
-    ``command`` is a bare name, resolved on the PATH the app was started with."""
+    """The plugin runs the Claude extension's launcher, so both routes behave
+    alike: refresh to the newest release and serve exactly it (offline, the newest
+    cached one still starts), or the release ``MARS_VERSION`` pins. The
+    code goes in as ``python -c``: no ``cwd`` and no file in the plugin,
+    because nothing may depend on the plugin's directory, which Codex
+    replaces. ``command`` is a bare name, resolved on the PATH the app was
+    started with; Python 3.13 is the newest every MARS dependency supports."""
 
     (name,) = _SERVERS
     server = _SERVERS[name]
     assert name == "mars"
     assert server["command"] == "uv"
-    assert server["args"] == [
-        "tool", "run", "--python", "3.13", "--from", "skynet-mars[mcp]@latest", "mars-mcp",
+    # -I: the launcher runs isolated, so a module planted in whatever folder
+    # Codex starts it from is never imported; --no-config: a uv.toml there
+    # cannot pick the package index; --isolated: a .venv there is not the
+    # interpreter, so its .pth files never run (it was, 2026-11-02).
+    assert server["args"][:-1] == [
+        "run", "--no-project", "--no-config", "--isolated", "--python", "3.13", "python", "-I", "-c",
     ]
     assert "cwd" not in server
+
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="needs uv")
+def test_a_venv_in_the_starting_folder_is_not_the_launchers_python(tmp_path):
+    """Without --isolated, `uv run` took a Python 3.13 .venv in Codex's
+    starting folder as the interpreter, and its .pth files ran before the
+    launcher (reproduced 2026-11-02)."""
+
+    made = subprocess.run(
+        ["uv", "venv", "--offline", "-q", "--python", "3.13", str(tmp_path / ".venv")],
+        capture_output=True, text=True, timeout=120,
+    )
+    if made.returncode:
+        pytest.skip("no local Python 3.13 for uv")
+    site = next((tmp_path / ".venv").glob("**/site-packages"))
+    (site / "zz_planted.pth").write_text("import sys; sys.stderr.write('PLANTED\\n')\n")
+    args = _SERVERS["mars"]["args"][:-1] + ["import sys; print(sys.prefix)"]
+
+    done = subprocess.run(
+        ["uv", *args], cwd=tmp_path, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "UV_OFFLINE": "1"},
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "PLANTED" not in done.stderr
+    assert Path(done.stdout.strip()).resolve() != (tmp_path / ".venv").resolve()
+
+def test_the_launcher_is_the_extensions_own_code():
+    """One launcher for both routes; .github/scripts/sync_codex_launcher.py
+    writes this copy, and fails --check when it is stale."""
+
+    import importlib.util
+
+    script = _ROOT / ".github" / "scripts" / "sync_codex_launcher.py"
+    spec = importlib.util.spec_from_file_location("sync_codex_launcher", script)
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+
+    assert sync.main(["--check"]) == 0, "run python3 .github/scripts/sync_codex_launcher.py"
+    code = _SERVERS["mars"]["args"][-1]
+    assert "skynet-mars[mcp]" in code and '"--offline"' in code
+    compile(code, "<launcher>", "exec")
     shipped = {p.name for p in _PLUGIN.iterdir()}
     assert not shipped & {"pyproject.toml", "uv.lock", "src", ".venv"}
 
@@ -121,10 +175,12 @@ def test_only_variables_mars_reads_are_forwarded():
         "ADS_DEV_KEY",
         MARS_HOME_ENV,
         TOOLS_ENV,
+        "MARS_VERSION",
         "XDG_DATA_HOME",
         "CASDA_OPAL_USERNAME",
         "DBUS_SESSION_BUS_ADDRESS",
         "XDG_RUNTIME_DIR",
+        "MARS_CATALOG_DIR",
         "ANET_INDEX_PATH",
         "ANET_TIMEOUT_S",
         "ATLAS_CATALOG_ROOT",

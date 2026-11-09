@@ -127,14 +127,23 @@ def test_working_control_python_break_retains_every_native_point(skip, want_colo
 
 
 def test_working_control_plot_gap_is_aligned_in_both_coordinates():
-    """A NaN break reaches the actual Matplotlib line without a lost vertex."""
+    """The point renderer masks the gap and preserves every finite vertex."""
     import matplotlib.pyplot as plt
 
     iso = pd.DataFrame({"BP": [2.0, 1.5, 3.0], "RP": [1.0, 1.0, 1.0], "G": [5.0, 4.0, 3.0]})
     colour, mag = hrfit.isochrone_cmd(iso, "BP", "RP", "G", iskip=1)
     ax = hrfit.plot_cmd([0.0, 1.0], [1.0, 2.0], colour, mag)
     try:
-        np.testing.assert_equal(ax.lines[0].get_xydata(), [[1.0, 5.0], [np.nan, np.nan], [0.5, 4.0], [2.0, 3.0]])
+        model = next(c for c in ax.collections if c.get_label() == "Isochrone")
+        offsets = model.get_offsets()
+        np.testing.assert_array_equal(
+            np.ma.getmaskarray(offsets),
+            [[False, False], [True, True], [False, False], [False, False]],
+        )
+        np.testing.assert_array_equal(
+            offsets.compressed().reshape(-1, 2), [[1.0, 5.0], [0.5, 4.0], [2.0, 3.0]],
+        )
+        assert not ax.lines  # Do not reconnect separate evolutionary phases.
         assert ax.yaxis_inverted()
     finally:
         plt.close(ax.figure)
@@ -235,8 +244,12 @@ def test_working_control_current_hr_tool_plots_local_track_without_losing_model_
         sentinel = (np.abs(raw[:, [20, 21, 19]]) > 25.0).any(axis=1)
         np.testing.assert_array_equal(np.flatnonzero(sentinel), [337])
         expected = np.column_stack((raw[:337, 20] - raw[:337, 21], raw[:337, 19]))
-        np.testing.assert_array_equal(ax.lines[0].get_xydata(), expected)
-        assert ax.lines[0].get_xydata().shape == (337, 2)
+        model = next(c for c in ax.collections if c.get_label() == "Isochrone")
+        offsets = model.get_offsets()
+        assert not np.ma.getmaskarray(offsets).any()
+        np.testing.assert_array_equal(offsets, expected)
+        assert offsets.shape == (337, 2)
+        assert not ax.lines
         assert ax.get_xlabel() == "(BP - RP)$_0$"
         assert ax.get_ylabel() == "M$_{G}$"
         assert ax.yaxis_inverted()

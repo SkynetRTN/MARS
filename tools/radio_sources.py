@@ -368,14 +368,46 @@ def identify_radio_sources(
 # ---------------------------------------------------------------------------
 # 2. A source's multi-frequency flux history -> fitted spectrum + plot
 # ---------------------------------------------------------------------------
-def _load_spectrum_csv(csv_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    df = pd.read_csv(csv_path)
+#: Axis labels for spectra whose units are known: explicit arrays are Hz and
+#: Jy by their parameter names, and NED's homogenized photometry columns are
+#: Hz and Jy (checked live, 2026-10-30).
+_FREQUENCY_LABEL = "Frequency (Hz)"
+_FLUX_LABEL = "Flux density (Jy)"
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _load_spectrum_csv(
+    csv_path: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, tuple[str, str]]:
+    """The CSV's frequency, flux and optional error columns, plus the axis
+    labels: a CSV may be in any units, so its own headers label the plot.
+
+    A file with no header row is read from its first row, and its axes get no
+    unit. pandas would otherwise take that row for the header, dropping it
+    from the fit and labelling the axes with its numbers. The first row is
+    judged by its own values, read raw: pandas renames a repeated header
+    value (``2.5,2.5`` becomes ``2.5`` and ``2.5.1``)."""
+    df = pd.read_csv(csv_path, header=None, dtype=str, keep_default_na=False)
     if df.shape[1] < 2:
         raise ValueError(f"{csv_path!r} needs at least two columns: frequency, flux")
+    first = [str(value).strip() for value in df.iloc[0, :2]]
+    if all(_is_number(value) for value in first):
+        axis_labels = ("Frequency", "Flux density")
+    else:
+        axis_labels = (first[0], first[1])
+        df = df.iloc[1:]
+    df = df.apply(pd.to_numeric, errors="coerce")
     freq = df.iloc[:, 0].to_numpy(dtype=float)
     flux = df.iloc[:, 1].to_numpy(dtype=float)
     flux_err = df.iloc[:, 2].to_numpy(dtype=float) if df.shape[1] >= 3 else None
-    return freq, flux, flux_err
+    return freq, flux, flux_err, axis_labels
 
 
 def _load_spectrum_from_ned(name: str, max_frequency_hz: float) -> tuple[np.ndarray, np.ndarray, str]:
@@ -413,7 +445,10 @@ def analyze_source_spectrum(
 
     Exactly one input is used, in this priority order: explicit
     ``frequencies_hz``/``fluxes_jy`` arrays, then ``csv_path`` (columns:
-    frequency, flux[, flux error] -- any units, consistent across rows), then
+    frequency, flux[, flux error] -- any units, consistent across rows; an
+    error column weights both fits when every point has a positive error,
+    and is otherwise ignored, with a ``flux_errors_incomplete`` warning),
+    then
     ``name`` resolved through NED's photometry table (homogenized units,
     filtered to ``max_frequency_hz`` -- the conventional radio-continuum
     cutoff). Fits both a pure power law (spectral index) and a log-parabola
@@ -424,12 +459,14 @@ def analyze_source_spectrum(
     overlaid) to ``output_dir`` (default: the shared artifact directory).
     """
     source_label = name
+    axis_labels = (_FREQUENCY_LABEL, _FLUX_LABEL)
+    flux_err = None
     try:
         if frequencies_hz is not None and fluxes_jy is not None:
             freq = np.asarray(frequencies_hz, dtype=float)
             flux = np.asarray(fluxes_jy, dtype=float)
         elif csv_path is not None:
-            freq, flux, _ = _load_spectrum_csv(csv_path)
+            freq, flux, flux_err, axis_labels = _load_spectrum_csv(csv_path)
             source_label = source_label or Path(csv_path).stem
         elif name is not None:
             freq, flux, _ = _load_spectrum_from_ned(name, max_frequency_hz)
@@ -448,15 +485,32 @@ def analyze_source_spectrum(
     except (RuntimeError, ValueError) as exc:
         return ToolResult(status="error", errors=[{"code": "provider_unavailable", "message": str(exc)}])
 
+    warnings: list[ToolWarning] = []
+    if flux_err is not None:
+        # Weighted, both fits drop a point without a usable error. Over a
+        # partly filled column they would fit, and compare, a subset; so the
+        # errors weight the fit only when every point has one.
+        measured = np.isfinite(freq) & np.isfinite(flux) & (freq > 0) & (flux > 0)
+        missing = int((measured & ~(np.isfinite(flux_err) & (flux_err > 0))).sum())
+        if missing:
+            warnings.append(ToolWarning(
+                code="flux_errors_incomplete",
+                message=(f"{missing} of {int(measured.sum())} points have no usable flux "
+                         "error, so the errors were ignored and the fit is unweighted; "
+                         "give every point a positive error to weight it."),
+            ))
+            flux_err = None
+
     try:
-        fit = spectral_fitting.analyze_spectrum(freq, flux)
+        fit = spectral_fitting.analyze_spectrum(freq, flux, flux_err)
     except ValueError as exc:
         return ToolResult(status="error", errors=[{"code": "invalid_input", "message": str(exc)}])
 
     stem = _safe_stem(source_label or "spectrum")
     plot_path = _output_path(f"{stem}_spectrum", ".png", output_dir)
     try:
-        _plot_spectrum(freq, flux, fit, plot_path, title=source_label)
+        _plot_spectrum(freq, flux, fit, plot_path, title=source_label, axis_labels=axis_labels,
+                       flux_err=flux_err)
     except BaseException:
         # The reservation is an empty file; a failed plot must not leave it.
         artifacts.discard_placeholder(plot_path)
@@ -464,21 +518,32 @@ def analyze_source_spectrum(
 
     fit["source_name"] = source_label
     fit["n_points"] = fit["power_law"]["n_points"]
+    fit["weighted"] = flux_err is not None
     return ToolResult(
         status="ok",
         count=1,
         preview=[fit],
         artifacts=[ArtifactRef(path=str(plot_path), format="png")],
+        warnings=warnings,
     )
 
 
 def _plot_spectrum(freq_hz: np.ndarray, flux: np.ndarray, fit: dict, path: Path,
-                   title: str | None = None) -> None:
+                   title: str | None = None,
+                   axis_labels: tuple[str, str] = (_FREQUENCY_LABEL, _FLUX_LABEL),
+                   flux_err: np.ndarray | None = None) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7, 5))
+    if flux_err is not None:
+        # The errors that weighted the power law; one the fit could not use
+        # draws no bar.
+        usable = np.isfinite(flux_err) & (flux_err > 0)
+        ax.errorbar(freq_hz, flux, yerr=np.where(usable, flux_err, 0.0),
+                    fmt="none", ecolor="#33b3e6", elinewidth=0.8, alpha=0.7, zorder=2,
+                    label="Flux error")
     ax.scatter(freq_hz, flux, s=30, c="#33b3e6", zorder=3, label="Measured flux")
 
     freq_grid = np.logspace(np.log10(freq_hz.min()), np.log10(freq_hz.max()), 200)
@@ -502,8 +567,8 @@ def _plot_spectrum(freq_hz: np.ndarray, flux: np.ndarray, fit: dict, path: Path,
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Flux density")
+    ax.set_xlabel(axis_labels[0])
+    ax.set_ylabel(axis_labels[1])
     ax.set_title(title or "Radio spectrum")
     ax.grid(alpha=0.15, which="both")
     ax.legend(loc="best", frameon=False, fontsize=9)
@@ -683,8 +748,8 @@ def _plot_field_sed(
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Flux density")
+    ax.set_xlabel(_FREQUENCY_LABEL)
+    ax.set_ylabel(_FLUX_LABEL)
     ax.set_title(title or "Field spectral energy distribution")
     ax.grid(alpha=0.15, which="both")
     ax.legend(loc="best", frameon=False, fontsize=8)

@@ -63,6 +63,44 @@ class ToolError(MARSToolModel):
     message: str
 
 
+
+#: Error codes that mean a lookup found nothing to return, rather than failed.
+NOT_FOUND_CODES = frozenset({"not_found", "target_not_found"})
+
+#: Error codes that come with a usable result: an ambiguous name returns the
+#: candidates it matched, for the caller to choose from.
+CHOICE_CODES = frozenset({"ambiguous"})
+
+
+class StatusFromErrors(MARSToolModel):
+    """A result whose ``status`` is decided by its ``errors``.
+
+    The console and the MCP surface decide whether a call failed from
+    ``status`` alone, and these models had none: a tool that reported an
+    error in ``errors`` -- a crashed ``solve-field``, a periodogram given bad
+    steps -- was shown, and reported to MCP clients, as a success. Every place
+    these models are built with errors returns no usable result alongside
+    them (checked model by model, 2026-10-28), except an ambiguous name, which
+    returns its candidates. So the status follows the errors: none is ``ok``;
+    only "found nothing" codes (:data:`NOT_FOUND_CODES`) is ``not_found``, as
+    a lookup with no match reports elsewhere -- an unknown photometry target
+    included, which ``PhotometryRunResult``'s own rule had called ``error``;
+    only choice codes (:data:`CHOICE_CODES`) is ``ok``, since the candidates
+    are the result; anything else is ``error``. Warnings never change it.
+    """
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status(self) -> Literal["ok", "not_found", "error"]:
+        errors = getattr(self, "errors", None) or []
+        if not errors:
+            return "ok"
+        if all(error.code in NOT_FOUND_CODES for error in errors):
+            return "not_found"
+        if all(error.code in CHOICE_CODES for error in errors):
+            return "ok"
+        return "error"
+
 class ArtifactRef(MARSToolModel):
     """A file a tool wrote to disk, plus enough metadata to use it."""
 
@@ -104,7 +142,7 @@ class FileMetadata(MARSToolModel):
     suffix: str | None = None
 
 
-class ArtifactMetadata(MARSToolModel):
+class ArtifactMetadata(StatusFromErrors):
     file: FileMetadata
     artifact_type: str
     media_type: str | None = None
@@ -145,7 +183,7 @@ class WcsSearchSummary(MARSToolModel):
     explicit: list[str] = Field(default_factory=list)
 
 
-class WcsSummary(MARSToolModel):
+class WcsSummary(StatusFromErrors):
     """Compact celestial WCS metadata from a FITS header or plate solve.
 
     ``algorithms.wcs.results.WcsSolveMetadata`` carries fitted diagnostics such
@@ -179,7 +217,7 @@ class CatalogSummary(MARSToolModel):
     filter_aliases: list[str] = Field(default_factory=list)
 
 
-class ReferenceBandResolution(MARSToolModel):
+class ReferenceBandResolution(StatusFromErrors):
     catalog: str
     image_filter: str | None = None
     supported: bool
@@ -195,7 +233,7 @@ class ReferenceBandResolution(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointSolution(MARSToolModel):
+class ZeropointSolution(StatusFromErrors):
     #: The ABSOLUTE photometric zero point in magnitudes, as ``calc_solution``
     #: returns it. Afterglow's API instead fixes ``zero_point = 20`` and
     #: reports a ``zero_point_correction``; adding the two gives this number.
@@ -213,7 +251,7 @@ class ZeropointSolution(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointReference(MARSToolModel):
+class ZeropointReference(StatusFromErrors):
     """A recorded zero-point solve shipped as ground truth.
 
     Three independent numbers describe the same exposure and they do not use
@@ -250,7 +288,7 @@ class ZeropointReference(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class ZeropointComparison(MARSToolModel):
+class ZeropointComparison(StatusFromErrors):
     """A computed zero point placed against the recorded ground truth.
 
     ``delta_vs_skynet``/``delta_vs_afterglow`` are ``zero_point`` minus the
@@ -320,7 +358,7 @@ class FieldCalMatch(MARSToolModel):
     ref_mag_error: float | None = None
 
 
-class FieldCalReplay(MARSToolModel):
+class FieldCalReplay(StatusFromErrors):
     """The end-to-end selection replay of a recorded field calibration.
 
     The recorded detections and the recorded *full* catalog response go
@@ -405,7 +443,7 @@ class SourceSummary(MARSToolModel):
     flux_error: float | None = None
 
 
-class PhotometryRunResult(MARSToolModel):
+class PhotometryRunResult(StatusFromErrors):
     """Result of running source extraction (and optionally a verified
     zero-point solve) on one bundled FITS target.
 
@@ -434,12 +472,6 @@ class PhotometryRunResult(MARSToolModel):
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
-
-    @computed_field
-    @property
-    def status(self) -> Literal["ok", "error"]:
-        """Preserve the MCP/agent error flag for structured photometry failures."""
-        return "error" if self.errors else "ok"
 
 
 class PulsarObservationInfo(MARSToolModel):
@@ -498,7 +530,7 @@ class PulsarScan(MARSToolModel):
     warnings: list[ToolWarning] = Field(default_factory=list)
 
 
-class PulsarScanList(MARSToolModel):
+class PulsarScanList(StatusFromErrors):
     """Scans found locally, plus where they were looked for."""
 
     scans: list[PulsarScan] = Field(default_factory=list)
@@ -518,7 +550,7 @@ class VariableStarFixture(MARSToolModel):
     row_count: int = 0
 
 
-class VariableStarFixtureList(MARSToolModel):
+class VariableStarFixtureList(StatusFromErrors):
     """Stage 0 variable-star fixture discovery result."""
 
     fixtures: list[VariableStarFixture] = Field(default_factory=list)
@@ -528,7 +560,7 @@ class VariableStarFixtureList(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarLightCurve(MARSToolModel):
+class VariableStarLightCurve(StatusFromErrors):
     """Stage 1 merged paired-source photometry."""
 
     file: FileMetadata
@@ -542,7 +574,7 @@ class VariableStarLightCurve(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarPeriodogram(MARSToolModel):
+class VariableStarPeriodogram(StatusFromErrors):
     """Stage 2 fixed-grid error-weighted variable-star periodogram."""
 
     file: FileMetadata
@@ -561,7 +593,7 @@ class VariableStarPeriodogram(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class VariableStarFoldedLightCurve(MARSToolModel):
+class VariableStarFoldedLightCurve(StatusFromErrors):
     """Stage 3 phase-folded differential variable-star photometry."""
 
     file: FileMetadata
@@ -577,7 +609,7 @@ class VariableStarFoldedLightCurve(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class OpticalFrame(MARSToolModel):
+class OpticalFrame(StatusFromErrors):
     """An optical FITS frame available on local disk.
 
     ``path`` is what every image tool takes. Everything else is read from the
@@ -602,7 +634,7 @@ class OpticalFrame(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class OpticalFrameList(MARSToolModel):
+class OpticalFrameList(StatusFromErrors):
     """Frames found locally, plus where they were looked for.
 
     ``search_root`` is the primary root -- the ``MARS_OPTICAL_DATA_DIR``
@@ -621,7 +653,7 @@ class OpticalFrameList(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarLightCurve(PulsarObservationInfo):
+class PulsarLightCurve(PulsarObservationInfo, StatusFromErrors):
     """Stage 1: an ingested, background-subtracted pulsar light curve.
 
     The artifact is the handoff to every later stage -- pass its path back in
@@ -647,7 +679,7 @@ class PulsarCandidate(MARSToolModel):
     power: float
 
 
-class PulsarPeriodogram(PulsarObservationInfo):
+class PulsarPeriodogram(PulsarObservationInfo, StatusFromErrors):
     """Stage 2: a Lomb-Scargle spectrum and the period it peaks at."""
 
     file: FileMetadata
@@ -703,7 +735,7 @@ class PulsarPeriodogram(PulsarObservationInfo):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarFoldedProfile(PulsarObservationInfo):
+class PulsarFoldedProfile(PulsarObservationInfo, StatusFromErrors):
     """Stage 3: a light curve folded at a period into a pulse profile."""
 
     file: FileMetadata
@@ -734,7 +766,7 @@ class PulsarFoldedProfile(PulsarObservationInfo):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarSonification(MARSToolModel):
+class PulsarSonification(StatusFromErrors):
     """A rendered pulsar audio file, plus what it was rendered from.
 
     The observation fields describe the input light curve; the audio fields
@@ -787,7 +819,7 @@ class PulsarSonification(MARSToolModel):
     errors: list[ToolError] = Field(default_factory=list)
 
 
-class PulsarPlot(MARSToolModel):
+class PulsarPlot(StatusFromErrors):
     """A rendered pulsar chart.
 
     Chart defaults come from ``algorithms.pulsar.charts``. Spectrum channel

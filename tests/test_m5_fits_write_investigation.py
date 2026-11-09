@@ -272,7 +272,7 @@ def test_public_write_boundary_reopens_with_accepted_coordinates(tmp_path, monke
         )
 
     monkeypatch.setattr(public_wcs, "_solve_wcs", solver_seam)
-    monkeypatch.setattr(public_wcs, "_configured_backend_warnings", lambda settings: ([], []))
+    monkeypatch.setattr(public_wcs, "_configured_backend_warnings", lambda settings, catalog_dir_problems: ([], []))
     summary = public_wcs.solve_astrometry(
         path, index_path=tmp_path, force=True, write_header=True,
     )

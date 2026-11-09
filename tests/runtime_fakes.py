@@ -99,3 +99,31 @@ def solver_descendant(ready):
     parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',sys.argv[1]]); time.sleep(60)"
     Path(ready).write_text(str(os.getpid()))
     AstrometryNetBackend._invoke_solve_field([sys.executable, "-c", parent, child], Path(ready).parent, 60)
+
+
+def write_artifact():
+    # A finished call that leaves a file behind, as a plot or download does.
+    from tools import artifacts
+    from tools.models import ArtifactRef, ToolResult
+    path = artifacts.reserve_artifact_path("made_in_a_worker", ext="txt")
+    path.write_text("made in a worker")
+    return ToolResult(status="ok", artifacts=[ArtifactRef(path=str(path), format="txt")])
+
+
+
+def read_own_artifact(path):
+    # A tool that accepts only an artifact under the artifact directory, as
+    # the variable-star periodogram checks its light curve.
+    from pathlib import Path
+    from tools import artifacts
+    from tools.models import ToolResult
+    if not Path(path).resolve().is_relative_to(Path(artifacts.ARTIFACT_DIR).resolve()):
+        return ToolResult(status="error", errors=[{"code": "invalid_input", "message": "not an artifact"}])
+    return ToolResult(status="ok", count=len(Path(path).read_text()))
+
+def child_pythonpath(out):
+    # What a tool's own child process -- a solver's Python helper -- inherits.
+    from tools.models import ToolResult
+    probe = "import os,sys; open(sys.argv[1],'w').write(os.environ.get('PYTHONPATH','<unset>'))"
+    subprocess.run([sys.executable, "-c", probe, out], check=True)
+    return ToolResult(status="ok", count=0)

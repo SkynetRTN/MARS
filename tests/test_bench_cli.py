@@ -245,3 +245,44 @@ def test_answers_filters_to_nothing_without_failing(tmp_path, capsys):
     out = _replay_run(tmp_path)
     assert main(["answers", str(out), "--task", "no-such-task"]) == 0
     assert "No sessions matched." in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Installed: the suites are not in the package
+
+
+@pytest.mark.parametrize("verb", ["run", "grade", "falsify", "answers", "compare"])
+def test_a_missing_suite_says_what_is_missing_and_where_suites_live(tmp_path, monkeypatch, capsys, verb):
+    """An installed mars-bench run outside a checkout used to end in a
+    FileNotFoundError traceback for benchmarks/suites; `compare`, which takes
+    no --suite-root, still did after the first fix."""
+
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "run.json").write_text(json.dumps({"config": {"suite_id": "smoke"}, "runs": []}))
+    monkeypatch.chdir(tmp_path)  # no benchmarks/ here, as for an installed copy
+    argv = {
+        "run": ["run", "smoke", "--backend", "replay/smoke", "--dry-run"],
+        "grade": ["grade", str(run)],
+        "falsify": ["falsify", str(run)],
+        "answers": ["answers", str(run)],
+        "compare": ["compare", str(run)],
+    }[verb]
+
+    assert main(argv) == 2
+    err = capsys.readouterr().err
+    assert "does not exist" in err
+    assert "checkout" in err and "--suite-root" in err
+
+
+def test_reference_data_is_the_bundled_data_not_a_path_beside_the_package():
+    from tools import config
+    from tools.bench.sources import REPO_DATA_ROOT
+
+    assert REPO_DATA_ROOT == config.BUNDLED_DATA_DIR
+    assert (REPO_DATA_ROOT / "fieldcal").is_dir()
+
+
+def test_a_mistyped_suite_is_named_not_a_traceback(capsys):
+    assert main(["run", "no-such-suite", "--backend", "replay/smoke", "--dry-run"]) == 2
+    assert "no-such-suite does not exist" in capsys.readouterr().err

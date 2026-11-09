@@ -938,6 +938,35 @@ def test_a_stop_during_a_tool_turn_refuses_the_call_but_still_answers_it():
     assert json.loads(results["blocks"][0]["content"])["errors"][0]["code"] == "interrupted"
 
 
+def test_a_stop_that_releases_an_open_approval_is_recorded_as_a_stop():
+    """The console answers open approvals Deny when the person stops the run.
+    The record said the approval policy refused the call."""
+
+    stop = {"requested": False}
+
+    def stop_while_asking(_proposed) -> Decision:
+        stop["requested"] = True
+        return Decision.DENY
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="unreached"),
+        ]
+    )
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": lambda **_: ToolResult(status="ok")},
+        approver=stop_while_asking,
+        should_stop=lambda: stop["requested"],
+    )
+
+    denied = [e for e in stream if isinstance(e, events.ToolCallDenied)]
+    assert [e.reason for e in denied] == ["stopped by the user"]
+    result = json.loads(session.history[-1]["blocks"][0]["content"])
+    assert result["errors"][0]["code"] == "interrupted"
+
+
 def test_a_stop_hook_that_raises_cannot_end_a_session():
     """A broken stop button must not be able to stop a run."""
 
@@ -1036,3 +1065,85 @@ def test_an_identical_rejected_call_is_a_cache_hit_the_second_time():
     )
 
     assert [call["cache_hit"] for call in session.tool_calls] == [False, True]
+
+
+# --- interrupt: Ctrl+C ends the step in flight ----------------------------
+
+
+class _HangingBackend(StubBackend):
+    """A model request that streams a chunk, then blocks until released --
+    one that does not end when asked to."""
+
+    def __init__(self, release):
+        super().__init__([])
+        self.release = release
+
+    def complete(self, *, messages, on_text=None, **kwargs):
+        self.calls.append({"messages": messages, **kwargs})
+        if on_text is not None:
+            on_text("partial ")
+        self.release.wait(timeout=5)
+        if on_text is not None:
+            on_text("arrived after the interrupt")
+        return ModelResponse(stop_reason="end_turn", text="partial arrived after the interrupt")
+
+
+def test_an_interrupt_abandons_a_model_request_in_flight():
+    """The request cannot be cancelled, so the loop stops waiting for it: the
+    session ends at once, and what the reply streams afterwards is dropped."""
+
+    import threading
+    import time
+
+    release, interrupt = threading.Event(), threading.Event()
+    delivered: list[str] = []
+    threading.Timer(0.2, interrupt.set).start()
+    started = time.monotonic()
+    try:
+        stream, session = _run(
+            _HangingBackend(release),
+            interrupt=interrupt,
+            on_delta=lambda event: delivered.append(event.text),
+        )
+    finally:
+        release.set()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 2, "the loop waited for the reply"
+    assert stream[-1].outcome == "interrupted"
+    assert session.outcome == "interrupted"
+    time.sleep(0.2)  # the abandoned reply finishes on its own thread
+    assert delivered == ["partial "]
+
+
+def test_an_interrupted_conversation_takes_the_next_question_in_the_same_turn():
+    """It ends on the person's message; the next question joins it rather
+    than following it, since two user turns in a row are not a shape every
+    provider accepts."""
+
+    history = [Message(role="user", blocks=(TextBlock(text="Find M31."),))]
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="Andromeda.")])
+
+    list(run_session("And M33?", backend=backend, session=_session(), history=history,
+                     tool_schemas=[], tool_functions={}))
+
+    sent = backend.calls[0]["messages"]
+    assert [message.role for message in sent] == ["user"]
+    assert [block.text for block in sent[0].blocks] == ["Find M31.", "And M33?"]
+
+
+def test_without_an_interrupt_the_request_runs_on_the_loops_own_thread():
+    """Callers that pass no interrupt (the bench, scripts) are unchanged."""
+
+    import threading
+
+    threads: list[str] = []
+
+    class Recording(StubBackend):
+        def complete(self, **kwargs):
+            threads.append(threading.current_thread().name)
+            return super().complete(**kwargs)
+
+    _run(Recording([ModelResponse(stop_reason="end_turn", text="ok")]))
+
+    assert threads == [threading.current_thread().name]

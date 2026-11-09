@@ -227,14 +227,19 @@ verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
 entry point: `mars`. The `tools/runner.py` shim and its console script were
 deleted once the console replaced them.
 
-`run_session()` also takes three optional callables for an interactive caller,
+`run_session()` also takes four optional hooks for an interactive caller,
 and behaves exactly as before without them: `on_delta` (receives `TextDelta`
 and `ThinkingDelta` live **instead of** their being emitted afterwards — a
 delta is delivered exactly once either way), `pending_input` (drained each turn
 and merged into the trailing user message, so a note typed mid-run arrives with
-the tool results), and `should_stop` (ends the session with outcome
+the tool results), `should_stop` (ends the session with outcome
 `interrupted`, refusing any pending tool call with a `tool_result` rather than
-leaving a `tool_use` unanswered).
+leaving a `tool_use` unanswered), and `interrupt`, a `threading.Event` that
+ends it *now*: the model request runs on a daemon thread the loop stops
+waiting for, and a reply that arrives later is dropped. The console's
+Ctrl+C sets it, and runs every tool but a short list of instant lookups in
+the MCP server's owned workers (`tools/tui/tool_calls.py`), which the same
+event kills.
 
 `tools/llm/` owns the provider-neutral **model port** and nothing else:
 neutral types, the `ModelBackend` protocol (`complete()` is the only required
@@ -367,7 +372,10 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   `ATLAS_TIMEOUT_S` as per-call values; the tool layer reads the environment.
   `solve_wcs(..., solver_settings=...)`
   accepts a per-call settings object; callers using the builders directly can
-  likewise pass any object exposing the relevant attributes.
+  likewise pass any object exposing the relevant attributes. The tool layer
+  builds it (`tools.wcs._solver_settings`, which the MCP install facts share)
+  and fills the two data paths from `MARS_CATALOG_DIR`, the user's one
+  catalog folder, searched four levels deep, when the variables are unset.
 - `algorithms/wcs/results.py` — solve output as two *frozen* dataclasses,
   `WcsSolveMetadata` and `WcsSolveResult`. This replaced `state.py`, which held
   plain-dataclass stand-ins for the Skynet ORM rows; the stateless rollout
@@ -420,17 +428,48 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 `extraction/centroiding.py`); there is no non-numba fallback. `scipy`, `astropy`,
 and Pydantic v2 are likewise required.
 
-End-to-end plate solving needs external binaries and catalog/index data.
-Set `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` explicitly for the relevant
-`solver_data` checks. `ANET_INDEX_PATH` must name directories holding suitable
-index files directly, separated with `os.pathsep` when needed. Set
-`ATLAS_CATALOG=ucac5` for this deployment's UCAC5 product. UCAC4 remains an
-unverified legacy product, not a requirement for this deployment.
+End-to-end runs additionally need data that is not in this repo. On the
+development host, `solve-field` is `/usr/bin/solve-field`, astrometry.net
+indexes 4107-4119 are under `/usr/share/astrometry/data`, three further
+index sets (2MASS 4200-series, TYCHO2, UCAC5) are under
+`/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
+UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
+selected by the repository's default environment. Set
+`MARS_CATALOG_DIR=/srv/agents/catalogs` to opt in to the three index sets
+and the UCAC5 catalogue, or `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` for
+one solver. The packaged 4107-4119 indexes are not under that folder; to use
+them too, name every index folder in `ANET_INDEX_PATH`, which replaces the
+folder's index sets rather than adding to them.
+`ANET_INDEX_PATH` must name directories that hold index files *directly*
+(`os.pathsep`-join the three leaf directories above; the `astrometry/` root
+alone is rejected as holding no index files). `tests/conftest.py` takes
+`MARS_CATALOG_DIR` out of every test's environment and gives it only to the
+`solver_data` tests, so a developer's catalogs never reach the default
+suite. The suite reads it from the exported environment, not `.env`.
+The packaged 4107-4119 indexes start at a wider scale than the ~10-arcminute
+fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
+backend without producing a solution. With the 4200-series set the M15
+fixture solves: in ~14 s with explicit bounds (`solve_astrometry(...,
+search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8)`, P6) and in
+~285 s all-sky, to the same solution (both measured before the engine stopped
+loading every index up front, 2026-10-28; bounded it now takes ~5 s against
+the 4200 series). The bounds are opt-in; the default
+stays the extracted all-sky search. The
+`solver_data`-marked tests gate this path. A known-solution check (M4,
+2026-10-26) strips NGC 3628 V's recorded WCS and requires each backend to
+land back on it within 1 arcsec, 0.5% in scale and 0.25 deg in rotation:
+with all three index sets, astrometry.net bounded in ~2.6 s and all-sky in
+18-19 s since 2026-10-28 (4 s and ~150 s before; `docs/extraction.md`, WCS
+§5), and ATLAS bounded in ~20 s. ATLAS is a pointed solver, not a blind one: with no scale or
+pointing it refuses its 2-degree footprint budget. Missing data skips by
+name; a miss with the data configured fails. Both backends still degrade to
+"unavailable" when unconfigured.
 
-Current solver limits and opt-in native acceptance evidence are recorded in
-`docs/working/master-continuation-plan.md` and the M5 coordinate investigation.
-The ATLAS/astrometry.net checks self-skip without their prerequisites; passing
-the ordinary suite does not imply that a new host's solver is configured.
+This deployment uses UCAC5. UCAC4's native product remains unverified legacy;
+its absence is not a deployment blocker. M5's motion/coverage corrections and
+retained limits are recorded in `docs/working/master-continuation-plan.md` and
+`docs/analysis/m5-coordinates-image-geometry.md`. Passing the ordinary suite
+without native prerequisites does not validate a new host's solver setup.
 
 ## Astromancer port boundaries
 

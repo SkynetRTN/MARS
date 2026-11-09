@@ -11,7 +11,7 @@ documents for individual gates.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | M1–M3 merged into main. M5 geometry and flux/position work is on `feature/m5-geometry` (2026-11-02); the master records validation and remaining gates. No release or main merge is implied by local closure. |
+| [master-continuation-plan.md](master-continuation-plan.md) | M1–M4 merged into main. M5's six squares and integration with main `193d117` are validated on `feature/m5-geometry` (2026-11-09). Release evidence and remaining questions stay in the master. |
 
 ## Landed
 
@@ -29,6 +29,7 @@ from the record.
 | MCP tool surface | [`../archive/mcp-tool-surface.md`](../archive/mcp-tool-surface.md); `v0.1.0rc1` published | 2026-09-25 (C9, the last phase) |
 | Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
 | Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |
+| Desktop acceptance (M4) | [`../archive/desktop-acceptance.md`](../archive/desktop-acceptance.md); install steps in [`../installing/`](../installing/) | 2026-10-23 |
 | Benchmark | [`../benchmarking/`](../benchmarking/README.md) — phases 4–5 of the model port, with its results, report and figures | 2026-09-14 (calibration gate) |
 | TUI | `../tool-architecture.md` section 10.2; working document deleted, git history has it | 2026-09-18 (phase G) |
 
