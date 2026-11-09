@@ -1306,6 +1306,14 @@ The upstream exporter is deliberately not maintained. MARS tools execute one
 known input per call and return structured results rather than iterating a
 directory, persisting run state, or aggregating CSV output.
 
+*M5 disposition (2026-11-09):* PHOT-16's blank-CSV exception handler and literal
+centroid radius of 5 belonged to the exporter deleted in `01177ec`. The
+maintained public reference replay returns explicit frame/WCS/fit errors and
+retains warnings, with a successful next-call control after injected failure.
+It consumes recorded magnitudes rather than running pixel centroiding. Current
+pixel photometry defaults to centroid radius 0. See the
+[obsolete-report evidence](analysis/m5-obsolete-reports-instructions.md).
+
 ---
 
 #### 5. Extraction-time parity behaviours and later corrections

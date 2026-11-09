@@ -9,7 +9,8 @@ through. The next release needs a new version.
 M2 is merged and unpublished. Its detailed evidence below retains the dated
 pre-merge branch history; those historical "unmerged" statements do not describe
 current main. Live provider failures remain recorded below.
-M4 and subsequent release gates remain open. PR #120 is abandoned as an
+M5's six squares are complete on `feature/m5-geometry`; the other gates retain
+their separately recorded status. PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
 
@@ -425,7 +426,9 @@ reachable now, what it does, and whether the release needs a change or caveat.
 received three independent passes covering the first four squares, with no
 confirmed actionable findings. The [review record](../analysis/m5-completed-work-review-2026-11-08.md)
 preserves per-pass tests, independent numerical controls, expected native skips
-and the distinction from the prior full-suite run. The fifth square follows.
+and the distinction from the prior full-suite run. The catalog and obsolete-report
+squares were subsequently reviewed and validated; all six M5 squares are now
+complete (2026-11-09). Release/M6 decisions remain separate.
 
 - [x] **Coordinates and image geometry.** Check whether RA strings are read
   as hours instead of degrees, scale keywords get wrong units, or rotated and
@@ -623,12 +626,32 @@ and the distinction from the prior full-suite run. The fifth square follows.
   Final locked suite: **4,964 passed, 94 skipped, 214 FITS notices**, no
   failures (407.55 seconds, Python 3.13.15). All 453 snapshotted code/test/
   guidance files stayed unchanged; compilation, generated guidance and
-  whitespace checks pass. M5 now has five of six squares complete.
-- [ ] **Obsolete reports and instructions.** Close retired helper reports
+  whitespace checks pass. This closes the fifth square.
+- [x] **Obsolete reports and instructions.** Close retired helper reports
   after checking for surviving callers. Reconcile Python 3.13-only agent-guide
   wording with current Python 3.12/3.13 support and remove stale execution
   instructions. Recheck the calibration reference driver's swallowed failures
   against current replay evidence. Historical review text remains dated evidence.
+  *Investigated, reconciled and validated 2026-11-09:*
+  [The current-callers and instruction evidence](../analysis/m5-obsolete-reports-instructions.md)
+  distinguishes removed optical state/deps/batch APIs and TypeScript-only
+  ArrMath/index folding from surviving Python helpers and the still-maintained
+  `query_catalogs_for_image`. PHOT-16 belongs to the deleted exporter; ten new
+  public replay controls confirm explicit frame/WCS/fit/nonconvergence errors,
+  retained warnings and successful recovery without pixel centroiding.
+  Current pixel photometry defaults to centroid radius zero. Contributor
+  guidance now reflects Python 3.12/3.13 support, deliberate 3.13 installers,
+  main as the PR base, canonical catalog routing, per-call solver config and
+  independent correction tests beside historical preservation evidence.
+  Old reviews remain dated; the stale test defect table is labeled historical.
+  No numerical logic changed: the production replay edit is a docstring
+  correction, verified by unchanged executable AST. Independent review is
+  clear. Targeted integration passes 404 cases; two centroid controls pass.
+  Final locked suite with MCP: **4,974 passed, 94 skipped, 214 FITS notices**,
+  no failures (409.08 seconds, Python 3.13.15). All 466 source/test/guidance/CI
+  metadata files remained frozen through the run. Compilation, generated
+  guidance, Markdown file links and whitespace checks pass. No fresh
+  Python 3.12/native/live-provider run is claimed. M5 is now **6/6 complete**.
 
 Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#9-full-finding-register),
 [extraction and preservation record](../extraction.md),

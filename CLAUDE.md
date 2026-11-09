@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-MARS (MCP Astronomy Research Suite) is a **staging area for extracted astronomy algorithms**, not yet a coherent
-package. It holds four things:
+MARS (MCP Astronomy Research Suite) is a Python astronomy tool collection,
+packaged as `skynet-mars`. Its main code and architecture areas are:
 
 1. `tools/` — plain Python tool wrappers, split database/archive tools, the
    optional agent loop and the `mars` console over it, and shared
@@ -28,19 +28,20 @@ edit the source, then run `uv run python -m tools.skill`.
 
 The extraction folders came from Skynet (`/home/claude/skynet`). The Python port
 folders came from Astromancer (`/home/claude/astromancer`) TypeScript. Extracted
-algorithms, constants, comments, and known bugs are preserved; ports document their
-intentional runtime and language differences. Two rules follow from this:
+algorithms retain provenance and recorded upstream evidence; ports document
+their runtime and language differences. M1–M5 intentionally correct verified
+defects with regression tests and dated evidence. Two rules follow from this:
 
 - **Every severed upstream dependency is marked inline** with `# EXTRACTED: was <symbol>`.
   These markers are the index of what was cut and why. Preserve them; add one whenever
   you cut another dependency.
-- **Documented parity quirks are deliberate.** Example: `algorithms/catalogs/`
-  ships two registries that disagree on purpose — `CATALOGS` (11 catalogs) and
-  `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
-  resolution). Merging them silently changes which reference band a narrowband
-  or unfiltered image calibrates against (`docs/extraction.md`, Catalogs §4).
-  `algorithms/hrdiagram_py/legacy.py` preserves several flagged upstream bugs. Do not "fix"
-  these unless the task is explicitly to diverge from Skynet/Astromancer.
+- **Distinguish current policy from historical defects.** Production catalog
+  selection, numerical resolution and reporting share `CATALOGS` through
+  `catalogs.filters`; `CATALOG_OPTIONS` is a historical compatibility export.
+  Retained quirks in `algorithms/hrdiagram_py/legacy.py` have explicit
+  dispositions in `docs/extraction.md` and the master continuation plan.
+  Check current callers and acceptance evidence before changing them. TS-21's
+  cancelling unit factors remain protected; changing only one is incorrect.
 
   The quirk that used to head this list is gone rather than preserved:
   `algorithms/wcs/state.py` was a non-`slots` dataclass specifically so
@@ -78,17 +79,21 @@ dependency ships wheels for -- `sep` has none for 3.14; see
 or 3.13, so neither Python nor the dependencies are chased to their newest:
 `uv.lock` moves when a change needs it or for a security fix (Dependabot's
 security updates, enabled in the repository settings), not on a schedule. Resolve paths for containment
-checks through `tools.config.within`/`safe_resolve`. It gates three jobs: `compileall` over
-`tools algorithms tests` on 3.12, `uv run --locked --extra mcp pytest` (after the MCP
-tests alone without the extra), and a `repository-shape` job asserting that
+checks through `tools.config.within`/`safe_resolve`. Required jobs include
+`compileall` over `tools algorithms tests` on 3.12,
+`uv run --locked --extra mcp pytest` on both supported versions (after the MCP
+tests alone without the extra), packaging, native platform containment, and
+a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
 exist.
 
-The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
-parity against recorded Skynet output and pins known bugs rather than fixing them. See
-`tests/README.md`. Nothing in it opens a socket unless marked `network`, which also
-requires `MARS_TEST_NETWORK=1`.
+The suite includes upstream preservation tests and independent correctness
+regressions for intentional corrections. Preserve recorded evidence and convert
+affected bug pins when fixing defects; parity alone does not establish scientific
+correctness. See `tests/README.md`. Live astronomy/model calls require explicit
+opt-in; `network` tests require `MARS_TEST_NETWORK=1`. MCP tests also use local
+IPC, so a sandbox that forbids it cannot run those integration checks.
 
 There is **no linter or formatter configured**. Match the surrounding file's style.
 
@@ -107,10 +112,10 @@ group, never in `dependencies` (`tests/test_packaging_metadata.py`).
 
 ## Python domain boundaries
 
-`algorithms/wcs/`, `algorithms/photometry/` and `algorithms/fieldcal/`
-deliberately do not import each other directly. `algorithms/catalogs/` and
-`algorithms/query/` are shared layers that `algorithms/fieldcal/` may import —
-see below. Ownership is strict:
+`algorithms/fieldcal/` composes photometry and source-extraction helpers with
+explicit WCS and catalog inputs. The WCS and photometry packages do not own
+the calibration solve. `algorithms/catalogs/` supplies declarations and filter
+routing; the tool layer owns remote query orchestration. Ownership is:
 
 - `algorithms/wcs/` owns plate solving only — `algorithms.wcs.wcs.solve_wcs`. Extracts sources, tries the
   astrometry.net `solve-field` subprocess backend, falls back to the in-process ATLAS
@@ -136,9 +141,9 @@ see below. Ownership is strict:
 
   **The stage order is a dependency, not a convention:** light curve ->
   periodogram -> period -> fold -> sonify. Only the periodogram produces a
-  period, and folding at a wrong period returns a *flat profile, not an error*.
-  That silent failure is why each stage reports a quality number
-  (`peak_confidence`, `pulse_snr`) and why the tools are four rather than one.
+  period. Folding at a wrong period may yield a misleading profile without
+  raising an error. Inspect `peak_fold_snr`/`pulse_snr` and the conditional
+  false-alarm disclosures; the legacy `peak_confidence` label is null.
   See `docs/pulsar-tool-pipeline.md`.
 
   Never read a period off rendered audio: the synthesis ignores sample
@@ -173,10 +178,10 @@ subclasses `(Declaration, Backend)` so that the three plugins overriding
 MRO position upstream's single-class arrangement gave them. Do not replace that
 with composition.
 
-Two catalog registries exist and disagree deliberately: `CATALOGS` (11 catalogs)
-and `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
-resolution). Merging them silently changes which reference band a narrowband or
-unfiltered image calibrates against. See `docs/extraction.md`, Catalogs §4.
+`CATALOGS` supplies the production filter routes through `catalogs.filters`.
+`CATALOG_OPTIONS` retains APASS/PanSTARRS extraction-time declarations for
+compatibility and provenance; it does not drive runtime reference resolution.
+See `docs/extraction.md`, Catalogs §4 and the dated M2 corrections.
 
 `algorithms.fieldcal` needs WCS, source extraction, and photometry but does not
 own them. **There is no dependency-injection seam.** The stateless rollout
@@ -208,8 +213,9 @@ query, and passing it `catalog_fixture=` (or `catalog_sources=` from
 **together with the recorded VSX rows** -- the recorded selection filtered
 variables out before matching, and does not reproduce without them.
 
-One public tool call is MARS's execution boundary: no run, stage, or session
-state is retained between calls, and no tool writes state another tool reads.
+One public tool call is MARS's execution boundary. Callers explicitly pass
+artifact paths and inputs between calls; no persisted optical processing-run
+object or global dependency shim joins them.
 
 ### The agent loop and the model port
 
@@ -356,9 +362,10 @@ preserve extraction-parity notes.
 
 Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 
-- `algorithms/wcs/config.py` — `SolverSettings` reads `ANET_INDEX_PATH`,
+- `algorithms/wcs/config.py` — `SolverSettings` holds `ANET_INDEX_PATH`,
   `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG` (default `ucac5`), and
-  `ATLAS_TIMEOUT_S` from the environment. `solve_wcs(..., solver_settings=...)`
+  `ATLAS_TIMEOUT_S` as per-call values; the tool layer reads the environment.
+  `solve_wcs(..., solver_settings=...)`
   accepts a per-call settings object; callers using the builders directly can
   likewise pass any object exposing the relevant attributes.
 - `algorithms/wcs/results.py` — solve output as two *frozen* dataclasses,
@@ -413,25 +420,17 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 `extraction/centroiding.py`); there is no non-numba fallback. `scipy`, `astropy`,
 and Pydantic v2 are likewise required.
 
-End-to-end runs additionally need data that is not in this repo. On the
-development host, `solve-field` is `/usr/bin/solve-field`, astrometry.net
-indexes 4107-4119 are under `/usr/share/astrometry/data`, three further
-index sets (2MASS 4200-series, TYCHO2, UCAC5) are under
-`/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
-UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
-selected by the repository's default environment. Set `ANET_INDEX_PATH` and/or
-`ATLAS_CATALOG_ROOT` to opt in. `ANET_INDEX_PATH` must name directories that
-hold index files *directly* (`os.pathsep`-join the three leaf directories
-above; the `astrometry/` root alone is rejected as holding no index files).
-The packaged 4107-4119 indexes start at a wider scale than the ~10-arcminute
-fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
-backend without producing a solution. With the 4200-series set the M15
-fixture solves: in ~14 s with explicit bounds (`solve_astrometry(...,
-search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8)`, P6) and in
-~285 s all-sky, to the same solution. The bounds are opt-in; the default
-stays the extracted all-sky search. The
-`solver_data`-marked tests gate this path. The ATLAS backend has not been
-validated (P9). Both backends still degrade to "unavailable" when unconfigured.
+End-to-end plate solving needs external binaries and catalog/index data.
+Set `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` explicitly for the relevant
+`solver_data` checks. `ANET_INDEX_PATH` must name directories holding suitable
+index files directly, separated with `os.pathsep` when needed. Set
+`ATLAS_CATALOG=ucac5` for this deployment's UCAC5 product. UCAC4 remains an
+unverified legacy product, not a requirement for this deployment.
+
+Current solver limits and opt-in native acceptance evidence are recorded in
+`docs/working/master-continuation-plan.md` and the M5 coordinate investigation.
+The ATLAS/astrometry.net checks self-skip without their prerequisites; passing
+the ordinary suite does not imply that a new host's solver is configured.
 
 ## Astromancer port boundaries
 
@@ -451,7 +450,7 @@ provenance and parity details.
 
 ## Conventions
 
-- Target `dev`, not `main`, unless a maintainer says otherwise. `.github/CODEOWNERS` marks
+- Target `main` unless a maintainer says otherwise. `.github/CODEOWNERS` marks
   the repo maintainer-owned.
 - Keep PRs narrow; separate documentation, workflow, dependency, and behavior changes.
 - Keep live remote astronomy service calls out of default checks — gate them explicitly.

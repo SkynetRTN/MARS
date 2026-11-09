@@ -10,7 +10,7 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 
 Most extracted algorithms have preservation tests against recorded upstream
 output, including known bugs. Passing those tests establishes parity, not
-scientific correctness. Intentional M2 corrections have separate acceptance
+scientific correctness. Intentional M1–M5 corrections have acceptance
 tests against independent scientific references; the pulsar, variable-star,
 cluster and photometric-calibration records under `docs/analysis/` describe
 their derivations and limits.
@@ -21,16 +21,17 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 
 For the preservation tests, three conventions apply:
 
-1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
-   four complete recorded Skynet zero-point solves. See `data/README.md`.
+1. **Keep recorded data.** Fixtures include 42 real PROMPT/Skynet frames and
+   four complete recorded Skynet zero-point solves. Independent numerical
+   regressions also use synthetic cases with specified answers. See `data/README.md`.
 2. **Preserve recorded evidence.** Historical outputs stay unchanged. M2's
    corrected field-calibration solver uses the same four recorded inputs,
    checked against an independent scientific fit; historical Skynet/Afterglow
    agreement is tested separately from the corrected output.
-3. **Known bugs are pinned, not fixed.** Where a test documents a defect it says
-   so in capitals, gives the upstream file it was verified against, and states
-   what to do if someone decides to diverge. Deleting such a test is part of
-   fixing the bug; changing the algorithm without touching the test is not.
+3. **Distinguish bug pins from correction regressions.** A retained defect has
+   an explicit current disposition. When fixing it, convert its pin into a
+   regression against the intended answer and preserve the historical record.
+   Do not change the algorithm while leaving a test that expects the old bug.
 
 ## Layout
 
@@ -43,7 +44,8 @@ For the preservation tests, three conventions apply:
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms and lexical/numeric-AST guardrails |
 | `test_fieldcal_expression_limits.py` | M1 PHOT-15: bounded numeric AST (no eval), pre-parser/pre-evaluator sentinels, literal regex band matching, namespace/alias/integer work limits, kill/reap-bounded powers and direct calibration-collection failures; exact shipped-polynomial arithmetic and existing uncertainty propagation stay preserved. |
 | `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
-| `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's 35 matches selected from the recorded 132-row APASS cone (45 once clipped, minus VSX variables) with bit-exact reference magnitudes and independent fit expectations, under a `socket.connect` guard |
+| `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's recorded 35 matches versus 29 usable current matches from the recorded 132-row APASS cone (45 on the detector), with unchanged reference magnitudes and independent fit expectations, under a `socket.connect` guard |
+| `test_m5_obsolete_report_controls.py` | PHOT-16 disposition through the maintained public replay: named frame/WCS/solver/nonconvergence errors instead of blank CSV cells, warning retention, recovery after a failed call and no pixel centroiding of recorded magnitudes. |
 | `test_catalogs_registries.py` | Current declarations, retained historical secondary export, no-network guarantee |
 | `test_catalog_magnitudes_filters.py` | M2 shared production routing, native band identities, exact transform values, composed spelling, invalid/zero values, overrides and relative narrowband warning/label |
 | `test_catalog_filter_review.py` | Follow-up catalog review: equivalent alias overrides, actual reference provenance, supplied/native magnitude warnings, public photometry labels and exact rejection-mask disclosures |
@@ -128,15 +130,18 @@ For the preservation tests, three conventions apply:
 The default suite remains deterministic: network-marked tests are skipped unless
 `MARS_TEST_NETWORK=1` is set explicitly.
 
-## Defects recorded here
+## Extraction-time defect descriptions (historical)
 
-Everything below was verified against the upstream Skynet source **before**
-being written down; each one reproduces there too, so these are preserved by the
-extraction contract rather than introduced by it. Nothing here has been fixed.
+The descriptions below record extraction-time observations, not a current bug
+list. M2–M5 corrected many of them or removed their callers; a few rows already
+carry later correction notes. The
+[master continuation plan](../docs/working/master-continuation-plan.md) and its
+linked evidence give current dispositions, including
+[obsolete reports and instructions](../docs/analysis/m5-obsolete-reports-instructions.md).
+Keep the original evidence distinct from current behavior.
 
-They are collected in one place because they are the single most likely thing to
-be mistaken for a broken test. If one of these assertions fails, the algorithm
-changed — which may be the intent, but is never an accident.
+Tests named in this historical table may now assert the corrected answer.
+Assess a failure against that test's current contract and independent reference.
 
 ### Wrong output or a crash
 

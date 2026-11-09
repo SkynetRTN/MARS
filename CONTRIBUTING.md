@@ -1,7 +1,7 @@
 # Contributing
 
 MARS (MCP Astronomy Research Suite) is early-stage astronomy tooling. Keep pull requests narrow and target
-`dev` unless a maintainer asks for a different base branch.
+`main` unless a maintainer asks for a different base branch.
 
 ## Pull Requests
 
