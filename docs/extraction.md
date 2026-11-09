@@ -1868,6 +1868,14 @@ effect of module import. MARS moves it to
 so the default behaviour is unchanged, but the patch is greppable and a caller
 can opt out. Patching a third-party module's globals should not be invisible.
 
+*M5 (2026-11-08):* the locked SDK creates cache directories before those hooks.
+The patch now tolerates `OSError` from that directory creation too, preserving
+the SDK property setter and its normal read/write path. A failed cache costs
+a request; provider/network, cancellation and requested file-save errors still
+surface, without replaying the request. SDSS's direct error-entry eviction
+also tolerates filesystem errors: successful eviction repairs the cache on
+refetch; failed eviction makes that single HTML-recovery retry uncached.
+
 ##### 4.3 `CUSTOM_VIZIER_CATALOGS` loop → `build_custom_vizier_catalog()`
 
 Afterglow built custom catalog classes in an import-time `for` loop over Flask
@@ -1946,16 +1954,22 @@ grid-aligned region than asked for. The WCS path clips afterwards; a caller
 using `query_circ` directly does not. Turning the cache off changes results near
 a field edge. M2 now grows rounded cones by the spherical displacement of
 their centre before rounding the radius upward; moving the centre cannot cut
-away the original cone's edge. Explicit boxes retain their legacy rounding.
+away the original cone's edge. M5 also grows rectangular height for latitude
+displacement and recomputes width for both longitude displacement and the
+changed latitude. Pole/full-longitude cases use full RA. This preserves the
+original rectangle under the maintained spherical box definition, subject to
+the existing provider row cap; it does not promise an uncapped provider result.
 
-##### 5.2 `_derive_columns` requests columns named `int` and `float`
+##### 5.2 Expression column dependencies (corrected by M5)
 
-The identifier filter skips NumPy exports and `str` methods but not Python
-builtins, so Landolt's sexagesimal-parsing expressions contribute `'int'` and
-`'float'` as VizieR column names. VizieR ignores unknown columns, so the query
-still returns correct data — which is why it survived upstream unnoticed.
-Left as-is: filtering builtins changes the request MARS sends and needs
-validation against a live VizieR.
+The extracted identifier filter requested `int` and `float` for the
+Landolt/Stetson sexagesimal expressions. M5 shares AST dependency analysis
+between outgoing columns and response validation: actual call targets and
+attribute names are excluded; data reads and literal columns named `int`,
+`float`, NumPy exports or string methods remain dependencies. Missing literal
+coordinate columns now raise the same provider-schema error as other missing
+coordinates. Offline real-SDK payload/VOTable controls verify requests and
+mapping without asserting how a live service handles unknown columns.
 
 ##### 5.3 `build_custom_vizier_catalog`'s character class is wrong
 
@@ -2233,6 +2247,24 @@ queries and public VizieR tools share this guard. Rejected HTTP-200 replies
 are evicted through the SDK's cache hook so later queries can recover; the
 normal cache directory/pruning, successful empty replies and row-cap behavior
 are retained. Failed VSX checks consequently reach `catalog_query_incomplete`.
+
+##### 5.14 M5 catalog boundary corrections (2026-11-08)
+
+The [catalog investigation and repair record](analysis/m5-catalog-parsing-cache-identity.md)
+distinguishes confirmed defects from retained policy. Box rounding and
+expression dependencies are corrected in §5.1–5.2 above; cache recovery is
+recorded in §4.2. SIMBAD maps machine `*`/`G` to Star/Galaxy, decodes byte
+codes and keeps unknown codes as raw labels. Deliberately empty vocabulary
+labels remain empty. A masked optional catalog identifier is now absent at
+the field-calibration handoff; integer zero remains valid.
+
+Landolt preserves synthesized zero uncertainty when every operand of the
+retained formula has a recorded finite error. Missing operands do not become
+assertions of exact precision; existing positive partial-error quadrature and
+the separately disclosed wrong-colour U formula remain unchanged. Null wire
+serialization, pruning frequency/retention and per-catalog exact-row dedup
+retain their documented scope. No stable APASS ID is invented. The deployment
+uses UCAC5; the unverified UCAC4 native product remains a legacy limitation.
 
 #### 6. External dependencies
 

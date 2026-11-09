@@ -1,7 +1,6 @@
 """M5 CAT-17/26 investigation: current behavior, with no provider network.
 
-BUGPIN tests deliberately assert a remaining defect; they are characterization,
-not acceptance tests for a repair. Geometry witnesses are specified independently
+Geometry witnesses are specified independently
 of MARS clipping. SDK checks retain the installed astroquery request/cache path
 and replace only its HTTP session or the filesystem operation being tested.
 """
@@ -60,10 +59,10 @@ def test_constructed_catalog_uses_enabled_setting_despite_false_class_attribute(
 @pytest.mark.parametrize("dec,height,direction", [
     (20.0013, 2.0, 1), (-20.0013, 2.0, -1), (89.999, 0.2, -1), (-89.999, 0.2, 1),
 ])
-def test_bugpin_cached_public_box_loses_an_original_latitude_edge(
+def test_cached_public_box_preserves_original_latitude_edge(
     name, dec, height, direction, monkeypatch,
 ):
-    """Exact grid-multiple dimensions need not grow when the centre moves."""
+    """Exact grid-multiple dimensions grow to compensate for centre motion."""
     catalog, received = _capture_region(monkeypatch, name)
     # On the meridian, rectangular latitude extent is unambiguous even near
     # the poles. Stay 0.06 arcsec inside the edge away from the rounded centre.
@@ -76,13 +75,13 @@ def test_bugpin_cached_public_box_loses_an_original_latitude_edge(
     (_, exact_dec, exact_dimensions), (_, snapped_dec, dimensions) = received
     assert exact_dec == dec
     assert abs(witness_dec - exact_dec) * 60 < exact_dimensions[1].to_value(arcmin) / 2
-    assert dimensions[1].to_value(arcmin) == height
-    assert abs(witness_dec - snapped_dec) * 60 > height / 2  # BUGPIN: lost edge
+    assert dimensions[1].to_value(arcmin) >= height
+    assert abs(witness_dec - snapped_dec) * 60 < dimensions[1].to_value(arcmin) / 2
 
 
 @pytest.mark.parametrize("name", ["APASS", "SDSS"])
 @pytest.mark.parametrize("ra_deg", [0.0013, 359.9987])
-def test_bugpin_cached_public_equatorial_box_loses_edge_at_ra_seam(
+def test_cached_public_equatorial_box_preserves_edge_at_ra_seam(
     name, ra_deg, monkeypatch,
 ):
     catalog, received = _capture_region(monkeypatch, name)
@@ -97,9 +96,9 @@ def test_bugpin_cached_public_equatorial_box_loses_edge_at_ra_seam(
                           width_arcmins=2.0, height_arcmins=2.0) == []
     snapped_ra, _, dimensions = received[0]
     assert snapped_ra == 0.0
-    assert dimensions[0].to_value(arcmin) == 2.0
+    assert dimensions[0].to_value(arcmin) >= 2.0
     snapped_distance = abs((witness_ra - snapped_ra * 15 + 180) % 360 - 180) * 60
-    assert snapped_distance > 1.0  # BUGPIN: original in-field witness is absent
+    assert snapped_distance < dimensions[0].to_value(arcmin) / 2
 
 
 @pytest.mark.parametrize("name", ["APASS", "SDSS"])
@@ -258,10 +257,10 @@ def test_sdss_direct_eviction_refetches_html_and_caches_valid_csv(sdss_error_cac
     assert len(requests) == 2
 
 
-def test_bugpin_sdss_direct_eviction_permission_fault_prevents_html_recovery(
+def test_sdss_direct_eviction_permission_fault_still_recovers_html(
     sdss_error_cache, monkeypatch,
 ):
-    """SDSS unlinks directly, outside the protected SDK remove_cache_file."""
+    """An undeletable service-error entry triggers one uncached retry."""
     from algorithms.query.sdss import _query_sql
 
     client, directory, requests = sdss_error_cache
@@ -276,22 +275,17 @@ def test_bugpin_sdss_direct_eviction_permission_fault_prevents_html_recovery(
         return original_unlink(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "unlink", denied_unlink)
-    with pytest.raises(PermissionError, match="SDSS direct cache eviction"):
-        _query_sql(client, sql, data_release=17, cache=True)
+    rows = _query_sql(client, sql, data_release=17, cache=True)
     assert len(failed_evictions) == 1
     assert failed_evictions[0].exists()
-    assert len(requests) == 1  # BUGPIN: the automatic provider retry never runs.
-    # The next provider answer and real SDK CSV parser both work; the caller
-    # can recover manually only by bypassing the poisoned cache.
-    rows = _query_sql(client, sql, data_release=17, cache=False)
     assert list(rows["objID"]) == [1]
     assert len(requests) == 2
 
 
-def test_bugpin_installed_sdk_cache_directory_fault_prevents_automatic_fallback(
+def test_installed_sdk_cache_directory_fault_allows_automatic_fallback(
     sdk_cache, monkeypatch,
 ):
-    """SDK resolves cache_location before entering MARS's protected hooks."""
+    """A failed cache directory creation does not prevent the provider call."""
     client, directory, requests = sdk_cache
     directory.rmdir()  # Model an unavailable cache directory that needs creation.
     original_mkdir = Path.mkdir
@@ -302,11 +296,10 @@ def test_bugpin_installed_sdk_cache_directory_fault_prevents_automatic_fallback(
         return original_mkdir(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", denied_mkdir)
-    with pytest.raises(PermissionError, match="cache directory permission"):
-        _sdk_region(client)
-    assert requests == []  # BUGPIN: no automatic uncached provider attempt.
-    assert not _sdk_region(client, enabled=False)
+    assert not _sdk_region(client)
     assert len(requests) == 1
+    assert not _sdk_region(client, enabled=False)
+    assert len(requests) == 2
 
 
 @pytest.mark.parametrize("fault", ["listing", "stat", "unlink"])

@@ -4,13 +4,89 @@ Investigated 2026-11-08 against `a1b57fa` on `feature/m5-geometry`, after
 [reviewing the four completed M5 squares](m5-completed-work-review-2026-11-08.md).
 The [master plan](../working/master-continuation-plan.md#m5-resolve-the-specific-older-reports-that-remain-unverified)
 defines the questions; the [investigation plan](../superpowers/plans/2026-11-08-m5-review-and-catalog-investigation.md)
-records the work. **Catalog production behavior is unchanged.** Tests marked
-BUGPIN/characterization deliberately describe defects, not repair acceptance.
-This fifth M5 square remains open.
+records the original investigation. The dated repair section below supersedes
+its defect descriptions. Original confirmed bug pins now require corrected
+behavior; retained policy and conditional controls keep their explicit scope.
 
 The vault's September catalog note predates M2/M3/M5. Retrieval used its
 index/text fallback because BM25/chunks are unconfigured. Current repository
 code, installed SDK behavior and executed probes are authoritative.
+
+## Repair and closure (2026-11-08–09)
+
+The [repair plan](../superpowers/plans/2026-11-08-m5-catalog-fixes.md) corrects
+all seven confirmed findings and the masked-optional-ID handoff:
+
+- Cached rectangular queries grow height for latitude displacement and invert
+  their spherical longitude extent at the snapped latitude, including RA
+  center displacement. Pole/full-RA and widths at least 180 degrees use full
+  longitude. Both backends preserve independently specified original bounds;
+  default square height, unequal dimensions, both poles and the RA seam are
+  covered. Cone enclosure and row/work caps remain intact. A provider cap may
+  still truncate the expanded region; no claim of live provider completeness
+  follows from these offline bounds.
+- The shared SDK patch tolerates filesystem `OSError` during default-directory
+  discovery and creation, as well as its existing read/write/eviction hooks.
+  A discovery failure returns the platform null-device path as a non-directory
+  cache sentinel; protected hooks miss without relocating the cache. A later
+  call retries discovery and normal cache hits resume. The original HTTP
+  request is never replayed; provider/network/cancellation and requested
+  file-save errors still surface.
+- SDSS tolerates direct eviction failure. Successful eviction keeps caching
+  enabled on its single HTML-recovery retry and repairs the entry; an
+  undeletable entry makes only that retry uncached. Persistent HTML and
+  parser/service/network failures remain distinct and bounded.
+- SIMBAD maps `*`/`G` to Star/Galaxy, decodes byte codes, trims padding and
+  preserves unknown raw codes. Missing/masked types and the deliberately empty
+  `Possible_As*` label remain empty without discarding valid coordinates.
+- A shared AST walk derives request and response dependencies. Calls and
+  attribute names are excluded, literal columns named like builtins/NumPy/
+  string methods stay usable and guarded, and lambda/comprehension locals do
+  not become provider columns. NumPy expression constants retain their existing
+  global meaning. Null-byte declarations now raise contextual validation errors.
+- Landolt retains computed zero errors when every operand of the actual
+  retained formula has a recorded finite error. Missing uncertainties remain
+  distinct from zero. Magnitudes, positive partial-error quadrature and the
+  separately disclosed wrong-colour U-error formula are unchanged.
+- Masked optional identifiers stay unset before calibration normalization;
+  integer zero remains valid. No persistent APASS identity is fabricated.
+
+Review reproduced two further gaps before validation: lambda/comprehension
+scope and Astropy's default-directory discovery permission failure. Both gained
+failing regression controls before correction. A deterministic enclosure probe
+also found the decreasing-asin width branch above 180 degrees; its new public
+backend controls now require enclosure. **20,000** seeded independent rectangle
+probes pass across centers, widths and heights.
+
+The original 105 cases are converted where needed, with 90 additional offline
+regressions in the four repair files. Cache tests use real SDK request/cache
+paths, expression tests execute real mappings, and uncertainty tests reach
+numeric reference resolution. No new live service traffic or catalog fixtures
+are required. Independent follow-up review has no remaining findings; all
+195 catalog cases pass. Related focused integration passes 890 tests with one
+expected network skip and six FITS notices (5.56 seconds).
+
+The fifth square is **closed on 2026-11-09**. The final locked Python 3.13.15
+suite passes **4,964 tests, 94 skips, 214 FITS notices**, no failures, in
+407.55 seconds:
+
+```bash
+uv run --locked pytest -q --junitxml=/tmp/m5-catalog-fixes-full-results.xml
+```
+
+All 453 snapshotted code/test/guidance files remained unchanged through that
+run. Compilation, generated-guidance consistency and whitespace checks pass.
+No new live provider or Windows execution was performed. M5 now has five of
+six squares complete; obsolete reports/instructions remain separate.
+
+Retained dispositions: CAT-25 wire-null policy, CAT-26 prune frequency and
+distinct SDK freshness/file-retention policies, CAT-32 ordinal/exact-row identity
+limits, and the unverified UCAC4 native product. This deployment uses UCAC5.
+
+## Original investigation (before repair)
+
+The remainder is the dated pre-repair evidence, including its then-current
+open status and validation counts. Source line numbers refer to that baseline.
 
 ## Findings and dispositions
 

@@ -3,12 +3,14 @@
 SIMBAD tags every object with a machine ``otype`` code — ``GlCl``, ``EB*``,
 ``gammaBurst`` — and MARS surfaces those to users as prose. This is the
 mapping, and it is a plain lookup table with no behaviour attached; the resolver
-that consumes it is ``query/simbad.py``.
+that consumes it is ``query/simbad.py``. The resolver aliases the machine codes
+``*`` and ``G`` to the retained ``Star`` and ``Galaxy`` keys. Other unknown
+codes are preserved without fetching additional metadata.
 
 The table is reproduced exactly as MARS's upstream carried it, empty strings
 and all. Three points worth knowing before editing:
 
-* Two entries map to the empty string (``Possible_As*``, ``Unknown``). Callers
+* ``Possible_As*`` maps to the empty string. Callers
   must treat "present but empty" as "no label", not as a missing key.
 * The vocabulary is SIMBAD's, not MARS's. Codes are added and retired
   upstream; an unrecognized code means SIMBAD moved, and the resolver falls

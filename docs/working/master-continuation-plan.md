@@ -1,6 +1,6 @@
 # MARS release closure gate
 
-Updated 2026-11-02 from `main` at `fb09774` on `feature/m5-geometry`.
+Updated 2026-11-09 from `main` at `fb09774` on `feature/m5-geometry`.
 M0 through M3 are closed and merged: M1 through PR #118, M2 through PR #124,
 and M3 through PRs #122 and #123. Their changes are absent from the published `0.1.0rc6`.
 Publication remains deferred until the remaining gates below have been worked
@@ -595,35 +595,35 @@ and the distinction from the prior full-suite run. The fifth square follows.
   clear. Full locked suite: **4,769 passed, 94 skipped, 214 FITS notices**, no
   failures (442.47 seconds), with all 435 snapshotted code/test/guidance files
   unchanged. Compilation, guidance and whitespace checks pass.
-- [ ] **Catalog parsing, caches and identity.** Check whether padded filter
+- [x] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding
   omit edge stars, cache failures break queries, invalid values look absent,
   or APASS IDs change after re-ingestion? Confirm UCAC disk layout against an
   actual zone and its specification before claiming a reader defect.
-  *Investigated 2026-11-08 against `a1b57fa`:*
-  [The evidence and dispositions](../analysis/m5-catalog-parsing-cache-identity.md)
-  confirm remaining cached-box undercoverage in both catalog backends (the
-  maintained WCS/cone paths remain protected), cache-directory and direct SDSS
-  eviction failures outside the patched SDK hooks, SIMBAD type-label loss,
-  invalid Landolt/Stetson requested columns, derived zero-error omission and
-  a conditional custom-column schema gap. Caching defaults to enabled.
-  Padded/composed filters and base-mapper zero values are already corrected;
-  null serialization does not change tested reference eligibility/solutions.
-  Pruning frequency is a policy/work observation, not measured bad latency.
-  Current APASS metadata lacks `recno`; ordinal/dedup and masked-ID cases retain
-  explicit conditional scope, without an observed live re-ingestion failure.
-  The maintainer confirms this deployment uses UCAC5, not UCAC4. No native
-  UCAC4 defect is claimed without actual zone/product evidence; it remains an
-  unverified legacy path rather than a deployment blocker.
-  There are 105 new offline characterization/control cases; production catalog
-  behavior is unchanged. This square remains open for remediation/dispositions.
-  Independent investigation review has no remaining test-oracle findings;
-  direct SDSS cache-eviction recovery gained a separately reproduced bug pin
-  and working control. Final locked suite: **4,874 passed, 94 skipped, 214 FITS
-  notices**, no failures (426.28 seconds, Python 3.13.15). All 438 snapshotted
-  code/test/guidance files stayed unchanged; compilation, generated guidance
-  and whitespace checks pass. Passing bug pins is not repair acceptance.
+  *Investigated 2026-11-08; corrected and validated 2026-11-09:*
+  [The repair evidence and dispositions](../analysis/m5-catalog-parsing-cache-identity.md)
+  close all seven confirmed findings plus the masked optional-ID handoff.
+  Cached boxes enclose original bounds after center movement; cones and
+  row/work caps remain protected. SDK directory discovery/creation failures
+  fall back without HTTP replay. SDSS bypasses an undeletable HTML entry for
+  its single recovery retry. SIMBAD preserves common/unknown labels, scoped
+  AST dependencies exclude calls and local variables while guarding literal
+  columns, and Landolt preserves known zero synthesized errors.
+  The original 105 cases now require corrections where applicable, with 90
+  added regressions. Independent review is clear after fixing its scope and
+  cache-discovery findings. All 195 catalog controls and 20,000 seeded box
+  probes pass; related focused integration passes 890 with one network skip.
+  Retained dispositions are null-wire policy, pruning frequency/retention,
+  per-catalog exact-row/ordinal APASS identity, and the separately disclosed
+  wrong-colour Landolt U-error formula. No stable APASS ID is invented.
+  The maintainer confirms UCAC5 deployment; unverified UCAC4 is a legacy
+  limitation rather than a deployment blocker. No new live-provider or
+  Windows execution is claimed.
+  Final locked suite: **4,964 passed, 94 skipped, 214 FITS notices**, no
+  failures (407.55 seconds, Python 3.13.15). All 453 snapshotted code/test/
+  guidance files stayed unchanged; compilation, generated guidance and
+  whitespace checks pass. M5 now has five of six squares complete.
 - [ ] **Obsolete reports and instructions.** Close retired helper reports
   after checking for surviving callers. Reconcile Python 3.13-only agent-guide
   wording with current Python 3.12/3.13 support and remove stale execution

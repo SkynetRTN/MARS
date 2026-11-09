@@ -8,7 +8,7 @@ Three jobs:
 
 1. **Work out which columns to request.** A plugin's ``col_mapping`` values are
    Python expressions over provider column names (``'RAJ2000/15'``), not column
-   names. ``_derive_columns`` compiles each one and reads the identifiers back
+   names. ``_derive_columns`` parses each one and reads its data dependencies
    out, so the request asks VizieR only for columns the plugin can actually use.
 2. **Map rows onto ``CatalogSource``.** ``table_to_sources`` evaluates those
    same expressions against each row and builds the per-band ``Mag`` objects.
@@ -27,7 +27,7 @@ which are restored here.
 
 from __future__ import annotations
 
-import builtins
+import ast
 from io import BytesIO
 import logging
 import math
@@ -157,34 +157,16 @@ class VizierCatalog(Catalog):
     def _derive_columns(self) -> TList[str]:
         """Return the VizieR column names this catalog needs.
 
-        Reads them out of the compiled ``col_mapping`` expressions rather than
-        requiring plugins to list columns twice. Identifiers that name a NumPy
-        export or a ``str`` method are call targets, not columns, and are
-        skipped — that is how ``'DEJ2000.strip().startswith("-")'`` contributes
-        only ``DEJ2000``.
-
-        PRESERVED BUG: the filter checks NumPy's namespace and ``dir('')`` but
-        not Python's builtins, so an expression calling ``int()`` or ``float()``
-        contributes ``'int'`` and ``'float'`` as column names. Landolt's
-        sexagesimal parsing does exactly that, and its request asks VizieR for
-        two columns that do not exist. VizieR ignores unknown column names, so
-        the query still returns the right data — which is why this survived
-        upstream unnoticed. Left as-is: filtering builtins out would change the
-        request MARS sends, and that deserves its own validation against a
-        live VizieR rather than a silent fix here.
+        Share expression analysis with response validation: call targets and
+        attribute names are excluded, while literal columns named ``int`` or
+        ``sqrt`` remain data dependencies.
         """
         columns: TList[str] = []
 
         if self.col_mapping:
             for attrname, expr in self.col_mapping.items():
                 try:
-                    for name in compile(expr, "<string>", "eval").co_names:
-                        if name not in numpy.__dict__ and name not in dir(""):
-                            columns.append(name)
-                except SyntaxError:
-                    # Not a Python expression: a literal column name, possibly
-                    # one that is not a valid identifier (e.g. 'USNO-B1.0').
-                    columns.append(expr)
+                    columns.extend(_expression_columns(expr))
                 except ValueError as e:
                     raise ValueError(
                         'Bad column definition "{}" for attribute "{}" of '
@@ -267,7 +249,7 @@ class VizierCatalog(Catalog):
                             # A row that cannot supply this attribute leaves it
                             # unset rather than failing the whole query.
                             val = None
-                    if val is not None:
+                    if val is not None and not numpy.ma.is_masked(val):
                         setattr(source, attr, val)
 
             if getattr(self, "mags", None):
@@ -478,16 +460,76 @@ def _mag_columns(item) -> tuple[Optional[str], Optional[str]]:
 
 
 def _expression_columns(expr: str) -> TList[str]:
-    """The columns a ``col_mapping`` expression reads (as ``_derive_columns``,
-    but also skipping Python builtins such as ``int``/``float``)."""
+    """Read data names without confusing call targets with literal columns."""
+    if "\x00" in expr:
+        raise ValueError("source code string cannot contain null bytes")
     try:
-        names = compile(expr, "<string>", "eval").co_names
+        tree = ast.parse(expr, mode="eval")
     except SyntaxError:
         return [expr]  # a literal column name that is not an identifier
-    return [
-        name for name in names
-        if name not in numpy.__dict__ and name not in dir("") and not hasattr(builtins, name)
-    ]
+    if isinstance(tree.body, ast.Name):
+        return [tree.body.id]
+    names = []
+
+    class Columns(ast.NodeVisitor):
+        def __init__(self):
+            self.scopes = []
+
+        def visit_Name(self, node):
+            if any(node.id in scope for scope in self.scopes):
+                return
+            # Preserve NumPy constants available to expression evaluation.
+            # Callable names used as data (e.g. ``int + float``) are columns.
+            if node.id in numpy.__dict__ and not callable(numpy.__dict__[node.id]):
+                return
+            if node.id not in names:
+                names.append(node.id)
+
+        def visit_Call(self, node):
+            if not isinstance(node.func, ast.Name):
+                self.visit(node.func)  # methods still read their receiver
+            for arg in node.args:
+                self.visit(arg)
+            for keyword in node.keywords:
+                self.visit(keyword.value)
+
+        def visit_Lambda(self, node):
+            # Defaults execute outside the lambda's parameter scope.
+            for default in (*node.args.defaults, *node.args.kw_defaults):
+                if default is not None:
+                    self.visit(default)
+            parameters = {arg.arg for arg in (
+                *node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
+            for arg in (node.args.vararg, node.args.kwarg):
+                if arg is not None:
+                    parameters.add(arg.arg)
+            self.scopes.append(parameters)
+            self.visit(node.body)
+            self.scopes.pop()
+
+        def _comprehension(self, node, *values):
+            self.scopes.append(set())
+            for generator in node.generators:
+                self.visit(generator.iter)
+                self.scopes[-1].update(
+                    target.id for target in ast.walk(generator.target)
+                    if isinstance(target, ast.Name))
+                for condition in generator.ifs:
+                    self.visit(condition)
+            for value in values:
+                self.visit(value)
+            self.scopes.pop()
+
+        def visit_ListComp(self, node):
+            self._comprehension(node, node.elt)
+
+        visit_SetComp = visit_GeneratorExp = visit_ListComp
+
+        def visit_DictComp(self, node):
+            self._comprehension(node, node.key, node.value)
+
+    Columns().visit(tree)
+    return names
 
 
 def _column_spelling(name: str, present: set) -> Optional[str]:
@@ -530,19 +572,46 @@ def _round_for_cache(ra_hours: float, dec_degs: float, *sizes):
 
     Without this, two queries of the same field differing by a milliarcsecond
     are two cache entries and two round trips. Centres go to 10 arcsec, sizes
-    round *up* to 0.2 arcmin so the requested region is never shrunk.
+    round *up* to 0.2 arcmin. Boxes also grow to enclose the original region
+    after moving the centre; cones compensate separately below.
 
     This is observable: with the cache on, a query returns rows for a slightly
     larger, grid-aligned region than the caller asked for. Callers that need an
     exact region should clip the result, which the WCS path in ``runner.py``
     already does.
     """
+    original_ra, original_dec = ra_hours, dec_degs
     ra_hours = round(ra_hours * 5400) / 5400 % 24  # 10 arcsec
     dec_degs = round(dec_degs * 360) / 360
     if dec_degs > 90:
         dec_degs = 90
     elif dec_degs < -90:
         dec_degs = -90
+    if len(sizes) == 2:
+        width, height = sizes
+        if height is None:
+            height = width
+        height += 120 * abs(dec_degs - original_dec)
+        # The rectangular backend uses asin(sin(width/2)/cos(dec)) for
+        # longitude extent. Moving latitude changes that extent too, so
+        # adding centre displacement to angular width alone is insufficient.
+        original_height = sizes[1] if sizes[1] is not None else sizes[0]
+        # Above 180 degrees, increasing width decreases asin(sin(width/2)).
+        # Use full longitude rather than round into a smaller interval.
+        full_ra = abs(original_dec) + original_height / 120 > 90 or width >= 10800
+        ratio = math.sin(math.radians(width / 120)) / math.cos(math.radians(original_dec))
+        if full_ra or abs(ratio) >= 1:
+            width = 21600.0
+        else:
+            half_ra = math.asin(ratio) + math.radians(
+                abs((original_ra * 15 - ra_hours * 15 + 180) % 360 - 180))
+            if half_ra >= math.pi / 2:
+                width = 21600.0
+            else:
+                required = math.degrees(2 * math.asin(
+                    math.sin(half_ra) * math.cos(math.radians(dec_degs)))) * 60
+                width = max(width, required)
+        sizes = (width, height)
     rounded = tuple(
         numpy.ceil(size * 5) / 5 if size is not None else None for size in sizes
     )

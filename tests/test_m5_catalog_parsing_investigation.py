@@ -1,9 +1,8 @@
 """Offline M5 dispositions for CAT-23/24/28 through maintained catalog paths.
 
-Ordinary controls cover the zero-value and spelling behavior corrected in M2
-and M3. Tests marked BUGPIN characterize current retained defects; passing
-those characterizations is not acceptance of a correction. Provider transport
-is replaced only after the installed SDK has constructed its real request.
+Controls cover corrected zero values, spelling, expression dependencies and
+uncertainties. Provider transport is replaced only after the installed SDK
+has constructed its real request.
 """
 
 from io import BytesIO
@@ -79,15 +78,10 @@ def _literal_coordinate_catalog(ra_column, dec_column):
 
 @pytest.mark.parametrize("catalog_name", ["Landolt", "Stetson"])
 @pytest.mark.parametrize("query_mode", ["region", "objects"])
-def test_bugpin_sexagesimal_call_targets_reach_the_actual_sdk_request(
+def test_sexagesimal_call_targets_do_not_reach_the_actual_sdk_request(
     catalog_name, query_mode, monkeypatch,
 ):
-    """BUGPIN CAT-24: int/float calls leak into real outgoing column names.
-
-    The local response deliberately omits these nonexistent call-target
-    columns. This establishes the request defect and mapper independence;
-    it does not assume how a live provider handles unknown requested columns.
-    """
+    """CAT-24: request real data columns while retaining sexagesimal parsing."""
     catalog = CATALOGS[catalog_name]
     table = _landolt() if catalog_name == "Landolt" else _stetson()
     requests = _offline_votable(monkeypatch, table)
@@ -98,15 +92,12 @@ def test_bugpin_sexagesimal_call_targets_reach_the_actual_sdk_request(
     else:
         source, = catalog.query_circ(6.5, -0.5, 2.0)
 
-    # The compiler deduplicates repeated names within each coordinate
-    # expression. MARS appends them for both RA and Dec; the SDK then
-    # deduplicates across the complete requested column list.
-    assert catalog._columns.count("int") == 2
-    assert catalog._columns.count("float") == 2
+    assert "int" not in catalog._columns
+    assert "float" not in catalog._columns
     assert len(requests) == 1
     payload = dict(line.split("=", 1) for line in requests[0]["data"].splitlines())
     requested = payload["-out"].split(",")
-    assert requested.count("int") == requested.count("float") == 1
+    assert not {"int", "float"} & set(requested)
     assert {"RAJ2000", "DEJ2000", "Vmag", "e_Vmag"} <= set(requested)
     assert not {"split", "strip", "startswith", "abs"} & set(requested)
 
@@ -140,17 +131,12 @@ def test_literal_builtin_named_columns_are_requested_and_read(ra_column, dec_col
 
 
 @pytest.mark.parametrize("ra_column", ["int", "float"])
-def test_bugpin_missing_literal_builtin_coordinate_looks_like_an_empty_field(ra_column, monkeypatch):
-    """BUGPIN: schema checking mistakes a literal builtin name for a call.
-
-    The requested literal coordinate column is absent. Unlike an ordinary
-    missing coordinate column, it bypasses ProviderResponseError and its row
-    disappears. The preceding present-column controls establish that these
-    declarations can otherwise request and map real, usable rows.
-    """
+def test_missing_literal_builtin_coordinate_is_a_schema_error(ra_column, monkeypatch):
+    """A builtin name used as data must pass the same coordinate guard."""
     catalog = _literal_coordinate_catalog(ra_column, "Declination")
     _offline_votable(monkeypatch, Table({"Declination": [-0.5], "Vmag": [12.0]}))
-    assert catalog.query_circ(6.5, -0.5, 2.0) == []
+    with pytest.raises(ProviderResponseError, match=ra_column + ".*ra_hours"):
+        catalog.query_circ(6.5, -0.5, 2.0)
 
 
 def test_missing_ordinary_literal_coordinate_is_a_provider_schema_error(monkeypatch):
@@ -220,20 +206,15 @@ def test_zero_landolt_colours_generate_finite_ubvri_values():
     assert all(source.mags[band].value == 0.0 for band in ("B_V", "U_B", "V_R", "R_I", "V_I"))
 
 
-def test_bugpin_landolt_synthesized_zero_errors_are_still_absent():
-    """BUGPIN: zero-error omission remains in synthesis, beyond the fixed mapper.
-
-    Every contributing error is explicitly measured as zero, so quadrature
-    gives zero. The retained `if err` assignments instead leave None on all
-    four synthesized bands. This is separate from the known wrong U color.
-    """
+def test_landolt_synthesized_zero_errors_remain_known():
+    """Known-zero quadrature errors survive on all synthesized bands."""
     overrides = {name: [0.0] for name in (
         "e_Vmag", "e_B-V", "e_U-B", "e_V-R", "e_R-I", "e_V-I",
     )}
     source, = CATALOGS["Landolt"].table_to_sources(_landolt(**overrides))
     assert source.mags["V"].error == 0.0
     assert all(source.mags[band].error == 0.0 for band in ("B_V", "U_B", "V_R", "R_I", "V_I"))
-    assert all(source.mags[band].error is None for band in "UBRI")
+    assert all(source.mags[band].error == 0.0 for band in "UBRI")
 
 
 _UNMEASURED = [

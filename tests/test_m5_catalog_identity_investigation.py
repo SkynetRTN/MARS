@@ -1,7 +1,7 @@
-"""Offline M5 investigation of CAT-21/25/32, not corrected behavior.
+"""Offline M5 controls for CAT-21/25/32.
 
-Tests named ``characterizes_bug`` pin an observed defect. Other tests distinguish
-retained wire policy, optional identifiers, and the scope of same-row dedup.
+Tests distinguish corrected labels and masked IDs from retained wire policy,
+optional identifiers, and the scope of same-row dedup.
 Provider responses stop at SDK seams; mapping, geometry and solvers remain real.
 """
 
@@ -16,13 +16,9 @@ import numpy as np
 import pytest
 from astropy.table import MaskedColumn, Table
 from astropy.wcs import WCS
-from pydantic import ValidationError
 
 from algorithms.catalogs.schemas import CatalogSource, Mag
-from algorithms.fieldcal.field_cal import (
-    _normalize_catalog_sources,
-    perform_field_calibration,
-)
+from algorithms.fieldcal.field_cal import _normalize_catalog_sources
 from algorithms.fieldcal.ref_mag import resolve_ref_mag_for_filter
 from algorithms.query import simbad
 from algorithms.query.geometry import remove_duplicate_sources
@@ -45,14 +41,14 @@ def _simbad_response(monkeypatch, otype, *, ra=0.0, dec=0.0):
     return calls
 
 
-@pytest.mark.parametrize("otype", ["*", "G"])
-def test_cat21_characterizes_bug_common_machine_types_lose_public_labels(monkeypatch, otype):
+@pytest.mark.parametrize("otype,label", [("*", "Star"), ("G", "Galaxy")])
+def test_cat21_common_machine_types_keep_public_labels(monkeypatch, otype, label):
     # Current SIMBAD otype is the machine code, distinct from its otyp.label.
     # https://docs.astropy.org/projects/astroquery/en/stable/simbad/simbad_evolution.html#object-types
     calls = _simbad_response(monkeypatch, otype)
     result = resolve_target(" Test Object ")
     assert result.status == "ok" and result.count == 1
-    assert result.preview[0]["object_type"] == ""
+    assert result.preview[0]["object_type"] == label
     assert result.preview[0]["ra_deg"] == result.preview[0]["dec_deg"] == 0.0
     assert calls == [("test object", {"wildcard": False})]
 
@@ -65,14 +61,11 @@ def test_cat21_retained_long_vocabulary_keys_produce_public_prose(monkeypatch, o
     assert resolve_target("test object").preview[0]["object_type"] == label
 
 
-def test_cat21_characterizes_bug_unknown_code_is_erased_instead_of_raw_fallback(monkeypatch):
-    # catalogs.simbad promises a raw-code fallback; ResolvedTarget instead
-    # documents the implementation's empty-string policy. This test pins that
-    # observable mismatch without treating an unknown code as no match.
+def test_cat21_unknown_code_keeps_raw_fallback(monkeypatch):
     _simbad_response(monkeypatch, "future_code_not_in_mars")
     result = resolve_target("test object")
     assert result.status == "ok" and result.errors == []
-    assert result.preview[0]["object_type"] == ""
+    assert result.preview[0]["object_type"] == "future_code_not_in_mars"
 
 
 def test_cat21_a_deliberately_empty_vocabulary_label_is_not_a_missing_match(monkeypatch):
@@ -214,16 +207,14 @@ def test_cat32_catalog_blind_helper_is_not_used_to_cross_deduplicate_runner_resu
     assert len(remove_duplicate_sources(list(sources))) == 1
 
 
-def test_cat32_characterizes_conditional_masked_optional_id_rejection(monkeypatch):
+def test_cat32_masked_optional_id_is_absent_at_calibration_handoff(monkeypatch):
     # APASS does not currently serve recno. If an optional integer id is
-    # present but masked, its sentinel is not normalized like an absent id.
+    # present but masked, treat it like an absent optional id.
     table = _identity_table()
     table["recno"] = MaskedColumn([42], mask=[True])
     _offline_regions(monkeypatch, [table])
     sources = CATALOGS["APASS"].query_circ(0.0, 0.0, 1.0)
-    assert len(sources) == 1 and np.ma.is_masked(sources[0].id)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Pydantic serializer warnings:", category=UserWarning)
-        with pytest.raises(ValidationError, match="Input should be a valid string") as caught:
-            perform_field_calibration({}, np.zeros((4, 4)), wcs=_wcs(), catalog_sources=sources)
-    assert caught.value.errors()[0]["loc"] == ("id",)
+    assert len(sources) == 1 and sources[0].id is None
+    normalized, = _normalize_catalog_sources(sources, file_id=7)
+    assert normalized.id is None
+    assert (normalized.ra_hours, normalized.dec_degs) == (0.0, 0.0)
