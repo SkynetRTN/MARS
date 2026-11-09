@@ -31,6 +31,7 @@ import numpy as np
 
 # EXTRACTED: were absolute `skylib.astrometry.atlas.*` imports — made relative.
 from ..config import AtlasConfig
+from ..catalog.geometry import catalog_indices, image_epoch, query_spherical_catalog
 from ..catalog.limits import validate_catalog_radius
 from ..extract.sources import extract_sources
 from ..wcs.build import decompose_linear as _decompose_linear
@@ -149,15 +150,11 @@ def solve_oriented(
     fov_h = scale_arcsec_per_pix * height / 3600.0
     half_deg = float(pointing_radius_deg) + 0.5 * float(np.hypot(fov_w, fov_h))
     validate_catalog_radius(half_deg, config.catalog_max_radius_deg)
-    cos_dec = max(0.2, float(abs(np.cos(np.deg2rad(dec0_deg)))))
     catalog_name, catalog_root = config.resolve_catalog()
-    cat = _catalog_index(catalog_name, catalog_root).query_box(
-        ra0_deg - half_deg / cos_dec,
-        ra0_deg + half_deg / cos_dec,
-        dec0_deg - half_deg,
-        dec0_deg + half_deg,
-        thin=config.thin,
-    )
+    cat = query_spherical_catalog(_catalog_index(catalog_name, catalog_root),
+                                  ra0_deg, dec0_deg, half_deg, thin=config.thin,
+                                  epoch_jyear=image_epoch(fits_path),
+                                  max_radius_deg=config.catalog_max_radius_deg)
     if cat.ra_deg.size < 4:
         return _miss(
             "empty_catalog",
@@ -167,13 +164,10 @@ def solve_oriented(
         )
 
     cat_tp = _gnomonic_projection(cat.ra_deg, cat.dec_deg, ra0_deg, dec0_deg)
-    # Cap catalog size by uniform subsample (preserve coverage across the box —
-    # the true field can be anywhere within the pointing uncertainty).
-    if cat_tp.shape[0] > config.oriented_max_catalog_stars:
-        sub = np.random.default_rng(0).choice(
-            cat_tp.shape[0], config.oriented_max_catalog_stars, replace=False
-        )
-        cat_tp = cat_tp[sub]
+    # Prefer bright catalog stars consistently with the image's brightness cap.
+    cat_tp = cat_tp[catalog_indices(cat_tp, config.oriented_max_catalog_stars, cat.mag)]
+    if len(cat_tp) < 4:
+        return _miss("empty_catalog", start=start, n_extracted=n_sources, n_cat=len(cat_tp))
 
     # Radius-aware acceptance floor: a wider search offers more chances for a
     # coincidental match, so require more inliers/votes as the pointing radius

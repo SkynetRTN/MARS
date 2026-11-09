@@ -124,6 +124,7 @@ def ngc5128_replayed(frame_path, monkeypatch, tmp_path, saved_figures):
     """``run_photometry`` on NGC 5128 B, calibrated against the recorded
     APASS and VSX rows instead of the network."""
     from algorithms.query import runner
+    from tools import photometry
     from tools.fieldcal_reference import replay_catalog_sources, replay_variable_sources
     from tools.photometry import run_photometry_on_target
 
@@ -133,12 +134,21 @@ def ngc5128_replayed(frame_path, monkeypatch, tmp_path, saved_figures):
         return replay_catalog_sources("ngc5128_b_002", fixture="full_response")
 
     monkeypatch.setattr(runner, "query_catalogs", query)
+    plotted_inputs = []
+    real_plot = photometry.plot_zero_point_solution
+
+    def record_plot(zero_point, output_path):
+        plotted_inputs.append(zero_point)
+        return real_plot(zero_point, output_path)
+
+    monkeypatch.setattr(photometry, "plot_zero_point_solution", record_plot)
     result = run_photometry_on_target(frame_path("ngc5128_b"), catalogs=["APASS"],
                                      use_field_cal=True, output_dir=tmp_path)
     assert result.errors == []
     assert result.zero_point is not None
     overlay, zero_point = saved_figures[-2:]
-    return result, overlay, zero_point
+    assert len(plotted_inputs) == 1
+    return result, overlay, zero_point, plotted_inputs[0].calibration_sources
 
 
 @pytest.mark.slow
@@ -147,7 +157,7 @@ def test_overlay_markers_sit_on_their_stars(ngc5128_replayed, frame_image):
     same grid. It was not: every marker sat one pixel up and right."""
     import sep
 
-    _, overlay, _ = ngc5128_replayed
+    _, overlay, _, _ = ngc5128_replayed
     data, _ = frame_image("ngc5128_b")
     axes = overlay.axes[0]
     image = axes.get_images()[0]
@@ -171,18 +181,38 @@ def test_overlay_markers_sit_on_their_stars(ngc5128_replayed, frame_image):
 
 
 @pytest.mark.slow
-def test_stars_dropped_before_the_fit_are_not_called_outliers(ngc5128_replayed):
-    """Six of NGC 5128 B's 35 calibration stars have no instrumental error,
-    so the solver drops them before fitting; its outlier loop rejects none.
-    The plot called all six "rejected outlier"."""
-    result, _, figure = ngc5128_replayed
-    left, right = figure.axes[:2]
+def test_measured_frame_zero_point_plot_matches_current_fit_rows(ngc5128_replayed):
+    """M5's measured errors stay positive; plot groups follow the actual fit.
 
+    The historical six zero errors are corrected. Check measured inputs with
+    the independent fit oracle instead of freezing the former 29/6 counts.
+    """
+    from tests.fieldcal_oracle import scientific_solution
+
+    result, _, figure, sources = ngc5128_replayed
+    left, right = figure.axes[:2]
+    mag = np.array([s.mag for s in sources])
+    ref = np.array([s.ref_mag for s in sources])
+    errors = np.array([s.mag_error for s in sources])
+    assert len(sources) > 20
+    assert np.all(np.isfinite(errors) & (errors > 0))
+    expected, kept = scientific_solution(sources)
+    assert result.zero_point.zero_point == pytest.approx(expected[0], abs=1e-7)
+    assert result.zero_point.source_count == int(kept.sum())
+
+    residual = ref - mag - result.zero_point.zero_point
+    for label, rows in (("kept in fit", kept), ("rejected outlier", ~kept)):
+        if rows.any():
+            np.testing.assert_allclose(
+                _offsets(_labelled(left, f"{label} ({int(rows.sum())})")),
+                np.c_[mag[rows], ref[rows]],
+            )
+            np.testing.assert_allclose(
+                _offsets(_labelled(right, label)), np.c_[mag[rows], residual[rows]],
+            )
     labels = [text.get_text() for text in left.get_legend().get_texts()]
-    assert labels[:2] == ["kept in fit (29)", "not fitted: no instrumental error (6)"]
-    assert not any("rejected" in label for label in labels)
-    assert "29 kept, 0 rejected, 6 not fitted" in figure.get_suptitle()
-    assert result.zero_point.source_count == 29
+    assert not any("not fitted" in label for label in labels)
+    assert f"{int(kept.sum())} kept, {int((~kept).sum())} rejected" in figure.get_suptitle()
 
 
 def _calibration_star(mag, ref_mag, mag_error, ref_mag_error=0.02):
@@ -190,7 +220,8 @@ def _calibration_star(mag, ref_mag, mag_error, ref_mag_error=0.02):
                            ref_mag_error=ref_mag_error, catalog_name="APASS")
 
 
-def test_the_zero_point_plot_draws_the_solve_it_reports(tmp_path, saved_figures):
+@pytest.mark.parametrize("missing_error", [None, 0.0], ids=["missing", "zero"])
+def test_the_zero_point_plot_draws_the_solve_it_reports(tmp_path, saved_figures, missing_error):
     """Kept, rejected and unfitted stars, the fitted line, each star's
     measurement error and the fitted extra scatter, against the solver."""
     from algorithms.fieldcal.solution import _calc_solution_with_mask
@@ -200,7 +231,7 @@ def test_the_zero_point_plot_draws_the_solve_it_reports(tmp_path, saved_figures)
     mags = np.linspace(-10.0, -5.0, 20)
     stars = [_calibration_star(m, m + 21.0 + rng.normal(0, 0.03), 0.01) for m in mags]
     stars.append(_calibration_star(-7.0, -7.0 + 21.0 + 1.5, 0.01))  # an outlier
-    stars.append(_calibration_star(-4.5, -4.5 + 21.0 + 0.2, 0.0))  # no instrumental error
+    stars.append(_calibration_star(-4.5, -4.5 + 21.0 + 0.2, missing_error))
     (m0, m0_error, scatter, _, _), kept = _calc_solution_with_mask(stars)
     zero_point = ZeroPointResolution(
         value=m0, source="field-cal", verified=True, calibration_sources=stars,

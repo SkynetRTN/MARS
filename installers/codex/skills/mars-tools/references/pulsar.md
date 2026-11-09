@@ -83,12 +83,18 @@ dedispersion. Expect the fallback there.
 5. **Compare** the measured period with `curated_period_s` (or `search_atnf`
    for an unbundled source). Agreement: fold at the **measured** period.
 6. `fold_pulsar_lightcurve(path=<artifact>, period_s=<measured>)` — read
-   `pulse_snr`. A faint source may need fewer `bins`.
+   `pulse_snr`. A faint source may need fewer `bins`. A null diagnostic also
+   warns `weak_or_absent_pulse`; flat or insufficient occupied phase bins do
+   not validate a pulse. Bins cover the full cycle and retain endpoint samples.
+   Empty bins remain absent; `display_period=2` saves and plots both cycles.
 7. **Fallback**, only if every retuned search failed: fold at the reference
    period and say so in the answer.
 8. `sonify_pulsar(path=<artifact>, period_s=<the period you folded at>)` —
    folded audio is what sounds like a pulsar. Without `period_s` it warns
    `unfolded_rendering` and plays the raw scan once.
+   Sparse folded audio plays occupied bins at equal intervals and warns
+   `playback_not_real_time`: relative phase gaps can be compressed even when
+   the whole-loop `playback_stretch` is 1. Audio cannot measure a period.
 
 ## Pulsar: reporting the period
 

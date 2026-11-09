@@ -829,20 +829,16 @@ def test_float_mod_is_repeated_subtraction_not_fmod() -> None:
     np.testing.assert_allclose(result, [0.0, 0.5, 1.0, 1.0, 0.5, -0.5])
 
 
-def test_bin_data_drops_the_point_at_the_upper_edge() -> None:
-    """PRESERVED: `floor((x-xMin)/binSize)` guarded by `< bins`.
-
-    The single point at ``x == xMax`` computes an index of exactly ``bins`` and
-    is discarded. Upstream does the same (``binData``, pulsar.service.ts
-    850-886); it costs one sample out of thousands.
-    """
+def test_bin_data_includes_the_point_at_the_upper_edge() -> None:
+    """M5 corrects upstream's endpoint loss; the last bin averages both rows."""
     x = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
     y = np.array([1.0, 1.0, 1.0, 1.0, 99.0])
 
     centres, values = folding.bin_data(x, y, 4)
 
     assert centres.size == 4
-    assert 99.0 not in values
+    np.testing.assert_array_equal(centres, [.125, .375, .625, .875])
+    np.testing.assert_array_equal(values, [1., 1., 1., 50.])
 
 
 def test_bin_data_averages_within_bins_and_drops_empty_ones() -> None:
@@ -851,11 +847,9 @@ def test_bin_data_averages_within_bins_and_drops_empty_ones() -> None:
 
     centres, values = folding.bin_data(x, y, 10)
 
-    # Two bins survive: the first two points average together, and 10.0 lands
-    # alone in the last filled bin. 20.0 sits at x == xMax and is dropped by
-    # the `binIndex < bins` guard, per the test above.
+    # Two bins survive. Both pairs contribute, including the upper endpoint.
     assert centres.size == 2
-    np.testing.assert_allclose(values, [2.0, 10.0])
+    np.testing.assert_allclose(values, [2.0, 15.0])
 
 
 def test_fold_and_bin_bins_before_shifting() -> None:

@@ -85,13 +85,15 @@ class Ucac4Index:
         validate_query_box(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
 
         thin = max(1, int(thin))
+        # Preserve a full turn before wrapping its endpoints to the same RA.
+        all_ra = abs(ra_max_deg - ra_min_deg) >= 360.0
         ra_min_deg %= 360.0
         ra_max_deg %= 360.0
         dec_min_deg = max(-90.0, dec_min_deg)
         dec_max_deg = min(90.0, dec_max_deg)
 
         zones = _zones_for_dec_range(dec_min_deg, dec_max_deg)
-        intervals = _ra_intervals(ra_min_deg, ra_max_deg)
+        intervals = ((0.0, 360.0),) if all_ra else _ra_intervals(ra_min_deg, ra_max_deg)
 
         ra_out: list[np.ndarray] = []
         dec_out: list[np.ndarray] = []

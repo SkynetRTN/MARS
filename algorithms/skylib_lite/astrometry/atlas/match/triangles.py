@@ -87,19 +87,28 @@ def triangle_invariant_and_order(
     max_side: float,
     collinear_eps: float = 1e-6,
 ) -> Tuple[np.ndarray | None, np.ndarray | None]:
-    p0, p1, p2 = points
-    d01 = np.linalg.norm(p0 - p1)
-    d12 = np.linalg.norm(p1 - p2)
-    d20 = np.linalg.norm(p2 - p0)
-
-    if min(d01, d12, d20) < min_side or max(d01, d12, d20) > max_side:
+    points = np.asarray(points, dtype=np.float64)
+    if points.shape != (3, 2) or not np.isfinite(points).all():
         return None, None
 
-    area = _cross2(p1 - p0, p2 - p0)
-    if abs(area) < collinear_eps:
+    # MARS WCS-07: hypot avoids squaring overflow/underflow. Edges whose
+    # lengths cannot be represented are invalid, even with no upper cut.
+    with np.errstate(over="ignore"):
+        edges = points[[1, 2, 0]] - points
+        sides = np.hypot(edges[:, 0], edges[:, 1])
+    if not np.isfinite(sides).all() or np.any(sides == 0):
+        return None, None
+    shortest_side, longest_side = sides.min(), sides.max()
+
+    if shortest_side < min_side or longest_side > max_side:
         return None, None
 
-    sides = np.array([d01, d12, d20], dtype=np.float64)
+    # Twice the area divided by longest_side**2 is dimensionless, so image
+    # pixels and tangent-plane radians use the same collinearity tolerance.
+    area = _cross2(edges[0] / longest_side, -edges[2] / longest_side)
+    if area == 0 or abs(area) < collinear_eps:
+        return None, None
+
     order = np.argsort(sides)
     l1, l2, l3 = sides[order]
     inv = np.array([l1 / l3, l2 / l3], dtype=np.float64)
@@ -110,9 +119,9 @@ def triangle_invariant_and_order(
 
 def _canonical_order(points: np.ndarray) -> np.ndarray:
     p0, p1, p2 = points
-    d01 = np.linalg.norm(p0 - p1)
-    d12 = np.linalg.norm(p1 - p2)
-    d20 = np.linalg.norm(p2 - p0)
+    d01 = np.hypot(*(p0 - p1))
+    d12 = np.hypot(*(p1 - p2))
+    d20 = np.hypot(*(p2 - p0))
 
     if d01 >= d12 and d01 >= d20:
         idx = (0, 1, 2)

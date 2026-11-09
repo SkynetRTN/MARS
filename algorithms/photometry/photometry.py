@@ -135,7 +135,9 @@ def run_photometry(
         x, y = get_source_xy(source, epoch, wcs)
         if x is None or y is None:
             continue
-        if 0 <= x < data.shape[1] and 0 <= y < data.shape[0]:
+        # FITS origin 1 places pixel centers at integers; the detector's
+        # continuous footprint extends half a pixel beyond the end centers.
+        if .5 <= x <= data.shape[1] + .5 and .5 <= y <= data.shape[0] + .5:
             update = {
                 "x": float(x),
                 "y": float(y),
@@ -214,6 +216,8 @@ def run_photometry(
     results: list[PhotometryData] = []
     for row, source in zip(source_table, valid_sources):
         if row["flag"] & (0xF0 & ~sep.APER_HASMASKED):
+            continue
+        if row["flux"] <= 0:
             continue
         if not np.isfinite(
             [row["x"], row["y"], row["flux"], row["flux_err"], row["mag"], row["mag_err"]]

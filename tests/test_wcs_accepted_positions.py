@@ -229,7 +229,8 @@ def test_atlas_references_cover_the_solved_field_not_the_hint_or_search_scale(
         queries.append((ra_min, ra_max, dec_min, dec_max))
         # Match UCAC's wrapped, inclusive intervals, including the RA seam.
         lo, hi = ra_min % 360, ra_max % 360
-        in_ra = ((stars.ra.deg >= lo) & (stars.ra.deg <= hi) if lo <= hi else
+        in_ra = (np.ones(len(stars), dtype=bool) if abs(ra_max - ra_min) >= 360 else
+                 (stars.ra.deg >= lo) & (stars.ra.deg <= hi) if lo <= hi else
                  (stars.ra.deg >= lo) | (stars.ra.deg <= hi))
         keep = in_ra & (stars.dec.deg >= dec_min) & (stars.dec.deg <= dec_max)
         return SimpleNamespace(ra_deg=stars.ra.deg[keep], dec_deg=stars.dec.deg[keep])
@@ -285,13 +286,13 @@ def test_reference_footprint_includes_a_distorted_edge_between_corners(monkeypat
     assert len(result.catalog_sources) == 1
 
 
-def test_split_polar_queries_share_the_returned_row_budget(monkeypatch, tmp_path):
+def test_polar_queries_keep_the_returned_row_budget(monkeypatch, tmp_path):
     from algorithms.skylib_lite.astrometry.atlas.catalog import limits
 
     monkeypatch.setattr(limits, "MAX_QUERY_ROWS", 3)
 
     def query_box(lo, hi, *args, **kwargs):
-        return SimpleNamespace(ra_deg=np.array([lo, lo + 90]), dec_deg=np.array([89.99, 89.99]))
+        return SimpleNamespace(ra_deg=np.array([0., 90., 180., 270.]), dec_deg=np.full(4, 89.99))
 
     monkeypatch.setattr(pipeline, "get_catalog_spec", lambda _: SimpleNamespace(
         index_factory=lambda _: SimpleNamespace(query_box=query_box)))

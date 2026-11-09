@@ -114,11 +114,19 @@ any conclusion about the field's reference coverage.
 
 `limiting_magnitude_unvalidated` means the retained log-SNR extrapolation is
 not a measured completeness limit; near-flat fits can produce implausible
-magnitudes. `magnitude_error_snr_cut` discloses thresholds on inverse magnitude
-error rather than exact flux SNR. `ra_seam_matching_approximation` means close
-sources across 0/24 hours can fail to match. `retained_catalog_uncertainty`
+magnitudes. Calibration selection uses flux/error SNR, with an inverse
+logarithmic magnitude-error fallback for magnitude-only input. WCS association
+uses detector-pixel distance; sky-only Python callers without WCS must supply
+an explicit `source_match_tol_arcsec`. `retained_catalog_uncertainty`
 identifies Landolt U's retained wrong-colour error; do not claim a repaired
 uncertainty or change its transform.
+
+`nonpositive_aperture_flux` and `empty_background_annulus` mean affected
+measurements were excluded. `background_noise_masked` means unusable RMS pixels
+were excluded locally. Growth-curve corrections reject reaccelerating reference
+stars (`aperture_correction_crowding`); `aperture_correction_unavailable` means
+magnitudes retain their measured aperture scale. These marginal error estimates
+do not include resampling covariance or sky-model and correction systematics.
 
 > Authority: `tools/registry.py`, the `calibrate_zeropoint`,
 > `replay_field_calibration` and `compare_zeropoint_to_reference`

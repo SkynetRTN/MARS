@@ -13,7 +13,7 @@ optimization. ``install_cache_error_suppression()`` replaces
 that swallow those failures, so a lost cache entry costs a round trip instead of
 the query.
 
-**Unbounded growth.** Nothing in astroquery expires cache entries.
+**Unbounded growth.** SDK freshness expiry does not delete old cache files.
 ``prune_vizier_cache()`` deletes entries older than a cutoff; the patched
 ``to_cache`` calls it on every write, so pruning happens as a side effect of
 normal use.
@@ -43,6 +43,7 @@ import shutil
 import time
 from datetime import timedelta
 from glob import glob
+from pathlib import Path
 from typing import Optional
 
 from astropy.config.paths import get_cache_dir
@@ -109,6 +110,28 @@ def install_cache_error_suppression(max_age: Optional[timedelta] = None) -> None
 
     original_to_cache = _aq.to_cache
     original_astro_query = _aq.AstroQuery
+    original_cache_location = _aq.BaseQuery.cache_location
+
+    def cache_location(query):
+        # The locked SDK creates this directory in its property getter, before
+        # our protected read/write hooks run. Resolve without Astropy's eager
+        # mkdir, then let a failed directory behave like an ordinary cache miss.
+        location = query._cache_location
+        if location is None:
+            try:
+                location = Path(_aq.paths.get_cache_dir(ensure_exists=False),
+                                "astroquery", query.name)
+            except OSError:
+                # Discovery can stat an inaccessible legacy Astropy directory.
+                # A non-directory makes the protected cache hooks miss without
+                # moving the cache or replaying HTTP. Retry discovery next time.
+                logger.debug("Cache directory discovery failed; continuing without cache", exc_info=True)
+                return Path(os.devnull)
+        try:
+            location.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.debug("Cache directory unavailable; continuing without cache", exc_info=True)
+        return location
 
     def to_cache(*args, **kwargs):
         """Write a cache entry, then drop expired ones. Never raises."""
@@ -145,4 +168,5 @@ def install_cache_error_suppression(max_age: Optional[timedelta] = None) -> None
 
     _aq.to_cache = to_cache
     _aq.AstroQuery = AstroQuery
+    _aq.BaseQuery.cache_location = original_cache_location.getter(cache_location)
     _patched = True

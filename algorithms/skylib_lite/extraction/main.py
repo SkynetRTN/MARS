@@ -12,7 +12,6 @@ from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 from astropy.convolution import Gaussian2DKernel, Kernel2D
 from astropy.modeling.models import Gaussian2D
 import sep
-from algorithms.diagnostics import note_numerical_issue
 
 from ..calibration.background import estimate_background, sep_compatible
 from .centroiding import centroid_iraf, centroid_iraf_masked
@@ -106,8 +105,9 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
     :param centroid: obtain more accurate centroid positions after extraction using the windowed algorithm (SExtractor's
         XWIN_IMAGE, YWIN_IMAGE)
     :param gain: electrons to data units conversion factor; used to estimate photometric errors
-    :param sat_img: optional image with non-zero values indicating saturated pixels; if provided, an extra column
-        `saturated` is added that contains the number of saturated pixels in the source
+    :param sat_img: optional image with non-zero, unmasked values indicating saturated detector pixels; if provided,
+        an extra column `saturated` counts those pixels assigned to each source's segmentation cells. Incomplete edge
+        blocks omitted from downsampled detection are also omitted from the count.
     :param discard_saturated: if > 0 and `sat_img` is provided, discard sources with at least the given number of
         saturated pixels
     :param max_sources: maximum allowed number of detected sources
@@ -137,6 +137,10 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
         gain = float(gain)
 
     img = sep_compatible(img)
+    if sat_img is not None:
+        # Keep detector-pixel resolution: a reduced segmentation cell may hold
+        # any number of saturated pixels, rather than an entire saturated block.
+        sat_img = np.asarray(np.ma.filled(sat_img, 0)) != 0
 
     # Estimate background
     if bkg_kw is None:
@@ -180,10 +184,6 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
 
     # Downsample the image
     if downsample > 1:
-        if sat_img is not None:
-            note_numerical_issue("saturation_count_unreliable",
-                "Downsampled extraction retains an extra coordinate division in saturation "
-                "counting. Zero saturation counts and discard_saturated do not establish unsaturated stars.")
         # Adjust extraction parameters
         min_pixels //= downsample**2
 
@@ -213,9 +213,6 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
         if _mask is not None:
             _mask = (_mask.reshape((height, downsample, width, downsample))
                      .sum(3).sum(1)/downsample**2).astype(_mask.dtype)
-        if sat_img is not None:
-            sat_img = (sat_img.reshape((height, downsample, width, downsample))
-                       .sum(3).sum(1)/downsample**2).astype(sat_img.dtype)
 
     extract_kwargs = dict(
         err=_rms, mask=_mask, minarea=min_pixels, filter_kernel=filter_kernel, deblend_nthresh=deblend_levels,
@@ -230,12 +227,12 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
 
     sources = append_fields(sources, 'saturated', np.zeros(len(sources), int), usemask=False)
     if seg_img is not None:
-        # Count saturated pixels
-        downsample2 = downsample**2
+        # Assign each retained detector pixel to its reduced segmentation cell
+        # exactly once. The saturation mask was cropped with detection above.
         for y, x in zip(*sat_img.nonzero()):
             i = seg_img[y//downsample, x//downsample]
             if i:
-                sources[i - 1]['saturated'] += downsample2
+                sources[i - 1]['saturated'] += 1
         del seg_img
 
     # Exclude sources that couldn't be measured
@@ -260,10 +257,12 @@ def extract_sources(img: np.ndarray | np.ma.MaskedArray,
 
     # Make sure that a >= b
     s = sources['a'] < sources['b']
-    sources[s]['a'], sources[s]['b'] = sources[s]['b'], sources[s]['a']
-    sources[s]['theta'] += np.pi/2
+    # MARS WCS-16: select the field first so masked assignments update the
+    # source table rather than a temporary structured-array copy.
+    sources['a'][s], sources['b'][s] = sources['b'][s], sources['a'][s]
+    sources['theta'][s] += np.pi/2
     sources['theta'] %= np.pi
-    sources[sources['theta'] > np.pi/2]['theta'] -= np.pi
+    sources['theta'][sources['theta'] > np.pi/2] -= np.pi
 
     # Discard sources with FWHM or ellipticity outside the limits
     if min_fwhm:

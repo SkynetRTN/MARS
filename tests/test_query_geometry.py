@@ -198,52 +198,15 @@ def test_negative_parity_frames_still_yield_a_positive_footprint(frame_header, f
 # The two footprint implementations
 # ---------------------------------------------------------------------------
 
-def test_both_footprint_implementations_agree_on_centre_and_roughly_on_size(frame_header):
-    """Same centre exactly; sizes differ by the rotation the projection sees.
-
-    NGC 2070 is rotated ~1.6 deg. ``boxes_from_wcs`` projects the corners, so it
-    returns the bounding box of the *rotated* rectangle —
-    ``w*cos(theta) + h*sin(theta)`` — while ``image_boxes_from_wcs`` multiplies
-    pixel scale by axis length and returns the detector's own extent. On this
-    frame that is a 2.6% difference, and it grows with rotation angle.
-
-    The centres must still agree to the last float: both project the same pixel.
-    """
+def test_both_footprint_implementations_use_the_same_conservative_enclosure(frame_header):
+    """M5 replaces both historical geometries with one spherical enclosure."""
     wcs, header = _wcs_from(frame_header, "ngc2070")
-
-    (ra_a, dec_a, w_a, h_a), = boxes_from_wcs(wcs)
-    (ra_b, dec_b, w_b, h_b), = image_boxes_from_wcs(wcs, header=header)
-
-    assert ra_a == pytest.approx(ra_b, abs=1e-9)
-    assert dec_a == pytest.approx(dec_b, abs=1e-9)
-
-    # The projected box is the larger one, by the rotation factor.
-    theta = np.arctan2(header["CD1_2"], header["CD1_1"])
-    h_px, w_px = wcs_array_shape(wcs)
-    expected_ratio = (w_px * abs(np.cos(theta)) + h_px * abs(np.sin(theta))) / w_px
-
-    assert w_a > w_b
-    assert w_a / w_b == pytest.approx(expected_ratio, rel=0.01)
+    np.testing.assert_allclose(boxes_from_wcs(wcs), image_boxes_from_wcs(wcs, header=header))
 
 
-def test_image_boxes_does_not_see_rotation(frame_header):
-    """The documented divergence, on the frame that shows it.
-
-    Carina is rotated ~90 deg. ``image_boxes_from_wcs`` multiplies per-axis
-    pixel scale by axis length, so it reports the detector's own aspect ratio;
-    ``boxes_from_wcs`` projects corners and reports the sky footprint, whose
-    axes are swapped. On a near-square detector this is a small difference —
-    which is why the limitation has survived — but the two are not
-    interchangeable.
-    """
+def test_image_boxes_covers_rotation_using_the_same_sky_enclosure(frame_header):
     wcs, header = _wcs_from(frame_header, "carina")
-
-    (_, _, w_projected, h_projected), = boxes_from_wcs(wcs)
-    (_, _, w_scaled, h_scaled), = image_boxes_from_wcs(wcs, header=header)
-
-    # The projected footprint is wider than tall; the scaled one follows the
-    # 1056x1027 detector and is also wider than tall, but by a different ratio.
-    assert w_projected / h_projected != pytest.approx(w_scaled / h_scaled, rel=1e-3)
+    np.testing.assert_allclose(boxes_from_wcs(wcs), image_boxes_from_wcs(wcs, header=header))
 
 
 def test_image_boxes_works_without_an_array_shape(frame_header):

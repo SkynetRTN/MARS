@@ -121,16 +121,18 @@ class AstrometryNetBackend:
         """Write the field sources as an xylist FITS table for solve-field."""
 
         xy = np.asarray(request.xy, dtype=float)
-        cols = {"X": xy[:, 0], "Y": xy[:, 1]}
+        # Missing brightness changes ordering, not the source budget. Select
+        # before indexing so a small cap also limits the copied output vectors.
+        order = slice(None, request.max_sources or None)
+        flux = None
         if request.flux is not None:
             flux = np.asarray(request.flux, dtype=float)
             if len(flux) != len(xy):
                 raise ValueError("flux must match xy length")
-            # Brightest-first; honour max_sources by truncating the table.
-            order = np.argsort(flux)[::-1]
-            if request.max_sources:
-                order = order[: request.max_sources]
-            cols = {"X": xy[order, 0], "Y": xy[order, 1], "FLUX": flux[order]}
+            order = np.argsort(flux)[::-1][order]
+        cols = {"X": xy[order, 0], "Y": xy[order, 1]}
+        if flux is not None:
+            cols["FLUX"] = flux[order]
         path = work / "field.xyls"
         Table(cols).write(str(path), format="fits", overwrite=True)
         return path

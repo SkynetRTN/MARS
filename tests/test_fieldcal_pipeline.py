@@ -221,7 +221,7 @@ def test_no_detected_sources_passes_catalog_sources_through_untouched():
     ) is catalog
 
 
-def test_pixel_mode_needs_a_wcs_when_detections_lack_sky_coordinates():
+def test_pixel_mode_needs_a_wcs_when_catalog_has_only_sky_coordinates():
     with pytest.raises(ValueError, match="Missing WCS"):
         _match_detected_sources(
             [_catalog_source(0, 12.0, 13.5)],
@@ -230,15 +230,7 @@ def test_pixel_mode_needs_a_wcs_when_detections_lack_sky_coordinates():
         )
 
 
-def test_angular_mode_activates_when_every_detection_has_radec():
-    """With sky coordinates on both sides, matching is WCS-quality-independent.
-
-    The comment upstream is explicit about why: if the detected RA/Dec came from
-    the same plate solution the catalog was queried against, angular matching
-    finds the right neighbour even when the WCS itself is imprecise. Passing
-    ``wcs=None`` here proves the angular path really is taken — the pixel path
-    would raise.
-    """
+def test_sky_only_mode_uses_an_explicit_angular_tolerance_without_wcs():
     w = _wcs()
     ra_deg, dec_deg = w.all_pix2world(500.0, 500.0, 1)
     ra_hours = float(ra_deg) / 15.0
@@ -249,7 +241,8 @@ def test_angular_mode_activates_when_every_detection_has_radec():
     ]
 
     matched = _match_detected_sources(
-        catalog, detected, wcs=None, header={}, data=np.zeros((4, 4)), source_match_tol=5.0
+        catalog, detected, wcs=None, header={}, data=np.zeros((4, 4)),
+        source_match_tol=5.0, source_match_tol_arcsec=5.0,
     )
     assert len(matched) == 1
     assert matched[0].catalog_name == "APASS"
@@ -274,7 +267,8 @@ def test_matching_is_mutual_nearest_neighbour():
     ]
     matched = _match_detected_sources(
         [_catalog_source(0, ra_hours, dec)], detected,
-        wcs=None, header={}, data=np.zeros((4, 4)), source_match_tol=10.0,
+        wcs=None, header={}, data=np.zeros((4, 4)),
+        source_match_tol=10.0, source_match_tol_arcsec=10.0,
     )
     assert len(matched) == 1
     assert matched[0].id == "cat-0"
@@ -286,7 +280,8 @@ def test_unmatchable_sources_raise_rather_than_returning_empty():
         _match_detected_sources(
             [_catalog_source(0, 1.0, 1.0)],
             [SourceExtractionData(id="d0", x=5.0, y=5.0, ra_hours=20.0, dec_degs=-80.0)],
-            wcs=None, header={}, data=np.zeros((4, 4)), source_match_tol=1.0,
+            wcs=None, header={}, data=np.zeros((4, 4)),
+            source_match_tol=1.0, source_match_tol_arcsec=1.0,
         )
 
 
@@ -312,7 +307,8 @@ def test_matched_source_takes_catalog_identity_and_detected_geometry():
     ]
     matched = _match_detected_sources(
         [_catalog_source(0, ra_hours, dec)], detected,
-        wcs=None, header={}, data=np.zeros((4, 4)), source_match_tol=5.0,
+        wcs=None, header={}, data=np.zeros((4, 4)),
+        source_match_tol=5.0, source_match_tol_arcsec=5.0,
     )[0]
 
     assert isinstance(matched, CatalogSource)
@@ -337,9 +333,47 @@ def test_catalog_sources_without_file_id_are_offered_to_every_file():
     ]
     matched = _match_detected_sources(
         [_catalog_source(0, ra_hours, dec)], detected,
-        wcs=None, header={}, data=np.zeros((4, 4)), source_match_tol=5.0,
+        wcs=None, header={}, data=np.zeros((4, 4)),
+        source_match_tol=5.0, source_match_tol_arcsec=5.0,
     )
     assert sorted(m.file_id for m in matched) == [1, 2]
+
+
+def test_pixel_matching_without_wcs_preserves_the_pixel_tolerance():
+    catalog = [CatalogSource(id="near", x=10.9, y=10), CatalogSource(id="far", x=10, y=20)]
+    matched = _match_detected_sources(
+        catalog, [SourceExtractionData(id="det", x=10, y=10)],
+        wcs=None, header={}, data=np.zeros((30, 30)), source_match_tol=1,
+    )
+    assert [source.id for source in matched] == ["near"]
+
+
+def test_wcs_matching_prefers_measured_pixels_over_supplied_sky_coordinates():
+    wcs = _wcs()
+    ra, dec = wcs.all_pix2world([500, 510], [500, 500], 1)
+    detected = SourceExtractionData(id="det", x=500, y=500,
+        ra_hours=float(ra[1] / 15), dec_degs=float(dec[1]))
+    matched = _match_detected_sources(
+        [_catalog_source(0, float(ra[0] / 15), float(dec[0])),
+         _catalog_source(1, float(ra[1] / 15), float(dec[1]))], [detected],
+        wcs=wcs, header={}, data=np.zeros((1027, 1056)), source_match_tol=1,
+    )
+    assert [source.id for source in matched] == ["cat-0"]
+    assert (matched[0].x, matched[0].y) == (500, 500)
+
+
+@pytest.mark.parametrize("crval", [(0, 0), (179, 89.99), (179, -89.99)])
+def test_wcs_matching_projects_sky_only_detections_at_origin_one(crval):
+    wcs = _wcs(crpix=(10, 10), crval=crval)
+    ra, dec = wcs.all_pix2world([10, 10.8], [10, 10], 1)
+    matched = _match_detected_sources(
+        [_catalog_source(0, float(ra[0] / 15), float(dec[0]))],
+        [SourceExtractionData(id="det", ra_hours=float(ra[1] / 15), dec_degs=float(dec[1]))],
+        wcs=wcs, header={}, data=np.zeros((20, 20)), source_match_tol=1,
+    )
+    assert [source.id for source in matched] == ["cat-0"]
+    assert matched[0].x == pytest.approx(10.8, abs=1e-8)
+    assert matched[0].y == pytest.approx(10, abs=1e-8)
 
 
 # ---------------------------------------------------------------------------
@@ -544,13 +578,14 @@ def test_calibration_photometry_forces_apcorr_tol_to_zero(monkeypatch):
         CatalogSource(
             id=f"cat-{i}", catalog_name="APASS",
             ra_hours=ra_hours + i * 1e-4, dec_degs=dec,
-            mags={"V": Mag(value=34.0 + i * 0.1, error=0.02)},
+            mags={"V": Mag(value=34.0 + i * 0.101, error=0.02)},
         )
         for i in range(6)
     ]
     detected = [
         SourceExtractionData(
-            id=f"d{i}", x=500.0 + i, y=500.0,
+            id=f"d{i}", x=float(w.all_world2pix((ra_hours + i*1e-4)*15, dec, 1)[0]),
+            y=float(w.all_world2pix((ra_hours + i*1e-4)*15, dec, 1)[1]),
             ra_hours=ra_hours + i * 1e-4, dec_degs=dec, filter="V",
         )
         for i in range(6)
@@ -569,3 +604,104 @@ def test_calibration_photometry_forces_apcorr_tol_to_zero(monkeypatch):
     )
 
     assert seen == [0.0]
+
+
+@pytest.mark.parametrize("mag_only", [False, True])
+def test_calibration_snr_constraints_use_flux_ratio_or_exact_magnitude_inverse(mag_only):
+    rows = [CatalogSource(
+        id=str(i), mag=-5 - i * .2, mag_error=2.5 * np.log10(1 + 1 / snr),
+        flux=None if mag_only else 1000, flux_error=None if mag_only else 1000 / snr,
+        ref_mag=15 - i * .2 + i * .005, ref_mag_error=.02,
+    ) for i, snr in enumerate([9.9, 10.1, 10.3, 10.4, 11.1])]
+    _, result = perform_field_calibration(
+        {"FILTER": "V"}, np.zeros((10, 10)), catalog_sources=rows,
+        use_provided_photometry=True,
+        field_cal_settings=PhotometricCalibrationSettings(min_snr=10, max_snr=11),
+    )
+    assert [row.id for row in result.phot_results] == ["1", "2", "3"]
+
+
+@pytest.mark.parametrize("flux,flux_error,mag_error", [
+    (100, 0, .01), (100, -1, .01), (100, None, None),
+    (None, None, None), (None, None, 0), (None, None, -.01),
+])
+def test_calibration_snr_constraints_reject_unusable_measurement_uncertainty(flux, flux_error, mag_error):
+    rows = [CatalogSource(id=str(i), flux=flux, flux_error=flux_error,
+        mag=-5 + i * .1, mag_error=mag_error, ref_mag=15 + i * .101, ref_mag_error=.02)
+        for i in range(3)]
+    with pytest.raises(RuntimeError, match="All sources violate SNR constraints"):
+        perform_field_calibration(
+            {"FILTER": "V"}, np.zeros((10, 10)), catalog_sources=rows,
+            use_provided_photometry=True,
+        )
+
+
+@pytest.mark.parametrize("flux", [0, -100])
+def test_calibration_rejects_nonpositive_flux_even_with_finite_magnitude_and_open_snr(flux):
+    rows = [CatalogSource(id=str(i), flux=flux, flux_error=10,
+        mag=-5 + i * .1, mag_error=.01, ref_mag=15 + i * .101, ref_mag_error=.02)
+        for i in range(3)]
+    with pytest.raises(RuntimeError, match="No catalog sources could be photometered"):
+        perform_field_calibration(
+            {"FILTER": "V"}, np.zeros((10, 10)), catalog_sources=rows,
+            use_provided_photometry=True,
+            field_cal_settings=PhotometricCalibrationSettings(min_snr=0),
+        )
+
+
+def test_matched_detector_positions_are_not_projected_or_proper_motion_shifted_again(monkeypatch):
+    from datetime import datetime
+    from algorithms.photometry.source_extraction import get_source_xy
+
+    wcs = _wcs(crpix=(20, 20), crval=(180, 0), scale=1 / 3600)
+    epoch, old_epoch = datetime(2026, 1, 1), datetime(2016, 1, 1)
+    seconds = (epoch - old_epoch).total_seconds()
+    xy = [(10, 20), (20, 20), (30, 20)]
+    ra, dec = wcs.all_pix2world(*np.transpose(xy), 1)
+    catalog = [CatalogSource(id=str(i), ra_hours=float(r / 15), dec_degs=float(d - 10 / 3600),
+        pm_epoch=old_epoch, pm_sky=(10 / 3600) / seconds, pm_pos_angle_sky=0,
+        ref_mag=15 + i * .101, ref_mag_error=.02) for i, (r, d) in enumerate(zip(ra, dec))]
+    detected = [SourceExtractionData(id=f"det{i}", x=x, y=y,
+        ra_hours=float(r / 15), dec_degs=float(d + 3 / 3600))
+        for i, ((x, y), r, d) in enumerate(zip(xy, ra, dec))]
+    measured_positions = []
+
+    def measure(data, header, sources, settings, **kwargs):
+        measured_positions.extend(get_source_xy(source, epoch, kwargs["wcs"]) for source in sources)
+        return [PhotometryData(id=source.id, mag=-5 + i * .1, mag_error=.02, filter="V")
+                for i, source in enumerate(sources)]
+
+    monkeypatch.setattr("algorithms.fieldcal.field_cal.run_photometry", measure)
+    perform_field_calibration(
+        {"FILTER": "V", "DATE-OBS": "2026-01-01T00:00:00"}, np.zeros((40, 40)),
+        wcs=wcs, catalog_sources=catalog, detected_sources=detected,
+        field_cal_settings=PhotometricCalibrationSettings(source_match_tol=.1, variable_check_tol=0),
+    )
+    np.testing.assert_allclose(measured_positions, xy, atol=1e-8)
+
+
+def test_calibration_forwards_extracted_rms_and_retains_annular_background(monkeypatch):
+    image = np.zeros((40, 40))
+    rms = np.full_like(image, 4)
+    detected = [SourceExtractionData(id=str(i), x=10 + i * 10, y=20) for i in range(3)]
+    catalog = [CatalogSource(id=str(i), x=10 + i * 10, y=20,
+        ref_mag=15 + i * .101, ref_mag_error=.02) for i in range(3)]
+    seen = []
+
+    def extract(*args, **kwargs):
+        return detected, np.full_like(image, 50), rms
+
+    def measure(data, header, sources, settings, **kwargs):
+        seen.append((kwargs["background"], kwargs["background_rms"]))
+        return [PhotometryData(id=source.id, mag=-5 + i * .1, mag_error=.02, filter="V")
+                for i, source in enumerate(sources)]
+
+    monkeypatch.setattr("algorithms.fieldcal.field_cal.run_source_extraction", extract)
+    monkeypatch.setattr("algorithms.fieldcal.field_cal.run_photometry", measure)
+    perform_field_calibration(
+        {"FILTER": "V"}, image, catalog_sources=catalog,
+        extraction_settings=SourceExtractionSettings(),
+    )
+    assert len(seen) == 1
+    assert seen[0][0] is None
+    assert seen[0][1] is rms

@@ -11,7 +11,7 @@ documents for individual gates.
 
 | Plan | Status |
 | --- | --- |
-| [master-continuation-plan.md](master-continuation-plan.md) | Refreshed 2026-10-30 against `main` at `e1ad8b0` (M2, PR #124). M2 and M3 are closed on main, unpublished. Remaining gates describe missing evidence and release checks. |
+| [master-continuation-plan.md](master-continuation-plan.md) | M1–M4 merged into main. M5's six squares and integration with main `193d117` are validated on `feature/m5-geometry` (2026-11-09). Release evidence and remaining questions stay in the master. |
 
 ## Landed
 

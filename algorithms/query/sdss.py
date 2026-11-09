@@ -149,8 +149,8 @@ def _query_sql(client, sql: str, data_release: int, cache: bool):
     and maintenance pages, so one transient error made the same query fail
     until the cache entry expired. The raw reply is inspected before parsing:
 
-    * an HTML page from the cache is evicted and refetched with caching on, so
-      a good reply repairs the cache;
+    * an HTML page is evicted and refetched with caching on to repair the entry;
+      if eviction fails, the retry bypasses the stale cache instead;
     * an HTML page that persists is a service failure, raised as astroquery's
       ``RemoteServiceError`` -- retryable later, like a refusal;
     * a refusal (``error_message``) raises as itself;
@@ -166,8 +166,8 @@ def _query_sql(client, sql: str, data_release: int, cache: bool):
     response = client.query_sql_async(sql, data_release=data_release, cache=cache)
     if cache and _is_html(response.text):
         logger.warning("SkyServer reply was an HTML page; evicting it and asking again")
-        _evict_last_query(client)
-        response = client.query_sql_async(sql, data_release=data_release, cache=True)
+        evicted = _evict_last_query(client)
+        response = client.query_sql_async(sql, data_release=data_release, cache=evicted)
     if _is_html(response.text):
         if cache:
             _evict_last_query(client)
@@ -196,15 +196,22 @@ def _html_title(text: str) -> str:
     return match.group(1).strip()[:120] if match else text.strip()[:120]
 
 
-def _evict_last_query(client) -> None:
+def _evict_last_query(client) -> bool:
     """Delete the cache entry astroquery just read or wrote for ``client``.
 
-    Not ``AstroQuery.remove_cache_file``: it tests ``Path.exists`` without
-    calling it and so raises when the entry is already gone.
+    Return whether a cached retry is safe. A failed removal must not hide the
+    provider/parser error or cause recovery to reread the same error entry.
+    Not ``AstroQuery.remove_cache_file``: its suppression cannot report whether
+    an undeletable entry remains, and older SDK versions mishandle absent files.
     """
     query = getattr(client, "_last_query", None)
     if query is not None:
-        query.request_file(client.cache_location).unlink(missing_ok=True)
+        try:
+            query.request_file(client.cache_location).unlink(missing_ok=True)
+        except OSError:
+            logger.debug("SDSS cache eviction failed; bypassing the entry", exc_info=True)
+            return False
+    return True
 
 
 def _positive_angle(value: object, unit: str) -> float:

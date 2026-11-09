@@ -263,4 +263,3 @@ def test_a_folder_name_with_a_line_break_is_refused_not_written():
 
     assert usable == []
     assert "line break" in problems[0]
-

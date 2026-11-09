@@ -913,9 +913,10 @@ def replay_field_calibration(
     ``use_provided_photometry``, so the recorded instrumental magnitudes are
     consumed rather than re-measured -- with the bundled frame's header
     supplying the WCS, the epoch and the filter. So, unlike
-    :func:`solve_zeropoint_from_reference`, the 35 calibration sources are
-    *chosen* here: from the 132 candidates in the cone, after the VSX filter,
-    by mutual nearest-neighbour matching against 298 detections. The result
+    :func:`solve_zeropoint_from_reference`, calibration sources are *chosen*
+    here from the 132 candidates in the cone, after detector/VSX filtering,
+    by mutual nearest-neighbour matching against 298 detections. The recorded
+    run chose 35; current uncertainty/SNR acceptance keeps 29. The result
     reports the counts, each match, the solve, and the comparison to the
     recorded numbers; ``selection_matches_recorded`` says whether the replay
     chose exactly the recorded rows in the recorded order.

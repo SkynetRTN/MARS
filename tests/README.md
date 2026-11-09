@@ -10,7 +10,7 @@ uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 
 Most extracted algorithms have preservation tests against recorded upstream
 output, including known bugs. Passing those tests establishes parity, not
-scientific correctness. Intentional M2 corrections have separate acceptance
+scientific correctness. Intentional M1–M5 corrections have acceptance
 tests against independent scientific references; the pulsar, variable-star,
 cluster and photometric-calibration records under `docs/analysis/` describe
 their derivations and limits.
@@ -21,16 +21,17 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 
 For the preservation tests, three conventions apply:
 
-1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
-   four complete recorded Skynet zero-point solves. See `data/README.md`.
+1. **Keep recorded data.** Fixtures include 42 real PROMPT/Skynet frames and
+   four complete recorded Skynet zero-point solves. Independent numerical
+   regressions also use synthetic cases with specified answers. See `data/README.md`.
 2. **Preserve recorded evidence.** Historical outputs stay unchanged. M2's
    corrected field-calibration solver uses the same four recorded inputs,
    checked against an independent scientific fit; historical Skynet/Afterglow
    agreement is tested separately from the corrected output.
-3. **Known bugs are pinned, not fixed.** Where a test documents a defect it says
-   so in capitals, gives the upstream file it was verified against, and states
-   what to do if someone decides to diverge. Deleting such a test is part of
-   fixing the bug; changing the algorithm without touching the test is not.
+3. **Distinguish bug pins from correction regressions.** A retained defect has
+   an explicit current disposition. When fixing it, convert its pin into a
+   regression against the intended answer and preserve the historical record.
+   Do not change the algorithm while leaving a test that expects the old bug.
 
 ## Layout
 
@@ -43,7 +44,8 @@ For the preservation tests, three conventions apply:
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms and lexical/numeric-AST guardrails |
 | `test_fieldcal_expression_limits.py` | M1 PHOT-15: bounded numeric AST (no eval), pre-parser/pre-evaluator sentinels, literal regex band matching, namespace/alias/integer work limits, kill/reap-bounded powers and direct calibration-collection failures; exact shipped-polynomial arithmetic and existing uncertainty propagation stay preserved. |
 | `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
-| `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's 35 matches selected from the recorded 132-row APASS cone (45 once clipped, minus VSX variables) with bit-exact reference magnitudes and independent fit expectations, under a `socket.connect` guard |
+| `test_fieldcal_reference.py` | Historical references as tool results (`tools/fieldcal_reference.py`), corrected scientific replays and honest deltas; NGC 5128 B's recorded 35 matches versus 29 usable current matches from the recorded 132-row APASS cone (45 on the detector), with unchanged reference magnitudes and independent fit expectations, under a `socket.connect` guard |
+| `test_m5_obsolete_report_controls.py` | PHOT-16 disposition through the maintained public replay: named frame/WCS/solver/nonconvergence errors instead of blank CSV cells, warning retention, recovery after a failed call and no pixel centroiding of recorded magnitudes. |
 | `test_catalogs_registries.py` | Current declarations, retained historical secondary export, no-network guarantee |
 | `test_catalog_magnitudes_filters.py` | M2 shared production routing, native band identities, exact transform values, composed spelling, invalid/zero values, overrides and relative narrowband warning/label |
 | `test_catalog_filter_review.py` | Follow-up catalog review: equivalent alias overrides, actual reference provenance, supplied/native magnitude warnings, public photometry labels and exact rejection-mask disclosures |
@@ -62,6 +64,18 @@ For the preservation tests, three conventions apply:
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
 | `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
+| `test_m5_geometry_investigation.py` | M5's 29 original probes converted to correctness regressions: fallback decimal RA, alternate-WCS scales, ATLAS triangles/polar coverage, projection/reader/matrix/FOV helpers and real SEP ellipses. |
+| `test_m5_flux_investigation.py`, `test_m5_positions_investigation.py`, `test_m5_uncertainty_investigation.py`, `test_m5_overlap_investigation.py` | Converted M5 correctness regressions: reject zero-image calibration/unusable annuli, correct detector saturation and origins, exact matching/SNR and RMS/variance, real reduced-frame errors, crowding-reference rejection, and bounded native analytic ellipse overlap. |
+| `test_m5_review_edges.py`, `test_m5_review_fieldcal.py`, `test_m5_review_growth.py` | Follow-up regressions: continuous fractional FITS footprint, cropped extraction with full-image masked RMS, observed sky-only positions and motion, ellipse annulus units across growth/aperture sizes, valid zero corrections and retained truncation rejection. |
+| `test_m5_reuse_investigation.py`, `test_m5_fits_write_investigation.py`, `test_m5_solver_controls_investigation.py` | Converted correctness regressions for call-local saturation settings, immutable/reusable isophotal tables, current aperture flags, modern/legacy detector-map cleanup, preserved effective time origins and independent source caps. Retain frame/SIP and latent parity controls, plus opt-in bounded native parity checks. |
+| `test_m5_lightcurve_boundary_investigation.py`, `test_m5_hr_boundary_investigation.py` | M5 characterization/controls: latent zero slider steps versus valid grids, variable-star boundary retention, legacy HR framing/splice and pixel scales versus maintained local-model fitting/plotting. Helper-only bug pins retain their explicit dispositions. |
+| `test_m5_pulsar_boundary_investigation.py`, `test_m5_pulsar_folding_fixes.py`, `test_m5_pulsar_handoff_fixes.py` | M5 correctness regressions: circular phase neighbors, full-cycle bins, all endpoint/tied-maximum samples retained, degenerate means, shared calibrated channels, display-independent diagnostics, unavailable-diagnostic warnings, actual ECSV/PCM/PNG handoffs and two-cycle plot extent. Standard-coordinate ambiguity and value-only channel alignment remain bounded controls; sparse qualitative audio discloses relative phase compression even at exact whole-loop duration. |
+| `test_m5_pulsar_combined_channels.py` | M5 review follow-up: finite channel means with unrepresentable sums/differences raise a declared validation error, including strict NumPy error mode; public fold/audio write no artifact, one-/two-cycle display is covered, and large representable combinations retain their real ECSV values. |
+| `test_m5_catalog_parsing_investigation.py`, `test_m5_catalog_cache_investigation.py`, `test_m5_catalog_identity_investigation.py` | M5 catalog correctness and policy controls: filter/zero routing, real VOTable/request mapping, literal column dependencies, enclosing boxes/cones, actual SDK cache faults/pruning and SDSS retry, SIMBAD labels, null-wire eligibility and conditional ordinal identity. Original confirmed bug pins now require corrected behavior. |
+| `test_m5_catalog_query_fixes.py`, `test_m5_catalog_cache_fixes.py`, `test_m5_landolt_errors.py`, `test_m5_simbad_types.py` | Additional M5 regressions: polar/seam box bounds and unequal dimensions, literal/callable name distinctions, masked optional IDs, cache-directory recovery without HTTP replay or lost provider/save errors, undeletable SDSS HTML entries, known-zero versus absent Landolt errors, and common/unknown/intentional-empty SIMBAD labels. |
+| `test_m5_background_variance.py`, `test_m5_saturation_fixes.py` | Independent gain/sky-mean/source variance, offset invariance, local residual noise and mask propagation; exact detector saturation through partial downsample blocks and masked/nonzero detector maps. |
+| `test_m5_header_fixes.py`, `test_m5_shape_fixes.py` | Header unit/coordinate contracts, scaled/degenerate triangle controls and ellipse canonicalization before source cuts. |
+| `test_m5_catalog_readers.py`, `test_m5_catalog_geometry.py` | Independently packed UCAC metadata, real full-turn span generation, shared spherical queries, motion halos/epochs, candidate budgets, downstream references and legacy-box coverage. |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_wcs_accepted_positions.py` | M2 solved-footprint acceptance and ATLAS reference coverage, nonfinite/rank-one CD/PC rejection, preserved headers, small valid anisotropic scales, seams/poles and SIP edges; native boundaries stubbed |
 | `test_wcs_timeout_limits.py` | M1 WCS-02: finite default/validated attempt budgets at direct config, duck-typed builder, mutable backend and public/environment boundaries; CPU/backstop and retry propagation; actual POSIX owned-group termination with stubborn children and an exited leader, pipe closure and structured timeout diagnostics. Whole-call/ATLAS preprocessing/cancellation budgets remain WCS-21/MCP-01. |
@@ -118,21 +132,24 @@ For the preservation tests, three conventions apply:
 The default suite remains deterministic: network-marked tests are skipped unless
 `MARS_TEST_NETWORK=1` is set explicitly.
 
-## Defects recorded here
+## Extraction-time defect descriptions (historical)
 
-Everything below was verified against the upstream Skynet source **before**
-being written down; each one reproduces there too, so these are preserved by the
-extraction contract rather than introduced by it. Nothing here has been fixed.
+The descriptions below record extraction-time observations, not a current bug
+list. M2–M5 corrected many of them or removed their callers; a few rows already
+carry later correction notes. The
+[master continuation plan](../docs/working/master-continuation-plan.md) and its
+linked evidence give current dispositions, including
+[obsolete reports and instructions](../docs/analysis/m5-obsolete-reports-instructions.md).
+Keep the original evidence distinct from current behavior.
 
-They are collected in one place because they are the single most likely thing to
-be mistaken for a broken test. If one of these assertions fails, the algorithm
-changed — which may be the intent, but is never an accident.
+Tests named in this historical table may now assert the corrected answer.
+Assess a failure against that test's current contract and independent reference.
 
 ### Wrong output or a crash
 
 | Where | What | Test |
 | --- | --- | --- |
-| `skylib_lite/util/overlap.py` | `ellipoverlap` **segfaults** — does not raise — when a rectangle is centred on the ellipse and large relative to it. The shared diagonal passes through the circle centre and the recursive clipping in `triangle_unitcircle_overlap` never terminates. The low-level defect remains pinned in subprocesses (0.40 px fine, 0.35 px fatal). ALG-01 is contained at the driver and Numba dispatcher/initializer boundaries: every effective ellipse or elliptical-annulus axis must be finite and at least 0.5 px before a parallel overlap kernel runs; small fixed circles retain their independent safe kernel. Subprocess tests prove clean validation for non-finite axes, optimizer-derived axes, annuli, fixed/default-auto `run_photometry`, and structured errors from registered HR and radio FITS wrappers. | `test_skylib_geometry.py` |
+| `skylib_lite/util/overlap.py` | **Corrected by M5 (PHOT-19):** retaining both third-edge intersections fixes finite area corruption and native recursion, including the crash above M1's 0.5-pixel floor. Old low-level crash probes now require analytic areas in bounded native subprocesses. The M1 floor remains a separate conservative public geometry guard; fixed circles retain their own path. | `test_skylib_geometry.py`, `test_m5_overlap_investigation.py` |
 | `photometry/source_extraction.py` | Any crop that narrows the **columns** raises `ValueError: array is not C-contiguous` inside `sep`. `_crop_data` returns a numpy view; row-only slices stay contiguous, column slices do not. `_ensure_native_contiguous` exists in the sibling `photometry.py` and was never applied here. | `test_photometry_extraction.py` |
 | `query/geometry.py` | `clip_sources_to_box` **silently returns zero sources** near a pole. Once `sin(w/2)/cos(dec) > 1` the `arcsin` yields NaN, every subsequent comparison against NaN is `False` — including the pole and RA-wrap guards — and execution falls through to a filter that rejects everything. At dec 89.5 a 60-arcmin box is already enough. The failure surfaces as "no catalog sources", not as an error. | `test_query_geometry.py` |
 | `wcs/header_utils.py` | `_parse_ra_dec_values` **raises** on the comma decimal separators three fixture frames use (`'00:42:44,3'`), and `guess_icrs_radec_from_header` does not catch it. Latent only because those frames are solved, so `CRVAL` answers at step 1. An unsolved frame from the same telescope — exactly the case a solver hint exists for — would raise. | `test_wcs_headers.py` |
@@ -153,7 +170,7 @@ changed — which may be the intent, but is never an accident.
 | `catalogs/apass_catalog.py` | APASS declares a `U` transform referencing `uprime`, which APASS does not carry. The entry is unsatisfiable, and reference-magnitude resolution deliberately returns `(None, None)` rather than falling back — substituting V for a U frame is ~1.5 mag. Tracked in `UNSATISFIABLE_LOOKUPS` so a *new* unresolvable entry fails the test. | `test_catalogs_registries.py` |
 | `catalogs/__init__.py` | Four registry keys differ from the plugin's own `name`: `Stetson`→`StetsonGlobs`, `Tycho`→`Tycho2`, `UCAC`→`UCAC5`, `USNO`→`USNOB1`. `CatalogSource.catalog_name` is populated from `name`, so a source from Stetson reports a catalog string matching no registry key. | `test_catalogs_registries.py` |
 | `fieldcal/ref_mag.py` | `_ALLOWED_TOKENS` rejects the raw expression **before** the apostrophe sanitiser runs, so a band spelled `g'` can never appear inside a transform — the sanitiser is unreachable for exactly the names it looks written for. Every shipped transform uses `gprime`/`rprime`/`iprime` for this reason; a `g'`-spelled one would fail silently as `None`. | `test_fieldcal_ref_mag.py` |
-| `query/selection.py` | `_filter_token_candidates(" v ")` returns `[" v ", "v", " V "]` — never a bare `"V"`, because `.upper()` runs on the unstripped string. Safe only because `select_catalogs_for_filter` normalises first; calling `catalog_supports_filter` directly with a padded name can miss. | `test_query_selection.py` |
+| `catalogs/filters.py` + `query/selection.py` | **Corrected by M2:** shared token normalization composes padding, typographic primes and underscores across selection/resolution/reporting. Single-letter case remains meaningful: padded SkyMapper `v` must not offer Johnson `V` as a substitute. | `test_query_selection.py`, `test_catalog_magnitudes_filters.py`, `test_m5_catalog_parsing_investigation.py` |
 | `photometry/photometry.py` | With aperture correction on (the default `apcorr_tol=1e-4`), `mag` and `flux` **disagree**: the correction adjusts the magnitude but `flux` keeps the raw aperture sum, so recomputing `-2.5*log10(flux/texp)` is ~0.11 mag off on the fixture frame. One more reason field calibration forces `apcorr_tol = 0`. | `test_photometry_pipeline.py` |
 | `photometry/photometry.py` | A supplied `gain` of exactly `1` is treated as **unset** and replaced from the header, so a caller genuinely wanting unit gain cannot ask for it. Changes every reported flux uncertainty. | `test_photometry_pipeline.py` |
 | `wcs/wcs.py` | Header write-back is **not bit-exact**: `to_header(relax=True)` refactors `CD` into `PC` × `CDELT` and the recovered matrix differs in the 5th significant figure (~5e-5 relative). A few hundredths of an arcsec across a frame — harmless, but not zero. | `test_wcs_solution.py` |

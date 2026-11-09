@@ -20,6 +20,7 @@ The ``decompose_linear`` tests are adapted from
 from __future__ import annotations
 
 import math
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -123,7 +124,7 @@ def test_a_pixel_outside_the_ellipse_contributes_nothing():
 
 
 def test_a_small_ellipse_wholly_inside_a_pixel_returns_its_own_area():
-    """Down to the crash boundary, a sub-pixel aperture is measured correctly."""
+    """A sub-pixel aperture contributes its analytic area."""
     for semi_axis in (0.5, 0.45, 0.4):
         assert ellipoverlap(-0.5, -0.5, 0.5, 0.5, semi_axis, semi_axis, 0.0) == (
             pytest.approx(math.pi * semi_axis ** 2, rel=1e-6)
@@ -146,15 +147,14 @@ def test_elongated_apertures_capture_different_pixels_by_orientation():
 
 
 # ---------------------------------------------------------------------------
-# A preserved crash
+# Native overlap regressions and retained public containment
 # ---------------------------------------------------------------------------
 
-#: Inputs that terminate the interpreter. Never call these in-process.
-CRASHING_CALLS = [
-    # A pixel centred on an elliptical aperture smaller than ~0.36 px.
-    "ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.35, 0.35, 0.0)",
-    # The same geometry at any scale: a rectangle centred on the ellipse.
-    "ellipoverlap(-2.0, -2.0, 2.0, 2.0, 1.0, 1.0, 0.0)",
+#: PHOT-19 formerly crashed on these inputs. Keep native execution isolated.
+ENCLOSED_ELLIPSE_CALLS = [
+    ("ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.35, 0.35, 0.0)", math.pi * .35**2),
+    ("ellipoverlap(-2.0, -2.0, 2.0, 2.0, 1.0, 1.0, 0.0)", math.pi),
+    ("ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.40, 0.40, 0.0)", math.pi * .4**2),
 ]
 
 #: Conservative boundary accepted by the MARS photometry containment guard.
@@ -168,23 +168,29 @@ SAFE_FLOOR_CALLS = [
 
 def _run_python(source: str) -> subprocess.CompletedProcess[str]:
     """Run a potentially fatal geometry path outside the pytest process."""
+    if sys.platform == "win32":
+        pytest.skip("Native overlap probes require POSIX resource limits")
+    setup = "import resource\nresource.setrlimit(resource.RLIMIT_CORE, (0, 0))\n"
     return subprocess.run(
-        [sys.executable, "-c", source],
+        [sys.executable, "-c", setup + source],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=180,
         cwd=str(Path(__file__).resolve().parent.parent),
+        env={**os.environ, "NUMBA_DISABLE_JIT": "0", "NUMBA_NUM_THREADS": "1",
+             "OMP_NUM_THREADS": "1"},
     )
 
 
-def _crashes(expression: str) -> bool:
-    """Run one overlap call in a subprocess; report whether it survived."""
+def _overlap_value(expression: str) -> float:
+    """Require one native overlap call to survive and return its area."""
     result = _run_python(
         "from algorithms.skylib_lite.util.overlap import "
         "ellipoverlap, triangle_unitcircle_overlap\n"
         f"print({expression})"
     )
-    return result.returncode != 0
+    assert result.returncode == 0, result
+    return float(result.stdout)
 
 
 def _assert_blocked_after_setup(source: str) -> None:
@@ -198,53 +204,17 @@ def _assert_blocked_after_setup(source: str) -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("expression", CRASHING_CALLS)
-def test_ellipoverlap_segfaults_on_a_centred_oversized_rectangle(expression):
-    """PRESERVED DEFECT: this does not raise — it kills the interpreter.
-
-    ``ellipoverlap`` splits the rectangle into two triangles and hands each to
-    ``triangle_unitcircle_overlap``. When the rectangle is *centred* on the
-    ellipse and large enough relative to it, the shared diagonal passes exactly
-    through the circle centre, and the recursive clipping in
-    ``triangle_unitcircle_overlap`` never terminates. The result is a stack
-    overflow inside numba-compiled code: a SIGSEGV, not a Python exception, so
-    no ``try``/``except`` anywhere upstream can contain it.
-
-    Byte-identical to ``skynet packages/py/skylib/skylib/util/overlap.py`` and
-    it crashes there too, so this is upstream's bug, preserved by the extraction
-    contract rather than introduced by it.
-
-    **Reachability.** ``aperture_numba.py:579`` calls
-    ``ellipoverlap(dx - 0.5, dy - 0.5, dx + 0.5, dy + 0.5, a*rout, b*rout, theta)``
-    — a 1x1 pixel against the aperture, with ``dx``/``dy`` the offset from the
-    source centre. So a source sitting on a pixel centre with an effective
-    semi-axis below about 0.36 pixels crashes the process. Measured on this
-    build: 0.40 is fine, 0.35 is fatal. The maintained photometry boundary
-    rejects unsafe ellipses before this helper, while the vendored low-level
-    defect remains pinned here.
-
-    Run in a subprocess because an in-process call would take pytest down with
-    it. Asserted as a non-zero exit rather than a specific signal, since the
-    exact code varies by platform.
-    """
-    assert _crashes(expression), (
-        f"{expression} no longer crashes — if the recursion was fixed upstream "
-        f"or vendored anew, delete this test and unskip the normal cases"
-    )
-
-
-@pytest.mark.slow
-def test_the_crash_boundary_sits_between_0_4_and_0_35_pixels():
-    """Bound the defect so a change in either direction is visible."""
-    assert not _crashes("ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.40, 0.40, 0.0)")
-    assert _crashes("ellipoverlap(-0.5, -0.5, 0.5, 0.5, 0.35, 0.35, 0.0)")
+@pytest.mark.parametrize("expression, expected", ENCLOSED_ELLIPSE_CALLS)
+def test_ellipoverlap_recovers_enclosed_areas_across_the_former_crash_boundary(expression, expected):
+    """The discarded intersection caused the old subpixel crashes as well."""
+    assert _overlap_value(expression) == pytest.approx(expected, abs=1e-12)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("expression", SAFE_FLOOR_CALLS)
 def test_the_containment_floor_is_safe_for_rotated_and_elongated_ellipses(expression):
     """The 0.5 px guard boundary survives representative ellipse shapes."""
-    assert not _crashes(expression)
+    assert 0.0 <= _overlap_value(expression) <= 1.0
 
 
 @pytest.mark.slow
@@ -267,13 +237,10 @@ def test_sum_ellipse_blocks_nonfinite_axes_before_the_parallel_kernel(axis):
 
 @pytest.mark.slow
 def test_an_off_centre_pixel_is_safe_at_the_same_scale():
-    """Only the centred case is fatal, which is why it survived in production.
-
-    Real sources rarely land exactly on a pixel centre, and real apertures are
-    rarely sub-pixel — the two conditions together are what make this rare
-    enough to have gone unnoticed.
-    """
-    assert not _crashes("ellipoverlap(-0.3, -0.7, 0.7, 0.3, 0.2, 0.2, 0.0)")
+    """An offset rectangle enclosing a .2-pixel circle returns pi*r*r."""
+    assert _overlap_value("ellipoverlap(-0.3, -0.7, 0.7, 0.3, 0.2, 0.2, 0.0)") == (
+        pytest.approx(math.pi * .2**2, abs=1e-12)
+    )
 
 
 @pytest.mark.slow
@@ -466,7 +433,7 @@ def test_a_triangle_outside_the_unit_circle_overlaps_not_at_all():
 
 
 def test_a_triangle_containing_the_circle_returns_the_circle_area():
-    """Safe as long as no edge runs through the centre — see the crash above."""
+    """An enclosing triangle overlaps the entire circle."""
     overlap = triangle_unitcircle_overlap(-10.0, -10.0, 10.0, -10.0, 0.0, 10.0)
     assert overlap == pytest.approx(math.pi, abs=1e-9)
 

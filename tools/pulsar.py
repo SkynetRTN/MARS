@@ -621,13 +621,18 @@ def compute_pulsar_periodogram(
         except ValueError:
             peak_fold_snr = None
 
-    if peak_fold_snr is not None and peak_fold_snr < 8:
+    if peak_fold_snr is None or peak_fold_snr < 8:
+        concentration = (
+            "The strongest peak's fold concentration cannot be evaluated "
+            "(flat, insufficient or numerically unresolved phase support); "
+            if peak_fold_snr is None else
+            f"The strongest peak has a fold concentration of only {peak_fold_snr:.1f}; "
+        )
         warnings.append(
             ToolWarning(
                 code="peak_does_not_fold",
                 message=(
-                    f"The strongest peak has a fold concentration of only "
-                    f"{peak_fold_snr:.1f}; the fold does not strongly support this "
+                    f"{concentration}the fold does not strongly support this "
                     f"candidate. It may be noise, interference, a wrong period or "
                     f"a faint source. Inspect aliases and the profile, vary "
                     f"back_scale by rerunning load_pulsar_lightcurve, change "
@@ -742,8 +747,11 @@ def fold_pulsar_lightcurve(
     conventional warning cutoff of 8. It is not a calibrated probability or
     source classifier: periodic interference can fold coherently too. A weak
     fold can mean a wrong period or a faint source; it need not raise an error.
+    An unavailable diagnostic (flat, fewer than four occupied phase bins or
+    numerically unresolved) also warns and does not validate a pulse.
 
-    ``bins`` is samples per period (100 upstream), ``phase`` shifts the profile
+    ``bins`` divides the full cycle into equal-width bins (100 upstream); empty
+    bins are omitted and every input sample contributes. ``phase`` shifts the profile
     by that fraction of a period, and ``display_period=2`` emits two cycles
     side by side so a pulse straddling the wrap is easier to read.
     """
@@ -807,13 +815,20 @@ def fold_pulsar_lightcurve(
         )
 
     snr = profile.pulse_snr()
-    if snr is not None and snr < 8:
+    if snr is None or snr < 8:
+        message = (
+            "Pulse concentration cannot be evaluated: the profile is flat, has "
+            "fewer than four occupied phase bins, or is numerically unresolved. "
+            "This fold does not establish a pulse; inspect the data and period."
+            if snr is None else
+            f"Profile has an empirical pulse concentration of only {snr:.1f}. "
+            "The fold does not strongly support a pulse; inspect the period, "
+            "noise and possible interference."
+        )
         warnings.append(
             ToolWarning(
                 code="weak_or_absent_pulse",
-                message=f"Profile peaks at only {snr:.1f} sigma above its own "
-                f"scatter. Either the period is wrong or the source is too faint "
-                f"in this scan; a wrong period folds flat, not to an error.",
+                message=message,
             )
         )
 
@@ -829,6 +844,9 @@ def fold_pulsar_lightcurve(
     table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
     table.meta["period_s"] = float(period_s)
     table.meta["bins"] = int(bins)
+    table.meta["phase"] = float(phase)
+    table.meta["display_period"] = int(display_period)
+    table.meta["cal"] = float(cal)
 
     artifact = artifacts.write_table(
         table, _label(lc, file, output_name) + "_folded", subdir=subdir, fmt="ecsv"
@@ -881,7 +899,7 @@ def sonify_pulsar(
     channels.
 
     **Pass ``period_s`` whenever you have one.** With it, the scan is folded
-    into a pulse profile and that profile is looped at the true rotation rate —
+    into a pulse profile and that profile is looped with the requested period —
     upstream's primary rendering, and the one that actually sounds like a
     pulsar, because every rotation reinforces the same pulse. Get the period
     from ``compute_pulsar_periodogram`` or ``search_atnf``.
@@ -891,7 +909,10 @@ def sonify_pulsar(
     playback drifts a few percent from sky time (reported as
     ``playback_stretch``) because the synthesis ignores sample timestamps.
 
-    ``speed`` divides the pass duration, ``audio_seconds`` sets the output
+    Sparse folded profiles play only occupied bins, at equal intervals; missing
+    relative phase gaps are compressed and warn ``playback_not_real_time`` even
+    when the whole-loop duration matches. Audio is qualitative, not a timing
+    measurement. ``speed`` divides the pass duration, ``audio_seconds`` sets the output
     length, and ``seed`` makes the noise carrier reproducible.
     """
     file = _describe(path)
@@ -938,6 +959,7 @@ def sonify_pulsar(
     playback_stretch: Optional[float] = None
     pulse_snr: Optional[float] = None
     used_bins: Optional[int] = None
+    sparse_fold = False
 
     if period_s is not None:
         # --- Folded rendering: upstream's primary path. --------------------
@@ -963,14 +985,23 @@ def sonify_pulsar(
         rendering = "folded"
         pulse_snr = profile.pulse_snr()
         used_bins = profile.bins
+        sparse_fold = profile.bin_count < profile.bins
         # cal was already applied by the fold; applying it again would square it.
         render_cal = 1.0
-        if pulse_snr is not None and pulse_snr < 8:
+        if pulse_snr is None or pulse_snr < 8:
+            message = (
+                "Pulse concentration cannot be evaluated: the folded profile is "
+                "flat, has fewer than four occupied phase bins, or is numerically "
+                "unresolved. Audio does not validate this period."
+                if pulse_snr is None else
+                f"Folded profile has an empirical pulse concentration of only "
+                f"{pulse_snr:.1f}; inspect the data and period before interpreting "
+                "the audio as a pulse."
+            )
             warnings.append(
                 ToolWarning(
                     code="weak_or_absent_pulse",
-                    message=f"Folded profile peaks at only {pulse_snr:.1f} sigma; "
-                    f"the render will sound like noise. Check the period.",
+                    message=message,
                 )
             )
     else:
@@ -1046,9 +1077,10 @@ def sonify_pulsar(
     # rendered samples would span at the instrument's nominal cadence -- which
     # is not their actual span, because the synthesis compresses gaps away.
     #
-    # Neither rendering is exactly 1.0: `samplesPerPoint` is floored to a whole
-    # number of output samples, so a pass is quantized rather than fitted. The
-    # folded path avoids only the gap-compression term, not this one.
+    # Both modes floor `samplesPerPoint` to a whole number of output samples,
+    # so a pass is quantized rather than fitted to its requested duration. The
+    # folded path can also compress relative phase gaps when bins are empty.
+    # Its global stretch describes the loop length, not within-loop timing.
     sky_seconds_per_pass: Optional[float] = None
     if rendering == "folded":
         sky_seconds_per_pass = period_s
@@ -1058,16 +1090,22 @@ def sonify_pulsar(
     if sky_seconds_per_pass:
         playback_stretch = rendered.pass_audio_seconds / sky_seconds_per_pass
         drift = playback_stretch * speed
-        if abs(drift - 1.0) > 0.01:
+        if abs(drift - 1.0) > 0.01 or sparse_fold:
+            timing = (
+                "Only occupied phase bins are played, at equal intervals; "
+                "missing phase bins are compressed, so relative pulse timing "
+                "is not preserved. The stretch describes whole-loop duration only. "
+                if sparse_fold else ""
+            )
             warnings.append(
                 ToolWarning(
                     code="playback_not_real_time",
                     message=(
-                        f"Audio runs {abs(drift - 1) * 100:.1f}% "
-                        f"{'slow' if drift > 1 else 'fast'} against the observation "
-                        f"clock: the synthesis ignores sample timestamps, and this "
-                        f"file has gaps. A period measured off the audio will be off "
-                        f"by that much -- use search_atnf for the real one."
+                        f"Audio pass duration is {drift:.6g} times the requested "
+                        f"sky duration after accounting for speed. Integer output "
+                        f"sampling changes loop duration, and synthesis plays "
+                        f"samples by index. {timing}Do not measure a period from "
+                        f"audio; use compute_pulsar_periodogram and compare references."
                     ),
                 )
             )

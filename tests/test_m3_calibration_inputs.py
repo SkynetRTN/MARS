@@ -129,7 +129,7 @@ def _match(catalog_sources, detected, *, tol_arcsec=2.0):
     header = fits.Header({"DATE-OBS": "2026-01-01T00:00:00"})
     return field_cal._match_detected_sources(
         catalog_sources, detected, wcs=None, header=header,
-        data=np.zeros((20, 20)), source_match_tol=tol_arcsec,
+        data=np.zeros((20, 20)), source_match_tol=1, source_match_tol_arcsec=tol_arcsec,
     )
 
 

@@ -605,6 +605,65 @@ keeps `no_solution` for exactly that case. Tests:
 `tests/test_m3_wcs_failures.py` (stubbed backends); the real-solver runs above
 and the `solver_data` tests were also run with the operator data configured.
 
+#### 10. M5 coordinate and geometry corrections (2026-11-01)
+
+The [M5 investigation and correction record](analysis/m5-coordinates-image-geometry.md)
+documents intentional departures from the extraction for WCS-06/07/08/09/10/
+11/12/16/17/24 and the old CAT-07/09 helpers. Decimal RA strings now follow
+the numeric hours/degrees heuristic; explicitly scaled celestial WCS A
+provides angular scales through its actual CUNIT and PC/CD transform. The
+disabled primary-WCS/optics hint policies remain disabled. PC result metadata
+uses `diag(CDELT) @ PC`; non-celestial default pixel increments cannot supply
+an angular FOV. Triangles use normalized, dimensionless area for collinearity.
+
+The general and oriented ATLAS searches and post-solve reference query share
+`atlas/catalog/geometry.py`: a spherical-cap box handles RA zero and both
+poles, with one full-turn query at a pole so candidate and returned-row caps
+remain per operation. UCAC4 also preserves spans of a full turn or more before
+wrapping. Far-side/horizon positions become NaN in gnomonic projection and
+cannot enter matching or source caps. Original row/work limits remain.
+
+UCAC5 retains Gaia G and proper motions from the authors' 52-byte u5z layout:
+signed 16-bit PM components at offsets 32/34 in 0.1 mas/year and Gaia G at
+offset 40 in mmag, with Gaia positions at epoch 2015.0. The unchanged
+record dtype is viewed at the verified offsets, preserving `rest`, chunking,
+thinning and row order. Magnitude and motion arrays remain aligned with
+positions. The published binary description specifies no PM/G missing sentinel.
+See [readmeU5.txt section 4c](https://vizier.cfa.harvard.edu/ftp/cats/I/340/readmeU5.txt).
+
+Capped matching catalogs now prefer measured bright stars with deterministic
+distance ties. Recorded exposure midpoints select the observation epoch;
+queries expand by the conservative motion bound from the signed encoding
+before querying, propagate constant tangential motion along a great circle,
+and clip to the requested cap. The enlarged cap must fit the same radius
+budget. No distance/radial velocity/perspective acceleration is assumed.
+Reference sources carry propagated motion and a naive UTC epoch consistent
+with existing calibration/extraction consumers. Absent dates or catalog
+motion and unknown brightness at a cap produce registered public warnings.
+These corrections do not certify completeness or band-independent source
+detectability, and do not validate the disputed UCAC4 native record layout.
+
+#### 11. M5 repeated calls and FITS writes (2026-11-03)
+
+WCS-28, WCS-26 and M5-WRITE-01/02 intentionally depart from the copied
+behavior. `solve_wcs` copies source-extraction settings before disabling
+saturation rejection locally, so a later caller keeps its original policy.
+The astrometry.net xylist writer caps coordinates independently of optional
+brightness, retaining input order without flux and brightest-first order
+with it; no brightness values are synthesized.
+
+Both algorithm and staged tool writers now share WCS replacement policy.
+Modern D2IM records and legacy `AXISCORR` references are cleared, preventing
+retained lookup HDUs from being reapplied to the accepted new geometry.
+Their unreferenced data payloads remain. Source observation dates and original
+single/split MJDREF or DATEREF values/comments are preserved without mixing
+in candidate time-origin defaults. Serialization precedes in-memory mutation;
+the tool's existing file version and atomic replacement guards remain.
+Native full-HDU round trips, effective time origins, failure paths and bounded
+parity controls are recorded in the
+[investigation and corrections](analysis/m5-repeated-calls-fits-writes.md).
+The documented latent explicit-parity contract is not exposed by new settings.
+
 ## Photometry
 
 _Former source: `algorithms/photometry/EXTRACTION.md`._
@@ -619,9 +678,9 @@ This began as a **verbatim extraction**, not a port. Every algorithm, constant,
 comment, and numeric quirk was preserved exactly as it was in Skynet; the
 original edits were import rewiring and removal of hard dependencies on
 Skynet's ORM and plate-solving stage, each marked in-place with an
-`# EXTRACTED:` comment. The current tree has one later, explicitly documented
-MARS containment divergence: ALG-01 rejects unsafe sub-pixel ellipse geometry
-before the preserved overlap arithmetic runs.
+`# EXTRACTED:` comment. Subsequent M1 containment, M2/M3 and M5 corrections
+intentionally depart from the copied behavior. The M5 checkpoint below
+records the current measurement contracts, including exact-overlap arithmetic.
 
 Current package note: the copied Skylib files described below now live under
 `algorithms/skylib_lite/`; historical paths in this record describe the original
@@ -677,18 +736,19 @@ divergence described immediately below it.
 | `util/fits.py` | 211 | `algorithms/skylib_lite/util/fits.py` |
 | `util/__init__.py` | 8 | `algorithms/skylib_lite/util/__init__.py` |
 
-The original **3,311 source lines were vendored unmodified**. Eleven files
-remain byte-identical. `photometry/aperture.py` validates source ellipses before
+The original **3,311 source lines were vendored unmodified**. The following
+describes M1's initial containment checkpoint, before M5's corrections.
+`photometry/aperture.py` validates source ellipses before
 the automatic optimal-radius search and after final fixed/automatic axes are
 derived. `photometry/aperture_numba.py` applies the same validation to every
 effective ellipse and elliptical-annulus axis before parallel dispatch, with a
 second initializer check for direct internal kernel calls. Elliptical semi-axes
 must be finite and at least 0.5 pixels before any exact-overlap kernel runs.
 Fixed circles retain the independent circle-overlap path and are not subject to
-the floor. The upstream arithmetic in `aperture.py`, `aperture_numba.py`, and
-`util/overlap.py` is otherwise unchanged; the fatal low-level recursion remains
-pinned in subprocess tests while maintained fixed, auto, annulus, optimizer,
-HR-FITS, and radio-FITS paths now fail cleanly.
+the floor. M5 subsequently fixes the discarded intersection in
+`util/overlap.py`, including a native recursion case that passed this floor.
+Bounded low-level probes now require independent areas rather than crashes;
+the conservative public floor remains in place.
 
 Their intra-package relative imports
 (`from ..calibration.background import ...`, `from ..util.stats import ...`,
@@ -934,26 +994,25 @@ parity with legacy output.
 1. `skylib/photometry/aperture_numba.py:537` — `_aper_init_ellipann` validates
    `if aper[3] > aper[3]:`, comparing a value to itself. Presumably meant
    `aper[3] > aper[4]` (inner > outer radius). The check is dead.
-2. `skylib/photometry/aperture_numba.py:307` — `_sum_aper_reject` indexes the mask
-   box-relative (`mask[iy - ymin, ix - xmin]`) while `_sum_aper` at line 212
-   indexes it absolutely (`mask[iy, ix]`). Reached only with
-   `reject_outliers=True` and a non-`None` mask.
+2. **Corrected by M5 (2026-11-02):** `_sum_aper_reject` indexes masks with
+   absolute detector coordinates, matching the ordinary kernel. A masked
+   contaminant in an offset annulus is excluded with or without rejection.
 3. `skylib/extraction/centroiding.py:305` — in the `method='win'` all-good branch,
    `y[:] = y + 1` uses the input `y` rather than the windowed result `y1`.
    Unreached on this photometry path: `run_photometry` calls `centroid_sources`
    with the default `method='iraf'`.
-4. `skylib/extraction/main.py:257–261` — the "Make sure that a >= b" block assigns
-   through `sources[s][...]` where `s` is a boolean mask. Boolean indexing returns
-   a copy, so those three statements are no-ops. The adjacent
-   `sources['theta'] %= np.pi` (line 260) is a field view and does take effect.
+4. **Corrected by M5 (WCS-16, 2026-11-01):** the "Make sure that a >= b"
+   block now selects structured fields before masking, so axis swaps, the
+   quarter-turn and final angle normalization update the table. Real SEP
+   ellipses retain their geometry; reversed axes now reach FWHM/ellipticity
+   cuts in canonical order. Flux/downsampling behavior is unchanged.
 5. `skylib/extraction/main.py:105–106, 280–286` — the `centroid` parameter is
    documented as using "the windowed algorithm (SExtractor's XWIN_IMAGE,
    YWIN_IMAGE)" but the code calls `centroid_iraf` / `centroid_iraf_masked`. The
    comment at line 281 (`# Centroid sources using IRAF-like method`) matches the
    code; the docstring does not.
-6. `skylib/photometry/aperture.py:542–545` — a `background_rms` column is appended
-   to the output record array but never assigned, so it stays 0. (The docstring
-   lists it as an output field.)
+6. **Corrected by M5 (2026-11-02):** the `background_rms` output column now
+   contains the effective supplied/estimated sky RMS in output electron units.
 7. `skylib/util/stats.py:292` — a second `from numba import njit` mid-module,
    immediately before `chauvenet1 = njit(...)(chauvenet1py)`, with the comment
    "Compile WITHOUT parallel=True to avoid parfors entirely". Redundant but
@@ -992,9 +1051,8 @@ not on the photometry call path if that import proves inconvenient.
 #### 10. Verification performed
 
 - At extraction time, `diff -q` against source for all 13 vendored skylib files
-  was byte-identical. Eleven remain so; the current `photometry/aperture.py`
-  and `photometry/aperture_numba.py` differences are the documented ALG-01
-  containment guards above.
+  was byte-identical. Current intentional departures include ALG-01 containment
+  and the later M5 measurement/geometry corrections below.
 - `python3 -m compileall` over the whole tree — clean.
 - Import-graph audit: no `skynet_db`, `skynet_sdk`, or absolute `skylib` imports
   remain outside `# EXTRACTED:` comments.
@@ -1006,6 +1064,90 @@ not on the photometry call path if that import proves inconvenient.
 `scipy`, `numba`, `sep`, and `photutils` were not installed in the original
 extraction environment. Later repository tests cover the deliberate ALG-01
 guard; this paragraph records only the initial extraction-time limitation.
+#### 11. M5 measured flux and source position corrections (2026-11-02)
+
+PHOT-01/02/06/07/12/13/18/19 and the additional investigation findings
+intentionally diverge from the extraction. The [investigation and correction
+record](analysis/m5-measured-flux-source-position.md) retains the original
+failures and describes the converted correctness probes.
+
+Exact ellipse clipping retains both third-edge intersections, agreeing with
+pinned SEP 1.4.1 and analytic/quadrature areas; old small-axis and newer
+guard-passing native recursion cases now complete. The separate public 0.5-pixel
+ellipse floor remains. Saturation counts map each original detector pixel into
+its reduced segmentation cell once, including partial-block cropping and masks.
+Photometry admits source centers across the continuous FITS footprint
+`[0.5, width+0.5] × [0.5, height+0.5]`, with aperture truncation handled by
+measurement flags. Isophotal analysis
+receives zero-based centers and uses the covariance `atan2` orientation.
+
+Nonpositive net flux has no finite magnitude; existing magnitude fields are
+cleared, failure flags set, and invalid rows excluded. Unusable sky annuli yield
+invalid measurements and preserve flags, including masked/edge annuli. The
+requested annulus's axes, rotation, masks and outlier selection govern the same
+sky mean, variance and metadata used for subtraction.
+
+Background/RMS maps are independent inputs. Supplied RMS describes marginal
+per-pixel sky/read noise; annular residual sample variance supplies a local
+estimate when absent. The weighted sample estimate uses denominator
+`sum(w) - sum(w**2)/sum(w)`. The error follows SEP's fractional-area convention:
+sky variance integrated over aperture area, plus the variance of the annular
+mean, plus positive net source flux divided by gain. Map-based sky is subtracted
+before adding source shot noise. Constant reduction offsets do not change this
+source term; masks also constrain fallback RMS estimation. The optimal-radius
+objective squares RMS before calling its variance kernel. These marginal errors
+do not recover detector history, resampling covariance or background-model
+systematics from reduced pixels.
+
+Growth curves that reaccelerate beyond the fractional tolerance are rejected
+as correction references; the next suitable source is tried. If none supplies
+a converged correction, the aperture scale is retained with an explicit notice.
+A converged curve requiring zero correction is available and emits no such
+notice. Elliptical growth annuli convert pixel radii to scale factors relative
+to each current aperture; circular annuli retain pixel units, including
+per-source radii in adaptive measurement.
+Field calibration continues to disable aperture correction.
+
+Calibration retains its annular flux convention and forwards extracted RMS.
+If extraction used a region, calibration estimates RMS over the full masked
+measurement image using the extraction background settings, so annuli beyond
+the region have correctly positioned noise data.
+WCS matching uses actual detector pixels, including anisotropic and rotated
+frames. Sky-only matching without WCS requires explicit `source_match_tol_arcsec`
+and uses spherical chord distance. A matched centroid is not projected or moved
+a second time during measurement. Matched sky-only observations retain their
+observed sky coordinates until header-WCS projection, without applying copied
+catalog motion. SNR selection uses positive finite flux/error
+or the exact inverse logarithmic magnitude error for magnitude-only input.
+Missing/zero errors cannot bypass a constrained SNR window. M2's
+magnitude-variance fitter remains unchanged.
+
+Historical Skynet/Afterglow fixtures are unchanged. Current selection excludes
+six uncertainty-free rows in the recorded NGC 5128 replay (35 to 29).
+Propagated annulus truncation excludes edge measurements (35 to 34 in its
+selected-row pixel measurement; 35 to 33 in the NGC 3628 default-annulus test).
+These are deliberate validity changes, not widened parity tolerances.
+
+#### 12. M5 source-table reuse (2026-11-03)
+
+M5-REUSE-01/02 intentionally change low-level table ownership and measurement
+status. `aperture_photometry` returns an independent table and leaves the
+caller's array unchanged, including read-only inputs. The additive `iso_flux`
+column retains original/computed isophotal weights in input-count units while
+`flux` continues to hold current measured aperture electrons. Adaptive reuse
+and fixed-to-adaptive changes use those isophotal weights rather than feeding
+the previous aperture flux back into aperture selection. SEP `cflux` is a
+different quantity. Old measured tables without retained isophotal data cannot
+recover vanished weights; keep raw extraction inputs or re-extract.
+
+Only prior aperture flag bits are replaced by the current measurement;
+extraction and unknown bits survive. Signed/unsigned 8-, 16- and 64-bit native
+tests cover invalid-to-valid calls, masks and high bits. Public photometry still
+builds its own tables and schema results. First-call values of all pre-existing
+fields remain bit-exact in five tested native aperture modes; repeated results
+now agree with fresh inputs. See the same correction record above for scope,
+independent controls and validation.
+
 ## Field Calibration
 
 _Former source: `algorithms/fieldcal/EXTRACTION.md`._
@@ -1197,6 +1339,14 @@ The upstream exporter is deliberately not maintained. MARS tools execute one
 known input per call and return structured results rather than iterating a
 directory, persisting run state, or aggregating CSV output.
 
+*M5 disposition (2026-11-09):* PHOT-16's blank-CSV exception handler and literal
+centroid radius of 5 belonged to the exporter deleted in `01177ec`. The
+maintained public reference replay returns explicit frame/WCS/fit errors and
+retains warnings, with a successful next-call control after injected failure.
+It consumes recorded magnitudes rather than running pixel centroiding. Current
+pixel photometry defaults to centroid radius 0. See the
+[obsolete-report evidence](analysis/m5-obsolete-reports-instructions.md).
+
 ---
 
 #### 5. Extraction-time parity behaviours and later corrections
@@ -1370,9 +1520,9 @@ are checked against an independent two-parameter optimizer, rather than
 claiming old bitwise parity. M3's degenerate-solve/header safeguards remain.
 
 See [acceptance, derivation and limits](analysis/photometric-calibration.md).
-PHOT-06 downsampled saturation counts, other aperture/background defects,
-catalog completeness and calibration sufficiency are addressed by the following
-disclosure contract; the retained numerical defects remain separate open work.
+The M2 disclosure checkpoint below predated M5's repair of downsampled
+saturation, aperture/background validity and SNR/matching. Catalog completeness
+and calibration sufficiency remain separate limits.
 
 #### 5d. M2 catalog coverage and sample disclosure (2026-10-23)
 
@@ -1775,6 +1925,14 @@ effect of module import. MARS moves it to
 so the default behaviour is unchanged, but the patch is greppable and a caller
 can opt out. Patching a third-party module's globals should not be invisible.
 
+*M5 (2026-11-08):* the locked SDK creates cache directories before those hooks.
+The patch now tolerates `OSError` from that directory creation too, preserving
+the SDK property setter and its normal read/write path. A failed cache costs
+a request; provider/network, cancellation and requested file-save errors still
+surface, without replaying the request. SDSS's direct error-entry eviction
+also tolerates filesystem errors: successful eviction repairs the cache on
+refetch; failed eviction makes that single HTML-recovery retry uncached.
+
 ##### 4.3 `CUSTOM_VIZIER_CATALOGS` loop → `build_custom_vizier_catalog()`
 
 Afterglow built custom catalog classes in an import-time `for` loop over Flask
@@ -1853,16 +2011,22 @@ grid-aligned region than asked for. The WCS path clips afterwards; a caller
 using `query_circ` directly does not. Turning the cache off changes results near
 a field edge. M2 now grows rounded cones by the spherical displacement of
 their centre before rounding the radius upward; moving the centre cannot cut
-away the original cone's edge. Explicit boxes retain their legacy rounding.
+away the original cone's edge. M5 also grows rectangular height for latitude
+displacement and recomputes width for both longitude displacement and the
+changed latitude. Pole/full-longitude cases use full RA. This preserves the
+original rectangle under the maintained spherical box definition, subject to
+the existing provider row cap; it does not promise an uncapped provider result.
 
-##### 5.2 `_derive_columns` requests columns named `int` and `float`
+##### 5.2 Expression column dependencies (corrected by M5)
 
-The identifier filter skips NumPy exports and `str` methods but not Python
-builtins, so Landolt's sexagesimal-parsing expressions contribute `'int'` and
-`'float'` as VizieR column names. VizieR ignores unknown columns, so the query
-still returns correct data — which is why it survived upstream unnoticed.
-Left as-is: filtering builtins changes the request MARS sends and needs
-validation against a live VizieR.
+The extracted identifier filter requested `int` and `float` for the
+Landolt/Stetson sexagesimal expressions. M5 shares AST dependency analysis
+between outgoing columns and response validation: actual call targets and
+attribute names are excluded; data reads and literal columns named `int`,
+`float`, NumPy exports or string methods remain dependencies. Missing literal
+coordinate columns now raise the same provider-schema error as other missing
+coordinates. Offline real-SDK payload/VOTable controls verify requests and
+mapping without asserting how a live service handles unknown columns.
 
 ##### 5.3 `build_custom_vizier_catalog`'s character class is wrong
 
@@ -1913,9 +2077,9 @@ own validation.
 
 ##### 5.10 M2 enclosing-cone WCS queries (2026-10-23)
 
-The two historical box helpers remain callable for extraction comparisons.
-Their limitations include off-detector CRPIX failures, the image helper's
-transposed anisotropic scales and rotation, and polar undercoverage. Both live
+The two historical box helpers remain callable. M5 subsequently makes both
+wrap the same enclosing cone, returning conservative angular sky boxes and
+removing their off-detector CRPIX, rotation and anisotropic-scale defects. Both live
 WCS runner entry points now query enclosing spherical cones and clip to the
 detector. Undistorted TAN fields use the four outer detector vertices; a cap
 smaller than a hemisphere containing those vertices contains the gnomonic
@@ -2140,6 +2304,24 @@ queries and public VizieR tools share this guard. Rejected HTTP-200 replies
 are evicted through the SDK's cache hook so later queries can recover; the
 normal cache directory/pruning, successful empty replies and row-cap behavior
 are retained. Failed VSX checks consequently reach `catalog_query_incomplete`.
+
+##### 5.14 M5 catalog boundary corrections (2026-11-08)
+
+The [catalog investigation and repair record](analysis/m5-catalog-parsing-cache-identity.md)
+distinguishes confirmed defects from retained policy. Box rounding and
+expression dependencies are corrected in §5.1–5.2 above; cache recovery is
+recorded in §4.2. SIMBAD maps machine `*`/`G` to Star/Galaxy, decodes byte
+codes and keeps unknown codes as raw labels. Deliberately empty vocabulary
+labels remain empty. A masked optional catalog identifier is now absent at
+the field-calibration handoff; integer zero remains valid.
+
+Landolt preserves synthesized zero uncertainty when every operand of the
+retained formula has a recorded finite error. Missing operands do not become
+assertions of exact precision; existing positive partial-error quadrature and
+the separately disclosed wrong-colour U formula remain unchanged. Null wire
+serialization, pruning frequency/retention and per-catalog exact-row dedup
+retain their documented scope. No stable APASS ID is invented. The deployment
+uses UCAC5; the unverified UCAC4 native product remains a legacy limitation.
 
 #### 6. External dependencies
 
@@ -3509,6 +3691,31 @@ The four tools that sit on these are documented in
    scans; explicit-path failures return `read_failed` or `parse_error`.
    `test_pulsar_registry_failures.py` pins this first-party recovery contract.
 
+#### M5 folding boundary correction (2026-11-04, TS-24/25)
+
+The Python fold now represents phases in `[0, P)` without adding P before
+wrapping, which could coalesce the float immediately below P with the endpoint.
+It retains the bounded repeated-subtraction sequence in `float_mod`, including
+its direct-helper contract; the fold maps its P endpoint to zero. Bins cover
+the full physical cycle rather than the observed extrema. Every sample
+contributes, including tied maxima, and a degenerate generic `bin_data` range
+returns its single occupied mean. Generic binning includes its right endpoint;
+empty bins remain omitted. Calibration, bin-before-shift ordering and display
+duplication retain their roles. Two displayed cycles do not count twice toward
+the empirical concentration diagnostic's four-bin minimum.
+Derived non-finite bin means are rejected before writing artifacts, including
+finite flux whose accumulation overflows. Fractional-cycle shifting avoids
+overflow from adding a whole period to a near-maximum finite bin coordinate.
+
+The tool warns when fold concentration is unavailable as well as weak, using
+`weak_or_absent_pulse` and `peak_does_not_fold`. Its folded ECSV persists phase,
+calibration and display extent along with period/bin count, fixing a reload
+that clipped the second cycle. Small literal profiles, actual ECSV/PNG/PCM
+handoffs and synchronized-channel controls replace the endpoint-loss bug pins.
+See [the investigation and repair record](analysis/m5-lightcurve-hr-boundaries.md).
+These are intentional corrections to the M1-era phase/bin behavior above;
+they do not change source-file units or introduce timing corrections.
+
 ### 7. Preserved upstream behaviours (do not "fix")
 
 1. **The polarization labels are transposed.** Skynet cal files write
@@ -3530,7 +3737,9 @@ The four tools that sit on these are documented in
 
    Consequence for callers: **a period measured off the audio is not the
    pulsar's period.** `tools/pulsar.py` reports this as `playback_stretch` and
-   warns `playback_not_real_time` when it exceeds 1%.
+   warns `playback_not_real_time` when duration drift exceeds 1%, or whenever
+   a folded profile omits phase bins. Occupied bins play at equal intervals;
+   a global stretch cannot describe unequal relative phase gaps.
 
 3. **The leading noise-diode block is dropped by the last-column filter**, not
    by reading the `Cal` flag — `lastValue !== 0`. On the fixtures that removes
@@ -3697,11 +3906,12 @@ narrower:
 - **No barycentric correction**, so periods are topocentric and differ from an
   ATNF `P0` in the fourth decimal. Upstream has none either.
 
-Note the time-axis caveat in §7.2 is specific to the light-curve rendering. A
-binned phase profile is uniform in phase by construction, so the folded
-rendering does not inherit the gap-compression term — but it is still subject
-to the `samplesPerPoint` floor, so its `playback_stretch` is near 1.0 (~0.4%
-on the B0329+54 fixture) rather than exactly 1.0.
+The time-axis caveat in §7.2 also applies to sparse folded profiles: equal-width
+binning omits empty bins, and the synthesis plays occupied bins by index. A
+complete profile avoids that relative gap compression but is still subject to
+the `samplesPerPoint` floor; `playback_stretch` can be near 1.0 (~0.4% on the
+B0329+54 fixture) rather than exactly 1.0. Sparse audio is qualitative and is
+explicitly disclosed, including when its whole-loop stretch happens to equal 1.
 
 ---
 

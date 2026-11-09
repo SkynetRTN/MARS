@@ -22,6 +22,8 @@ _MIN_SAFE_ELLIPSE_SEMI_AXIS_PX = 0.5
 # Aperture flags
 SEP_APER_TRUNC = 0x0010
 SEP_APER_HASMASKED = 0x0020
+SEP_APER_ALLMASKED = 0x0040
+SEP_APER_NONPOSITIVE = 0x0080
 
 
 @njitc
@@ -155,7 +157,8 @@ def sum_aper_factory(aper_init,
                   segmap: np.ndarray | None,
                   seg_id: int,
                   gain: float,
-                  ignore_mask: bool = False) -> tuple[float, float, float, int]:
+                  ignore_mask: bool = False,
+                  estimate_noise: bool = False) -> tuple[float, float, float, int]:
         """
         Sum pixels over the given aperture with subpixel accuracy
 
@@ -183,6 +186,7 @@ def sum_aper_factory(aper_init,
         """
         # initializations
         tv = sigtv = totarea = maskarea = 0.0
+        sample_weight = sample_weight2 = sample_mean = sample_m2 = 0.0
         h, w = data.shape
 
         # Initialize aperture-specific parameters
@@ -230,12 +234,25 @@ def sum_aper_factory(aper_init,
                     else:
                         v = data[iy, ix]
                         tv += v*overlap
+                        if estimate_noise and overlap > 0:
+                            new_weight = sample_weight + overlap
+                            delta = v - sample_mean
+                            sample_mean += delta*overlap/new_weight
+                            sample_m2 += overlap*delta*(v - sample_mean)
+                            sample_weight = new_weight
+                            sample_weight2 += overlap*overlap
                         if noise.size > 1:
                             noiseval = noise[iy, ix]
                         if noiseval:
                             sigtv += noiseval*overlap
 
                     totarea += overlap
+
+        if totarea <= maskarea:
+            return np.nan, np.nan, 0.0, flag | SEP_APER_ALLMASKED
+        if estimate_noise:
+            denominator = sample_weight - sample_weight2/sample_weight
+            sigtv = max(sample_m2, 0)/denominator*sample_weight if denominator > 0 else np.nan
 
         # correct for masked values
         if maskarea > 0:
@@ -263,7 +280,8 @@ def sum_aper_factory(aper_init,
                          segmap: np.ndarray | None,
                          seg_id: int,
                          gain: float,
-                         ignore_mask: bool = False) -> tuple[float, float, float, int]:
+                         ignore_mask: bool = False,
+                         estimate_noise: bool = False) -> tuple[float, float, float, int]:
         """
         Sum pixels over the given aperture with subpixel accuracy and outlier rejection
 
@@ -306,7 +324,7 @@ def sum_aper_factory(aper_init,
                     if not ov:
                         continue
 
-                    ismasked = mask is not None and mask[iy - ymin, ix - xmin] > maskthresh
+                    ismasked = mask is not None and mask[iy, ix] > maskthresh
 
                     # Segmentation image:
                     #    If `id` is negative, require segmented pixels within the aperture.
@@ -332,7 +350,7 @@ def sum_aper_factory(aper_init,
                     totarea += ov
 
         if not npix:
-            return 0.0, 0.0, 0.0, flag
+            return np.nan, np.nan, 0.0, flag | SEP_APER_ALLMASKED
 
         while True:
             tv = sigtv = 0.0
@@ -366,6 +384,20 @@ def sum_aper_factory(aper_init,
                     i += 1
             if not npix:
                 break
+
+        if not npix or totarea <= maskarea:
+            return np.nan, np.nan, 0.0, flag | SEP_APER_ALLMASKED
+        if estimate_noise:
+            weight = weight2 = mean = m2 = 0.0
+            for i in range(npix):
+                ov = overlap[i]
+                new_weight = weight + ov
+                delta = b[i] - mean
+                mean += delta*ov/new_weight
+                m2 += ov*delta*(b[i] - mean)
+                weight, weight2 = new_weight, weight2 + ov*ov
+            denominator = weight - weight2/weight
+            sigtv = max(m2, 0)/denominator*weight if denominator > 0 else np.nan
 
         # correct for masked values
         if maskarea > 0:
@@ -727,17 +759,30 @@ def sum_circle(
 
         for i in prange(n):
             flux, fluxerr, area[i], flag[i] = _sum_circle(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0)
+            estimate_noise = noise.size == 1 and noise[0, 0] == 0
             if reject_outliers:
-                bkgflux, bkgfluxerr, bkgarea, _ = _sum_circann_reject(
-                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain, ignore_mask=True)
+                bkgflux, bkgfluxerr, bkgarea, bkgflag = _sum_circann_reject(
+                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0,
+                    ignore_mask=True, estimate_noise=estimate_noise)
             else:
-                bkgflux, bkgfluxerr, bkgarea, _ = _sum_circann(
-                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain, ignore_mask=True)
+                bkgflux, bkgfluxerr, bkgarea, bkgflag = _sum_circann(
+                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0,
+                    ignore_mask=True, estimate_noise=estimate_noise)
+            flag[i] |= bkgflag
             _area = area[i]
             if _area > 0 and bkgarea > 0:
                 flux -= bkgflux/bkgarea*_area
                 fluxerr = np.hypot(fluxerr, bkgfluxerr*_area/bkgarea)
+                variance = fluxerr*fluxerr
+                if estimate_noise:
+                    variance += bkgfluxerr*bkgfluxerr/bkgarea*_area
+                if gain > 0 and flux > 0:
+                    variance += flux/gain
+                fluxerr = np.sqrt(variance)
+            else:
+                flux = fluxerr = np.nan
+                flag[i] |= SEP_APER_ALLMASKED
             sumdata[i], sumerr[i] = flux, fluxerr
 
     return sumdata, sumerr, area, flag
@@ -757,7 +802,9 @@ def sum_circann(
         maskthresh: float = 0,
         seg_id: int | np.ndarray | None = None,
         segmap: np.ndarray | None = None,
-        reject_outliers: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        reject_outliers: bool = False,
+        ignore_mask: bool = False,
+        estimate_noise: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Parallel Numba port of :func:`sep.sum_circann`; always assumes subpix=0
     """
@@ -772,11 +819,13 @@ def sum_circann(
     if reject_outliers:
         for i in prange(x.size):
             sumdata[i], sumerr[i], area[i], flag[i] = _sum_circann_reject(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain,
+                ignore_mask=ignore_mask, estimate_noise=estimate_noise)
     else:
         for i in prange(x.size):
             sumdata[i], sumerr[i], area[i], flag[i] = _sum_circann(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain,
+                ignore_mask=ignore_mask, estimate_noise=estimate_noise)
 
     return sumdata, sumerr, area, flag
 
@@ -842,17 +891,30 @@ def sum_ellipse(
 
         for i in prange(n):
             flux, fluxerr, area[i], flag[i] = _sum_ellipse(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0)
+            estimate_noise = noise.size == 1 and noise[0, 0] == 0
             if reject_outliers:
-                bkgflux, bkgfluxerr, bkgarea, _ = _sum_ellipann_reject(
-                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain, ignore_mask=True)
+                bkgflux, bkgfluxerr, bkgarea, bkgflag = _sum_ellipann_reject(
+                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0,
+                    ignore_mask=True, estimate_noise=estimate_noise)
             else:
-                bkgflux, bkgfluxerr, bkgarea, _ = _sum_ellipann(
-                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain, ignore_mask=True)
+                bkgflux, bkgfluxerr, bkgarea, bkgflag = _sum_ellipann(
+                    x[i], y[i], aper_ann[i], data, mask, maskthresh, noise, segmap, seg_id[i], 0,
+                    ignore_mask=True, estimate_noise=estimate_noise)
+            flag[i] |= bkgflag
             _area = area[i]
             if _area > 0 and bkgarea > 0:
                 flux -= bkgflux/bkgarea*_area
                 fluxerr = np.hypot(fluxerr, bkgfluxerr*_area/bkgarea)
+                variance = fluxerr*fluxerr
+                if estimate_noise:
+                    variance += bkgfluxerr*bkgfluxerr/bkgarea*_area
+                if gain > 0 and flux > 0:
+                    variance += flux/gain
+                fluxerr = np.sqrt(variance)
+            else:
+                flux = fluxerr = np.nan
+                flag[i] |= SEP_APER_ALLMASKED
             sumdata[i], sumerr[i] = flux, fluxerr
 
     return sumdata, sumerr, area, flag
@@ -875,7 +937,9 @@ def sum_ellipann(
         maskthresh: float = 0,
         seg_id: int | np.ndarray | None = None,
         segmap: np.ndarray | None = None,
-        reject_outliers: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        reject_outliers: bool = False,
+        ignore_mask: bool = False,
+        estimate_noise: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Parallel Numba port of :func:`sep.sum_ellipann`; always assumes subpix=0
     """
@@ -900,10 +964,12 @@ def sum_ellipann(
     if reject_outliers:
         for i in prange(x.size):
             sumdata[i], sumerr[i], area[i], flag[i] = _sum_ellipann_reject(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain,
+                ignore_mask=ignore_mask, estimate_noise=estimate_noise)
     else:
         for i in prange(x.size):
             sumdata[i], sumerr[i], area[i], flag[i] = _sum_ellipann(
-                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain)
+                x[i], y[i], aper[i], data, mask, maskthresh, noise, segmap, seg_id[i], gain,
+                ignore_mask=ignore_mask, estimate_noise=estimate_noise)
 
     return sumdata, sumerr, area, flag

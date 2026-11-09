@@ -1,19 +1,20 @@
 # MARS release closure gate
 
-Updated 2026-10-30 against `main` at `e1ad8b0` (M2, PR #124), merged into
-M4's branch `docs/m4-desktop-acceptance`.
-M0, M1, M2 and M3 are closed. M1 merged through PR #118, M3 through PRs #122
-and #123, and M2 through PR #124; their changes are absent from the published
-`0.1.0rc6`. Publication remains deferred until the remaining
-gates below have been worked through. The next release needs a new version.
-By maintainer decision (2026-10-26), it ships as soon as every gate with a
-manual step is complete; the install guides (`../installing/`) always point
-at the latest release and name none. M4's work stays on its branch, without
-a PR, until all of M4 is done.
+Updated 2026-11-09 after integrating `main` at `193d117` into
+`feature/m5-geometry`. M0 through M4 are closed; M1–M3 merged through PRs
+#118/#124/#122/#123, and M4 through PRs #128–#135. These changes are absent
+from the published `0.1.0rc6`. The next release needs a new version.
+By maintainer decision (2026-10-26), publication follows completion of every
+gate with a manual step; install guides (`../installing/`) point at the latest
+release without naming a version. Final release evidence remains a separate
+gate below. M4's earlier branch-only instructions are historical now that its
+reviewed split is merged.
 
-M2 is closed and merged into main (PR #124, 2026-10-30), unpublished. Live
-provider failures remain recorded below.
-M4 and subsequent release gates remain open. PR #120 is abandoned as an
+M2 is merged and unpublished. Its detailed evidence below retains dated
+pre-merge history; historical "unmerged" statements do not describe current
+main. Live provider failures remain recorded below. M5's six squares are
+complete on the feature branch; current-main integration is validated below.
+PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
 
@@ -815,7 +816,15 @@ Evidence: [installation guide](../installing.md),
 These are questions to check, not newly confirmed bugs. Record whether each is
 reachable now, what it does, and whether the release needs a change or caveat.
 
-- [ ] **Coordinates and image geometry.** Check whether RA strings are read
+*Completed-work review 2026-11-08:* the combined changes `fb09774..a1b57fa`
+received three independent passes covering the first four squares, with no
+confirmed actionable findings. The [review record](../analysis/m5-completed-work-review-2026-11-08.md)
+preserves per-pass tests, independent numerical controls, expected native skips
+and the distinction from the prior full-suite run. The catalog and obsolete-report
+squares were subsequently reviewed and validated; all six M5 squares are now
+complete (2026-11-09). Release/M6 decisions remain separate.
+
+- [x] **Coordinates and image geometry.** Check whether RA strings are read
   as hours instead of degrees, scale keywords get wrong units, or rotated and
   unequally binned images lose sky coverage. Other reports describe lost stars
   near poles/RA zero, CRPIX at image edges failing, fields wider than 360 degrees
@@ -823,40 +832,247 @@ reachable now, what it does, and whether the release needs a change or caveat.
   whether valid small-field triangles are rejected, far-side stars project
   nearby, source ellipses keep wrong axes, or catalog depth/epoch mismatch loses
   usable stars.
-- [ ] **Measured flux and source position.** Do nonpositive fluxes appear
+  *Investigated 2026-11-01 against merged main `fb09774`, on
+  `feature/m5-geometry`:* confirmed fallback decimal-RA misparsing (WCS-06),
+  alternate-WCS scale units/inverted ATLAS bounds (WCS-08), small-field
+  triangle rejection (WCS-07), and polar undercoverage in both ATLAS
+  pre-solve searches (WCS-10). The subsequent authorized remediation fixes
+  those four defects plus far-side projection, full-turn UCAC4/UCAC5 queries,
+  PC matrices/metadata, ellipse normalization and non-celestial FOV inference
+  (WCS-09/11/12/16/24). The old CAT-07/09 helpers now use the maintained
+  spherical enclosure; M2's CAT-11 polar handling remains. UCAC5 G magnitudes
+  drive capped selection, and observation-epoch positions use verified binary
+  proper motions with bounded query halos (WCS-17). Missing data produces
+  registered warnings, not fabricated epochs or brightness. See
+  [the investigation and corrections](../analysis/m5-coordinates-image-geometry.md).
+  *Closed locally 2026-11-02.* The converted original probes
+  failed in 22 cases before corrections; new header, shape and reader tests
+  also failed first. The 145-case M5 correctness group now passes. Review
+  corrections have regressions for downstream UTC epochs, candidate budgets,
+  UCAC5 duplicate spans and incomplete epoch/duration data. Native bounded
+  ATLAS recovered NGC 3628 within 0.17 arcsec at centre / 0.38 arcsec across
+  the detector, 0.026% in scale and 0.017 degrees in rotation, with 67
+  motion-bearing references. An initial blind astrometry.net check using
+  only the 2MASS indexes timed out at 330 seconds; the documented full index
+  configuration (2MASS 4200, TYCHO2 and UCAC5) then passed both configured
+  native checks in 52.18 seconds. The initial failure remains recorded; a
+  subset of those indexes has no guaranteed convergence/time envelope.
+  Final Python 3.13.15 suite with MCP: **4,428 passed, 90 skipped, 214 FITS
+  notices**, no failures (425.35 seconds). The final run used the existing
+  locked environment outside the sandbox: its socket restriction failed
+  `test_the_guard_actually_refuses`, and subprocess MCP calls stalled in an
+  interrupted sandboxed attempt; those paths pass in the final unrestricted
+  run. Skips are 80 network cases, one live-model check, four historical
+  benchmark runs, one Windows check and four unconfigured native checks;
+  the two algorithm-level native checks passed separately as above.
+  The public-tool native checks were not separately enabled. Compilation,
+  generated guidance and whitespace checks pass. Independent review has no
+  remaining findings in that correction scope. Committed and pushed on
+  2026-11-02 as `fab8b21` on `feature/m5-geometry`; other M5 and M4 items are
+  not closed by this result.
+- [x] **Measured flux and source position.** Do nonpositive fluxes appear
   valid, empty annuli omit sky subtraction, downsampling misplace saturated
   sources, or growth-curve neighbor checks fail? Check pixel origins,
   matching tolerances, SNR/fit weights and the tentative ellipse-clipping
-  arithmetic report. M1's crash containment is already closed.
-  *Found 2026-10-30 (M4 plot review):* six of NGC 5128 B's 35 calibration
-  stars leave the aperture kernel with `flux_err` exactly 0 at ordinary
-  fluxes (3,000-4,000 counts), so the zero-point solve drops them before
-  fitting. Why the error is zero is not yet known.
-- [ ] **Repeated calls and FITS writes.** Check whether reusing settings,
+  arithmetic report. M1's original crash cases were contained; newly reachable
+  geometry still needs checking.
+  *M4 observation, 2026-10-30:* six of NGC 5128 B's 35 calibration
+  stars had zero instrumental flux error at ordinary 3,000–4,000-count fluxes,
+  so the fit dropped them. Its then-unknown noise cause is investigated and
+  corrected below; the recorded historical inputs remain unchanged.
+  *Original investigation 2026-11-02 against `fab8b21`:*
+  [The investigation](../analysis/m5-measured-flux-source-position.md) confirms
+  PHOT-01/02/06/07/12/18 and PHOT-13's SNR selection mismatch, while correcting
+  the old mean-RA cause and superseded fit-weight claim. PHOT-19 is confirmed
+  against independent geometry and pinned SEP: it corrupts finite flux and
+  crashes maintained photometry with axes 0.8×0.5 pixels. M1's existing floor
+  therefore contains its original cases, not every fatal ellipse. Additional
+  probes establish a masked-annulus warning gap, last-pixel admission and
+  equal-moment angle errors, a variance/RMS mismatch in the optimal-radius
+  objective, and missing/raw-sum-dependent background noise. The latter
+  explains M4's six zero-error NGC 5128 B candidates. Characterization tests
+  pin these current failures; passing them is not acceptance of a correction.
+  The 33 new cases and related existing tests pass (**431 passed**, 8 FITS
+  notices); compilation/whitespace checks and independent review pass. No
+  production source changed in this investigation.
+  *Corrected and validated 2026-11-02 on `feature/m5-geometry`.* All confirmed
+  reports above now have correctness regressions. Exact clipping fixes the
+  native crash; invalid magnitudes/annuli are excluded. Detector saturation,
+  pixel origins, covariance angles, WCS/spherical matching and flux-SNR gates
+  are corrected. Calibration keeps annular sky, forwards RMS and adds net-source
+  shot variance after subtraction; masks and actual annulus geometry govern
+  flux/error/metadata consistently. Unusable RMS pixels are excluded locally
+  with a notice. Crowded correction references are rejected; unavailable
+  corrections are disclosed. M2's fitter and historical fixtures remain.
+  Independent review rechecked the mask/annulus/RMS edge cases and found no
+  remaining actionable findings. Final locked suite: **4,514 passed, 90 skipped,
+  214 FITS notices**, no failures (428.26 seconds), outside the socket-restricted
+  sandbox. Earlier five-failure integration and cached-guidance failure remain
+  documented in the report; compilation, guidance and whitespace checks pass.
+  The error model does not infer detector history, resampling covariance or
+  sky/correction systematics. Other M5/M4 work remains separate.
+  *Follow-up code review:* four P2 regressions and one P3 notice issue at
+  `23a964a` are now corrected: cropped RMS/full-image measurement, lost sky-only
+  positions, fractional FITS edge centers, ellipse-growth annulus units and
+  valid zero corrections. The new 27 native regression/control cases pass;
+  171 related checks and independent review pass. Final locked follow-up suite:
+  **4,541 passed, 90 skipped, 214 FITS notices**, no failures (409.33 seconds).
+  The report preserves the failing probes and six stale HR warning expectations
+  replaced with clean-frame and deterministic actual-noise notice checks.
+- [x] **Repeated calls and FITS writes.** Check whether reusing settings,
   source arrays or headers changes later results; old coordinate-frame or
   distortion keywords survive a new solution; solvers interpret automatic
   image parity differently; or omitting flux bypasses the source-count limit.
-- [ ] **Light-curve and HR boundaries.** Check period steps rounded to zero,
+  *Investigated 2026-11-02 against `a4d429a` on `feature/m5-geometry`:*
+  [The investigation](../analysis/m5-repeated-calls-fits-writes.md) confirms
+  WCS-28's shared saturation-setting mutation, adaptive source-table flux
+  feedback (0.14/0.28-mag repeat changes), retained measurement failure flags,
+  surviving detector lookup distortion (5-arcsec FITS reopen error), and
+  overwritten single-card `MJDREF`. WCS-26 is confirmed in the direct writer,
+  while the maintained wrapper's independent cap remains effective. Automatic
+  parity is correct, including bounded native astrometry.net convention checks;
+  explicit parity remains latent and ATLAS blind request fields are ignored.
+  Old epoch/SIP ancillary cards survive without the previously claimed
+  coordinate error on acceptance-gated controls. Public photometry inputs and
+  copied calibration catalog inputs are stable. These are characterization
+  results, with production source unchanged; fixes/dispositions remain open.
+  Validation: 79 offline probes/controls plus four optional native cases; 786
+  related passes and 51 native-enabled control passes. Independent review has
+  no actionable findings in the investigation. Final locked offline suite:
+  **4,620 passed, 94 skipped, 214 FITS notices**, no failures (425.22 seconds).
+  *Corrected and validated 2026-11-03.* All six confirmed findings now have
+  correctness regressions. Saturation settings are copied; source tables retain
+  isophotal weights and caller ownership; current aperture flags replace old
+  measurement bits while retaining extraction/unknown flags. Both writers clear
+  modern and legacy detector-map references and preserve effective source time
+  origins/comments. The direct xylist cap applies independently of flux. Review
+  caught a legacy `AXISCORR` path; four native regressions failed before its
+  correction and the reviewer independently rechecked zero offsets. No
+  actionable review findings remain. Related checks: 860 passed, eight skipped;
+  native-enabled controls: 56 passed. Final locked suite: **4,664 passed,
+  94 skipped, 214 FITS notices**, no failures (422.62 seconds). Compilation,
+  guidance consistency and whitespace checks pass. Legacy measured tables
+  lacking original isophotal weights require raw extraction data or re-extraction
+  for adaptive reuse. Latent explicit parity and inert ancillary metadata keep
+  their documented dispositions; no new solver preferences are exposed.
+- [x] **Light-curve and HR boundaries.** Check period steps rounded to zero,
   maximum-time samples lost in binning, exact multiples assigned phase one,
   channels paired by index rather than phase and prefolded-file axes. Legacy
   isochrone splicing drops a point; luminosity framing and edge-on projection
   scales also need their intended meaning established.
-  *Found 2026-11-01 (M4 plot review):* the HR fit joins track rows no more
-  than 0.5 mag apart (`TRACK_MAX_GAP_MAG`). On M67's fitted track that
-  leaves the main sequence unjoined between M_G 6.94 and 7.48, where 27 of
-  548 members are scored against the two end rows only, and joins most
-  AGB pulse steps. The effect on the fitted parameters is unmeasured.
-- [ ] **Catalog parsing, caches and identity.** Check whether padded filter
+  *Investigated and repaired 2026-11-04 on `feature/m5-geometry`:*
+  [The evidence and repair record](../analysis/m5-lightcurve-hr-boundaries.md)
+  preserves the investigation at `7375f82` and the subsequent corrections.
+  Pulsar TS-24/25 now retain every endpoint/tied-maximum sample in full-cycle
+  bins; folded artifact/audio and the periodogram's diagnostic use those data.
+  Unavailable concentration warns, and duplicated display rows cannot invent
+  diagnostic support. M5-LC-01 saves display extent so a real two-cycle PNG
+  shows every bin. Review found two extreme-scale arithmetic gaps; derived
+  non-finite means are now rejected before output and fractional-cycle shifts
+  wrap without coordinate overflow. Sparse qualitative audio explicitly warns
+  of relative phase compression even when whole-loop stretch equals 1.
+  The related pulsar group passed 360 tests; the final boundary/limit group
+  passed 73 after review corrections, with no remaining review findings.
+
+  The unused period-slider helper retains its rounding defect; actual grids
+  validate progress. Public channel support is aligned; independently supported
+  value-only helper inputs still require caller alignment. The retired index
+  fold is unreachable; the original standard/prefolded coordinate contract
+  remains unverified and current column-zero-as-seconds behavior is unchanged.
+  Legacy HR framing/splice helpers are outside maintained tools; current
+  local-grid Python preserves ordinary model points. Edge-on constants are
+  documented pixel rendering; visible model-gap policy is separate from
+  fitting, which already refuses interpolation across large gaps. These are
+  explicit dispositions and limitations, not pending maintained-path repairs.
+  Final locked suite: **4,759 passed, 94 skipped, 214 FITS notices**, no
+  failures (416.07 seconds, Python 3.13.15). All 434 snapshotted algorithm,
+  tool, test and guidance files stayed unchanged through the run. Compilation,
+  generated-guidance consistency and whitespace checks pass. This closes the
+  fourth square with the documented helper/format/display limitations; catalog
+  parsing/cache/identity and obsolete reports remain separate.
+  *Follow-up 2026-11-06:* reject non-finite combined-channel sums/differences
+  before profile/artifact/audio output. Ten regressions cover both overflow
+  directions and retained finite values; 83 focused passes, independent review
+  clear. Full locked suite: **4,769 passed, 94 skipped, 214 FITS notices**, no
+  failures (442.47 seconds), with all 435 snapshotted code/test/guidance files
+  unchanged. Compilation, guidance and whitespace checks pass.
+  *Separate M4 fitting-policy question, 2026-11-01:* the fit's
+  `TRACK_MAX_GAP_MAG=0.5` resampling rule leaves M67's main sequence unjoined
+  between M_G 6.94 and 7.48, where 27 of 548 members are scored against the
+  endpoints, while joining most AGB pulse steps. Its effect on fitted
+  parameters is still unmeasured. This is distinct from the legacy splice
+  correction and M4's point-only renderer; it remains a release question
+  requiring measurement or an explicit disposition.
+- [x] **Catalog parsing, caches and identity.** Check whether padded filter
   names fail, zero values disappear, Landolt/Stetson expressions request
   nonexistent columns, or SIMBAD loses common object types. Can cache rounding
   omit edge stars, cache failures break queries, invalid values look absent,
   or APASS IDs change after re-ingestion? Confirm UCAC disk layout against an
   actual zone and its specification before claiming a reader defect.
-- [ ] **Obsolete reports and instructions.** Close retired helper reports
+  *Investigated 2026-11-08; corrected and validated 2026-11-09:*
+  [The repair evidence and dispositions](../analysis/m5-catalog-parsing-cache-identity.md)
+  close all seven confirmed findings plus the masked optional-ID handoff.
+  Cached boxes enclose original bounds after center movement; cones and
+  row/work caps remain protected. SDK directory discovery/creation failures
+  fall back without HTTP replay. SDSS bypasses an undeletable HTML entry for
+  its single recovery retry. SIMBAD preserves common/unknown labels, scoped
+  AST dependencies exclude calls and local variables while guarding literal
+  columns, and Landolt preserves known zero synthesized errors.
+  The original 105 cases now require corrections where applicable, with 90
+  added regressions. Independent review is clear after fixing its scope and
+  cache-discovery findings. All 195 catalog controls and 20,000 seeded box
+  probes pass; related focused integration passes 890 with one network skip.
+  Retained dispositions are null-wire policy, pruning frequency/retention,
+  per-catalog exact-row/ordinal APASS identity, and the separately disclosed
+  wrong-colour Landolt U-error formula. No stable APASS ID is invented.
+  The maintainer confirms UCAC5 deployment; unverified UCAC4 is a legacy
+  limitation rather than a deployment blocker. No new live-provider or
+  Windows execution is claimed.
+  Final locked suite: **4,964 passed, 94 skipped, 214 FITS notices**, no
+  failures (407.55 seconds, Python 3.13.15). All 453 snapshotted code/test/
+  guidance files stayed unchanged; compilation, generated guidance and
+  whitespace checks pass. This closes the fifth square.
+- [x] **Obsolete reports and instructions.** Close retired helper reports
   after checking for surviving callers. Reconcile Python 3.13-only agent-guide
   wording with current Python 3.12/3.13 support and remove stale execution
   instructions. Recheck the calibration reference driver's swallowed failures
   against current replay evidence. Historical review text remains dated evidence.
+  *Investigated, reconciled and validated 2026-11-09:*
+  [The current-callers and instruction evidence](../analysis/m5-obsolete-reports-instructions.md)
+  distinguishes removed optical state/deps/batch APIs and TypeScript-only
+  ArrMath/index folding from surviving Python helpers and the still-maintained
+  `query_catalogs_for_image`. PHOT-16 belongs to the deleted exporter; ten new
+  public replay controls confirm explicit frame/WCS/fit/nonconvergence errors,
+  retained warnings and successful recovery without pixel centroiding.
+  Current pixel photometry defaults to centroid radius zero. Contributor
+  guidance now reflects Python 3.12/3.13 support, deliberate 3.13 installers,
+  main as the PR base, canonical catalog routing, per-call solver config and
+  independent correction tests beside historical preservation evidence.
+  Old reviews remain dated; the stale test defect table is labeled historical.
+  No numerical logic changed: the production replay edit is a docstring
+  correction, verified by unchanged executable AST. Independent review is
+  clear. Targeted integration passes 404 cases; two centroid controls pass.
+  Final locked suite with MCP: **4,974 passed, 94 skipped, 214 FITS notices**,
+  no failures (409.08 seconds, Python 3.13.15). All 466 source/test/guidance/CI
+  metadata files remained frozen through the run. Compilation, generated
+  guidance, Markdown file links and whitespace checks pass. No fresh
+  Python 3.12/native/live-provider run is claimed. M5 is now **6/6 complete**.
+
+*Current-main integration, 2026-11-09:* the
+[whole-branch review and integration record](../analysis/m5-main-integration-review.md)
+compares M5 `afff753` with main `193d117`. Three documentation conflicts and
+four integration tests required reconciliation. The feature branch now retains
+both M4 and M5 evidence, the current WCS configuration seam, point-only HR
+rendering, independent real-frame fit/plot checks and controlled missing/zero
+error cases. The four failures reproduced before correction; 62 focused tests
+pass. Independent integration review is clear (99 passed); native-enabled
+solver controls pass 56 cases. Final locked MCP suite on the resolved real
+checkout: **5,174 passed, 100 skipped, 230 FITS notices**, no failures or errors
+(454.22 seconds, Python 3.13.15). All 475 source/test/guidance/CI metadata files
+stayed frozen. Compilation, generated guidance, links and whitespace checks
+pass. Main was refreshed after validation and remains `193d117`. The reported
+merge blockers are resolved; required PR/platform CI and M6 release evidence,
+including the separate HR fitting-gap question, remain their own gates.
 
 Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#9-full-finding-register),
 [extraction and preservation record](../extraction.md),

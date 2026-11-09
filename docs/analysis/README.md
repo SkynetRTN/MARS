@@ -7,7 +7,7 @@ edits here. See [`../README.md`](../README.md) for how `docs/` is organized.
 
 Current disposition and scheduling for all known continuing work are in the
 [master continuation plan](../working/master-continuation-plan.md), reconciled
-2026-10-01. Original claims below remain dated evidence.
+2026-11-09. Original claims below remain dated evidence.
 
 | Document | Description |
 | --- | --- |
@@ -24,6 +24,14 @@ Current disposition and scheduling for all known continuing work are in the
 | [catalog-coverage-sufficiency.md](catalog-coverage-sufficiency.md) | M2 coverage/sufficiency (2026-10-23): enclosing-cone footprints, polar and cache-edge coverage, isolated constraints, raw response caps, fallback disclosures and actual surviving-star counts. |
 | [warnings-benchmark-claims.md](warnings-benchmark-claims.md) | M2 numerical disclosures and bounded author/year attribution grading (2026-10-23), review corrections and historical benchmark limits. |
 | [photometric-calibration.md](photometric-calibration.md) | M2 calibration correction (2026-10-23): small-sample rejection, nonnegative extra variance, exact diagnostic masks, known saturation selection, magnitude zero, explicit unit gain and honest historical comparisons. |
+| [m5-coordinates-image-geometry.md](m5-coordinates-image-geometry.md) | M5 investigation and corrections (2026-11-01): header/ATLAS geometry, retained helpers, UCAC5 brightness/motion metadata and observation-epoch preparation; original failure evidence and regression coverage. |
+| [m5-measured-flux-source-position.md](m5-measured-flux-source-position.md) | M5 investigation and corrections (2026-11-02): false zero-image calibration, unusable annuli, detector saturation/origin/matching, explicit sky/source variance, crowding rejection and exact ellipse overlaps; original failure evidence and correction regressions. |
+| [m5-repeated-calls-fits-writes.md](m5-repeated-calls-fits-writes.md) | M5 investigation and corrections (2026-11-03): settings/source-array reuse, measurement flags, retained detector distortions, time origins and independent source caps. |
+| [m5-lightcurve-hr-boundaries.md](m5-lightcurve-hr-boundaries.md) | M5 investigation and corrections (2026-11-04/06): pulse endpoint retention, derived-channel validation, saved display extent and bounded legacy/helper/format dispositions. |
+| [m5-completed-work-review-2026-11-08.md](m5-completed-work-review-2026-11-08.md) | Independent combined review of the four completed M5 squares; no confirmed actionable findings, with per-pass verification and retained scope limits. |
+| [m5-catalog-parsing-cache-identity.md](m5-catalog-parsing-cache-identity.md) | M5 fifth-square investigation and corrections (2026-11-08–09): enclosing cached boxes, resilient cache faults, parsing/type-label/zero-error fixes and masked optional IDs; retained wire policy and conditional identity/native-layout limits. |
+| [m5-obsolete-reports-instructions.md](m5-obsolete-reports-instructions.md) | M5 sixth-square closure (2026-11-09): retired optical/batch/TypeScript reports versus surviving Python callers, explicit public replay failures and corrected contributor/package/test instructions; all six M5 squares complete. |
+| [m5-main-integration-review.md](m5-main-integration-review.md) | Whole-M5 review against current main (2026-11-09), followed by conflict/test integration corrections preserving M4 rendering, measured M5 uncertainties and remaining release questions. |
 | [obs-report.md](obs-report.md) | External Skynet observation/scheduler/API snapshot (2026-09-24), moved from `working/`. Source paths leave this standalone repository; EXT-SKY-01–12 require pinned upstream revalidation before implementation. |
 | [mcp-desktop-hosts.md](mcp-desktop-hosts.md) | PR #97 desktop-host proposal and vendor-source snapshot (2026-10-01), reconciled into master §9 as D0–D4. MCPB/config-helper decisions require actual macOS/Windows/app evidence; browser support remains parked. |
 

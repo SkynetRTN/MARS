@@ -5,7 +5,7 @@ accessed via VizieR
 
 from typing import List as TList, Union
 
-from numpy import hypot, sqrt
+from numpy import hypot, isfinite, sqrt
 from astropy.table import Table
 
 from .schemas import CatalogSource, Mag
@@ -22,6 +22,12 @@ __all__ = ['LandoltCatalog']
 def _err(mag) -> float:
     """A band's error, 0 when unset or the band is absent."""
     return (getattr(mag, 'error', None) or 0) if mag is not None else 0
+
+
+def _known_errors(*mags) -> bool:
+    """A computed zero is known only if every formula operand has an error."""
+    return all(mag is not None and mag.error is not None and isfinite(mag.error)
+               for mag in mags)
 
 
 class LandoltCatalog(Catalog):
@@ -47,7 +53,7 @@ class LandoltCatalog(Catalog):
         '(1 - 2*(DEJ2000.strip().startswith("-")))',
     }
 
-    # Photometric transform, preserved verbatim. ``super().table_to_sources``
+    # Photometric transform, retaining upstream algebra. ``super().table_to_sources``
     # resolves to the bound VizieR row mapper in ``query/vizier.py`` (see
     # ``query/binding.py`` for the MRO), which returns the raw colour indices
     # this method then converts to UBVRI.
@@ -83,19 +89,19 @@ class LandoltCatalog(Catalog):
             if 'B_V' in mags:
                 mags['B'] = Mag(value=v + mags['B_V'].value)
                 err = hypot(v_err, _err(mags['B_V']))
-                if err:
+                if err or _known_errors(mags['V'], mags['B_V']):
                     mags['B'].error = err
 
             if 'B' in mags and 'U_B' in mags:
                 mags['U'] = Mag(value=mags['B'].value + mags['U_B'].value)
                 err = hypot(_err(mags['B']), _err(mags.get('V_R')))
-                if err:
+                if err or _known_errors(mags['B'], mags.get('V_R')):
                     mags['U'].error = err
 
             if 'V_R' in mags:
                 mags['R'] = Mag(value=v - mags['V_R'].value)
                 err = hypot(v_err, _err(mags['V_R']))
-                if err:
+                if err or _known_errors(mags['V'], mags['V_R']):
                     mags['R'].error = err
 
             if 'R' in mags and 'R_I' in mags and 'V_I' in mags:
@@ -105,7 +111,7 @@ class LandoltCatalog(Catalog):
                 err = sqrt((_err(mags['R'])**2 +
                             _err(mags['R_I'])**2 +
                             v_err**2 + _err(mags['V_I'])**2)/2)
-                if err:
+                if err or _known_errors(mags['R'], mags['R_I'], mags['V'], mags['V_I']):
                     mags['I'].error = err
 
         return sources

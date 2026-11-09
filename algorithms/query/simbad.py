@@ -91,14 +91,24 @@ class SimbadResponseError(SimbadUnavailableError):
 _SIMBAD_COLUMNS = ("main_id", "ra", "dec", "otype")
 
 
+def _object_type_label(value) -> str:
+    """Use known prose labels while retaining unrecognized machine codes."""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    if not isinstance(value, str):
+        return ""  # missing/masked type, with usable coordinates
+    code = value.strip()
+    key = {"*": "Star", "G": "Galaxy"}.get(code, code)
+    return SIMBAD_OBJECT_TYPES.get(key, code)
+
+
 @dataclass
 class ResolvedTarget:
     """One candidate match for a free-text identifier.
 
     ``object_type`` is the prose label from ``SIMBAD_OBJECT_TYPES``. It is the
-    empty string when SIMBAD reports a code MARS's table does not carry, which
-    happens as SIMBAD's vocabulary evolves — treat it as "unknown", not as an
-    error.
+    raw code when the vocabulary does not carry it. Missing types and entries
+    with deliberately empty labels remain empty; neither discards a match.
     """
 
     object_name: str
@@ -227,7 +237,7 @@ def resolve_simbad(name: str, *, strict: bool = False) -> list[ResolvedTarget]:
                 object_name=row[column["main_id"]],
                 ra_deg=ra.degree,
                 dec_deg=dec.degree,
-                object_type=SIMBAD_OBJECT_TYPES.get(row[column["otype"]], ""),
+                object_type=_object_type_label(row[column["otype"]]),
                 source="SIMBAD",
             )
         )

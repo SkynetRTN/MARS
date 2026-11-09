@@ -16,15 +16,15 @@ caller passes is what decides the rendering, and upstream has two modes:
 
 * **Folded** (upstream's primary path, from the period-folding form) --
   ``pass_seconds`` is the *pulsar's period* and the input is the folded,
-  phase-binned profile, so the pulse repeats at its true rate. Reaching it
+  phase-binned profile, looped with the requested period. Reaching it
   requires a period, which is what the periodogram is for.
 * **Light curve** (upstream's secondary path, from the light-curve sonifier)
   -- ``pass_seconds`` is the windowed observation *duration* and the input is
   the raw background-subtracted scan, so one pass plays the scan through once.
 
-Both modes are wired through ``tools.pulsar``. The caveat below applies to
-the light-curve mode specifically -- a binned phase
-profile is uniform in phase by construction, so it does not suffer from it.
+Both modes are wired through ``tools.pulsar``. Folding uses equal-width phase
+bins, but omits empty bins. Sparse folded profiles can therefore retain unequal
+phase gaps, which the synthesis compresses when it plays occupied bins by index.
 
 **The synthesis never sees the time axis.** Upstream's first parameter is
 ``_xValues`` and is unused; samples are played back at a uniform rate in
@@ -243,8 +243,9 @@ def folded_sonification_input(
 
     Takes an :class:`algorithms.pulsar.folding.FoldedProfile` and returns
     ``(source1, source2, pass_seconds)`` for :func:`sonify`. ``pass_seconds``
-    is the profile's **period**, so one pass is one rotation of the pulsar and
-    the loop repeats it at the true rate.
+    is the profile's **period**, the requested duration of one rotation before
+    output-sampling quantization. The synthesis plays occupied bins by index;
+    it does not reconstruct missing relative phase gaps.
 
     Upstream reads the binned profile straight off the folding chart and hands
     it to ``sonification()`` with ``getPeriodFoldingPeriod()``; the calibration

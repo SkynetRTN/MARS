@@ -250,8 +250,9 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     """The end-to-end selection replay -- checkbox 3.
 
     Recorded Afterglow detections + the full APASS cone + the VSX rows, through
-    perform_field_calibration exactly as upstream's diagnostic drove it. Unlike
-    the selected-row replay, the 35 are *chosen* here from 132 candidates.
+    the maintained field-calibration path. The historical 35 were selected from
+    132 candidates; M5 now excludes six without usable uncertainty. Their
+    recorded values remain unchanged and the altered selection is reported.
     """
     replay = replay_field_calibration("ngc5128_b_002")
     assert replay.errors == []
@@ -264,15 +265,17 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     assert (replay.num_catalog_rows, replay.num_catalog_candidates) == (CONE_APASS_ROWS, FRAME_APASS_ROWS)
     assert (replay.num_variable_rows, replay.num_variable_sources) == (CONE_VSX_ROWS, FRAME_VSX_ROWS)
     assert replay.num_detected_sources == 298
-    assert replay.num_matched == RECORDED_NUM_MATCHED
-    assert replay.num_catalog_not_selected == FRAME_APASS_ROWS - RECORDED_NUM_MATCHED
-    assert replay.num_detections_not_selected == RECORDED_NUM_NOT_SELECTED
+    assert replay.num_matched == 29
+    assert replay.num_catalog_not_selected == FRAME_APASS_ROWS - 29
+    assert replay.num_detections_not_selected == 298 - 29
     assert replay.recorded_num_matched == RECORDED_NUM_MATCHED
     assert replay.recorded_num_not_selected == RECORDED_NUM_NOT_SELECTED
-    assert replay.selection_matches_recorded is True
+    assert replay.selection_matches_recorded is False
 
     # Matched source identity and order, and the reference magnitudes.
-    used = _recorded_used_rows()
+    # M5 SNR selection rejects six historical rows without usable error. The
+    # recorded evidence remains unchanged; its selection is no longer expected.
+    used = [row for row in _recorded_used_rows() if row["mag_error"].strip() and float(row["mag_error"]) > 0]
     assert [m.detected_id for m in replay.matches] == [r["id"] for r in used]
     assert [m.ref_mag for m in replay.matches] == [float(r["local_ref_mag"]) for r in used]
     # The historical CSV left three zero uncertainties blank. M2 preserves
@@ -287,7 +290,7 @@ def test_the_selection_replay_reproduces_the_recorded_run():
         assert match.ref_mag_error == raw[columns.index("e_Bmag")]
     assert [m.mag for m in replay.matches] == [float(r["mag"]) for r in used]
     assert all(0.0 <= m.separation_arcsec < 3.06 for m in replay.matches)
-    assert len({m.catalog_index for m in replay.matches}) == RECORDED_NUM_MATCHED
+    assert len({m.catalog_index for m in replay.matches}) == 29
 
     # Corrected fit over the same selected rows; historical comparison stays
     # honest even though the selected catalog identities still match exactly.
@@ -302,7 +305,7 @@ def test_the_selection_replay_reproduces_the_recorded_run():
 
 @float32_mag_errors
 def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
-    """PINNED: without the VSX filter the replay matches 36 sources, not 35.
+    """Without the VSX filter the current replay selects 30 sources, not 29.
 
     Gaia DR3 6088704247666049024 sits 0.91 arcsec from the APASS row that would
     otherwise match SRC467 (a star Afterglow detected twice: SRC335 is the same
@@ -323,11 +326,11 @@ def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
     assert replay.errors == []
     assert (replay.num_variable_rows, replay.num_variable_sources) == (0, 0)
     assert [w.code for w in replay.warnings] == [
-        "variable_sources_not_recorded", "magnitude_error_snr_cut",
+        "variable_sources_not_recorded",
         "limiting_magnitude_unvalidated", "calibration_sufficiency_unverified",
     ]
     assert "No recorded VSX response" in replay.warnings[0].message
-    assert replay.num_matched == 36
+    assert replay.num_matched == 30
     assert replay.selection_matches_recorded is False
     assert "SRC467" in [m.detected_id for m in replay.matches]
     expected, keep = scientific_solution(replay.matches)
@@ -351,7 +354,7 @@ def test_the_selection_replay_opens_no_socket(monkeypatch):
     )
     replay = replay_field_calibration("ngc5128_b_002")
     assert replay.errors == []
-    assert replay.num_matched == RECORDED_NUM_MATCHED
+    assert replay.num_matched == 29
     assert len(replay_catalog_sources("ngc5128_b_002", fixture="full_response")) == 132
 
 
@@ -706,7 +709,7 @@ def test_the_offline_paths_are_reachable_from_the_agent_registry():
     replay = schemas["replay_field_calibration"]
     assert replay["input_schema"]["required"] == ["field"]
     assert TOOL_FUNCTIONS["replay_field_calibration"] is replay_field_calibration
-    assert TOOL_FUNCTIONS["replay_field_calibration"](field="ngc5128_b_002").num_matched == 35
+    assert TOOL_FUNCTIONS["replay_field_calibration"](field="ngc5128_b_002").num_matched == 29
 
 
 @pytest.mark.slow

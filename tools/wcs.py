@@ -26,7 +26,11 @@ from algorithms.skylib_lite.astrometry.limits import DEFAULT_SOLVER_TIMEOUT_S, n
 from algorithms.wcs.results import WcsSolveMetadata
 from algorithms.wcs.schemas import WcsCalibrationSettings
 from algorithms.wcs.source_extraction import build_wcs_from_header
-from algorithms.wcs.wcs import SearchRadiusWithoutHint, WCS_REGEX, solve_wcs as _solve_wcs
+from algorithms.wcs.wcs import (
+    SearchRadiusWithoutHint,
+    _write_wcs_to_header,
+    solve_wcs as _solve_wcs,
+)
 from tools.artifacts import describe_file
 from tools.astrometry import (
     _center_from_wcs,
@@ -286,12 +290,10 @@ def _write_wcs_header(
         shutil.copy2(path, staged_path)
 
         with fits.open(staged_path, mode="update", memmap=False) as hdul:
-            current_header = hdul[0].header
-            for key in list(current_header.keys()):
-                if WCS_REGEX.match(key):
-                    del current_header[key]
-            current_header.add_history("WCS calibration applied by tools.wcs.solve_astrometry")
-            current_header.update(solved_wcs.to_header(relax=True))
+            _write_wcs_to_header(
+                hdul[0].header, solved_wcs,
+                history="WCS calibration applied by tools.wcs.solve_astrometry",
+            )
             hdul.flush()
 
         with staged_path.open("rb") as staged:

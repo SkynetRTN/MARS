@@ -5,6 +5,27 @@ import pytest
 from astropy.io import fits
 
 
+@pytest.fixture
+def hr_noise_notice(monkeypatch):
+    """Keep native extraction, then give measurement one unusable RMS pixel.
+
+    Warning propagation must not depend on a particular frame accidentally
+    tripping the growth-curve crowding heuristic.
+    """
+    from algorithms.hrdiagram_py import observations
+
+    extract = observations.run_source_extraction
+
+    def extract_with_bad_noise(*args, **kwargs):
+        sources, background, rms = extract(*args, **kwargs)
+        rms = rms.copy()
+        rms[0, 0] = -1.
+        return sources, background, rms
+
+    monkeypatch.setattr(observations, "run_source_extraction", extract_with_bad_noise)
+    return "background_noise_masked"
+
+
 @pytest.mark.parametrize("phase", ["directory", "plot", "extraction", "measurement"])
 def test_artifact_failure_keeps_catalog_and_sample_notices(phase, frame_path, tmp_path, monkeypatch):
     from algorithms.query.coverage import note_query_issue
@@ -37,11 +58,11 @@ def test_artifact_failure_keeps_catalog_and_sample_notices(phase, frame_path, tm
     )
     assert [error.code for error in result.errors] == ["tool_exception"]
     assert {"catalog_rows_capped", "catalog_fallback_not_exhausted",
-            "calibration_sufficiency_unverified", "magnitude_error_snr_cut"} <= {
+            "calibration_sufficiency_unverified"} <= {
         warning.code for warning in result.warnings}
 
 
-def test_nonpositive_flux_placeholder_is_reported_without_changing_legacy_values():
+def test_nonpositive_flux_is_reported_and_excluded():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData
@@ -51,12 +72,11 @@ def test_nonpositive_flux_placeholder_is_reported_without_changing_legacy_values
         rows = run_photometry(image, fits.Header({"EXPTIME": 1}),
             [SourceExtractionData(x=8, y=8)], PhotometrySettings(a=2, apcorr_tol=0),
             background=image.copy(), background_rms=np.ones_like(image))
-    assert len(rows) == 1
-    assert rows[0].flux == 0 and rows[0].mag == 0
+    assert rows == []
     assert "nonpositive_aperture_flux" in {notice.code for notice in notices}
 
 
-def test_empty_annulus_is_reported_even_when_the_legacy_flux_is_finite():
+def test_empty_annulus_is_reported_and_excluded():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.photometry.photometry import run_photometry
     from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionData
@@ -65,7 +85,7 @@ def test_empty_annulus_is_reported_even_when_the_legacy_flux_is_finite():
         rows = run_photometry(np.full((20, 20), 10.), fits.Header({"EXPTIME": 1}),
             [SourceExtractionData(x=10, y=10)],
             PhotometrySettings(a=2, a_in_px=30, a_out_px=35, apcorr_tol=0))
-    assert len(rows) == 1 and rows[0].flux > 0
+    assert rows == []
     assert "empty_background_annulus" in {notice.code for notice in notices}
 
 
@@ -84,7 +104,7 @@ def test_isophotal_origin_warning_follows_the_actual_adaptive_branch(provided_sh
             PhotometrySettings(mode="auto", a=2.5, centroid_radius=3, apcorr_tol=0),
             background=np.zeros_like(image), background_rms=np.ones_like(image))
     assert rows
-    assert ("isophotal_origin_approximation" in {notice.code for notice in notices}) != provided_shape
+    assert "isophotal_origin_approximation" not in {notice.code for notice in notices}
 
 
 @pytest.mark.parametrize("downsample", [1, 2])
@@ -97,7 +117,7 @@ def test_downsampled_saturation_counting_is_disclosed_only_on_that_path(downsamp
     with collect_numerical_notices() as notices:
         rows, _, _ = run_source_extraction(data.copy(), header, SourceExtractionSettings(downsample=downsample))
     assert rows
-    assert ("saturation_count_unreliable" in {notice.code for notice in notices}) == (downsample > 1)
+    assert "saturation_count_unreliable" not in {notice.code for notice in notices}
 
 
 def test_calibration_reports_near_flat_snr_extrapolation_and_its_actual_snr_cut(frame_path):
@@ -106,7 +126,8 @@ def test_calibration_reports_near_flat_snr_extrapolation_and_its_actual_snr_cut(
     result = calibrate_zeropoint(frame_path("ngc5128_b"), catalog_fixture="selected_rows",
                                  compare_to="ngc5128_b_002")
     assert result.errors == []
-    assert {"limiting_magnitude_unvalidated", "magnitude_error_snr_cut"} <= {w.code for w in result.warnings}
+    assert "limiting_magnitude_unvalidated" in {w.code for w in result.warnings}
+    assert "magnitude_error_snr_cut" not in {w.code for w in result.warnings}
 
 
 def test_direct_limiting_magnitude_is_disclosed_on_nearly_flat_snr_inputs():
@@ -128,38 +149,40 @@ def test_landolt_u_error_limit_is_not_attached_to_unaffected_bands():
     assert "retained_catalog_uncertainty" not in {w.code for w in resolve_reference_band("Landolt", "V").warnings}
 
 
-def test_angular_matching_discloses_its_retained_ra_seam_limit():
+def test_angular_matching_handles_the_ra_seam_without_a_defect_warning():
     from algorithms.diagnostics import collect_numerical_notices
     from algorithms.catalogs.schemas import CatalogSource
     from algorithms.fieldcal.field_cal import _match_detected_sources
     from algorithms.fieldcal.schemas import SourceExtractionData
 
     with collect_numerical_notices() as notices:
-        with pytest.raises(RuntimeError, match="Could not match"):
-            _match_detected_sources(
+        rows = _match_detected_sources(
                 [CatalogSource(id="c", ra_hours=.00001, dec_degs=0)],
                 [SourceExtractionData(id="d", ra_hours=23.99999, dec_degs=0, x=5, y=5)],
-                wcs=None, header=fits.Header(), data=np.zeros((10, 10)), source_match_tol=5)
-    assert "ra_seam_matching_approximation" in {notice.code for notice in notices}
+                wcs=None, header=fits.Header(), data=np.zeros((10, 10)),
+                source_match_tol=5, source_match_tol_arcsec=5)
+    assert len(rows) == 1
+    assert not notices
 
 
-def test_instrumental_public_photometry_reports_aperture_correction_crowding(frame_path, tmp_path):
+def test_instrumental_public_photometry_does_not_invent_crowding_for_a_clean_reference(frame_path, tmp_path):
     from tools.photometry import run_photometry_on_target
 
     result = run_photometry_on_target(frame_path("ngc5128_b"), use_field_cal=False, output_dir=tmp_path)
     assert result.errors == []
     assert result.status == "ok"
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert "aperture_correction_crowding" not in {warning.code for warning in result.warnings}
 
 
-def test_hr_detection_reports_its_real_aperture_warning(frame_path, tmp_path, monkeypatch):
+def test_hr_detection_does_not_invent_crowding_for_a_clean_reference(frame_path, tmp_path, monkeypatch):
     from tools import artifacts
     from tools.hr_diagram import extract_photometry_from_fits
 
     monkeypatch.setattr(artifacts, "ARTIFACT_DIR", tmp_path)
     result = extract_photometry_from_fits(str(frame_path("ngc5128_b")))
     assert result.errors == [] and result.count > 0
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert not {"aperture_correction_crowding", "aperture_correction_unavailable"} & {
+        warning.code for warning in result.warnings}
 
 
 def test_a_degenerate_fit_keeps_numerical_notices_on_its_error_result():
@@ -179,14 +202,14 @@ def test_solver_failure_keeps_source_extraction_notices(frame_path, tmp_path, mo
         return ["astrometry.net"], []
 
     def failing_solver(*args, **kwargs):
-        note_numerical_issue("saturation_count_unreliable", "Downsampled saturation counts are unreliable.")
+        note_numerical_issue("astrometry_catalog_epoch_unverified", "Reference epoch is unavailable.")
         raise RuntimeError("test native failure")
 
     monkeypatch.setattr(wcs, "_configured_backend_warnings", configured)
     monkeypatch.setattr(wcs, "_solve_wcs", failing_solver)
     result = wcs.solve_astrometry(frame_path("ngc5128_b"), force=True)
     assert "solver_failed" in {error.code for error in result.errors}
-    assert "saturation_count_unreliable" in {warning.code for warning in result.warnings}
+    assert "astrometry_catalog_epoch_unverified" in {warning.code for warning in result.warnings}
 
 
 def test_direct_band_resolution_discloses_the_retained_landolt_u_uncertainty():
@@ -208,15 +231,21 @@ def test_public_photometry_keeps_prior_notices_when_a_later_phase_raises(phase, 
 
     if phase == "compute":
         def fail(*args, **kwargs):
-            note_numerical_issue("saturation_count_unreliable", "Retained saturation counting limit.")
+            note_numerical_issue("astrometry_catalog_epoch_unverified", "Reference epoch is unavailable.")
             raise ValueError("test photometry failure")
         monkeypatch.setattr(photometry, "compute_photometry", fail)
-        expected = "saturation_count_unreliable"
+        expected = "astrometry_catalog_epoch_unverified"
     else:
+        original_compute = photometry.compute_photometry
+        def compute_with_notice(*args, **kwargs):
+            result = original_compute(*args, **kwargs)
+            note_numerical_issue("aperture_correction_unavailable", "Test correction is unavailable.")
+            return result
+        monkeypatch.setattr(photometry, "compute_photometry", compute_with_notice)
         def fail(*args, **kwargs):
             raise ValueError("test plot failure")
         monkeypatch.setattr(photometry, "plot_photometry", fail)
-        expected = "aperture_correction_crowding"
+        expected = "aperture_correction_unavailable"
     reply = call_tool("run_photometry_on_target", {
         "target": str(frame_path("ngc5128_b")), "use_field_cal": False, "output_dir": tmp_path})
     assert "tool_exception" in {error["code"] for error in reply["errors"]}
@@ -224,7 +253,7 @@ def test_public_photometry_keeps_prior_notices_when_a_later_phase_raises(phase, 
     assert result_is_error(reply)
 
 
-def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path, monkeypatch):
+def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path, monkeypatch, hr_noise_notice):
     from tools import hr_diagram
 
     def fail(*args, **kwargs):
@@ -233,7 +262,7 @@ def test_hr_pipeline_keeps_detection_warnings_when_the_catalog_fails(frame_path,
     monkeypatch.setattr(hr_diagram, "_fetch_gaia_and_match", fail)
     result = hr_diagram.run_full_hr_pipeline(str(frame_path("ngc5128_b")), "test cluster")
     assert result.status == "error"
-    assert "aperture_correction_crowding" in {warning.code for warning in result.warnings}
+    assert hr_noise_notice in {warning.code for warning in result.warnings}
 
 
 def test_supplied_reference_magnitudes_do_not_invent_a_landolt_transform():
@@ -274,7 +303,7 @@ def test_public_allocation_failure_keeps_the_resource_limit_code(phase, frame_pa
 
 
 @pytest.mark.parametrize("failure", [OSError, ValueError])
-def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, frame_path, monkeypatch):
+def test_hr_artifact_failure_preserves_the_real_measurement_warning(failure, frame_path, monkeypatch, hr_noise_notice):
     from tools import hr_diagram
     from tools.mcp.surface import call_tool, result_is_error
 
@@ -285,7 +314,7 @@ def test_hr_artifact_failure_preserves_the_real_extraction_warning(failure, fram
     reply = call_tool("extract_photometry_from_fits", {"fits_path": str(frame_path("ngc5128_b"))})
     assert result_is_error(reply)
     assert [error["code"] for error in reply["errors"]] == ["tool_exception"]
-    assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}
+    assert hr_noise_notice in {warning["code"] for warning in reply["warnings"]}
 
 
 @pytest.mark.parametrize("tool", ["calibrate_zeropoint", "run_photometry_on_target"])
@@ -323,7 +352,7 @@ def test_inner_calibration_allocation_failure_reaches_resource_limit(
 @pytest.mark.parametrize("phase", ["reserve", "write"])
 @pytest.mark.parametrize("failure", [OSError, MemoryError])
 def test_composite_hr_output_failure_preserves_the_failure_contract(
-    phase, failure, frame_path, tmp_path, monkeypatch,
+    phase, failure, frame_path, tmp_path, monkeypatch, hr_noise_notice,
 ):
     import pandas as pd
     from tools import artifacts, hr_diagram
@@ -352,4 +381,4 @@ def test_composite_hr_output_failure_preserves_the_failure_contract(
     expected = "resource_limit" if failure is MemoryError else "tool_exception"
     assert [error["code"] for error in reply["errors"]] == [expected]
     if failure is not MemoryError:
-        assert "aperture_correction_crowding" in {warning["code"] for warning in reply["warnings"]}
+        assert hr_noise_notice in {warning["code"] for warning in reply["warnings"]}

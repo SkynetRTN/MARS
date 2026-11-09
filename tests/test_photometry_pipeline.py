@@ -48,6 +48,14 @@ BASELINE_NOTE = (
 )
 
 
+def _complete_annulus_sources(data, detections):
+    """Independent detector bounds for the default radius-25 sky annulus."""
+    h, w = data.shape
+    return [s for s in detections
+            if .5 <= s.x - 25 and s.x + 25 <= w + .5
+            and .5 <= s.y - 25 and s.y + 25 <= h + .5]
+
+
 @pytest.fixture(scope="module")
 def measured(request):
     """``(data, header, detections, photometry)`` for the workhorse frame."""
@@ -144,9 +152,10 @@ def test_all_sources_outside_the_image_raises(frame_image):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow
-def test_photometry_measures_every_detection(measured):
-    _, _, detections, results = measured
-    assert len(results) == len(detections) == 35, BASELINE_NOTE
+def test_photometry_excludes_detections_with_truncated_sky_annuli(measured):
+    data, _, detections, results = measured
+    assert len(detections) == 35, BASELINE_NOTE
+    assert len(results) == len(_complete_annulus_sources(data, detections)) == 33
     assert all(r.mag is not None for r in results)
     assert all(r.flux is not None and r.flux > 0 for r in results)
 
@@ -368,7 +377,7 @@ def test_out_of_bounds_sources_are_dropped_not_measured(frame_image):
     ]
 
     results = run_photometry(working, header, padded, PhotometrySettings(a=5.0))
-    assert len(results) == len(detections)
+    assert len(results) == len(_complete_annulus_sources(working, detections))
 
 
 @pytest.mark.slow
@@ -387,7 +396,7 @@ def test_source_identity_survives_measurement(frame_image):
         source.id = f"det-{i}"
 
     results = run_photometry(working, header, detections, PhotometrySettings(a=5.0))
-    assert {r.id for r in results} == {f"det-{i}" for i in range(len(detections))}
+    assert {r.id for r in results} == {s.id for s in _complete_annulus_sources(working, detections)}
 
 
 @pytest.mark.slow
@@ -441,7 +450,8 @@ def test_centroiding_moves_positions_and_is_off_by_default(frame_image):
         working, header, detections, PhotometrySettings(a=5.0, centroid_radius=5.0)
     )
 
-    assert [round(r.x, 6) for r in plain] == [round(s.x, 6) for s in detections]
+    eligible = _complete_annulus_sources(working, detections)
+    assert [round(r.x, 6) for r in plain] == [round(s.x, 6) for s in eligible]
     moved = sum(
         abs(c.x - p.x) > 1e-6 or abs(c.y - p.y) > 1e-6
         for c, p in zip(centroided, plain)
