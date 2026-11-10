@@ -1140,9 +1140,24 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   *External checks (maintainer decision, 2026-11-04):* not run for this
   release, and recorded as skipped. They are the `network` live-service
   tests, the `model_api` live-provider tests, and the post-cutover rerun of
-  the live ADS tests. Codex in the ChatGPT app on a Mac stays untested. The
-  supported suites, installed-wheel and native release jobs, and
-  security/workflow jobs still run at the final merged revision, after M5.
+  the live ADS tests. Codex in the ChatGPT app on a Mac stays untested.
+  *Checks, 2026-11-10, after M5 merged (`4ec3e9c`):* since then this branch
+  changes Markdown and one `pyproject.toml` URL only. At `4ec3e9c`, CI
+  passed the 3.12 and 3.13 suites, packaging with the installed-wheel
+  self-test, native containment on `macos-latest` and `windows-11-arm`, the
+  secret scan and workflow safety (run 42713731317 and PR #136). On this host,
+  the candidate `e3456d9` passed the full locked 3.13 suite with `[mcp]`
+  (**5,178 passed, 96 skipped**, no failures) and the MCP tests without the
+  SDK (241 passed). With the host's solver data, the native plate-solving
+  tests passed (257). A clean-worktree wheel and sdist passed
+  `twine check --strict` and `check_dist.py`, and a clean install passed
+  `mars-mcp self-test`; the skill it installs matches `skills/mars-tools/`.
+  Of the 96 skips, 81 are the external checks above; none is a failure.
+  *Before release:* record the final merged revision when this branch
+  merges; get CI on its pull request; run the release dry run or the tag run
+  at that revision, since the last dry run (2026-10-28) predates M5; bump the
+  version from `0.1.0rc6`; and decide the HR joining rule. See
+  [the release evidence](../analysis/m6-release-evidence.md).
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once
