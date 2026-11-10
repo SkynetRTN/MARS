@@ -6,8 +6,8 @@ one result is also returned with that result, as a warning whose code
 carries its meaning. The agent skill teaches models to read those warnings.
 
 Compiled 2026-11-04 from the release gates M2–M4 and M6 in the
-[master plan](working/master-continuation-plan.md). The open M5 checks may
-add to it before the next release.
+[master plan](working/master-continuation-plan.md), and updated 2026-11-10
+with the limits M5 retained.
 
 ## What the results are
 
@@ -53,6 +53,12 @@ add to it before the next release.
   refuses, so astrometry.net is the only blind route. An all-sky
   astrometry.net solve against several index series is slow; give it the
   frame's scale. [Plate solving](installing.md#plate-solving)
+- **A partial index set has no time guarantee.** A blind check against the
+  2MASS 4200 series alone timed out at 330 s. With the 4200, Tycho-2 and
+  UCAC5 sets, both native checks passed in 52 s.
+  [Image geometry](analysis/m5-coordinates-image-geometry.md)
+- **ATLAS is verified against UCAC5.** Its UCAC4 reader has not been checked
+  against a real UCAC4 zone. [Catalog parsing](analysis/m5-catalog-parsing-cache-identity.md)
 
 ## The `mars` console
 
@@ -104,6 +110,12 @@ add to it before the next release.
 - **Some pulsar controls are Python-only:** plot labels and sizes, `cal`,
   the sonification `phase`, `max_input_seconds` and `sample_rate`.
   [Pulsar controls](pulsar-tool-pipeline.md#6b-public-and-python-only-controls-m3-2026-10-22)
+- **Reusing measured tables.** Adaptive photometry on a source table that
+  lacks its original isophotal weights, such as one measured by an earlier
+  release, needs re-extraction. Value-only light-curve helpers expect inputs
+  the caller has already aligned.
+  [Repeated calls](analysis/m5-repeated-calls-fits-writes.md),
+  [light-curve boundaries](analysis/m5-lightcurve-hr-boundaries.md)
 
 ## Remote services
 
@@ -119,7 +131,7 @@ add to it before the next release.
 
 ## Science results
 
-Each of these is also returned, as a warning, with the result it applies to.
+Most of these are also returned, as a warning, with the result they apply to.
 
 - **Pulsar periods.** The false-alarm bound assumes Gaussian noise. Neither
   the bound nor the fold signal-to-noise is a pulsar probability.
@@ -127,22 +139,41 @@ Each of these is also returned, as a warning, with the result it applies to.
   the bound. A blind search finds the period in one of the five bundled
   scans. A fold at a catalogued period is not an independent detection.
   Spectra saved by 0.1.0rc6 or earlier show their thresholds as
-  uncalibrated, with a warning; recompute them from the light curve. [Candidates and confidence](analysis/pulsar-candidates-confidence.md),
+  uncalibrated, with a warning; recompute them from the light curve.
+  [Candidates and confidence](analysis/pulsar-candidates-confidence.md),
   [the pipeline](pulsar-tool-pipeline.md)
+- **Prefolded pulsar files.** The first column of a "standard" file is read
+  as time in seconds, and its plots say so. Whether the original format meant
+  seconds, sample indices or phase is unverified, so check a file whose first
+  column is not seconds. [Light-curve boundaries](analysis/m5-lightcurve-hr-boundaries.md)
 - **Photometric calibration.** A finite zero point and error do not
   establish enough stars or enough coverage. The sky coverage of a distorted
   footprint is estimated, not guaranteed complete. A narrowband image is
   calibrated against a broadband reference: the result is a relative zero
   point, not an absolute narrowband magnitude. A one-star solve is refused,
-  where Skynet returns it with no error estimate.
-  [Calibration](analysis/photometric-calibration.md),
+  where Skynet returns it with no error estimate. Measurement errors combine
+  annular sky, the RMS map and net-source shot noise; they do not model
+  detector history, resampling covariance, or sky and correction
+  systematics. [Calibration](analysis/photometric-calibration.md),
+  [flux and position](analysis/m5-measured-flux-source-position.md),
   [coverage](analysis/catalog-coverage-sufficiency.md),
   [magnitudes and filters](analysis/catalog-magnitudes-filters.md)
+- **Catalog identity and errors.** MARS gives APASS stars no stable
+  identifier: an ordinal record number, where a response carries one, need
+  not survive the catalog's re-ingestion. Landolt U-band
+  uncertainties keep upstream's wrong-colour formula and are flagged
+  `retained_catalog_uncertainty`. [Catalog parsing](analysis/m5-catalog-parsing-cache-identity.md)
 - **HR diagrams.** Members are selected; no membership probability is
   claimed. The fitted isochrone is drawn as points, because the local
   Girardi tracks mark no phase breaks. The fit needs the Girardi grid
-  (`MARS_ISOCHRONE_DIR`, or the `isochrones` bundle).
-  [Ages and membership](analysis/cluster-ages-membership.md),
+  (`MARS_ISOCHRONE_DIR`, or the `isochrones` bundle). It reports no parameter
+  uncertainty: `parameter_uncertainty` is always null, because its optimizer
+  has no covariance. The fitted values depend on how the fit joins track
+  points: it joins only points at most 0.5 mag apart, which leaves stretches
+  of the faint main sequence unjoined. On M67, joining them moves the fitted
+  age from log 9.60 to 9.55, E(B−V) from 0.035 to 0.044 and the distance from
+  0.852 to 0.860 kpc. [Ages and membership](analysis/cluster-ages-membership.md),
+  [the joining rule](analysis/m6-release-evidence.md#1-the-hr-fits-track-joining-rule),
   [optional data](installing.md#optional-data)
 - **Legacy radius and mass outputs are labelled proxies.**
   [Coordinates, extinction and mass](analysis/legacy-coordinates-extinction-mass.md)
@@ -154,12 +185,3 @@ Each of these is also returned, as a warning, with the result it applies to.
   provider, and the corpus was written while watching the models it
   compares. The historical scores were not checked for author attribution.
   [Benchmark limits](benchmarking/results.md#limits)
-
-## Still being checked
-
-The M5 gate is rechecking older reports about coordinates and image
-geometry, measured flux and source positions, repeated calls and FITS
-writes, light-curve and HR boundaries, and catalog parsing and caches. Its
-outcomes are added here before the release. One limit is already recorded:
-the HR fit joins track rows no more than 0.5 mag apart, and the effect on the
-fitted parameters has not been measured.

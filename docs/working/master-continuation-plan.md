@@ -1126,7 +1126,17 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   console's stop keys, approvals, resumed sessions, streaming and macOS
   terminal, the Python package-name and import-time-settings conditions, and
   the ADS move to SciX. Science limits stay where users meet them, as result
-  warnings that the skill teaches. M5's outcomes are still to be added.
+  warnings that the skill teaches. *Updated 2026-11-10* with the limits M5
+  retained: partial index sets, the unverified UCAC4 reader, the photometric
+  error model, catalog identity and Landolt U errors, prefolded pulsar files,
+  table reuse, and the HR fit's missing uncertainty and joining rule.
+  *HR track-joining rule (handed over by M5), measured 2026-11-10:* on M67,
+  any threshold from 0.75 mag up, including joining every point, fits log age
+  9.55, 0.860 kpc and E(B−V) 0.044. The shipped 0.5 mag fits 9.60, 0.852 kpc
+  and 0.035, because it leaves stretches of the faint main sequence, which
+  the grid samples every 0.50–0.60 mag, unjoined. The disposition, keeping and
+  disclosing it or changing the threshold, awaits the maintainer
+  ([the measurement](../analysis/m6-release-evidence.md#1-the-hr-fits-track-joining-rule)).
   *External checks (maintainer decision, 2026-11-04):* not run for this
   release, and recorded as skipped. They are the `network` live-service
   tests, the `model_api` live-provider tests, and the post-cutover rerun of
