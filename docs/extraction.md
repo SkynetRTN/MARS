@@ -2782,8 +2782,22 @@ mag apart; and 32 inside the AGB pulses, whose other 166 steps stay joined in
 the wedge. The plot therefore does not draw it. The fit inherits both effects:
 between M_G 6.94 and 7.48 it scores stars against the two end rows only, and
 27 of M67's 548 members sit there, while its AGB segments join pulse to pulse.
-Each star's cost is capped (`CHI2_CAP`); the effect on the fitted distance,
-reddening and age has not been measured (M5, Light-curve and HR boundaries).
+Each star's cost is capped (`CHI2_CAP`). M5 left the effect on the fitted
+distance, reddening and age unmeasured (Light-curve and HR boundaries).
+
+M6 measured it (2026-11-10), on M67's recorded members against the operator
+grid with the M5 tests' literature stub: any threshold from 0.75 mag, joining
+every point included, fits log age 9.55, 0.860 kpc and E(B-V) 0.044, where
+0.5 mag fits 9.60, 0.852 kpc and 0.035 (M6 release evidence, section 1).
+HR fits are this sensitive to their settings, so the threshold became a fit
+setting rather than a fixed rule: `track_max_gap_mag` on
+`fit_and_compare_hr_diagram` (and `isochrones.fit_and_compare`; `max_gap` in
+`hrfit`). Its default stays 0.5 mag, so a fit at the defaults is unchanged.
+An agent may re-run the fit on the same
+members with other settings to bring it closer to the literature values;
+each result reports its `fit_settings`, and a fit tuned that way does not
+independently confirm those values. `test_hrdiagram_local_grid.py` pins
+M67's one-step move.
 
 It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
 `fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting
@@ -2904,7 +2918,8 @@ at the young edge of the age window. The cost was MARS's own, not Astromancer's
   so a star on the track between two points read as a 10-40 sigma miss; that
   sampling noise was most of the reduced cost (540-1,010) and set which age
   won. Tracks are now resampled every 0.005 mag (`TRACK_STEP_MAG`), without
-  joining jumps over 0.5 mag between phases (the grid carries no labels).
+  joining jumps over 0.5 mag between phases (the grid carries no labels; the
+  threshold is the `track_max_gap_mag` setting since M6).
 - Its chi-square had no floor and no cap. Blue stragglers, binaries and field
   stars cost tens of thousands each (eleven M67 blue stragglers, ~32,000 each)
   and pulled the fit to a younger, bluer turnoff, with extra reddening to put

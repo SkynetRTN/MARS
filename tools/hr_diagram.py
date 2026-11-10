@@ -62,7 +62,7 @@ from typing import Any
 import pandas as pd
 from astropy.table import Table
 
-from algorithms.hrdiagram_py import isochrones, literature, matching, membership, observations
+from algorithms.hrdiagram_py import hrfit, isochrones, literature, matching, membership, observations
 from algorithms.query.vizier import ProviderResponseError
 from tools import artifacts, config
 from tools.config import PREVIEW_ROWS
@@ -459,12 +459,17 @@ def fit_and_compare_hr_diagram(
     mh: float = 0.0,
     max_error: float = 0.1,
     logage_half_width: float = 0.3,
+    track_max_gap_mag: float = hrfit.TRACK_MAX_GAP_MAG,
 ) -> ToolResult:
     """Fit distance/E(B-V)/age to cluster members against the configured
     local Girardi grid near the cluster's published age, and plot the HR diagram.
 
     Returns the fitted values, the literature values, and their
-    percent/absolute differences, plus the saved PNG artifact.
+    percent/absolute differences, the settings the fit used, plus the saved
+    PNG artifact. HR fits are sensitive to their settings, so an agent may
+    call this again on the same members CSV with different ones;
+    ``track_max_gap_mag`` is the longest step between isochrone points that
+    the fit joins.
     """
     members = _read_table_artifact(members_csv_path)
     stem = _safe_stem(cluster_name)
@@ -473,6 +478,7 @@ def fit_and_compare_hr_diagram(
         report = _fit_and_compare(
             members, params, cluster_name, stem,
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
+            track_max_gap_mag=track_max_gap_mag,
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])

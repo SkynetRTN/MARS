@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from algorithms.hrdiagram_py import isochrones, local_grid
+from algorithms.hrdiagram_py import hrfit, isochrones, local_grid
 from tools import config
 from tools import hr_diagram
 
@@ -157,6 +157,20 @@ def test_fit_rejects_nonfinite_age_width_before_expanding_tracks(tmp_path, monke
         )
 
 
+@pytest.mark.parametrize("gap", [0.0, -0.5, float("nan"), float("inf")])
+def test_fit_rejects_a_track_gap_that_is_not_positive_and_finite(tmp_path, monkeypatch, gap):
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", tmp_path)
+    monkeypatch.setattr(isochrones.local_grid, "load_tracks", lambda **kwargs: pytest.fail("tracks loaded"))
+    members = pd.DataFrame({"BP": [], "RP": [], "G": [], "BP_err": [], "RP_err": [], "G_err": []})
+
+    with pytest.raises(ValueError, match="track_max_gap_mag must be finite and greater than zero"):
+        isochrones.fit_and_compare(
+            members, {"log_age": 8.60, "distance_kpc": 1.0, "ebv": 0.0, "age_myr": 400.0}, "local",
+            members_csv_path=tmp_path / "members.csv", out_png=tmp_path / "fit.png",
+            logage_half_width=0.0, track_max_gap_mag=gap,
+        )
+
+
 def test_failed_track_serialization_removes_temporary_conversion(tmp_path, monkeypatch):
     class FailingTrackFrame(pd.DataFrame):
         @property
@@ -203,6 +217,43 @@ def test_hr_tool_reads_operator_grid_from_config(tmp_path, monkeypatch):
     assert result.preview[0]["isochrone_path"] == str(tmp_path)
 
 
+def test_hr_tool_passes_the_track_gap_to_the_fit_and_reports_its_settings(tmp_path, monkeypatch):
+    """An agent tuning the fit changes ``track_max_gap_mag`` between calls on
+    the same members CSV; each result names the settings it used."""
+    track = _track()
+    track[:, 19:22] = [[10.0, 11.0, 9.0], [8.0, 9.0, 7.0]]
+    np.save(tmp_path / "Girardi_8.60_0.00.npy", track)
+    members_path = tmp_path / "members.csv"
+    pd.DataFrame({
+        "BP": [21.0, 19.0], "RP": [19.0, 17.0], "G": [20.0, 18.0],
+        "BP_err": [0.01, 0.01], "RP_err": [0.01, 0.01], "G_err": [0.01, 0.01],
+    }).to_csv(members_path, index=False)
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", tmp_path)
+    monkeypatch.setattr(hr_diagram, "_fetch_literature_params", lambda _: {"log_age": 8.60, "distance_kpc": 1.0, "ebv": 0.0, "age_myr": 400.0})
+    monkeypatch.setattr(hr_diagram, "_output_path", lambda stem, suffix: tmp_path / f"{stem}{suffix}")
+    gaps = []
+    fit_cluster = hrfit.fit_cluster
+
+    def recording_fit_cluster(*args, **kwargs):
+        gaps.append(kwargs["max_gap"])
+        return fit_cluster(*args, **kwargs)
+
+    monkeypatch.setattr(isochrones.hrfit, "fit_cluster", recording_fit_cluster)
+
+    default = hr_diagram.fit_and_compare_hr_diagram(str(members_path), "local", max_error=1.0, logage_half_width=0.0)
+    wider = hr_diagram.fit_and_compare_hr_diagram(
+        str(members_path), "local", max_error=1.0, logage_half_width=0.0, track_max_gap_mag=2.0,
+    )
+
+    assert default.status == wider.status == "ok"
+    assert gaps == [hrfit.TRACK_MAX_GAP_MAG, 2.0]
+    assert default.preview[0]["fit_settings"] == {
+        "mh": 0.0, "max_error": 1.0, "logage_half_width": 0.0,
+        "track_max_gap_mag": 0.5, "log_ages_scanned": [8.6, 8.6],
+    }
+    assert wider.preview[0]["fit_settings"]["track_max_gap_mag"] == 2.0
+
+
 _M67 = Path(__file__).parent / "fixtures" / "hrdiagram_m67"
 
 
@@ -228,3 +279,32 @@ def test_m67_fits_near_its_literature_age(tmp_path, monkeypatch):
     assert abs(fitted["log_age"] - 9.63) <= 0.1
     assert abs(fitted["distance_kpc"] - 0.889) / 0.889 < 0.06
     assert abs(fitted["ebv"] - 0.023) < 0.03
+
+
+@pytest.mark.slow
+def test_m67_joining_its_faint_main_sequence_moves_the_fit_one_age_step(tmp_path, monkeypatch):
+    """M6 (2026-11-10): the grid samples M67's faint main sequence 0.50-0.60
+    mag apart, so the default 0.5 mag rule leaves parts of it unjoined. Any
+    threshold from 0.75 mag joins it, and the fitted age moves one grid step.
+    Literature values are stubbed as the M5 tests stub them; the window is
+    narrowed to the three ages around them, which the per-age fits make
+    equivalent to the measured +-0.3 dex."""
+    members = pd.read_csv(_M67 / "members.csv")
+    literature = {"log_age": 9.60, "distance_kpc": 0.889, "ebv": 0.023, "age_myr": 10**9.60 / 1e6}
+    monkeypatch.setattr(config, "ISOCHRONE_DIR", _M67)
+    fitted = {}
+    for gap in (0.5, 1.0):
+        report = isochrones.fit_and_compare(
+            members, literature, "M67",
+            members_csv_path=tmp_path / f"members_{gap}.csv", out_png=tmp_path / f"fit_{gap}.png",
+            logage_half_width=0.05, max_error=0.2, track_max_gap_mag=gap,
+        )
+        assert report["fit_settings"]["log_ages_scanned"] == [9.55, 9.65]
+        fitted[gap] = report["fitted"]
+
+    assert fitted[0.5]["log_age"] == pytest.approx(9.60, abs=1e-6)
+    assert fitted[0.5]["distance_kpc"] == pytest.approx(0.8521, abs=5e-4)
+    assert fitted[0.5]["ebv"] == pytest.approx(0.0352, abs=5e-4)
+    assert fitted[1.0]["log_age"] == pytest.approx(9.55, abs=1e-6)
+    assert fitted[1.0]["distance_kpc"] == pytest.approx(0.8599, abs=5e-4)
+    assert fitted[1.0]["ebv"] == pytest.approx(0.0441, abs=5e-4)

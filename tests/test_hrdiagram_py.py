@@ -11,6 +11,7 @@ from __future__ import annotations
 import matplotlib
 import numpy as np
 import pandas as pd
+import pytest
 
 matplotlib.use("Agg")
 
@@ -142,3 +143,18 @@ def test_the_cost_measures_distance_to_the_track_not_to_its_points():
     assert on_track(np.array([0.0]), np.array([4.1])) <= (hrfit.TRACK_STEP_MAG / 2 / 0.003) ** 2
     capped = hrfit._TrackCost(errors, errors, iso_colour, iso_mag)
     assert capped(np.array([1.0]), np.array([4.1])) == hrfit.CHI2_CAP
+
+
+def test_a_wider_track_gap_joins_a_step_the_default_leaves_apart():
+    """The 1.75-mag step that the M5 working control pins as unjoined at the
+    default joins once ``max_gap`` exceeds it, so a star in it lies on the
+    track. ``max_gap`` is the setting ``track_max_gap_mag`` reaches."""
+    errors = np.array([1.0])
+    iso_colour = np.zeros(4)
+    iso_mag = np.array([0.0, 0.25, 2.0, 2.25])
+    star = (np.array([0.0]), np.array([1.0]))
+    default = hrfit._TrackCost(errors, errors, iso_colour, iso_mag, floor=0.0, cap=None)
+    wider = hrfit._TrackCost(errors, errors, iso_colour, iso_mag, floor=0.0, cap=None, max_gap=2.0)
+
+    assert default(*star) == pytest.approx(0.5625)
+    assert wider(*star) <= (hrfit.TRACK_STEP_MAG / 2) ** 2
