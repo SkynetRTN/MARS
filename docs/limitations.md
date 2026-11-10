@@ -11,12 +11,13 @@ add to it before the next release.
 
 ## What the results are
 
-- **Extractions, not independent validations.** The algorithms reproduce
-  Skynet and Astromancer, including their documented quirks and known bugs.
-  The test suite pins parity with recorded upstream output; it does not
-  establish scientific correctness. Each deliberate correction since is
-  recorded per package. [Extraction record](extraction.md),
-  [what the tests prove](../tests/README.md)
+- **Mostly extractions, not independent validations.** Where MARS has not
+  corrected them, the algorithms reproduce Skynet and Astromancer, including
+  quirks the extraction record lists. Parity with recorded upstream output
+  does not establish scientific correctness. The verified defects that the
+  M1–M5 gates corrected have acceptance tests against independent
+  scientific references; the rest of the suite pins parity.
+  [Extraction record](extraction.md), [what the tests prove](../tests/README.md)
 
 ## Installation and platforms
 

@@ -64,8 +64,9 @@ Three optional optical frames are Git LFS objects (`git lfs pull`); see
 
 ## Known Limitations
 
-The results reproduce Skynet and Astromancer, known bugs included; the tests
-pin that parity, not scientific correctness. Plate solving needs astrometry.net
+Most results reproduce Skynet and Astromancer, and parity with them is not a
+proof of scientific correctness; the defects corrected so far are recorded,
+each with tests against an independent reference. Plate solving needs astrometry.net
 and index files installed on your machine. The MCP server is a trusted,
 local, single-user stdio interface. Windows is supported on ARM, running an
 x64 Python. Scientific limits that apply to a result come back with it as
