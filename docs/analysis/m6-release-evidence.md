@@ -57,23 +57,34 @@ it comes from joining in-phase main-sequence points, which is the
 interpretation offered here, not a validated result. One cluster does not
 establish the size of the effect elsewhere.
 
-**Disposition:** the maintainer's. The two options are to keep 0.5 mag and
-disclose it, as [Known limitations](../limitations.md) now does, or to change
-the threshold. A change alters fitted results, and needs its own tests and
-an entry in `extraction.md`.
+**Disposition (maintainer, 2026-11-10).** HR fits are sensitive and hard
+to do, so their settings must be adjustable, by the agent in its tool-call
+loop, to bring a fit as close to the catalog values as it can. The threshold
+is therefore a setting, not a fixed rule: `track_max_gap_mag` on
+`fit_and_compare_hr_diagram`, default 0.5 mag, so a fit at the defaults is
+unchanged. Each result reports the `fit_settings` it used, including the
+ages scanned. The tool description and the skill's HR guide tell the agent
+to re-run the fit on the same members CSV, to say which settings it changed,
+and that a fit tuned toward the literature values does not independently
+confirm them. The change is `feature/hr-fit-track-gap` (`28be2e6`, from
+`main`), recorded in `extraction.md`; a slow test pins M67's move at 0.5 and
+1.0 mag.
 
-Reproduce: patch `algorithms.hrdiagram_py.hrfit._resample_track` with
-`functools.partial(original, max_gap=X)`, set `tools.config.ISOCHRONE_DIR`,
-stub `tools.hr_diagram._fetch_literature_params`, and call
+Reproduce: set `tools.config.ISOCHRONE_DIR`, stub
+`tools.hr_diagram._fetch_literature_params`, and call
 `tools.hr_diagram.fit_and_compare_hr_diagram(members_csv, "M67",
-max_error=0.2)`.
+max_error=0.2, track_max_gap_mag=X)`. Without the setting, patch
+`algorithms.hrdiagram_py.hrfit._resample_track` with
+`functools.partial(original, max_gap=X)` instead.
 
 ## 2. Checks on the release candidate
 
 The candidate is `main` at `4ec3e9c` (M5 merged) plus this branch. Since
 `4ec3e9c` the branch changes Markdown files and one URL in `pyproject.toml`:
 no Python, workflow or lockfile. The code CI tested at `4ec3e9c` is therefore
-the code here.
+the code here. The release also takes the `track_max_gap_mag` change (§1),
+which does change code; it was checked on its own branch (the last two rows)
+and gets CI on its own pull request.
 
 | Check | Where it ran | Result |
 |---|---|---|
@@ -88,6 +99,8 @@ the code here.
 | Wheel and sdist built from a clean worktree at `e3456d9`: `twine check --strict` (6.2.0) and `check_dist.py` | this host | passed |
 | Clean install of the wheel with `[mcp]`, and `mars-mcp self-test` run outside the checkout | this host | passed: B0329+54 measured at 0.71462 s against the curated 0.71452 s, folded at 218.5σ |
 | The skill `install-skill` writes from the wheel, against `skills/mars-tools/`; `python -m tools.skill --check` | this host | identical; no drift |
+| Full suite on `feature/hr-fit-track-gap` (`28be2e6`, from `main`), Python 3.13.14, locked, with `[mcp]` | this host, clean worktree | 5,181 passed, 100 skipped, no failures (775 s): the 7 new tests pass, and 4 benchmark checks that read the untracked run records in `artifacts/bench/` skip in a clean worktree |
+| The MCP tests without the SDK on `28be2e6` (CI's first step) | this host, separate environment | 241 passed, 21 skipped |
 
 The local clean install resolved its dependencies from the uv cache, as a
 clean runner resolves them from PyPI, not from `uv.lock`. No added or changed
@@ -124,7 +137,8 @@ types that carry no errors.
   installed-wheel, bundle and extension checks that predate M5.
 - **A new version.** The candidate still says `0.1.0rc6`; `releasing.md`
   owns the bump.
-- **The HR joining rule's disposition** (§1).
+- **The `track_max_gap_mag` change merges first** (§1), with CI on its own
+  pull request. It is the candidate's only code change since `4ec3e9c`.
 
 The outstanding user-visible limitations are listed in
 [Known limitations](../limitations.md).

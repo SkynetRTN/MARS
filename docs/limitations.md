@@ -168,11 +168,15 @@ Most of these are also returned, as a warning, with the result they apply to.
   Girardi tracks mark no phase breaks. The fit needs the Girardi grid
   (`MARS_ISOCHRONE_DIR`, or the `isochrones` bundle). It reports no parameter
   uncertainty: `parameter_uncertainty` is always null, because its optimizer
-  has no covariance. The fitted values depend on how the fit joins track
-  points: it joins only points at most 0.5 mag apart, which leaves stretches
-  of the faint main sequence unjoined. On M67, joining them moves the fitted
-  age from log 9.60 to 9.55, E(B−V) from 0.035 to 0.044 and the distance from
-  0.852 to 0.860 kpc. [Ages and membership](analysis/cluster-ages-membership.md),
+  has no covariance. The fitted values are sensitive to the fit's settings,
+  which the agent can change between calls: `max_error`,
+  `logage_half_width`, `mh` and `track_max_gap_mag`. The last is how far
+  apart two track points may be and still be joined. Its default, 0.5 mag,
+  leaves stretches of the faint main sequence unjoined; on M67, 0.75 mag or
+  more moves the fitted age from log 9.60 to 9.55, E(B−V) from 0.035 to
+  0.044 and the distance from 0.852 to 0.860 kpc. A fit tuned toward the
+  literature values does not independently confirm them.
+  [Ages and membership](analysis/cluster-ages-membership.md),
   [the joining rule](analysis/m6-release-evidence.md#1-the-hr-fits-track-joining-rule),
   [optional data](installing.md#optional-data)
 - **Legacy radius and mass outputs are labelled proxies.**

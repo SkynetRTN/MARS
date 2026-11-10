@@ -1134,9 +1134,16 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   any threshold from 0.75 mag up, including joining every point, fits log age
   9.55, 0.860 kpc and E(B−V) 0.044. The shipped 0.5 mag fits 9.60, 0.852 kpc
   and 0.035, because it leaves stretches of the faint main sequence, which
-  the grid samples every 0.50–0.60 mag, unjoined. The disposition, keeping and
-  disclosing it or changing the threshold, awaits the maintainer
+  the grid samples every 0.50–0.60 mag, unjoined
   ([the measurement](../analysis/m6-release-evidence.md#1-the-hr-fits-track-joining-rule)).
+  *Disposition (maintainer, 2026-11-10):* HR fits are sensitive and hard to
+  do, so their settings must be adjustable, by the agent in its tool-call
+  loop, to bring a fit as close to the catalog values as it can. The
+  threshold becomes the `track_max_gap_mag` setting of
+  `fit_and_compare_hr_diagram`, default 0.5 mag, so a fit at the defaults is
+  unchanged, and each result reports its `fit_settings`. That change is
+  `feature/hr-fit-track-gap` (`28be2e6`, from `main`), and merges before
+  this branch.
   *External checks (maintainer decision, 2026-11-04):* not run for this
   release, and recorded as skipped. They are the `network` live-service
   tests, the `model_api` live-provider tests, and the post-cutover rerun of
@@ -1156,7 +1163,8 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   *Before release:* record the final merged revision when this branch
   merges; get CI on its pull request; run the release dry run or the tag run
   at that revision, since the last dry run (2026-10-28) predates M5; bump the
-  version from `0.1.0rc6`; and decide the HR joining rule. See
+  version from `0.1.0rc6`; and merge the `track_max_gap_mag` change first,
+  since it changes code that the checks above did not cover. See
   [the release evidence](../analysis/m6-release-evidence.md).
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
