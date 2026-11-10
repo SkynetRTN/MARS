@@ -98,7 +98,7 @@ warnings. Every known limitation, with where it is detailed, is in
 
 ## Contributing
 
-Target `dev`, keep changes narrow, and run the checks CI enforces
+Target `main`, keep changes narrow, and run the checks CI enforces
 (`uv run pytest`, `python3 -m compileall tools algorithms tests`,
 `git diff --check`). See
 [`CONTRIBUTING.md`](https://github.com/SkynetRTN/MARS/blob/main/CONTRIBUTING.md),
