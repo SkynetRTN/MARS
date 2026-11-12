@@ -655,7 +655,7 @@
     "type": "function",
     "function": {
       "name": "fit_and_compare_hr_diagram",
-      "description": "Load a local Girardi isochrone near the cluster's published age (requires MARS_ISOCHRONE_DIR), fit distance and E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with the fitted isochrone overlaid. Returns the fitted values, the literature values, and their percent/absolute differences, plus the saved PNG artifact.",
+      "description": "Load a local Girardi isochrone near the cluster's published age (requires MARS_ISOCHRONE_DIR), fit distance and E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with the fitted isochrone overlaid. Returns the fitted values, the literature values, and their percent/absolute differences, the settings the fit used (fit_settings), plus the saved PNG artifact. HR fits are sensitive to their settings: to bring a fit closer to the literature values, call this again on the same members CSV with a different max_error, logage_half_width, mh or track_max_gap_mag, and say which settings you changed. A fit tuned toward the literature values agrees with them partly by construction, so it does not independently confirm them.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -678,6 +678,11 @@
           "logage_half_width": {
             "type": "number",
             "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.3)."
+          },
+          "track_max_gap_mag": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Longest step, in mag, between consecutive isochrone points that the fit joins (default 0.5). Longer steps are treated as jumps between evolutionary phases, because the grid has no phase labels. The grid samples the faint main sequence 0.5-0.6 mag apart, so 0.75 or more joins that too; on M67 that moved the fitted age by one grid step."
           }
         },
         "required": [
@@ -685,7 +690,8 @@
           "cluster_name",
           "mh",
           "max_error",
-          "logage_half_width"
+          "logage_half_width",
+          "track_max_gap_mag"
         ],
         "additionalProperties": false
       },

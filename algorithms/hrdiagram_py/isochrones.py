@@ -36,12 +36,16 @@ def fit_and_compare(
     logage_half_width: float = 0.3,
     dlage: float = 0.05,
     mh: float = 0.0,
+    track_max_gap_mag: float = hrfit.TRACK_MAX_GAP_MAG,
 ) -> dict[str, Any]:
     """Fit distance/E(B-V)/age against exact local Girardi tracks.
 
     ``mh`` is the track metallicity ([M/H], solar = 0.0). The configured grid
     must contain every selected exact age; the loader never interpolates,
-    substitutes a nearest track, or fetches a model.
+    substitutes a nearest track, or fetches a model. ``track_max_gap_mag`` is
+    the longest step between consecutive track points that the fit joins
+    (``hrfit.TRACK_MAX_GAP_MAG``). The settings used are returned with the
+    fit, so runs with different settings can be told apart.
     """
     if config.ISOCHRONE_DIR is None:
         raise RuntimeError(
@@ -58,6 +62,8 @@ def fit_and_compare(
         raise ValueError(f"logage_half_width must be between 0 and {MAX_LOGAGE_HALF_WIDTH}")
     if not math.isfinite(dlage) or dlage <= 0:
         raise ValueError("dlage must be finite and greater than zero")
+    if not math.isfinite(track_max_gap_mag) or track_max_gap_mag <= 0:
+        raise ValueError("track_max_gap_mag must be finite and greater than zero")
     if logage_half_width == 0:
         ages = [round(center, 2)]
     else:
@@ -90,6 +96,7 @@ def fit_and_compare(
             members_csv_path, temporary_iso_path, blue, red, lum, blue, red, lum,
             logages=logages, max_error=max_error,
             x0=(literature["distance_kpc"], literature["ebv"]),
+            max_gap=track_max_gap_mag,
         )
     finally:
         if temporary_iso_path is not None:
@@ -141,6 +148,13 @@ def fit_and_compare(
         "fitted": fitted,
         "literature": dict(literature),
         "comparison": comparison,
+        "fit_settings": {
+            "mh": mh,
+            "max_error": max_error,
+            "logage_half_width": logage_half_width,
+            "track_max_gap_mag": track_max_gap_mag,
+            "log_ages_scanned": [ages[0], ages[-1]],
+        },
         "png_path": str(out_png),
         "isochrone_path": str(config.ISOCHRONE_DIR),
         "members_csv_path": str(members_csv_path),
