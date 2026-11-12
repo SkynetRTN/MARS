@@ -173,7 +173,7 @@ The MCP tool-surface track has landed. `mars-mcp` serves all 55 tools over
 stdio to a coding agent's own console on a machine with no checkout, with the
 agent skill as its instructions and resources. A wheel carries the core data,
 and `mars-mcp fetch-data` installs checksum-pinned optional bundles.
-`v0.1.0rc1` is published as a pre-release. See
+Releases are published on PyPI as `skynet-mars` pre-releases. See
 [tool-architecture.md](tool-architecture.md) section 10.3,
 [installing.md](installing.md), and the track record in
 [archive/mcp-tool-surface.md](archive/mcp-tool-surface.md).
@@ -181,7 +181,8 @@ and `mars-mcp fetch-data` installs checksum-pinned optional bundles.
 It does not claim that every remote provider workflow is continuously tested,
 that preserved upstream behavior is scientifically correct, or that the
 benchmark is a model-independent leaderboard. Those limits are intentional,
-visible, and documented alongside the corresponding code and evidence.
+visible, and documented alongside the corresponding code and evidence;
+[limitations.md](limitations.md) lists every known limitation in one place.
 
 ## Further reading
 
@@ -193,3 +194,4 @@ visible, and documented alongside the corresponding code and evidence.
 | Folder and tool inventory | [repository-folders.md](repository-folders.md) |
 | Pulsar pipeline contract | [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md) |
 | Benchmark design, evidence, and limits | [benchmarking/README.md](benchmarking/README.md) |
+| Known limitations | [limitations.md](limitations.md) |

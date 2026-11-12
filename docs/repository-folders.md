@@ -286,8 +286,9 @@ Network.
 `tools` and `algorithms` stay top-level packages for now. They are generic
 enough that another installed project's `tools` package can collide with them,
 and moving them under one namespace is the durable fix. That move touches
-every import, test and extraction marker, so it is a change of its own (ARC-02
-in the master continuation plan). Until then no new top-level package is
+every import, test and extraction marker, so it is a change of its own
+(ARC-02; [M6 scope decisions](analysis/m6-scope-decisions.md) §2 records
+when the collision breaks a Python caller). Until then no new top-level package is
 added (`tests/test_rebrand_guard.py`), and a namespace choice must not be
 `mars`, for the reason above.
 
@@ -357,13 +358,15 @@ Important files:
   and a distance-aware velocity-dispersion floor -- the ellipse's *shape*
   alone doesn't help without that, since a circle and a fixed-radius ellipse
   reject the same points).
-- `isochrones.py`: the one module here with its own network call -- fetches
-  PARSEC isochrones from stev.oapd.inaf.it directly, since no existing tool
-  wraps that service.
+- `isochrones.py`: fits distance, E(B-V) and age against the
+  operator-installed local Girardi grid. It downloads nothing.
 
-`algorithms/hrdiagram_py/` never imports `tools.*`; all network I/O besides
-the PARSEC fetch above (Gaia DR3, cluster-literature lookups) lives one layer
-up in `tools/hr_diagram.py`, via `tools.vizier.search_vizier`.
+`algorithms/hrdiagram_py/` opens no network connection; all network I/O
+(Gaia DR3, cluster-literature lookups) lives one layer up in
+`tools/hr_diagram.py`, via `tools.vizier.search_vizier`. Its one import from
+`tools` is `tools.config`, which `isochrones.py` and `local_grid.py` read for
+`ISOCHRONE_DIR`, the grid location. That setting is read when MARS is first
+imported ([M6 scope decisions](analysis/m6-scope-decisions.md) §4).
 
 ## `algorithms/radio/`
 

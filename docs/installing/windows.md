@@ -8,6 +8,7 @@ x64 build of Python 3.13, under Windows' built-in x64 emulation: `sep` and
 themselves; nothing extra is needed. x64 Windows is no longer tested. For
 Claude Code, Cursor, VS Code or a hand-written config, see
 [`../installing.md`](../installing.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../limitations.md).
 
 Verified on Windows 11 ARM64 on 2026-10-27 through the routes' own launch
 command: a first start from nothing in 86 s (1.7 GB of Pythons and

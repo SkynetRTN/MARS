@@ -197,3 +197,4 @@ the same wheels as the Claude Desktop extension, and the same limits apply.
 `numba` and `llvmlite` have no Intel Mac wheels. Several dependencies have
 none for Windows on ARM, so there the launcher runs MARS on the x64 Python
 under Windows' emulation; x64 Windows is no longer tested.
+What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/limitations.md).

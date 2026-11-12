@@ -112,3 +112,4 @@ emulation. Supported: Apple Silicon Macs (verified in Claude Desktop by the
 maintainer, 2026-10-23) and Windows on ARM (the launch verified on Windows 11
 ARM64, 2026-10-27). x64 Windows is no longer tested. Step-by-step installs:
 [macOS](../../docs/installing/macos.md), [Windows](../../docs/installing/windows.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/limitations.md).

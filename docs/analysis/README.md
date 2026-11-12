@@ -34,6 +34,8 @@ Current disposition and scheduling for all known continuing work are in the
 | [m5-main-integration-review.md](m5-main-integration-review.md) | Whole-M5 review against current main (2026-11-09), followed by conflict/test integration corrections preserving M4 rendering, measured M5 uncertainties and remaining release questions. |
 | [obs-report.md](obs-report.md) | External Skynet observation/scheduler/API snapshot (2026-09-24), moved from `working/`. Source paths leave this standalone repository; EXT-SKY-01–12 require pinned upstream revalidation before implementation. |
 | [mcp-desktop-hosts.md](mcp-desktop-hosts.md) | PR #97 desktop-host proposal and vendor-source snapshot (2026-10-01), reconciled into master §9 as D0–D4. MCPB/config-helper decisions require actual macOS/Windows/app evidence; browser support remains parked. |
+| [m6-scope-decisions.md](m6-scope-decisions.md) | M6 scope investigation (2026-11-04): import cost per tool group, package-name shadowing under a wheel install, base-dependency sizes, the HR grid setting read at import, and the deferred capability decisions with their revisit conditions. |
+| [m6-release-evidence.md](m6-release-evidence.md) | M6 release evidence (2026-11-10): the HR fit's track-joining rule measured on M67 and made a fit setting, and the checks run for the release. |
 
 ## Related
 

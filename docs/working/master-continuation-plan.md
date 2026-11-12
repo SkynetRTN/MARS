@@ -1080,19 +1080,92 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
 
 ## M6: record the release decision and its limits
 
-- [ ] **Scope decisions.** Eager domain imports, generic package-name
+- [x] **Scope decisions.** Eager domain imports, generic package-name
   collisions, heavy base dependencies and HR code's dependence on application
   configuration need a failing supported use case before becoming release
   requirements. Output schemas, new transports, local catalog backends and
   new timing capabilities require separate decisions. Browser hosting remains
   deferred. The unpinned external Skynet review does not establish MARS bugs
   and is not a prerequisite for this release.
+  *Investigated 2026-11-04 against `main` at `193d117`, on
+  `docs/m6-release-decision`.* Only the package names have a failing
+  supported use case. Under a wheel install, a Python caller whose project
+  has its own `tools` or `algorithms` package, or a `tools.py`, cannot import
+  MARS. The `mars`, `mars-mcp` and `mars-bench` commands are unaffected, and
+  an editable checkout hides it. Eager imports cost every `--tools` group
+  1.6 s and 280 MB warm, within M4's measured host startup. The console and
+  provider packages are 14 MB of a 664 MB install and are never imported by
+  the server. A Python session that sets `MARS_ISOCHRONE_DIR` after importing
+  MARS gets an error naming that variable; no result is wrong.
+  *Decided 2026-11-04 by the maintainer:* all four limits are retained, and
+  none is a release requirement. MARS runs over MCP or in its own virtual
+  environment, and no namespace move is scheduled. The separate decisions,
+  and the pre-rewrite deferrals the plan no longer names, are kept as
+  recorded with their revisit conditions. See
+  [the investigation and decisions](../analysis/m6-scope-decisions.md).
 - [ ] **Release evidence.** Record the final merged revision and outstanding
   user-visible limitations. Run supported Python suites, installed-wheel
   source/data/skill/protocol checks, native runtime checks and security/workflow
   jobs; identify skipped external checks. Keep benchmark claims within the
   tested corpus and disclose provider-dialect and corpus-selection biases.
   Formal review is not required by the existing maintainer decision.
+  *Benchmark claims, 2026-11-04 (BEN-02):* `results.md`'s *Limits* now
+  states both biases. They had been dropped in the 2026-09-14 rewrite, while
+  the benchmarking README and `harness.md` still cited them there. Claude
+  alone received `json_schema` and both Qwen models `openai_function`, so
+  dialect is confounded with provider. The corpus keys were corrected while
+  watching earlier Qwen and Sonnet runs. The README's "three of four
+  backends" and "ranks first" wording is corrected, and `harness.md`'s
+  archive note marks the correction inline. No benchmark claim appears
+  outside `docs/benchmarking/`.
+  *Limitations, 2026-11-04:* the user-visible limitations M2–M4 retained and
+  M6 decided are listed in [Known limitations](../limitations.md), each with
+  a link to its details. The README (the PyPI page), `installing.md`, the
+  three platform guides, both installer READMEs, the docs map and the
+  technical summary link to it. `installing.md` now also states the
+  console's stop keys, approvals, resumed sessions, streaming and macOS
+  terminal, the Python package-name and import-time-settings conditions, and
+  the ADS move to SciX. Science limits stay where users meet them, as result
+  warnings that the skill teaches. *Updated 2026-11-10* with the limits M5
+  retained: partial index sets, the unverified UCAC4 reader, the photometric
+  error model, catalog identity and Landolt U errors, prefolded pulsar files,
+  table reuse, and the HR fit's missing uncertainty and joining rule.
+  *HR track-joining rule (handed over by M5), measured 2026-11-10:* on M67,
+  any threshold from 0.75 mag up, including joining every point, fits log age
+  9.55, 0.860 kpc and E(B−V) 0.044. The shipped 0.5 mag fits 9.60, 0.852 kpc
+  and 0.035, because it leaves stretches of the faint main sequence, which
+  the grid samples every 0.50–0.60 mag, unjoined
+  ([the measurement](../analysis/m6-release-evidence.md#1-the-hr-fits-track-joining-rule)).
+  *Disposition (maintainer, 2026-11-10):* HR fits are sensitive and hard to
+  do, so their settings must be adjustable, by the agent in its tool-call
+  loop, to bring a fit as close to the catalog values as it can. The
+  threshold becomes the `track_max_gap_mag` setting of
+  `fit_and_compare_hr_diagram`, default 0.5 mag, so a fit at the defaults is
+  unchanged, and each result reports its `fit_settings`. That change is
+  `feature/hr-fit-track-gap` (`28be2e6`, from `main`), and merges before
+  this branch.
+  *External checks (maintainer decision, 2026-11-04):* not run for this
+  release, and recorded as skipped. They are the `network` live-service
+  tests, the `model_api` live-provider tests, and the post-cutover rerun of
+  the live ADS tests. Codex in the ChatGPT app on a Mac stays untested.
+  *Checks, 2026-11-10, after M5 merged (`4ec3e9c`):* since then this branch
+  changes Markdown and one `pyproject.toml` URL only. At `4ec3e9c`, CI
+  passed the 3.12 and 3.13 suites, packaging with the installed-wheel
+  self-test, native containment on `macos-latest` and `windows-11-arm`, the
+  secret scan and workflow safety (run 42713731317 and PR #136). On this host,
+  the candidate `e3456d9` passed the full locked 3.13 suite with `[mcp]`
+  (**5,178 passed, 96 skipped**, no failures) and the MCP tests without the
+  SDK (241 passed). With the host's solver data, the native plate-solving
+  tests passed (257). A clean-worktree wheel and sdist passed
+  `twine check --strict` and `check_dist.py`, and a clean install passed
+  `mars-mcp self-test`; the skill it installs matches `skills/mars-tools/`.
+  Of the 96 skips, 81 are the external checks above; none is a failure.
+  *Before release:* record the final merged revision when this branch
+  merges; get CI on its pull request; run the release dry run or the tag run
+  at that revision, since the last dry run (2026-10-28) predates M5; bump the
+  version from `0.1.0rc6`; and merge the `track_max_gap_mag` change first,
+  since it changes code that the checks above did not cover. See
+  [the release evidence](../analysis/m6-release-evidence.md).
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once
