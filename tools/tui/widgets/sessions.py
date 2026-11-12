@@ -303,7 +303,9 @@ def _validate_history_protocol(history: list[Message]) -> None:
         if message.role == "user":
             if not all(isinstance(block, TextBlock) for block in message.blocks):
                 raise ValueError("session manifest history has an invalid user message")
-            if index + 1 == len(history) or history[index + 1].role != "assistant":
+            # A reply interrupted before completion leaves the user's prompt
+            # last. The engine joins the next question onto that same message.
+            if index + 1 < len(history) and history[index + 1].role != "assistant":
                 raise ValueError("session manifest history has an invalid message order")
             index += 1
             continue

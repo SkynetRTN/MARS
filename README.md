@@ -22,9 +22,11 @@ the [Skynet Robotic Telescope Network](https://skynet.unc.edu/) at the
 University of North Carolina at Chapel Hill: Skynet itself, extracted
 directly into Python, and [Astromancer](https://astromancer.skynet.unc.edu/home),
 its light-curve, periodogram and star-cluster web application, ported from
-TypeScript. They are **extractions, not rewrites** — algorithms, constants,
-comments and known bugs are preserved, and the test suite checks bit-for-bit
-parity with recorded Skynet output rather than "fixing" it in transit.
+TypeScript. The extractions preserve upstream algorithms and recorded
+behavior, with documented corrections for verified defects. The test suite
+includes both upstream parity checks and independent correctness regressions;
+the [extraction record](https://github.com/SkynetRTN/MARS/blob/main/docs/extraction.md)
+identifies the differences.
 
 ## Quick Start
 
@@ -86,6 +88,7 @@ warnings. Every known limitation, with where it is detailed, is in
 
 ## Documentation
 
+- [`0.1.0` release notes](https://github.com/SkynetRTN/MARS/blob/main/docs/releases/0.1.0.md) — the first official stable release, its corrections and retained limitations.
 - [`docs/README.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/README.md) — the documentation map.
 - [`docs/installing.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md) — installing with no checkout, registering `mars-mcp`, data bundles.
 - [`docs/limitations.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/limitations.md) — what MARS does not do, or does only under a condition, with links to the details.

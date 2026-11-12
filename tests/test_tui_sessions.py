@@ -367,3 +367,62 @@ def test_history_from_manifest_still_rejects_a_result_message_that_answers_nothi
 
     with pytest.raises(ValueError, match="unpaired tool call"):
         history_from_manifest(manifest)
+
+
+def test_history_from_manifest_preserves_an_interrupted_follow_up_after_an_answer():
+    """An interrupted later question remains attached to the earlier conversation."""
+
+    history = history_from_manifest({
+        "user_message": "How far away is it?",
+        "turns": [],
+        "resumable": True,
+        "history": [
+            {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+            {"role": "assistant", "blocks": [{"type": "text", "text": "Andromeda."}]},
+            {"role": "user", "blocks": [{"type": "text", "text": "How far away is it?"}]},
+        ],
+    })
+
+    assert [message.role for message in history] == ["user", "assistant", "user"]
+    assert [message.blocks[0].text for message in history] == [
+        "Find M31.", "Andromeda.", "How far away is it?"
+    ]
+
+
+@pytest.mark.parametrize("roles", [
+    ["assistant"], ["user", "user"], ["user", "assistant", "assistant"],
+])
+def test_history_from_manifest_rejects_invalid_order_even_with_a_terminal_message(roles):
+    with pytest.raises(ValueError, match="invalid message order"):
+        history_from_manifest({
+            "user_message": "Find M31.", "turns": [], "resumable": True,
+            "history": [
+                {"role": role, "blocks": [{"type": "text", "text": "hello"}]}
+                for role in roles
+            ],
+        })
+
+
+def test_history_from_manifest_rejects_an_unsigned_reasoning_block():
+    with pytest.raises(ValueError, match="invalid history block"):
+        history_from_manifest({
+            "user_message": "Find M31.", "turns": [], "resumable": True,
+            "history": [
+                {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+                {"role": "assistant", "blocks": [{"type": "thinking", "text": "NED resolves this."}]},
+            ],
+        })
+
+
+def test_history_from_manifest_rejects_an_unanswered_tool_call_even_if_marked_resumable():
+    with pytest.raises(ValueError, match="unpaired tool call"):
+        history_from_manifest({
+            "user_message": "Find M31.", "turns": [], "resumable": True,
+            "history": [
+                {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+                {"role": "assistant", "blocks": [{
+                    "type": "tool_call", "call_id": "t1", "name": "search_ned",
+                    "arguments": {"name": "M31"},
+                }]},
+            ],
+        })

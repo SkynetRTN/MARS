@@ -1,9 +1,12 @@
 # MARS release closure gate
 
-Updated 2026-11-09 after integrating `main` at `193d117` into
-`feature/m5-geometry`. M0 through M4 are closed; M1–M3 merged through PRs
-#118/#124/#122/#123, and M4 through PRs #128–#135. These changes are absent
-from the published `0.1.0rc6`. The next release needs a new version.
+Updated 2026-11-12 for the first official stable release, **0.1.0**.
+M0 through M5 are closed; M1–M3 merged through PRs #118/#124/#122/#123,
+M4 through PRs #128–#135, and M5 through #136. HR setting PR #137 and M6
+PR #138 are merged at `5a07dd7`. The preparation branch corrects the four
+post-M6 review findings and changes the package version from `0.1.0rc6` to
+`0.1.0`; its checklist and validation are at the end of this document.
+The published package remains `0.1.0rc6` until publication completes.
 By maintainer decision (2026-10-26), publication follows completion of every
 gate with a manual step; install guides (`../installing/`) point at the latest
 release without naming a version. Final release evidence remains a separate
@@ -13,7 +16,7 @@ reviewed split is merged.
 M2 is merged and unpublished. Its detailed evidence below retains dated
 pre-merge history; historical "unmerged" statements do not describe current
 main. Live provider failures remain recorded below. M5's six squares are
-complete on the feature branch; current-main integration is validated below.
+complete and merged; current-main integration is validated below.
 PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
@@ -1171,3 +1174,80 @@ M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once
 unchecked work has recorded outcomes and final checks pass; the
 [release procedure](../releasing.md) owns publication.
+
+
+## Official 0.1.0 release preparation (2026-11-12)
+
+The maintainer requested correction of the post-M6 review findings and the
+first official release, **0.1.0**, rather than another prerelease. The reviewed
+baseline is `5a07dd7`; preparation is on `release/0.1.0`.
+
+**Goal:** correct all four reproduced defects and produce a validated stable
+release candidate. Publication remains the existing tag/TestPyPI/manual-PyPI flow.
+
+**Architecture:** preserve the public tool surface and scientific equations.
+Keep the source-parity check authoritative, accept the engine's supported
+interrupted history, enforce pinned bundle sizes during transfer, and select
+coordinate matching only when the relevant rows support that coordinate system.
+
+**Global constraints:** Python 3.12 and 3.13; no dependency upgrades or bundle
+content changes; existing external-test waivers and M6 scope decisions stand.
+Tests must reproduce each defect before its correction. Release claims must name
+the tested revision and distinguish local, CI, skipped and pending checks.
+
+**Review focus:** exact publishing checkout; interrupted nonstreaming and
+streaming requests; resumed oversized transfers; mixed sky/pixel catalog rows;
+stable-release version classification and packaged install behavior.
+
+### Task 1: publication source verification
+
+- [x] Reproduce the failure by executing the real wheel checker in the publishing
+  job's checkout layout, then correct that layout and require the same check in
+  the release dry run before any upload.
+- [x] Cover rejection of stale modules and missing licence as well as acceptance
+  of a complete wheel. Keep write/token permissions confined to publishing.
+- [x] Files: `.github/workflows/release.yml`, `tests/test_check_dist.py` and
+  narrowly necessary workflow regression tests. Validate with the focused tests
+  and workflow syntax/security checks.
+
+### Task 2: bounded bundle transfers
+
+- [x] Add failing behavioral tests for oversized fresh and resumed HTTP
+  responses, then enforce the pinned byte ceiling before writing a chunk.
+- [x] Preserve exact-size success, partial-transfer resume and checksum checks.
+- [x] Files: `tools/mcp/bundles.py`, `tests/test_mcp_bundles.py`. Validate with
+  `pytest tests/test_mcp_bundles.py`.
+
+### Task 3: interrupted-session recovery
+
+- [x] Add a failing engine-manifest round trip and immediate console follow-up
+  after interruption before an answer, then accept the supported trailing-user
+  history without accepting incomplete tool-call checkpoints.
+- [x] Preserve normal ordering and signed reasoning/tool-result validation.
+- [x] Files: `tools/tui/widgets/sessions.py`, relevant session/engine/TUI tests;
+  change `tools/tui/app.py` only if necessary. Validate focused session, engine
+  and console tests outside the sandbox where process tests require it.
+
+### Task 4: mixed catalog positions
+
+- [x] Add the failing WCS-free three-reference calibration with sky coordinates
+  on every row and optional pixels on one row; preserve all usable sky matches.
+- [x] Cover pixel-only, sky-only, mixed and file-scoped catalogs with explicit
+  pixel/angular tolerances, preserving WCS-backed behavior.
+- [x] Files: `algorithms/fieldcal/field_cal.py` and its focused matching tests.
+  Validate the affected calibration suites.
+
+### Integration and release acceptance
+
+- [ ] Review each fix and the complete change; resolve material findings.
+- [x] Set `pyproject.toml` and `uv.lock` to **0.1.0**, align the development-status
+  classifier and add substantive release notes linked by the publication flow.
+- [ ] Run the full locked suite with MCP, the SDK-free subset, clean distribution
+  builds/strict metadata/source/data/skill checks and installed-wheel self-tests.
+  Exercise native solver prerequisites where available; retain explicit skips.
+- [ ] Obtain current supported-Python/platform CI, security/workflow checks and a
+  Release dry run on the prepared candidate; record actual results below and in
+  `docs/analysis/m6-release-evidence.md`. Do not mark remote or final merged
+  checks complete before they have run.
+- [ ] Finish the release change in a reviewable branch/PR with exact remaining
+  publication steps. Tagging/uploading is the existing release procedure.

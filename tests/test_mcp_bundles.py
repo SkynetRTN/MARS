@@ -238,6 +238,77 @@ def test_a_server_that_ignores_range_restarts_the_download(tmp_path, published):
     assert fetched
 
 
+def test_an_oversized_fresh_response_is_rejected_before_exceeding_the_pin(tmp_path):
+    part = tmp_path / "fresh.tar.part"
+    payload = b"x" * (3 * 1024 * 1024 + 200)
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, content=payload))
+    ) as client:
+        with pytest.raises(BundleError, match="exceeds pinned size 10"):
+            bundles._download("https://mirror.invalid/fresh", part, 10, client=client,
+                              progress=lambda done, total: None)
+
+    assert part.stat().st_size <= 10
+
+
+def test_an_oversized_resumed_response_keeps_only_the_existing_bounded_partial(tmp_path):
+    part = tmp_path / "resumed.tar.part"
+    part.write_bytes(b"12345678")
+
+    def serve(request):
+        assert request.headers["Range"] == "bytes=8-"
+        return httpx.Response(206, content=b"abc")
+
+    with httpx.Client(transport=httpx.MockTransport(serve)) as client:
+        with pytest.raises(BundleError, match="exceeds pinned size 10"):
+            bundles._download("https://mirror.invalid/resumed", part, 10, client=client,
+                              progress=lambda done, total: None)
+
+    assert part.read_bytes() == b"12345678"
+
+
+def test_a_fresh_multichunk_response_stops_at_the_pinned_size(tmp_path, monkeypatch):
+    class SplitBody(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b"abcdef"
+            yield b"ghijkl"
+
+    monkeypatch.setattr(bundles, "_CHUNK", 6)
+    part = tmp_path / "multichunk.tar.part"
+    progress = []
+    with httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=SplitBody())
+        )
+    ) as client:
+        with pytest.raises(BundleError, match="exceeds pinned size 10"):
+            bundles._download("https://mirror.invalid/multichunk", part, 10,
+                              client=client, progress=lambda done, total: progress.append(
+                                  (done, total)
+                              ))
+
+    assert part.read_bytes() == b"abcdef"
+    assert progress == [(6, 10)]
+
+
+def test_an_oversized_200_that_ignores_range_does_not_keep_stale_partial_data(tmp_path):
+    part = tmp_path / "ignored-range.tar.part"
+    part.write_bytes(b"stale123")
+    payload = b"x" * 11
+
+    def serve(request):
+        assert request.headers["Range"] == "bytes=8-"
+        return httpx.Response(200, content=payload)
+
+    with httpx.Client(transport=httpx.MockTransport(serve)) as client:
+        with pytest.raises(BundleError, match="exceeds pinned size 10"):
+            bundles._download("https://mirror.invalid/ignored-range", part, 10,
+                              client=client, progress=lambda done, total: None)
+
+    assert part.stat().st_size <= 10
+    assert not part.read_bytes().startswith(b"stale")
+
+
 def test_a_bundle_is_never_written_into_the_package(tmp_path, published):
     release, spec = published
     for inside in (config.BUNDLED_DATA_DIR / "bundles", Path(bundles.__file__).parent / "x"):

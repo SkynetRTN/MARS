@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skynet-mars"
-version = "0.1.0rc6"
+version = "0.1.0"
 description = "MARS, the MCP Astronomy Research Suite: astronomy tools for LLM agents and Python, built on algorithms extracted from Skynet."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,7 +19,7 @@ authors = [{ name = "James Atkisson", email = "james@atkisson.net" }]
 maintainers = [{ name = "SkynetRTN" }]
 keywords = ["astronomy", "mcp", "llm", "agents", "photometry", "pulsar", "skynet"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",

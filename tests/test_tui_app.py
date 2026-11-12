@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from textual.widgets import Input, OptionList, Static
 
 from tests.llm_fakes import StubBackend
@@ -544,6 +545,76 @@ def test_resume_command_reports_an_unknown_session_without_starting_the_engine(
             assert app.engine_starts == 0
 
     _run(scenario())
+
+
+@pytest.mark.parametrize("stream_partial", [False, True])
+@pytest.mark.parametrize("resume_saved", [False, True])
+def test_ctrl_c_before_an_answer_preserves_the_prompt_for_the_next_question(
+    monkeypatch, tmp_path, stream_partial, resume_saved
+):
+    """Both immediate follow-up and explicit resume must retain a stopped prompt."""
+
+    root = tmp_path / "artifacts"
+    monkeypatch.setattr(config, "ARTIFACT_DIR", root)
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+    entered, release, finished = (threading.Event() for _ in range(3))
+
+    class BlockingFirstReply(StubBackend):
+        def complete(self, *, on_text=None, **kwargs):
+            if not entered.is_set():
+                try:
+                    if stream_partial and on_text is not None:
+                        on_text("An unfinished answer")
+                    entered.set()
+                    assert release.wait(5), "test did not release the model request"
+                    return ModelResponse(stop_reason="end_turn", text="Abandoned answer")
+                finally:
+                    finished.set()
+            return super().complete(on_text=on_text, **kwargs)
+
+    backend = BlockingFirstReply([
+        ModelResponse(stop_reason="end_turn", text="M31 is Andromeda.")
+    ])
+
+    async def scenario() -> None:
+        app = MARSApp(backend=backend)
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt", Input)
+            prompt.value = "Find M31."
+            await pilot.press("enter")
+            assert await asyncio.to_thread(entered.wait, 2), "request did not start"
+            worker = app._active_worker
+            await pilot.press("ctrl+c")
+            async with asyncio.timeout(2):
+                await worker.wait()
+                await pilot.pause()
+
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 2)
+            if resume_saved:
+                manifest_path, = root.rglob("session_manifest.json")
+                app.new_session(())
+                app.resume_session(manifest_path)
+                await pilot.pause()
+
+            prompt.value = "And M33?"
+            await pilot.press("enter")
+            worker = app._active_worker
+            async with asyncio.timeout(2):
+                if worker is not None:
+                    await worker.wait()
+                await pilot.pause()
+
+            sent = backend.calls[0]["messages"]
+            assert [message.role for message in sent] == ["user"]
+            assert [block.text for block in sent[0].blocks] == [
+                "Find M31.", "And M33?"
+            ]
+
+    try:
+        _run(scenario())
+    finally:
+        release.set()
 
 
 def test_next_prompt_after_resume_sends_loaded_history_to_the_engine(

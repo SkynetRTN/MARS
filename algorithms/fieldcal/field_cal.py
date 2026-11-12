@@ -249,25 +249,82 @@ def _match_detected_sources(
         return all(value is not None and np.isfinite(value)
                    for value in (getattr(source, x_name, None), getattr(source, y_name, None)))
 
-    # A WCS always means detector-pixel distance. Without one, retain supplied
-    # pixel coordinates when both lists have them; sky-only matching has its own
-    # explicit angular contract and never reinterprets source_match_tol.
-    have_pixels = (all(has_position(s, "x", "y") for s in detected_sources)
-                   and any(has_position(s, "x", "y") for s in catalog_sources))
-    use_angular = wcs is None and not have_pixels
-    if use_angular:
-        if not all(has_position(s, "ra_hours", "dec_degs") for s in detected_sources):
-            raise ValueError("Missing WCS or shared pixel/sky coordinates for catalog source matching")
-        if (source_match_tol_arcsec is None or not np.isfinite(source_match_tol_arcsec)
-                or source_match_tol_arcsec <= 0):
-            raise ValueError("Positive source_match_tol_arcsec required for sky-only matching without WCS")
-        # Unit-vector chord distance is monotonic in spherical separation,
-        # including longitude seams and poles. A sphere's maximum angle is pi.
-        match_tol = 2 * np.sin(np.deg2rad(min(source_match_tol_arcsec / 3600, 180)) / 2)
-    else:
-        if source_match_tol is None or not np.isfinite(source_match_tol) or source_match_tol <= 0:
-            raise ValueError("Positive catalog source match tolerance expected")
-        match_tol = source_match_tol
+    detected_sources_for_file: dict[int | None, list[SourceExtractionData]] = {}
+    for source in detected_sources:
+        file_id = getattr(source, "file_id", None)
+        detected_sources_for_file.setdefault(file_id, []).append(source)
+
+    # A WCS always means detector-pixel distance. Without one, optional pixels
+    # must not hide usable sky references, nor may sky rows hide pixel-only
+    # references. Sky pairs use angular distance; pixel fallback requires at
+    # least one side without sky coordinates. Each group has its own tolerance.
+    catalog_sources_for_group: dict[tuple[int | None, str], list[CatalogSource]] = {}
+    detected_sources_for_group: dict[tuple[int | None, str], list[SourceExtractionData]] = {}
+    groups_for_file: dict[int | None, list[tuple[int | None, str]]] = {}
+    for file_id, detections in detected_sources_for_file.items():
+        catalog = catalog_sources_for_file[file_id]
+        if not catalog:
+            continue
+        have_pixels = (all(has_position(s, "x", "y") for s in detections)
+                       and any(has_position(s, "x", "y") for s in catalog))
+        sky_detections = [s for s in detections if has_position(s, "ra_hours", "dec_degs")]
+        sky_only_rows = any(has_position(s, "ra_hours", "dec_degs")
+                            and not has_position(s, "x", "y") for s in catalog)
+        use_angular = wcs is None and (not have_pixels or (bool(sky_detections) and sky_only_rows))
+        group = (file_id, "angular" if use_angular else "pixel")
+        groups_for_file[file_id] = [group]
+        catalog_sources_for_group[group] = catalog
+        detected_sources_for_group[group] = detections
+        if use_angular:
+            if sky_detections:
+                detected_sources_for_group[group] = sky_detections
+            # These rows cannot use sky distance, but detections with measured
+            # pixels can still match them directly without a coordinate transform.
+            pixel_only = [s for s in catalog if has_position(s, "x", "y")
+                          and not has_position(s, "ra_hours", "dec_degs")]
+            pixel_detections = [s for s in detections if has_position(s, "x", "y")]
+            if pixel_only and pixel_detections:
+                pixel_group = (file_id, "pixel")
+                groups_for_file[file_id].append(pixel_group)
+                catalog_sources_for_group[pixel_group] = pixel_only
+                detected_sources_for_group[pixel_group] = pixel_detections
+                pixel_ids = {id(s) for s in pixel_only}
+                catalog_sources_for_group[group] = [s for s in catalog if id(s) not in pixel_ids]
+                detected_sources_for_group[group] = sky_detections
+                if not catalog_sources_for_group[group] or not detected_sources_for_group[group]:
+                    del catalog_sources_for_group[group]
+                    del detected_sources_for_group[group]
+                    groups_for_file[file_id].remove(group)
+            # A dual-coordinate reference also remains available to detections
+            # having only pixels. Keep these edges separate from sky pairs so
+            # optional centroids cannot contradict usable angular positions.
+            dual_rows = [s for s in catalog if has_position(s, "x", "y")
+                         and has_position(s, "ra_hours", "dec_degs")]
+            pixel_only_detections = [s for s in pixel_detections
+                                     if not has_position(s, "ra_hours", "dec_degs")]
+            if dual_rows and pixel_only_detections:
+                fallback_group = (file_id, "pixel_fallback")
+                groups_for_file[file_id].append(fallback_group)
+                catalog_sources_for_group[fallback_group] = dual_rows
+                detected_sources_for_group[fallback_group] = pixel_only_detections
+
+    match_tol_for_group: dict[tuple[int | None, str], float] = {}
+    for group, detections in detected_sources_for_group.items():
+        use_angular = group[1] == "angular"
+        if use_angular:
+            if not all(has_position(s, "ra_hours", "dec_degs") for s in detections):
+                raise ValueError("Missing WCS or shared pixel/sky coordinates for catalog source matching")
+            if (source_match_tol_arcsec is None or not np.isfinite(source_match_tol_arcsec)
+                    or source_match_tol_arcsec <= 0):
+                raise ValueError("Positive source_match_tol_arcsec required for sky-only matching without WCS")
+            # Unit-vector chord distance is monotonic in spherical separation,
+            # including longitude seams and poles. A sphere's maximum angle is pi.
+            match_tol_for_group[group] = 2 * np.sin(
+                np.deg2rad(min(source_match_tol_arcsec / 3600, 180)) / 2)
+        else:
+            if source_match_tol is None or not np.isfinite(source_match_tol) or source_match_tol <= 0:
+                raise ValueError("Positive catalog source match tolerance expected")
+            match_tol_for_group[group] = source_match_tol
 
     def sky_vectors(ra, dec):
         longitude, latitude = np.deg2rad(ra), np.deg2rad(dec)
@@ -278,14 +335,12 @@ def _match_detected_sources(
     # ---- build catalog match coordinates ----------------------------------------
     # Both angular and pixel paths need the epoch-corrected catalog RA/Dec.
     # For the pixel path they are additionally projected through the WCS.
-    catalog_source_coord_for_file: dict[int | None, np.ndarray] = {}
-    catalog_source_kdtree_for_file: dict[int | None, cKDTree | None] = {}
-    catalog_index_for_file: dict[int | None, np.ndarray] = {}
+    catalog_source_coord_for_group: dict[tuple[int | None, str], np.ndarray] = {}
+    catalog_source_kdtree_for_group: dict[tuple[int | None, str], cKDTree | None] = {}
+    catalog_index_for_group: dict[tuple[int | None, str], np.ndarray] = {}
 
-    for file_id, catalog_source_list in catalog_sources_for_file.items():
-        if not catalog_source_list:
-            catalog_source_kdtree_for_file[file_id] = None
-            continue
+    for group, catalog_source_list in catalog_sources_for_group.items():
+        use_angular = group[1] == "angular"
         catalog_xy_data = []
         catalog_pm_epochs = []
         for source in catalog_source_list:
@@ -373,24 +428,17 @@ def _match_detected_sources(
                 int((~positioned).sum()), len(positioned),
                 "" if use_angular else " (in pixel mode, check the WCS projection)",
             )
-        catalog_index_for_file[file_id] = np.flatnonzero(positioned)
+        catalog_index_for_group[group] = np.flatnonzero(positioned)
         coords = coords[positioned]
-        catalog_source_coord_for_file[file_id] = coords
-        catalog_source_kdtree_for_file[file_id] = cKDTree(coords) if len(coords) else None
+        catalog_source_coord_for_group[group] = coords
+        catalog_source_kdtree_for_group[group] = cKDTree(coords) if len(coords) else None
 
     # ---- build detected-source match coordinates --------------------------------
-    detected_sources_for_file: dict[int | None, list[SourceExtractionData]] = {}
-    detected_source_file_idx: dict[int, tuple[int | None, int]] = {}
-    for source in detected_sources:
-        file_id = getattr(source, "file_id", None)
-        idx = len(detected_sources_for_file.get(file_id, []))
-        detected_sources_for_file.setdefault(file_id, []).append(source)
-        detected_source_file_idx[id(source)] = (file_id, idx)
-
-    detected_source_coord_for_file: dict[int | None, np.ndarray] = {}
-    detected_source_kdtree_for_file: dict[int | None, cKDTree] = {}
-    for file_id, sources in detected_sources_for_file.items():
-        if use_angular:
+    detected_source_coord_for_group: dict[tuple[int | None, str], np.ndarray] = {}
+    detected_source_kdtree_for_group: dict[tuple[int | None, str], cKDTree] = {}
+    detected_source_idx_for_group: dict[tuple[tuple[int | None, str], int], int] = {}
+    for group, sources in detected_sources_for_group.items():
+        if group[1] == "angular":
             det_ra_deg = np.array([float(getattr(s, "ra_hours", 0)) * 15.0 for s in sources])
             det_dec_deg = np.array([float(getattr(s, "dec_degs", 0)) for s in sources])
             coords = sky_vectors(det_ra_deg, det_dec_deg)
@@ -406,27 +454,63 @@ def _match_detected_sources(
                     det_ra[need_projection], det_dec[need_projection], 1, quiet=True))
             if not np.isfinite(coords).all():
                 raise ValueError("Detected sources need usable detector positions for pixel matching")
-        detected_source_coord_for_file[file_id] = coords
-        detected_source_kdtree_for_file[file_id] = cKDTree(coords)
+        detected_source_coord_for_group[group] = coords
+        detected_source_kdtree_for_group[group] = cKDTree(coords)
+        for idx, source in enumerate(sources):
+            detected_source_idx_for_group[group, id(source)] = idx
 
     # ---- mutual nearest-neighbour matching --------------------------------------
+    candidates_for_detection: dict[int, list[tuple[CatalogSource, bool, np.ndarray]]] = {}
+    detections_for_reference: dict[tuple[int | None, int], dict[int, SourceExtractionData]] = {}
+    for source in detected_sources:
+        file_id = getattr(source, "file_id", None)
+        candidates: list[tuple[CatalogSource, bool, np.ndarray]] = []
+        candidate_references: set[int] = set()
+        for group in groups_for_file.get(file_id, []):
+            tree = catalog_source_kdtree_for_group[group]
+            src_idx = detected_source_idx_for_group.get((group, id(source)))
+            if tree is None or src_idx is None:
+                continue
+            match_tol = match_tol_for_group[group]
+            det_coord = detected_source_coord_for_group[group][src_idx]
+            i = tree.query(det_coord, distance_upper_bound=match_tol)[1]
+            if i >= tree.n:
+                continue
+            catalog_source_list = catalog_sources_for_group[group]
+            catalog_source = catalog_source_list[catalog_index_for_group[group][i]]
+            cat_coord = catalog_source_coord_for_group[group][i]
+            detected_source_list = detected_sources_for_group[group]
+            reverse_tree = detected_source_kdtree_for_group[group]
+            j = reverse_tree.query(cat_coord, distance_upper_bound=match_tol)[1]
+            if (j < len(detected_source_list) and detected_source_list[j] is source
+                    and id(catalog_source) not in candidate_references):
+                candidate_references.add(id(catalog_source))
+                candidates.append((catalog_source, group[1] == "angular", det_coord))
+                detections_for_reference.setdefault((file_id, id(catalog_source)), {})[id(source)] = source
+        candidates_for_detection[id(source)] = candidates
+
     matched_sources: list[CatalogSource] = []
     for source in detected_sources:
-        file_id, src_idx = detected_source_file_idx[id(source)]
-        tree = catalog_source_kdtree_for_file.get(file_id)
-        if tree is None:
+        file_id = getattr(source, "file_id", None)
+        candidates = candidates_for_detection[id(source)]
+        if not candidates:
             continue
-        catalog_source_list = catalog_sources_for_file[file_id]
-        det_coord = detected_source_coord_for_file[file_id][src_idx]
-        i = tree.query(det_coord, distance_upper_bound=match_tol)[1]
-        if i >= tree.n:
+        if len(candidates) > 1:
+            # Distances in unrelated units cannot identify a sound winner.
+            # Withhold this observation instead of counting it twice or letting
+            # catalog order silently choose its reference magnitude.
+            logger.warning(
+                "Skipping ambiguous detected source %s in file %s: competing pixel/sky references %s",
+                source.id, file_id, ", ".join(str(row.id) for row, _, _ in candidates),
+            )
             continue
-        catalog_source = catalog_source_list[catalog_index_for_file[file_id][i]]
-        cat_coord = catalog_source_coord_for_file[file_id][i]
-        detected_source_list = detected_sources_for_file[file_id]
-        reverse_tree = detected_source_kdtree_for_file[file_id]
-        j = reverse_tree.query(cat_coord, distance_upper_bound=match_tol)[1]
-        if j >= len(detected_source_list) or detected_source_list[j] is not source:
+        catalog_source, use_angular, det_coord = candidates[0]
+        claimants = detections_for_reference[file_id, id(catalog_source)]
+        if len(claimants) > 1:
+            logger.warning(
+                "Skipping ambiguous reference %s in file %s: competing pixel/sky detections %s",
+                catalog_source.id, file_id, ", ".join(str(s.id) for s in claimants.values()),
+            )
             continue
 
         source_map = source.model_dump(
@@ -484,7 +568,7 @@ def _match_detected_sources(
 
     if not matched_sources:
         listed = sum(len(rows) for rows in catalog_sources_for_file.values())
-        positioned_total = sum(len(index) for index in catalog_index_for_file.values())
+        positioned_total = sum(len(index) for index in catalog_index_for_group.values())
         if listed and not positioned_total:
             raise RuntimeError("No catalog source has a usable position to match against")
         raise RuntimeError("Could not match any detected sources to catalog sources")

@@ -8,6 +8,12 @@ limitations are in [Known limitations](../limitations.md).
 
 Host: Fedora 44, Linux aarch64, 8 cores, Python 3.13 (locked environment).
 
+**Current status, 2026-11-12:** PR #137 merged before PR #138; their merged
+baseline is `5a07dd7ab532cb8d97d3a90fc3123d378518b387`. The maintainer has
+selected **0.1.0 as the first official stable release**. Preparation and the
+post-M6 review corrections are recorded in §5; earlier branch/check records
+below remain dated evidence.
+
 ## 1. The HR fit's track-joining rule
 
 M5 handed this to M6 as a release question "requiring measurement or an
@@ -142,3 +148,64 @@ types that carry no errors.
 
 The outstanding user-visible limitations are listed in
 [Known limitations](../limitations.md).
+
+
+## 5. Official 0.1.0 preparation (2026-11-12)
+
+The post-M6 review identified a publishing blocker and three P2 defects. All
+four are corrected on `release/0.1.0`; the master plan owns their
+completion checklist. This section records actual validation, not publication.
+
+- **Publication:** the final source-parity/licence checker previously ran in a
+  sparse checkout containing only the script, so a valid wheel failed with
+  228 stale-module errors. The shared read-only `verify-publication` job now
+  checks out both source packages and runs on dry runs and tags before any
+  GitHub or index upload. The token-bearing index jobs execute no repository
+  source. Workflow-derived behavioral tests exercise this exact checkout and
+  reject missing, stale or byte-different modules and an absent licence.
+- **Console:** interrupted model replies leave a supported trailing-user
+  history. The session reader now accepts it; genuine engine and console
+  tests retain the question through immediate follow-up and saved reopening,
+  including partially streamed replies. Invalid tool checkpoints remain rejected.
+- **Bundles:** streamed HTTP data is rejected before a chunk would cross the
+  pinned size. Tests cover fresh, resumed, ignored-Range and cumulative-chunk
+  overruns while retaining existing successful fetch/checksum controls.
+- **Calibration:** WCS-free mixed input uses separate angular, pixel-only
+  reference and pixel-only detection fallback groups. Valid sky and pixel
+  associations coexist; conflicting associations are withheld with diagnostics
+  and uniqueness is enforced for both references and detections within each
+  file. The 33 dedicated cases cover coordinate combinations, both conflict
+  directions, tolerances and proper motion. WCS-backed matching and fitting
+  equations are unchanged. Independent review found and verified corrections
+  for two intermediate edge cases; its final scoped review is clean.
+- **Metadata and notes:** project and lockfile now name `0.1.0`, with the
+  Production/Stable classifier; no dependency version changed. Versioned notes
+  are `docs/releases/0.1.0.md`, required by the build and carried as a separate
+  artifact for GitHub's `--notes-file`, outside the distributions sent to indexes.
+  Installation/summary documentation no longer describes every release as a
+  prerelease. Public PyPI and TestPyPI version endpoints both returned 404 for
+  `skynet-mars/0.1.0` on 2026-11-12, before publication.
+
+| Check on the preparation branch | Actual result |
+|---|---|
+| SDK-free CI subset in a separate locked environment | 245 passed, 21 expected skips |
+| Publication/checker behavioral tests | 38 passed |
+| Bundle tests, including cumulative transfer bounds | 53 passed |
+| Session/engine/console focused tests | 167 passed |
+| Calibration and matching focused suites | 367 passed; independent review clean |
+| Workflow lint with pinned actionlint and Zizmor 1.30.1 | passed locally; Zizmor's online audits require CI |
+| Lock consistency, compilation, generated skill and whitespace | passed |
+| Full locked Python 3.13 suite on frozen final code | pending |
+| Clean distribution build, strict metadata and installed-wheel checks | pending |
+| Candidate supported-Python/platform CI and security checks | pending |
+| Candidate Release dry run | pending |
+
+The initial local review's sandbox blocked an unconnected socket check and
+stalled an MCP protocol call. Both passed outside the sandbox. Official
+candidate integration checks run outside that restriction; an interrupted
+exploratory full run is not counted as passing evidence. The external-test
+waivers in §3 remain unchanged.
+
+The exact final candidate revision and run URLs must be recorded when their
+checks complete. The final merged revision, tag `v0.1.0`, TestPyPI verification
+and manual PyPI approval remain publication steps in `docs/releasing.md`.

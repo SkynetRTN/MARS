@@ -1132,6 +1132,61 @@ def test_an_interrupted_conversation_takes_the_next_question_in_the_same_turn():
     assert [block.text for block in sent[0].blocks] == ["Find M31.", "And M33?"]
 
 
+@pytest.mark.parametrize("stream_partial", [False, True])
+def test_interrupted_model_manifest_round_trips_into_a_follow_up(stream_partial):
+    """Rejecting a terminal user message loses the actual interrupted prompt."""
+
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from tools.tui.widgets.sessions import history_from_manifest
+
+    entered, release, finished = (threading.Event() for _ in range(3))
+    interrupt = threading.Event()
+
+    class BlockingBackend(StubBackend):
+        def complete(self, *, on_text=None, **kwargs):
+            try:
+                if stream_partial and on_text is not None:
+                    on_text("An unfinished answer")
+                entered.set()
+                assert release.wait(5), "test did not release the model request"
+                return ModelResponse(stop_reason="end_turn", text="Abandoned answer")
+            finally:
+                finished.set()
+
+    backend = BlockingBackend([])
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            lambda: list(run_session(
+                "Find M31.", backend=backend, interrupt=interrupt,
+                tool_schemas=[], tool_functions={},
+            ))
+        )
+        try:
+            assert entered.wait(2), "the model request did not start"
+            interrupt.set()
+            stream = future.result(timeout=2)
+        finally:
+            release.set()
+            assert finished.wait(2), "the abandoned request did not finish"
+
+    assert stream[-1].outcome == "interrupted"
+    manifest = json.loads(Path(stream[-1].manifest_path).read_text(encoding="utf-8"))
+    assert manifest["resumable"] is True
+    history = history_from_manifest(manifest)
+    assert history == (Message(role="user", blocks=(TextBlock(text="Find M31."),)),)
+
+    follow_up = StubBackend([ModelResponse(stop_reason="end_turn", text="Andromeda.")])
+    list(run_session(
+        "And M33?", backend=follow_up, history=history,
+        tool_schemas=[], tool_functions={},
+    ))
+    sent = follow_up.calls[0]["messages"]
+    assert [message.role for message in sent] == ["user"]
+    assert [block.text for block in sent[0].blocks] == ["Find M31.", "And M33?"]
+
+
 def test_without_an_interrupt_the_request_runs_on_the_loops_own_thread():
     """Callers that pass no interrupt (the bench, scripts) are unchanged."""
 
