@@ -31,6 +31,30 @@ or diagnose — for instance, widening `plx_sigma`, `pm_sigma` or
 members survive. A nearby cluster needs a larger `pm_dispersion_km_s` floor
 than a distant one for the same physical dispersion.
 
+## Tuning the fit
+
+HR fits are sensitive to their settings. When a fit lands far from the
+literature values, call `fit_and_compare_hr_diagram` again on the members CSV
+the earlier call returned; the one-call pipelines return it too. Re-running a
+whole pipeline fetches Gaia again for the same stars.
+
+| Setting | Default | What it changes |
+| --- | --- | --- |
+| `max_error` | 0.1 (0.2 in `run_full_hr_pipeline_from_catalog`) | which members are fitted: lower it to drop noisier stars |
+| `logage_half_width` | 0.3 (0.4 in `run_full_hr_pipeline_from_catalog`) | the ages scanned around the literature age. Widen it when the best age sits at an end of `fit_settings.log_ages_scanned` |
+| `mh` | 0.0 | the track metallicity, [M/H] |
+| `track_max_gap_mag` | 0.5 | the longest step between isochrone points that the fit joins. The grid samples the faint main sequence 0.5–0.6 mag apart, so 0.75 or more joins it too; on M67 that fitted log age 9.55 instead of 9.60 |
+
+Each result carries the `fit_settings` it used. Report the settings of the fit
+you present and which ones you changed from the defaults. A fit tuned toward
+the literature values agrees with them partly by construction: say that it was
+tuned, and do not present the agreement as an independent confirmation. The
+spread between runs shows how sensitive the fit is to its settings. It is not
+a statistical uncertainty, and `parameter_uncertainty` stays null.
+
+> Authority: `tools/registry.py`, the `fit_and_compare_hr_diagram`
+> description.
+
 ## What the results are, and are not
 
 - **Open clusters only.** The literature source is Cantat-Gaudin & Anders

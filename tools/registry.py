@@ -540,7 +540,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "MARS_ISOCHRONE_DIR), fit distance and "
             "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
             "the fitted isochrone overlaid. Returns the fitted values, the literature "
-            "values, and their percent/absolute differences, plus the saved PNG artifact."
+            "values, and their percent/absolute differences, the settings the fit used "
+            "(fit_settings), plus the saved PNG artifact. HR fits are sensitive to their "
+            "settings: to bring a fit closer to the literature values, call this again on "
+            "the same members CSV with a different max_error, logage_half_width, mh or "
+            "track_max_gap_mag, and say which settings you changed. A fit tuned toward "
+            "the literature values agrees with them partly by construction, so it does "
+            "not independently confirm them."
         ),
         "input_schema": {
             "type": "object",
@@ -550,6 +556,15 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default; the literature source doesn't publish per-cluster metallicity)."},
                 "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.1)."},
                 "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.3)."},
+                "track_max_gap_mag": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Longest step, in mag, between consecutive isochrone points "
+                    "that the fit joins (default 0.5). Longer steps are treated as jumps "
+                    "between evolutionary phases, because the grid has no phase labels. The "
+                    "grid samples the faint main sequence 0.5-0.6 mag apart, so 0.75 or more "
+                    "joins that too; on M67 that moved the fitted age by one grid step.",
+                },
             },
             "required": ["members_csv_path", "cluster_name"],
         },

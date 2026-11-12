@@ -251,7 +251,12 @@ CHI2_CAP = 9.0
 #: the track between two points no longer reads as a miss.
 TRACK_STEP_MAG = 0.005
 #: Consecutive points further apart than this are a jump between evolutionary
-#: phases (the grid has no phase labels), and are not joined.
+#: phases (the grid has no phase labels), and are not joined. It is the
+#: default, not a measured phase boundary: the grid also samples the faint
+#: main sequence 0.5-0.6 mag apart, so this leaves parts of it unjoined. On
+#: M67, any threshold from 0.75 mag fits log age 9.55, 0.860 kpc and E(B-V)
+#: 0.044, against 9.60, 0.852 kpc and 0.035 at 0.5 (M6, 2026-11-10). Callers
+#: pass ``max_gap`` to change it.
 TRACK_MAX_GAP_MAG = 0.5
 #: How many nearest resampled points are compared exactly for each star.
 _NEIGHBOURS = 16
@@ -281,8 +286,10 @@ class _TrackCost:
     nearest points contain the true one."""
 
     def __init__(self, s_colour, s_mag, iso_colour, iso_mag,
-                 floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP):
-        self.ic, self.im = _resample_track(np.asarray(iso_colour, float), np.asarray(iso_mag, float))
+                 floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP, max_gap=TRACK_MAX_GAP_MAG):
+        self.ic, self.im = _resample_track(
+            np.asarray(iso_colour, float), np.asarray(iso_mag, float), max_gap=max_gap,
+        )
         self.sc = np.sqrt(s_colour**2 + floor**2)
         self.sm = np.sqrt(s_mag**2 + floor**2)
         self.scale = (float(np.median(self.sc)), float(np.median(self.sm)))
@@ -304,15 +311,16 @@ class _TrackCost:
 def fit_distance_reddening(df, blue, red, lum, iso_colour, iso_mag,
                            x0=(1.0, 0.1), err_suffix="_err",
                            d_bounds=(0.05, 100.0), ebv_bounds=(0.0, 3.0), rv=3.1,
-                           floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP):
+                           floor=SYSTEMATIC_FLOOR_MAG, cap=CHI2_CAP, max_gap=TRACK_MAX_GAP_MAG):
     """Optimize distance (kpc) and E(B-V) so data best overlays a fixed isochrone.
 
     ``x0`` centres a coarse grid (distance x0.6-x1.5, E(B-V) from 0 to the
     larger of 0.8 and twice x0's), and Nelder-Mead polishes its best point.
     Started at ``x0`` alone, it settled in a second minimum at many ages, which
-    made the ranking of ages close to random."""
+    made the ranking of ages close to random. ``max_gap`` is the longest step
+    between track points that is joined (``TRACK_MAX_GAP_MAG``)."""
     s_colour, s_mag = _errors(df, blue, red, lum, err_suffix)
-    track = _TrackCost(s_colour, s_mag, iso_colour, iso_mag, floor=floor, cap=cap)
+    track = _TrackCost(s_colour, s_mag, iso_colour, iso_mag, floor=floor, cap=cap, max_gap=max_gap)
 
     def cost(p):
         d, ebv = p
@@ -334,7 +342,8 @@ def fit_distance_reddening(df, blue, red, lum, iso_colour, iso_mag,
 
 def fit_cluster(csv_path, iso_path, blue, red, lum,
                 iso_blue, iso_red, iso_lum, logages, mh=None,
-                max_error=None, err_suffix="_err", x0=(1.0, 0.1), rv=3.1):
+                max_error=None, err_suffix="_err", x0=(1.0, 0.1), rv=3.1,
+                max_gap=TRACK_MAX_GAP_MAG):
     """Scan logAges, fit distance & E(B-V) for each, return best + ranked trials."""
     df = load_photometry(csv_path, blue, red, lum, err_suffix, max_error)
     iso_all = load_isochrone(iso_path)
@@ -343,7 +352,7 @@ def fit_cluster(csv_path, iso_path, blue, red, lum,
         iso = select_isochrone(iso_all, la, mh)
         ic, im = isochrone_cmd(iso, iso_blue, iso_red, iso_lum)
         fit = fit_distance_reddening(df, blue, red, lum, ic, im,
-                                     x0=x0, err_suffix=err_suffix, rv=rv)
+                                     x0=x0, err_suffix=err_suffix, rv=rv, max_gap=max_gap)
         fit["logage"] = la
         trials.append(fit)
     trials.sort(key=lambda t: t["cost"])
