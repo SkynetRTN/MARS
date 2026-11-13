@@ -183,7 +183,8 @@ completion checklist. This section records actual validation, not publication.
   for intermediate edge cases; the whole-branch review identified the
   same-domain competition case, and its final scoped correction review is clean.
 - **Metadata and notes:** project and lockfile now name `0.1.0`, with the
-  Production/Stable classifier; no dependency version changed. Versioned notes
+  Production/Stable classifier. The initial preparation changed no dependency
+  versions; the security correction in §6 supersedes that initial constraint. Versioned notes
   are `docs/releases/0.1.0.md`, required by the build and carried as a separate
   artifact for GitHub's `--notes-file`, outside the distributions sent to indexes.
   Installation/summary documentation no longer describes every release as a
@@ -218,3 +219,29 @@ The preparation change is [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
 Its validation record names the final source revision and actual post-correction
 results. Required checks and the non-publishing Release rehearsal must succeed
 before merging or tagging; the earlier `e642ded` results alone do not close them.
+
+
+## 6. Security dependency correction (2026-11-13)
+
+GitHub reported 51 open runtime dependency alerts after the preparation push.
+Direct alert/advisory inspection identified five affected packages, including
+critical Pillow and certifi findings. These were not waived by M6's external
+service-test decisions. The security-update exception in `docs/releasing.md`
+requires selective patching before official release.
+
+Only five locked versions changed: Pillow 12.3.0 → 13.0.0, certifi 2026.7.22 →
+2026.10.23, Soup Sieve 2.9.2 → 4.1, Werkzeug 3.1.8 → 3.1.9 and OpenTelemetry API
+1.44.0 → 1.45.2. No package was added to or removed from the 97-package lock.
+The patched minima are enforced in wheel metadata, with OpenTelemetry remaining
+in the MCP extra. Behavioral requirement-specifier tests reject the vulnerable
+versions and allow the fixes.
+
+An independent comparison evaluated every captured affected-version range
+against the new lock: **51 checked, none unresolved**. PyPI metadata confirms
+Python 3.12/3.13 compatibility and Pillow wheels for the supported platforms.
+The [dated security review](0.1.0-security-review.md) records primary advisory
+sources, the compatibility boundary and the required post-update validation.
+Final full-suite, clean-wheel and Release rehearsal results are attached to the
+corrected source revision in [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
+Earlier full-suite results using the old dependency versions do not validate
+this security update.

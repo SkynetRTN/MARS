@@ -12,6 +12,10 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
 _ROOT = Path(__file__).resolve().parents[1]
 _PROJECT = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
@@ -47,13 +51,51 @@ def test_the_project_urls_point_at_the_repository():
 
 def test_runtime_dependencies_are_bounded_ranges_not_a_freeze():
     """An exact pin on every package, test tools included, clashed with the
-    rest of a user's environment. Runtime dependencies are what MARS imports,
-    bounded with ~=; exact versions belong to uv.lock."""
+    rest of a user's environment. Runtime dependencies and security floors
+    use bounded ranges; exact versions belong to uv.lock."""
     deps = _PROJECT["dependencies"] + sum(_PROJECT["optional-dependencies"].values(), [])
     for dep in deps:
         assert "==" not in dep and "~=" in dep, dep
     names = {dep.split()[0].split("~=")[0].lower() for dep in deps}
     assert not names & {"pytest", "mock", "packaging", "twine"}, names
+
+
+@pytest.mark.parametrize(
+    ("name", "extra", "vulnerable_versions", "fixed"),
+    [
+        ("pillow", None, ("12.3.0",), "13.0.0"),
+        ("certifi", None, ("2026.7.22", "2026.10.17"), "2026.10.18"),
+        ("soupsieve", None, ("2.9.2", "3.0.2"), "4.0.0"),
+        ("werkzeug", None, ("3.1.8",), "3.1.9"),
+        ("opentelemetry-api", "mcp", ("1.44.0", "1.45.1"), "1.45.2"),
+    ],
+)
+def test_published_requirements_exclude_known_vulnerable_releases(
+    name, extra, vulnerable_versions, fixed
+):
+    """A lock-only fix cannot protect an installer resolving the published wheel."""
+    dependencies = list(_PROJECT["dependencies"])
+    if extra:
+        dependencies += _PROJECT["optional-dependencies"][extra]
+    requirements = [
+        requirement
+        for dependency in dependencies
+        if canonicalize_name((requirement := Requirement(dependency)).name) == name
+    ]
+    for vulnerable in vulnerable_versions:
+        assert not all(vulnerable in requirement.specifier for requirement in requirements), (
+            f"Installing {'[' + extra + ']' if extra else 'the base package'} permits "
+            f"vulnerable {name} {vulnerable}"
+        )
+    assert all(fixed in requirement.specifier for requirement in requirements), (
+        f"The security fix {name} {fixed} must remain installable"
+    )
+    locked = tomllib.loads((_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    versions = [package["version"] for package in locked["package"] if package["name"] == name]
+    assert versions and all(
+        all(version in requirement.specifier for requirement in requirements)
+        for version in versions
+    ), f"The lock must honor the published security requirements for {name}"
 
 
 def test_pytest_is_a_development_dependency_only():

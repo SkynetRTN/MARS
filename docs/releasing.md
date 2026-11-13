@@ -124,6 +124,11 @@ registry manifest digest, checked on the same date.
 Keep pins stable between reviewed updates. Security updates may be expedited,
 but still verify the upstream digest/version and run package, workflow-safety
 and secret-scan checks in a narrow PR; ordinary updates follow the same gates.
+Before an official tag, review current dependency advisories against both the
+lockfile and a fresh wheel installation. Require security floors in published
+metadata where older transitive versions remain otherwise admissible; a fixed
+lock alone does not protect wheel users. Record the checked revision and
+outcomes, as in [the 0.1.0 review](analysis/0.1.0-security-review.md).
 Pins do not prove that a dependency is vulnerability-free. Desktop launchers
 still deliberately select the newest released MARS (`@latest`): they are not
 lock-reproducible installs. Use an exact verified release for reproducibility

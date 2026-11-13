@@ -1190,8 +1190,8 @@ Keep the source-parity check authoritative, accept the engine's supported
 interrupted history, enforce pinned bundle sizes during transfer, and select
 coordinate matching only when the relevant rows support that coordinate system.
 
-**Global constraints:** Python 3.12 and 3.13; no dependency upgrades or bundle
-content changes; existing external-test waivers and M6 scope decisions stand.
+**Global constraints:** Python 3.12 and 3.13; no unrelated dependency upgrades
+or bundle content changes; existing external-test waivers and M6 scope decisions stand.
 Tests must reproduce each defect before its correction. Release claims must name
 the tested revision and distinguish local, CI, skipped and pending checks.
 
@@ -1257,3 +1257,22 @@ stable-release version classification and packaged install behavior.
 Current preparation review and exact candidate validation: [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
 The final CI, installed-wheel and Release rehearsal outcomes are recorded there
 against the source revision; publication steps remain separate.
+
+
+### Security dependency correction (2026-11-13)
+
+The release push exposed 51 current GitHub runtime dependency alerts affecting
+five locked packages, including critical Pillow and certifi findings. These
+are a release blocker. The security-update exception in `docs/releasing.md`
+applies: only the affected versions and necessary metadata constraints change.
+This supersedes the initial plan to leave every dependency version unchanged.
+
+- [x] Require patched Pillow, certifi, Soup Sieve and Werkzeug versions in base
+  wheel metadata, and patched OpenTelemetry API in the optional MCP metadata.
+- [x] Selectively relock the five packages; prove the declared constraints reject
+  vulnerable versions and allow patched ones, including every recorded alert.
+- [ ] Verify Python 3.12/3.13 compatibility, clean installs, rendering and parser
+  paths, full suites and release rehearsal on the corrected candidate.
+
+The advisory inventory and actual validation belong in
+[the security review](../analysis/0.1.0-security-review.md) and PR #139.
