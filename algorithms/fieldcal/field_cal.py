@@ -466,6 +466,7 @@ def _match_detected_sources(
         file_id = getattr(source, "file_id", None)
         candidates: list[tuple[CatalogSource, bool, np.ndarray]] = []
         candidate_references: set[int] = set()
+        forward_nearest: dict[bool, tuple[float, tuple[int | None, str], int, int]] = {}
         for group in groups_for_file.get(file_id, []):
             tree = catalog_source_kdtree_for_group[group]
             src_idx = detected_source_idx_for_group.get((group, id(source)))
@@ -473,9 +474,21 @@ def _match_detected_sources(
                 continue
             match_tol = match_tol_for_group[group]
             det_coord = detected_source_coord_for_group[group][src_idx]
-            i = tree.query(det_coord, distance_upper_bound=match_tol)[1]
+            distance, i = tree.query(det_coord, distance_upper_bound=match_tol)
             if i >= tree.n:
                 continue
+            use_angular = group[1] == "angular"
+            previous = forward_nearest.get(use_angular)
+            if previous is None or distance < previous[0]:
+                forward_nearest[use_angular] = (distance, group, src_idx, i)
+
+        # Pixel-only and dual references can share a pixel-only detection.
+        # Choose their joint forward nearest before checking reciprocity;
+        # reverse rejection must not expose a farther fallback. Angular
+        # distances remain separate because their units are incomparable.
+        for _, group, src_idx, i in forward_nearest.values():
+            match_tol = match_tol_for_group[group]
+            det_coord = detected_source_coord_for_group[group][src_idx]
             catalog_source_list = catalog_sources_for_group[group]
             catalog_source = catalog_source_list[catalog_index_for_group[group][i]]
             cat_coord = catalog_source_coord_for_group[group][i]

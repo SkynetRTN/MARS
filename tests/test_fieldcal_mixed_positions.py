@@ -245,3 +245,106 @@ def test_dual_reference_competing_sky_and_pixel_detections_are_both_withheld(rev
     assert [source.id for source in matched] == ["independent"]
     assert "ambiguous" in caplog.text.lower()
     assert all(name in caplog.text for name in ("dual", "sky_detection", "pixel_detection"))
+
+
+@pytest.mark.parametrize("reverse_catalog", [False, True])
+@pytest.mark.parametrize("nearest_reference", ["pixel", "dual"])
+def test_pixel_only_detection_chooses_nearest_reference_across_pixel_groups(
+    nearest_reference, reverse_catalog,
+):
+    # Both distances are in pixels: 0.1 beats 0.4 regardless of which
+    # reference also has sky coordinates or where it appears in the catalog.
+    catalog = [
+        CatalogSource(id="pixel", x=10.1 if nearest_reference == "pixel" else 10.4, y=10),
+        CatalogSource(id="dual", x=10.1 if nearest_reference == "dual" else 10.4,
+                      y=10, ra_hours=12, dec_degs=20),
+        CatalogSource(id="independent", ra_hours=13, dec_degs=20),
+    ]
+    if reverse_catalog:
+        catalog.reverse()
+    detections = [
+        SourceExtractionData(id="pixel_detection", x=10, y=10),
+        SourceExtractionData(id="independent_detection", ra_hours=13, dec_degs=20),
+    ]
+    matched = _match_detected_sources(
+        catalog, detections, wcs=None, header={}, data=np.zeros((100, 100)),
+        source_match_tol=.5, source_match_tol_arcsec=2,
+    )
+    assert [source.id for source in matched] == [nearest_reference, "independent"]
+    assert (matched[0].x, matched[0].y) == (10, 10)
+
+
+@pytest.mark.parametrize("reverse_catalog", [False, True])
+@pytest.mark.parametrize("nearest_reference,blocker_positions", [
+    ("pixel", "pixel"), ("pixel", "dual"), ("dual", "pixel"),
+])
+def test_pixel_nearest_rejected_by_reverse_neighbor_does_not_fall_back(
+    nearest_reference, blocker_positions, reverse_catalog,
+):
+    # d0's nearest is 0.2 pixels away, but d1 is only 0.05 from it.
+    # The other group's reference is 0.4 from d0 and 0.65 from d1: accepting
+    # it would bypass the forward nearest-neighbor requirement.
+    catalog = [
+        CatalogSource(id="pixel", x=10.2 if nearest_reference == "pixel" else 9.6, y=10),
+        CatalogSource(id="dual", x=10.2 if nearest_reference == "dual" else 9.6,
+                      y=10, ra_hours=12, dec_degs=20),
+        CatalogSource(id="independent", ra_hours=13, dec_degs=20),
+    ]
+    if reverse_catalog:
+        catalog.reverse()
+    detections = [
+        SourceExtractionData(id="d0", x=10, y=10),
+        SourceExtractionData(id="d1", x=10.25, y=10,
+                             **({"ra_hours": 14, "dec_degs": 20} if blocker_positions == "dual" else {})),
+        SourceExtractionData(id="independent_detection", ra_hours=13, dec_degs=20),
+    ]
+    matched = _match_detected_sources(
+        catalog, detections, wcs=None, header={}, data=np.zeros((100, 100)),
+        source_match_tol=.5, source_match_tol_arcsec=2,
+    )
+    assert [source.id for source in matched] == [nearest_reference, "independent"]
+    assert (matched[0].x, matched[0].y) == (10.25, 10)
+
+
+def test_dual_reference_pixel_reverse_neighbor_excludes_angular_only_pair():
+    # The closer dual detection must use angular distance for the dual row.
+    # Its mismatching sky position cannot block the eligible pixel-only pair.
+    catalog = [
+        CatalogSource(id="pixel", x=9.6, y=10),
+        CatalogSource(id="dual", x=10.1, y=10, ra_hours=12, dec_degs=20),
+        CatalogSource(id="independent", ra_hours=13, dec_degs=20),
+    ]
+    detections = [
+        SourceExtractionData(id="pixel_detection", x=10, y=10),
+        SourceExtractionData(id="dual_detection", x=10.11, y=10, ra_hours=14, dec_degs=20),
+        SourceExtractionData(id="independent_detection", ra_hours=13, dec_degs=20),
+    ]
+    matched = _match_detected_sources(
+        catalog, detections, wcs=None, header={}, data=np.zeros((100, 100)),
+        source_match_tol=.5, source_match_tol_arcsec=2,
+    )
+    assert [source.id for source in matched] == ["dual", "independent"]
+
+
+@pytest.mark.parametrize("reverse_catalog", [False, True])
+def test_joint_pixel_nearest_keeps_true_cross_domain_reference_ambiguity(reverse_catalog, caplog):
+    # A jointly nearest pixel reference also has an angular claimant. There
+    # is no unit-compatible winner and d0 must not be reassigned to "far".
+    catalog = [
+        CatalogSource(id="far", x=10.4, y=10),
+        CatalogSource(id="dual", x=10.1, y=10, ra_hours=12, dec_degs=20),
+        CatalogSource(id="independent", ra_hours=13, dec_degs=20),
+    ]
+    if reverse_catalog:
+        catalog.reverse()
+    detections = [
+        SourceExtractionData(id="pixel_detection", x=10, y=10),
+        SourceExtractionData(id="sky_detection", ra_hours=12, dec_degs=20),
+        SourceExtractionData(id="independent_detection", ra_hours=13, dec_degs=20),
+    ]
+    matched = _match_detected_sources(
+        catalog, detections, wcs=None, header={}, data=np.zeros((100, 100)),
+        source_match_tol=.5, source_match_tol_arcsec=2,
+    )
+    assert [source.id for source in matched] == ["independent"]
+    assert all(name in caplog.text for name in ("dual", "pixel_detection", "sky_detection"))

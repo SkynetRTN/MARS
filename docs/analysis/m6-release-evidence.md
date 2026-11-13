@@ -174,10 +174,14 @@ completion checklist. This section records actual validation, not publication.
   reference and pixel-only detection fallback groups. Valid sky and pixel
   associations coexist; conflicting associations are withheld with diagnostics
   and uniqueness is enforced for both references and detections within each
-  file. The 33 dedicated cases cover coordinate combinations, both conflict
+  file. Joint pixel-domain forward selection precedes the chosen reference's
+  eligible reverse-neighbour check, so comparable pixel candidates do not
+  create false cross-domain conflicts or bypass a nearer rejected match.
+  The 46 dedicated cases cover coordinate combinations, both conflict
   directions, tolerances and proper motion. WCS-backed matching and fitting
   equations are unchanged. Independent review found and verified corrections
-  for two intermediate edge cases; its final scoped review is clean.
+  for intermediate edge cases; the whole-branch review identified the
+  same-domain competition case, and its final scoped correction review is clean.
 - **Metadata and notes:** project and lockfile now name `0.1.0`, with the
   Production/Stable classifier; no dependency version changed. Versioned notes
   are `docs/releases/0.1.0.md`, required by the build and carried as a separate
@@ -192,13 +196,13 @@ completion checklist. This section records actual validation, not publication.
 | Publication/checker behavioral tests | 38 passed |
 | Bundle tests, including cumulative transfer bounds | 53 passed |
 | Session/engine/console focused tests | 167 passed |
-| Calibration and matching focused suites | 367 passed; independent review clean |
+| Calibration and matching focused suites | 380 passed; final scoped review clean |
 | Workflow lint with pinned actionlint and Zizmor 1.30.1 | passed locally; Zizmor's online audits require CI |
 | Lock consistency, compilation, generated skill and whitespace | passed |
-| Full locked Python 3.13 suite on frozen final code | pending |
-| Clean distribution build, strict metadata and installed-wheel checks | pending |
-| Candidate supported-Python/platform CI and security checks | pending |
-| Candidate Release dry run | pending |
+| Full locked Python 3.13 suite | Initial candidate `e642ded`: 5,240 passed, 100 skipped, 230 FITS notices; this preceded the final matching correction. Post-correction results are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139). |
+| Clean distributions and installed-wheel checks | Initial wheel/sdist strict metadata and source/data/licence checks passed. Final installed-wheel results are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139). |
+| Supported-Python/platform CI and security | Required candidate checks: [PR #139 checks](https://github.com/SkynetRTN/MARS/pull/139/checks). |
+| Release dry run | The run revision and outcome are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139) before release approval. |
 
 The initial local review's sandbox blocked an unconnected socket check and
 stalled an MCP protocol call. Both passed outside the sandbox. Official
@@ -209,3 +213,8 @@ waivers in §3 remain unchanged.
 The exact final candidate revision and run URLs must be recorded when their
 checks complete. The final merged revision, tag `v0.1.0`, TestPyPI verification
 and manual PyPI approval remain publication steps in `docs/releasing.md`.
+
+The preparation change is [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
+Its validation record names the final source revision and actual post-correction
+results. Required checks and the non-publishing Release rehearsal must succeed
+before merging or tagging; the earlier `e642ded` results alone do not close them.

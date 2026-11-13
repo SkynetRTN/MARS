@@ -1239,7 +1239,9 @@ stable-release version classification and packaged install behavior.
 
 ### Integration and release acceptance
 
-- [ ] Review each fix and the complete change; resolve material findings.
+- [x] Review each fix and the complete change; resolve material findings.
+  Final scoped review accepted the same-domain pixel competition correction;
+  46 dedicated matching cases and 380 focused calibration cases pass.
 - [x] Set `pyproject.toml` and `uv.lock` to **0.1.0**, align the development-status
   classifier and add substantive release notes linked by the publication flow.
 - [ ] Run the full locked suite with MCP, the SDK-free subset, clean distribution
@@ -1251,3 +1253,7 @@ stable-release version classification and packaged install behavior.
   checks complete before they have run.
 - [ ] Finish the release change in a reviewable branch/PR with exact remaining
   publication steps. Tagging/uploading is the existing release procedure.
+
+Current preparation review and exact candidate validation: [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
+The final CI, installed-wheel and Release rehearsal outcomes are recorded there
+against the source revision; publication steps remain separate.
