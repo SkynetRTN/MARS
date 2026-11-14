@@ -8,11 +8,12 @@ limitations are in [Known limitations](../limitations.md).
 
 Host: Fedora 44, Linux aarch64, 8 cores, Python 3.13 (locked environment).
 
-**Current status, 2026-11-12:** PR #137 merged before PR #138; their merged
+**Current status, 2026-11-13:** PR #137 merged before PR #138; their merged
 baseline is `5a07dd7ab532cb8d97d3a90fc3123d378518b387`. The maintainer has
 selected **0.1.0 as the first official stable release**. Preparation and the
-post-M6 review corrections are recorded in §5; earlier branch/check records
-below remain dated evidence.
+post-M6 review corrections are validated at `5b4cb58` in §5, including the
+security correction in §6. Earlier branch/check records below remain dated
+evidence. Merge, tag and manual publication remain outstanding.
 
 ## 1. The HR fit's track-joining rule
 
@@ -137,6 +138,10 @@ types that carry no errors.
 
 ## 4. Before the release
 
+This was the M6 branch's checklist on 2026-11-10. Version selection, the HR
+merge, current supported-Python CI and the Release rehearsal are now complete
+as recorded in §5. The final merged revision and tag/publication checks remain.
+
 - **The final merged revision** is recorded when this branch merges.
 - **CI on this branch's pull request.**
 - **The release dry run, or the tag run, at that revision.** It repeats the
@@ -200,10 +205,13 @@ completion checklist. This section records actual validation, not publication.
 | Calibration and matching focused suites | 380 passed; final scoped review clean |
 | Workflow lint with pinned actionlint and Zizmor 1.30.1 | passed locally; Zizmor's online audits require CI |
 | Lock consistency, compilation, generated skill and whitespace | passed |
-| Full locked Python 3.13 suite | Initial candidate `e642ded`: 5,240 passed, 100 skipped, 230 FITS notices; this preceded the final matching correction. Post-correction results are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139). |
-| Clean distributions and installed-wheel checks | Initial wheel/sdist strict metadata and source/data/licence checks passed. Final installed-wheel results are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139). |
-| Supported-Python/platform CI and security | Required candidate checks: [PR #139 checks](https://github.com/SkynetRTN/MARS/pull/139/checks). |
-| Release dry run | The run revision and outcome are recorded in [PR #139](https://github.com/SkynetRTN/MARS/pull/139) before release approval. |
+| Full locked Python 3.13 suite on Linux ARM, final source `5b4cb58` | 5,258 passed, 100 skipped, 230 expected FITS notices (1,297 s). Earlier `e642ded` results preceded the final matching and security corrections and are superseded. |
+| Python 3.12 affected-path compatibility, final source | 293 passed. |
+| Configured native solver checks, final source | 257 passed, no skips (154 s), using the host's astrometry.net and UCAC5 prerequisites. |
+| Clean distributions and installed-wheel checks, final source | Wheel/sdist passed Twine 6.2.0 strict metadata and source/data/licence checks. Fresh Python 3.12 and 3.13 wheel installs passed `mars-mcp self-test`, data-list and installed guide content/hash checks outside the checkout. |
+| [Supported-Python CI](https://github.com/SkynetRTN/MARS/actions/runs/43510390106), final source | Python 3.12: 5,257 passed, 101 skipped; Python 3.13: 5,258 passed, 100 skipped. Each has 230 FITS notices. SDK-free subsets: 245 passed, 21 skipped each. Both packaging/install checks and macOS/Windows ARM native containment passed. |
+| [Secret scan](https://github.com/SkynetRTN/MARS/actions/runs/43510390087) and [workflow safety](https://github.com/SkynetRTN/MARS/actions/runs/43510390151), final source | Both passed, including CI's online workflow audits. |
+| [Release rehearsal](https://github.com/SkynetRTN/MARS/actions/runs/43513739275), final source | Passed: source/licence gate, both Python wheel installs, extension validation/launch on macOS and Windows ARM, optional data fetch/verify/self-test on Linux/macOS/Windows. GitHub, TestPyPI and PyPI publishing jobs skipped. |
 
 The initial local review's sandbox blocked an unconnected socket check and
 stalled an MCP protocol call. Both passed outside the sandbox. Official
@@ -211,14 +219,22 @@ candidate integration checks run outside that restriction; an interrupted
 exploratory full run is not counted as passing evidence. The external-test
 waivers in §3 remain unchanged.
 
-The exact final candidate revision and run URLs must be recorded when their
-checks complete. The final merged revision, tag `v0.1.0`, TestPyPI verification
-and manual PyPI approval remain publication steps in `docs/releasing.md`.
+All final-source rows above refer to
+`5b4cb587733209cfb6c77bb0d6a362f639f31854`, including the five corrected
+dependencies. A subsequent evidence-only commit updates this record, the
+security review and the master plan without changing executable code,
+dependency metadata, workflows, release notes or shipped assets. The extra
+Python 3.12 CI skip needs a local Python 3.13 for the Codex launcher; the
+3.13 job covers it. Default native-data skips are covered by the configured
+run. Other external checks retain the explicit waivers in §3.
+
+The final merged revision, tag `v0.1.0`, TestPyPI verification and manual PyPI
+approval remain publication steps in `docs/releasing.md`.
 
 The preparation change is [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
-Its validation record names the final source revision and actual post-correction
-results. Required checks and the non-publishing Release rehearsal must succeed
-before merging or tagging; the earlier `e642ded` results alone do not close them.
+Its current-head checks supplement the source-revision evidence above. No tag
+or upload was performed. Required checks and the release gates must also pass
+on the merged/tagged revision before publication.
 
 
 ## 6. Security dependency correction (2026-11-13)
@@ -241,7 +257,8 @@ against the new lock: **51 checked, none unresolved**. PyPI metadata confirms
 Python 3.12/3.13 compatibility and Pillow wheels for the supported platforms.
 The [dated security review](0.1.0-security-review.md) records primary advisory
 sources, the compatibility boundary and the required post-update validation.
-Final full-suite, clean-wheel and Release rehearsal results are attached to the
-corrected source revision in [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
-Earlier full-suite results using the old dependency versions do not validate
-this security update.
+Final full-suite, clean-wheel and Release rehearsal results in §5 passed with
+the corrected versions; the independent security review found no actionable
+issue. Earlier full-suite results using the old dependency versions do not
+validate this security update. Repository alerts remain a default-branch
+assessment until merge; recheck advisories before tagging.
