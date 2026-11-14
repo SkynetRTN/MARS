@@ -8,6 +8,13 @@ limitations are in [Known limitations](../limitations.md).
 
 Host: Fedora 44, Linux aarch64, 8 cores, Python 3.13 (locked environment).
 
+**Current status, 2026-11-13:** PR #137 merged before PR #138; their merged
+baseline is `5a07dd7ab532cb8d97d3a90fc3123d378518b387`. The maintainer has
+selected **0.1.0 as the first official stable release**. Preparation and the
+post-M6 review corrections are validated at `5b4cb58` in §5, including the
+security correction in §6. Earlier branch/check records below remain dated
+evidence. Merge, tag and manual publication remain outstanding.
+
 ## 1. The HR fit's track-joining rule
 
 M5 handed this to M6 as a release question "requiring measurement or an
@@ -131,6 +138,10 @@ types that carry no errors.
 
 ## 4. Before the release
 
+This was the M6 branch's checklist on 2026-11-10. Version selection, the HR
+merge, current supported-Python CI and the Release rehearsal are now complete
+as recorded in §5. The final merged revision and tag/publication checks remain.
+
 - **The final merged revision** is recorded when this branch merges.
 - **CI on this branch's pull request.**
 - **The release dry run, or the tag run, at that revision.** It repeats the
@@ -142,3 +153,112 @@ types that carry no errors.
 
 The outstanding user-visible limitations are listed in
 [Known limitations](../limitations.md).
+
+
+## 5. Official 0.1.0 preparation (2026-11-12)
+
+The post-M6 review identified a publishing blocker and three P2 defects. All
+four are corrected on `release/0.1.0`; the master plan owns their
+completion checklist. This section records actual validation, not publication.
+
+- **Publication:** the final source-parity/licence checker previously ran in a
+  sparse checkout containing only the script, so a valid wheel failed with
+  228 stale-module errors. The shared read-only `verify-publication` job now
+  checks out both source packages and runs on dry runs and tags before any
+  GitHub or index upload. The token-bearing index jobs execute no repository
+  source. Workflow-derived behavioral tests exercise this exact checkout and
+  reject missing, stale or byte-different modules and an absent licence.
+- **Console:** interrupted model replies leave a supported trailing-user
+  history. The session reader now accepts it; genuine engine and console
+  tests retain the question through immediate follow-up and saved reopening,
+  including partially streamed replies. Invalid tool checkpoints remain rejected.
+- **Bundles:** streamed HTTP data is rejected before a chunk would cross the
+  pinned size. Tests cover fresh, resumed, ignored-Range and cumulative-chunk
+  overruns while retaining existing successful fetch/checksum controls.
+- **Calibration:** WCS-free mixed input uses separate angular, pixel-only
+  reference and pixel-only detection fallback groups. Valid sky and pixel
+  associations coexist; conflicting associations are withheld with diagnostics
+  and uniqueness is enforced for both references and detections within each
+  file. Joint pixel-domain forward selection precedes the chosen reference's
+  eligible reverse-neighbour check, so comparable pixel candidates do not
+  create false cross-domain conflicts or bypass a nearer rejected match.
+  The 46 dedicated cases cover coordinate combinations, both conflict
+  directions, tolerances and proper motion. WCS-backed matching and fitting
+  equations are unchanged. Independent review found and verified corrections
+  for intermediate edge cases; the whole-branch review identified the
+  same-domain competition case, and its final scoped correction review is clean.
+- **Metadata and notes:** project and lockfile now name `0.1.0`, with the
+  Production/Stable classifier. The initial preparation changed no dependency
+  versions; the security correction in §6 supersedes that initial constraint. Versioned notes
+  are `docs/releases/0.1.0.md`, required by the build and carried as a separate
+  artifact for GitHub's `--notes-file`, outside the distributions sent to indexes.
+  Installation/summary documentation no longer describes every release as a
+  prerelease. Public PyPI and TestPyPI version endpoints both returned 404 for
+  `skynet-mars/0.1.0` on 2026-11-12, before publication.
+
+| Check on the preparation branch | Actual result |
+|---|---|
+| SDK-free CI subset in a separate locked environment | 245 passed, 21 expected skips |
+| Publication/checker behavioral tests | 38 passed |
+| Bundle tests, including cumulative transfer bounds | 53 passed |
+| Session/engine/console focused tests | 167 passed |
+| Calibration and matching focused suites | 380 passed; final scoped review clean |
+| Workflow lint with pinned actionlint and Zizmor 1.30.1 | passed locally; Zizmor's online audits require CI |
+| Lock consistency, compilation, generated skill and whitespace | passed |
+| Full locked Python 3.13 suite on Linux ARM, final source `5b4cb58` | 5,258 passed, 100 skipped, 230 expected FITS notices (1,297 s). Earlier `e642ded` results preceded the final matching and security corrections and are superseded. |
+| Python 3.12 affected-path compatibility, final source | 293 passed. |
+| Configured native solver checks, final source | 257 passed, no skips (154 s), using the host's astrometry.net and UCAC5 prerequisites. |
+| Clean distributions and installed-wheel checks, final source | Wheel/sdist passed Twine 6.2.0 strict metadata and source/data/licence checks. Fresh Python 3.12 and 3.13 wheel installs passed `mars-mcp self-test`, data-list and installed guide content/hash checks outside the checkout. |
+| [Supported-Python CI](https://github.com/SkynetRTN/MARS/actions/runs/43510390106), final source | Python 3.12: 5,257 passed, 101 skipped; Python 3.13: 5,258 passed, 100 skipped. Each has 230 FITS notices. SDK-free subsets: 245 passed, 21 skipped each. Both packaging/install checks and macOS/Windows ARM native containment passed. |
+| [Secret scan](https://github.com/SkynetRTN/MARS/actions/runs/43510390087) and [workflow safety](https://github.com/SkynetRTN/MARS/actions/runs/43510390151), final source | Both passed, including CI's online workflow audits. |
+| [Release rehearsal](https://github.com/SkynetRTN/MARS/actions/runs/43513739275), final source | Passed: source/licence gate, both Python wheel installs, extension validation/launch on macOS and Windows ARM, optional data fetch/verify/self-test on Linux/macOS/Windows. GitHub, TestPyPI and PyPI publishing jobs skipped. |
+
+The initial local review's sandbox blocked an unconnected socket check and
+stalled an MCP protocol call. Both passed outside the sandbox. Official
+candidate integration checks run outside that restriction; an interrupted
+exploratory full run is not counted as passing evidence. The external-test
+waivers in §3 remain unchanged.
+
+All final-source rows above refer to
+`5b4cb587733209cfb6c77bb0d6a362f639f31854`, including the five corrected
+dependencies. A subsequent evidence-only commit updates this record, the
+security review and the master plan without changing executable code,
+dependency metadata, workflows, release notes or shipped assets. The extra
+Python 3.12 CI skip needs a local Python 3.13 for the Codex launcher; the
+3.13 job covers it. Default native-data skips are covered by the configured
+run. Other external checks retain the explicit waivers in §3.
+
+The final merged revision, tag `v0.1.0`, TestPyPI verification and manual PyPI
+approval remain publication steps in `docs/releasing.md`.
+
+The preparation change is [PR #139](https://github.com/SkynetRTN/MARS/pull/139).
+Its current-head checks supplement the source-revision evidence above. No tag
+or upload was performed. Required checks and the release gates must also pass
+on the merged/tagged revision before publication.
+
+
+## 6. Security dependency correction (2026-11-13)
+
+GitHub reported 51 open runtime dependency alerts after the preparation push.
+Direct alert/advisory inspection identified five affected packages, including
+critical Pillow and certifi findings. These were not waived by M6's external
+service-test decisions. The security-update exception in `docs/releasing.md`
+requires selective patching before official release.
+
+Only five locked versions changed: Pillow 12.3.0 → 13.0.0, certifi 2026.7.22 →
+2026.10.23, Soup Sieve 2.9.2 → 4.1, Werkzeug 3.1.8 → 3.1.9 and OpenTelemetry API
+1.44.0 → 1.45.2. No package was added to or removed from the 97-package lock.
+The patched minima are enforced in wheel metadata, with OpenTelemetry remaining
+in the MCP extra. Behavioral requirement-specifier tests reject the vulnerable
+versions and allow the fixes.
+
+An independent comparison evaluated every captured affected-version range
+against the new lock: **51 checked, none unresolved**. PyPI metadata confirms
+Python 3.12/3.13 compatibility and Pillow wheels for the supported platforms.
+The [dated security review](0.1.0-security-review.md) records primary advisory
+sources, the compatibility boundary and the required post-update validation.
+Final full-suite, clean-wheel and Release rehearsal results in §5 passed with
+the corrected versions; the independent security review found no actionable
+issue. Earlier full-suite results using the old dependency versions do not
+validate this security update. Repository alerts remain a default-branch
+assessment until merge; recheck advisories before tagging.

@@ -83,8 +83,8 @@ compiles `photutils`, which `uv.lock` pins to 3.0.0, the release before its
 ARM wheels, so `uv sync` there needs `gcc`. The install takes about
 700 MB, nearly all of it dependencies.
 
-Every release is a pre-release for now, so the commands above install the
-newest one. To install a specific release, use
+`0.1.0` is the first official stable release. The commands above select the
+newest stable release when available. To install a specific release, use
 `"skynet-mars[mcp]==<version>"`.
 
 **To verify the download**, fetch the wheel and `SHA256SUMS` from the

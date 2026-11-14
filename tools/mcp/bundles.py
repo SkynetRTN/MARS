@@ -256,6 +256,10 @@ def _download(
             raise BundleError(f"GET {url} returned HTTP {response.status_code}")
         with part.open(mode) as handle:
             for block in response.iter_bytes(_CHUNK):
+                if have + len(block) > size:
+                    raise BundleError(
+                        f"download from {url} exceeds pinned size {size:,} bytes"
+                    )
                 handle.write(block)
                 have += len(block)
                 progress(have, size)

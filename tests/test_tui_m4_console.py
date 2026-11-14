@@ -17,6 +17,7 @@ from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import Message, TextBlock
 from tools.tui import backends
+from tools.tui import app as tui_app
 from tools.tui.app import ApprovalModal, MARSApp
 from tools.tui.commands import COMMANDS
 from tools.tui.widgets.tool_node import ToolNode, _duration
@@ -38,6 +39,15 @@ def _run(coroutine):
 def _rendered(app: MARSApp) -> str:
     transcript = app.query_one("#transcript", Transcript)
     return "\n".join(str(entry.render()) for entry in transcript.query(Static))
+
+
+@pytest.fixture
+def approval_clock(monkeypatch):
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(
+        tui_app, "time", SimpleNamespace(monotonic=lambda: clock.now)
+    )
+    return clock
 
 
 async def _type(pilot, text: str) -> None:
@@ -453,7 +463,7 @@ def test_a_deny_is_never_held_back_by_the_grace_period():
     assert decisions == [Decision.DENY]
 
 
-def test_an_allow_as_the_approval_opens_is_ignored():
+def test_an_allow_as_the_approval_opens_is_ignored(approval_clock):
     """The prompt is live during a turn: an Enter meant for a note must not
     approve a call whose dialog appeared under it, even with Allow focused."""
 
@@ -474,7 +484,7 @@ def test_an_allow_as_the_approval_opens_is_ignored():
     assert decisions == []
 
 
-def test_an_n_typed_as_the_approval_opens_does_not_deny():
+def test_an_n_typed_as_the_approval_opens_does_not_deny(approval_clock):
     """The `n` in "and", from a note typed for the prompt, must not refuse a
     call whose dialog appeared under it; once the dialog has been up a
     moment, `n` denies."""
@@ -490,7 +500,7 @@ def test_an_n_typed_as_the_approval_opens_does_not_deny():
             await pilot.press(*"and then")
             await pilot.pause()
             assert app.screen is modal
-            modal._opened_at -= ApprovalModal.GRACE_S
+            approval_clock.now = ApprovalModal.GRACE_S + 0.01
             await pilot.press("n")
             await pilot.pause()
 

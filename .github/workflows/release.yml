@@ -87,11 +87,53 @@ jobs:
           echo "prerelease=$prerelease" | tee -a "$GITHUB_OUTPUT"
           echo "version=$version" | tee -a "$GITHUB_OUTPUT"
 
+      # Versioned notes are reviewed with the source, including on dry runs.
+      # Keep prose in a file/artifact, outside dist/ and shell expressions.
+      - name: Prepare release notes
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          mkdir release-notes
+          cp "docs/releases/$version.md" release-notes/notes.md
+
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: dist
           path: dist/
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-notes
+          path: release-notes/notes.md
+          if-no-files-found: error
+
+  # The exact final artifact check runs on manual dry runs as well as tags,
+  # before any public release or index upload. Source parity needs both Python
+  # trees; checking out only the script labels every wheel module as stale.
+  # Keep source execution in this read-only job, away from publishing tokens.
+  verify-publication:
+    name: verify publication artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/check_dist.py
+            tools/
+            algorithms/
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist
+
+      - name: Require exact source parity and a declared licence
+        run: python3 .github/scripts/check_dist.py --require-license dist/*.whl
 
   # The Claude Desktop extension (installers/claude-desktop/). It names no
   # MARS release, so one file serves every release; attaching it saves users
@@ -328,7 +370,7 @@ jobs:
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
+    needs: [build, verify-publication, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -342,6 +384,11 @@ jobs:
         with:
           name: extension
           path: extension
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-notes
+          path: release-notes
 
       - name: Create the GitHub release
         env:
@@ -357,7 +404,7 @@ jobs:
           (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
           gh release create "$TAG" dist/*.whl dist/*.tar.gz extension/mars.mcpb dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "MARS $TAG" \
-            --notes "Install and register: docs/installing.md. Claude Desktop (Apple Silicon Mac, Windows on ARM): double-click \`mars.mcpb\`; it is unsigned and runs the newest MARS release. Check the install: \`mars-mcp self-test\`. Data bundles: \`mars-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
+            --notes-file release-notes/notes.md
 
   # PyPI versions are permanent -- a file, once uploaded, can never be
   # replaced -- so every release goes to TestPyPI first and is installed from
@@ -365,7 +412,7 @@ jobs:
   publish-testpypi:
     name: publish to TestPyPI
     if: github.event_name == 'push'
-    needs: [build, verify, validate-extension, verify-extension, data, verify-data]
+    needs: [build, verify-publication, verify, validate-extension, verify-extension, data, verify-data]
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -434,7 +481,7 @@ jobs:
   # nothing reaches PyPI without a person approving that run.
   publish-pypi:
     name: publish to PyPI
-    needs: [build, verify-testpypi]
+    needs: [build, verify-publication, verify-testpypi]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -442,19 +489,10 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          sparse-checkout: .github/scripts/check_dist.py
-          sparse-checkout-cone-mode: false
-
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist
-
-      - name: Refuse a wheel that declares no licence
-        run: python3 .github/scripts/check_dist.py --require-license dist/*.whl
 
       - name: Keep only the distributions
         run: rm -f dist/SHA256SUMS

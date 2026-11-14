@@ -26,6 +26,7 @@ updated when the code changes.
 | [`archive/`](archive/README.md) | Completed track documents, kept as records rather than deleted. Not current-state. |
 | [`working/`](working/README.md) | The [master continuation plan](working/master-continuation-plan.md): current dispositions, execution order and acceptance checks for known continuing work. |
 | [`examples/`](examples/README.md) | Committed sample output — the deliberate exception to the repository's "no generated files" rule. |
+| [`releases/`](releases/0.1.0.md) | Versioned release notes, beginning with the first official stable release, `0.1.0`. The release workflow publishes the notes for its package version. |
 
 ## Document lifecycle
 

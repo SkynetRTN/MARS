@@ -1114,7 +1114,16 @@ measurement image using the extraction background settings, so annuli beyond
 the region have correctly positioned noise data.
 WCS matching uses actual detector pixels, including anisotropic and rotated
 frames. Sky-only matching without WCS requires explicit `source_match_tol_arcsec`
-and uses spherical chord distance. A matched centroid is not projected or moved
+and uses spherical chord distance. The 0.1.0 release correction selects usable
+coordinate groups separately for each file: mixed WCS-free catalogs retain both
+sky-capable and pixel-only references. Each coordinate domain uses its own tolerance and
+mutual nearest-neighbour check. Eligible pixel groups share a joint forward
+nearest choice before the selected reference's reverse check. A detection with competing matches across the
+two coordinate domains is withheld with an ambiguity diagnostic; pixel and
+angular distances are never ranked against each other. WCS-backed and wholly
+pixel-backed matching retain their previous coordinate policy. Regression
+coverage is in `tests/test_fieldcal_mixed_positions.py`.
+A matched centroid is not projected or moved
 a second time during measurement. Matched sky-only observations retain their
 observed sky coordinates until header-WCS projection, without applying copied
 catalog motion. SNR selection uses positive finite flux/error

@@ -7,16 +7,22 @@ bundles are published and matched to it. The workflow is
 ## Versions and tags
 
 - **`pyproject.toml`'s `version` is the version.** A release is the tag
-  `v<version>`, exactly: `v0.1.0rc1` for `0.1.0rc1`. The workflow refuses a
+  `v<version>`, exactly: `v0.1.0` for `0.1.0`. The workflow refuses a
   tag that does not match, so a wheel never carries a version its tag
   contradicts.
 - **A pre-release** is a [PEP 440](https://peps.python.org/pep-0440/)
   pre-release version: `aN`, `bN`, `rcN` or `.devN`. It is published as a
   GitHub pre-release, for testing — no compatibility promise between one and
   the next. Anything else is published as a release and marked latest.
+- **`0.1.0` is the first official stable release.** The supported Python and
+  platform scope is in `installing.md`; the scientific and operational limits
+  remain in `limitations.md`.
 - **Bump the version, relock, merge, then tag.** Change `version`, run
   `uv lock` (the lockfile records the project's own version), merge that
   change, and push the tag at the merged commit.
+- **Write the release notes with the version change.** Add
+  `docs/releases/<version>.md`. The build requires that file, including during
+  dry runs, and carries it as a separate artifact for GitHub publication.
 
 **Build from a checkout with symlinks.** The core data reaches the wheel
 through the committed `tools/_data` symlink. A clone made with
@@ -38,13 +44,20 @@ with the build artifact, installed and self-tested.
    - fails unless the wheel carries the scans, periods, zero-point reference,
      variable-star sample, Afterglow fixtures, skill and bundle manifest;
    - classifies the version with `packaging.version`, so every PEP 440
-     pre-release spelling publishes as a pre-release.
-2. **verify** runs on clean runners **with no checkout**, on Python 3.12 and
+     pre-release spelling publishes as a pre-release;
+   - copies the version's release notes into a separate `release-notes` artifact,
+     keeping Markdown out of the distributions uploaded to the indexes.
+2. **verify-publication** checks the wheel's exact Python-source parity, core
+   data and licence against a checkout containing the checker and both source
+   packages. This read-only job runs on dry runs and tags, before GitHub,
+   TestPyPI or PyPI publication. No repository source executes in the index
+   publishing jobs, which hold the trusted-publishing tokens.
+3. **verify** runs on clean runners **with no checkout**, on Python 3.12 and
    3.13, the supported versions. On each it
    installs the wheel with `[mcp]` and runs
    `mars-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
-3. **pack the extension** zips `installers/claude-desktop/` into
+4. **pack the extension** zips `installers/claude-desktop/` into
    `mars.mcpb` with `.github/scripts/pack_extension.py`, standard library
    only, honouring `.mcpbignore` as `mcpb pack` does. **validate the
    extension manifest** runs `@anthropic-ai/mcpb` 2.1.2's `validate` in a
@@ -59,26 +72,27 @@ with the build artifact, installed and self-tested.
    on a tag the job fails unless the extension served this build's version. It
    proves the launch, not the app: installing in Claude Desktop stays a manual
    check (`installing/`; record in `archive/desktop-acceptance.md`).
-4. **data** checks that the `data` release holds every archive
+5. **data** checks that the `data` release holds every archive
    `bundles.json` pins, at the pinned size and SHA-256. It reads GitHub's own
    asset digest.
-5. **verify-data** installs the wheel without a checkout, fetches both
+6. **verify-data** installs the wheel without a checkout, fetches both
    optional bundles, rehashes their extracted trees, and runs
    `mars-mcp self-test --with-data` through stdio and the local grid loader.
-6. **publish** adds `mars.mcpb` to `SHA256SUMS` and creates the GitHub
+7. **publish** adds `mars.mcpb` to `SHA256SUMS` and creates the GitHub
    release with the wheel, the sdist, `mars.mcpb` and `SHA256SUMS`, only
-   after **verify**, both extension checks, **data** and **verify-data**
-   pass. It is
+   after **verify-publication**, **verify**, both extension checks, **data**
+   and **verify-data** pass. Its notes come from the reviewed versioned file. It is
    the only job with write permission to the repository, and only on a tag.
-7. **publish to TestPyPI** runs in parallel with **publish**, uploading the
+8. **publish to TestPyPI** runs in parallel with **publish**, uploading the
    wheel and the sdist to TestPyPI after the same build and verification jobs
    pass.
-8. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
+9. **verify the TestPyPI upload** downloads the wheel TestPyPI serves,
    requires it to be byte-identical to the one **build** made, installs it
    with its dependencies from PyPI -- never from TestPyPI, where anyone can
    register a dependency's name -- and runs `mars-mcp self-test`.
-9. **publish to PyPI** refuses a wheel that declares no licence, then
-   uploads. It runs in the `pypi` environment, so it waits for a reviewer.
+10. **publish to PyPI** uploads the distributions after **verify-publication**
+    and the TestPyPI checks. It runs in the `pypi` environment, so it waits
+    for a reviewer.
 
 The build job and CI's `package` job, which runs on every pull request, both
 run `twine check --strict` and `.github/scripts/check_dist.py`: the core data,
@@ -110,6 +124,11 @@ registry manifest digest, checked on the same date.
 Keep pins stable between reviewed updates. Security updates may be expedited,
 but still verify the upstream digest/version and run package, workflow-safety
 and secret-scan checks in a narrow PR; ordinary updates follow the same gates.
+Before an official tag, review current dependency advisories against both the
+lockfile and a fresh wheel installation. Require security floors in published
+metadata where older transitive versions remain otherwise admissible; a fixed
+lock alone does not protect wheel users. Record the checked revision and
+outcomes, as in [the 0.1.0 review](analysis/0.1.0-security-review.md).
 Pins do not prove that a dependency is vulnerability-free. Desktop launchers
 still deliberately select the newest released MARS (`@latest`): they are not
 lock-reproducible installs. Use an exact verified release for reproducibility

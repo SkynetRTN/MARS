@@ -1,9 +1,12 @@
 # MARS release closure gate
 
-Updated 2026-11-09 after integrating `main` at `193d117` into
-`feature/m5-geometry`. M0 through M4 are closed; M1–M3 merged through PRs
-#118/#124/#122/#123, and M4 through PRs #128–#135. These changes are absent
-from the published `0.1.0rc6`. The next release needs a new version.
+Updated 2026-11-13 for the first official stable release, **0.1.0**.
+M0 through M5 are closed; M1–M3 merged through PRs #118/#124/#122/#123,
+M4 through PRs #128–#135, and M5 through #136. HR setting PR #137 and M6
+PR #138 are merged at `5a07dd7`. The preparation branch corrects the four
+post-M6 review findings and changes the package version from `0.1.0rc6` to
+`0.1.0`; its checklist and validation are at the end of this document.
+The published package remains `0.1.0rc6` until publication completes.
 By maintainer decision (2026-10-26), publication follows completion of every
 gate with a manual step; install guides (`../installing/`) point at the latest
 release without naming a version. Final release evidence remains a separate
@@ -13,7 +16,7 @@ reviewed split is merged.
 M2 is merged and unpublished. Its detailed evidence below retains dated
 pre-merge history; historical "unmerged" statements do not describe current
 main. Live provider failures remain recorded below. M5's six squares are
-complete on the feature branch; current-main integration is validated below.
+complete and merged; current-main integration is validated below.
 PR #120 is abandoned as an
 implementation path and supplies no closure evidence; do not continue from that
 branch or count its tests as acceptance.
@@ -1160,14 +1163,141 @@ Evidence: [original finding register](../analysis/algorithm-remediation-plan.md#
   `twine check --strict` and `check_dist.py`, and a clean install passed
   `mars-mcp self-test`; the skill it installs matches `skills/mars-tools/`.
   Of the 96 skips, 81 are the external checks above; none is a failure.
-  *Before release:* record the final merged revision when this branch
-  merges; get CI on its pull request; run the release dry run or the tag run
-  at that revision, since the last dry run (2026-10-28) predates M5; bump the
-  version from `0.1.0rc6`; and merge the `track_max_gap_mag` change first,
-  since it changes code that the checks above did not cover. See
+  *Official-release update, 2026-11-13:* HR #137 and M6 #138 are merged.
+  PR #139 sets version `0.1.0` and corrects the post-M6 findings and five
+  vulnerable dependencies. Supported-Python CI, security/workflow checks,
+  clean installed wheels, native checks and the non-publishing Release
+  rehearsal pass at source revision `5b4cb58`; exact evidence is below.
+  This parent gate remains open for the final merged revision and its tag
+  run. Merge, tag `v0.1.0`, TestPyPI verification and manual PyPI approval
+  remain publication steps. See
   [the release evidence](../analysis/m6-release-evidence.md).
 
 M0/M1 acceptance remains in the linked baseline record. Do not reopen completed
 containment work or infer that merged changes protect rc6 users. Release once
 unchecked work has recorded outcomes and final checks pass; the
 [release procedure](../releasing.md) owns publication.
+
+
+## Official 0.1.0 release preparation (2026-11-12)
+
+The maintainer requested correction of the post-M6 review findings and the
+first official release, **0.1.0**, rather than another prerelease. The reviewed
+baseline is `5a07dd7`; preparation is on `release/0.1.0`.
+
+**Goal:** correct all four reproduced defects and produce a validated stable
+release candidate. Publication remains the existing tag/TestPyPI/manual-PyPI flow.
+
+**Architecture:** preserve the public tool surface and scientific equations.
+Keep the source-parity check authoritative, accept the engine's supported
+interrupted history, enforce pinned bundle sizes during transfer, and select
+coordinate matching only when the relevant rows support that coordinate system.
+
+**Global constraints:** Python 3.12 and 3.13; no unrelated dependency upgrades
+or bundle content changes; existing external-test waivers and M6 scope decisions stand.
+Tests must reproduce each defect before its correction. Release claims must name
+the tested revision and distinguish local, CI, skipped and pending checks.
+
+**Review focus:** exact publishing checkout; interrupted nonstreaming and
+streaming requests; resumed oversized transfers; mixed sky/pixel catalog rows;
+stable-release version classification and packaged install behavior.
+
+### Task 1: publication source verification
+
+- [x] Reproduce the failure by executing the real wheel checker in the publishing
+  job's checkout layout, then correct that layout and require the same check in
+  the release dry run before any upload.
+- [x] Cover rejection of stale modules and missing licence as well as acceptance
+  of a complete wheel. Keep write/token permissions confined to publishing.
+- [x] Files: `.github/workflows/release.yml`, `tests/test_check_dist.py` and
+  narrowly necessary workflow regression tests. Validate with the focused tests
+  and workflow syntax/security checks.
+
+### Task 2: bounded bundle transfers
+
+- [x] Add failing behavioral tests for oversized fresh and resumed HTTP
+  responses, then enforce the pinned byte ceiling before writing a chunk.
+- [x] Preserve exact-size success, partial-transfer resume and checksum checks.
+- [x] Files: `tools/mcp/bundles.py`, `tests/test_mcp_bundles.py`. Validate with
+  `pytest tests/test_mcp_bundles.py`.
+
+### Task 3: interrupted-session recovery
+
+- [x] Add a failing engine-manifest round trip and immediate console follow-up
+  after interruption before an answer, then accept the supported trailing-user
+  history without accepting incomplete tool-call checkpoints.
+- [x] Preserve normal ordering and signed reasoning/tool-result validation.
+- [x] Files: `tools/tui/widgets/sessions.py`, relevant session/engine/TUI tests;
+  change `tools/tui/app.py` only if necessary. Validate focused session, engine
+  and console tests outside the sandbox where process tests require it.
+
+### Task 4: mixed catalog positions
+
+- [x] Add the failing WCS-free three-reference calibration with sky coordinates
+  on every row and optional pixels on one row; preserve all usable sky matches.
+- [x] Cover pixel-only, sky-only, mixed and file-scoped catalogs with explicit
+  pixel/angular tolerances, preserving WCS-backed behavior.
+- [x] Files: `algorithms/fieldcal/field_cal.py` and its focused matching tests.
+  Validate the affected calibration suites.
+
+### Integration and release acceptance
+
+- [x] Review each fix and the complete change; resolve material findings.
+  Final scoped review accepted the same-domain pixel competition correction;
+  46 dedicated matching cases and 380 focused calibration cases pass.
+- [x] Set `pyproject.toml` and `uv.lock` to **0.1.0**, align the development-status
+  classifier and add substantive release notes linked by the publication flow.
+- [x] Run the full locked suite with MCP, the SDK-free subset, clean distribution
+  builds/strict metadata/source/data/skill checks and installed-wheel self-tests.
+  Exercise native solver prerequisites where available; retain explicit skips.
+- [x] Obtain current supported-Python/platform CI, security/workflow checks and a
+  Release dry run on the prepared candidate; record actual results below and in
+  `docs/analysis/m6-release-evidence.md`. Do not mark remote or final merged
+  checks complete before they have run.
+- [x] Finish the release change in a reviewable branch/PR with exact remaining
+  publication steps. Tagging/uploading is the existing release procedure.
+
+Validated source revision: `5b4cb587733209cfb6c77bb0d6a362f639f31854` in
+[PR #139](https://github.com/SkynetRTN/MARS/pull/139). The subsequent evidence
+commit changes only this plan and the two analysis records; executable code,
+dependency metadata, workflows, release notes and shipped assets are unchanged.
+
+| Final preparation check | Actual result at `5b4cb58` |
+| --- | --- |
+| [Supported-Python CI](https://github.com/SkynetRTN/MARS/actions/runs/43510390106) | Python 3.12: 5,257 passed, 101 skipped; Python 3.13: 5,258 passed, 100 skipped; 230 expected FITS notices each. SDK-free, packaging and macOS/Windows ARM containment passed. |
+| Local Linux ARM full locked suite with MCP | 5,258 passed, 100 skipped, 230 FITS notices. |
+| Local SDK-free / Python 3.12 affected paths | 245 passed, 21 skipped / 293 passed. |
+| Local configured native solver checks | 257 passed, no skips. |
+| Wheel/sdist and clean installed wheels on both Pythons | Strict Twine metadata, source/data/licence parity, protocol self-tests and installed guide content/hash checks passed. |
+| [Secret scan](https://github.com/SkynetRTN/MARS/actions/runs/43510390087) / [workflow safety](https://github.com/SkynetRTN/MARS/actions/runs/43510390151) | Passed. |
+| [Non-publishing Release rehearsal](https://github.com/SkynetRTN/MARS/actions/runs/43513739275) | Passed, including installed wheels, native extension launches and optional data on Linux/macOS/Windows; all publication jobs skipped. |
+
+The extra Python 3.12 CI skip needs a local Python 3.13 for the Codex launcher;
+the 3.13 job covers it. Default native-data skips are covered by the configured
+run above. Existing live-service/model-provider waivers remain in effect.
+Current-head checks are visible on [the PR](https://github.com/SkynetRTN/MARS/pull/139/checks).
+Nothing has been merged, tagged or published by this preparation work.
+
+
+### Security dependency correction (2026-11-13)
+
+The release push exposed 51 current GitHub runtime dependency alerts affecting
+five locked packages, including critical Pillow and certifi findings. These
+are a release blocker. The security-update exception in `docs/releasing.md`
+applies: only the affected versions and necessary metadata constraints change.
+This supersedes the initial plan to leave every dependency version unchanged.
+
+- [x] Require patched Pillow, certifi, Soup Sieve and Werkzeug versions in base
+  wheel metadata, and patched OpenTelemetry API in the optional MCP metadata.
+- [x] Selectively relock the five packages; prove the declared constraints reject
+  vulnerable versions and allow patched ones, including every recorded alert.
+- [x] Verify Python 3.12/3.13 compatibility, clean installs, rendering and parser
+  paths, full suites and release rehearsal on the corrected candidate.
+
+The integration results above use the five corrected versions. Independent
+security review found no actionable issue; all 51 captured affected-version
+ranges exclude the candidate versions. GitHub's default-branch alerts may
+remain open until merge; repeat the advisory check when cutting the tag.
+
+The advisory inventory and actual validation belong in
+[the security review](../analysis/0.1.0-security-review.md) and PR #139.

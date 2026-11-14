@@ -173,7 +173,8 @@ The MCP tool-surface track has landed. `mars-mcp` serves all 55 tools over
 stdio to a coding agent's own console on a machine with no checkout, with the
 agent skill as its instructions and resources. A wheel carries the core data,
 and `mars-mcp fetch-data` installs checksum-pinned optional bundles.
-Releases are published on PyPI as `skynet-mars` pre-releases. See
+Releases are published on PyPI as `skynet-mars`; `0.1.0` is the first
+official stable release, following the `0.1.0rcN` testing series. See
 [tool-architecture.md](tool-architecture.md) section 10.3,
 [installing.md](installing.md), and the track record in
 [archive/mcp-tool-surface.md](archive/mcp-tool-surface.md).
