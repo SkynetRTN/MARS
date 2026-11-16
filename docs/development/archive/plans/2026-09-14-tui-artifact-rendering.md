@@ -16,7 +16,7 @@
 
 **Tech Stack:** Python 3.12+, Pillow, Rich, Textual 8.2.8, textual-image 0.13.2, pytest.
 
-**Spec:** `docs/development/plans/tui-harness.md` sections 7, 9, 10, and Phase E — that
+**Spec:** `docs/working/tui-harness.md` (historical path), sections 7, 9, 10, and Phase E — that
 working document was folded into `docs/architecture/tool-architecture.md` 10.2 and deleted
 when the track landed; git history has it.
 
