@@ -1,6 +1,6 @@
 """The efficiency axis -- **Q2**.
 
-``docs/benchmarking/harness.md`` section 7.2. Pure reporting: no pass/fail, and no
+``docs/benchmarks/harness.md`` section 7.2. Pure reporting: no pass/fail, and no
 money. Three things are measured -- **timing per token, turns, and tokens
 used** -- plus the call counts that explain a token total.
 

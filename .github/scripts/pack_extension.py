@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pack the Claude Desktop extension into a ``.mcpb`` with the standard library.
 
-Run by the release workflow (docs/releasing.md). A ``.mcpb`` is a zip of the
+Run by the release workflow (docs/development/releasing.md). A ``.mcpb`` is a zip of the
 extension folder; ``mcpb pack`` makes the same thing, but would run npm's
 unlocked dependency tree on the bytes users install, so the release packs here
 and runs ``mcpb validate`` only in a job whose output nothing uses.

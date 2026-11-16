@@ -20,7 +20,7 @@ proximity search, wildcards -- see ``algorithms.catalogs.ads`` and the ADS guide
 the full syntax those support.
 
 Verified live with a key on 2026-10-22 (``tests/test_m3_provider_responses_live.py``
-and ``docs/extraction.md`` Query §5.12); the rest was read from
+and ``docs/architecture/extraction.md`` Query §5.12); the rest was read from
 astroquery.nasa_ads.core's source:
 
 - Default fields, sort (``'date desc'``), and row count (10) come from

@@ -7,7 +7,7 @@ benchmark harness, and any plain Python caller all consume that one stream.
 
 This package imports no UI toolkit -- no ``textual``, no ``rich`` -- which is
 what keeps every tool callable from plain Python per
-``docs/tool-architecture.md`` section 7. A test asserts it.
+``docs/architecture/tool-architecture.md`` section 7. A test asserts it.
 """
 
 from __future__ import annotations

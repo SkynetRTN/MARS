@@ -53,7 +53,7 @@ OPTIONAL_SETTINGS = ("ADS_DEV_KEY", "MARS_MCP_TOOLS", "MARS_HOME", "MARS_VERSION
 #: A release as PyPI names one (PEP 440's characters), never a specifier.
 VERSION = re.compile(r"[0-9][0-9A-Za-z.!+-]*")
 
-#: The one Python every MARS dependency ships wheels for (docs/installing.md).
+#: The one Python every MARS dependency ships wheels for (docs/guides/installation/README.md).
 PYTHON = "3.13"
 
 #: Windows on ARM runs the x64 build, under Windows' own x64 emulation:

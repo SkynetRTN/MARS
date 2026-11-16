@@ -30,7 +30,7 @@ retired; it returns null. B1933+16 resists the recorded tuned searches: its
 dispersion smears the pulse across ~11% of the period, and this pipeline has no
 dedispersion. Expect the fallback there.
 
-> Authority: `docs/pulsar-tool-pipeline.md` §4, "What a blind search actually
+> Authority: `docs/guides/pulsar-tool-pipeline.md` §4, "What a blind search actually
 > achieves"; `tools/agent/prompt.py`, "PERIOD SOURCING".
 
 ## Pulsar: a run, step by step
@@ -111,7 +111,7 @@ cap allows about 90.7 seconds; the 60-second default fits. Reduce duration/rate
 on a size rejection. Listings retain readable scans and warn `scan_unreadable`
 for failed neighbors; explicit scan read failures carry `read_failed` or
 `parse_error`. Inspect those warnings rather than treating a partial listing
-as a complete archive. Full limits: `docs/pulsar-tool-pipeline.md` §6a.
+as a complete archive. Full limits: `docs/guides/pulsar-tool-pipeline.md` §6a.
 
 The answer must let a reader tell a detection from a fit. State, for every
 scan:

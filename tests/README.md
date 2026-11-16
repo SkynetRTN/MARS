@@ -12,7 +12,7 @@ Most extracted algorithms have preservation tests against recorded upstream
 output, including known bugs. Passing those tests establishes parity, not
 scientific correctness. Intentional M1–M5 corrections have acceptance
 tests against independent scientific references; the pulsar, variable-star,
-cluster and photometric-calibration records under `docs/analysis/` describe
+cluster and photometric-calibration records under `docs/development/reviews/` describe
 their derivations and limits.
 
 Most files are algorithm-preservation tests. Tool smoke tests live here too
@@ -109,9 +109,9 @@ For the preservation tests, three conventions apply:
 | `test_variable_star_weighted_contract.py` | M1 TS-03 / TS-17 public containment: aligned paired-row uncertainties; object/null and numeric masked ECSV handoffs; raw partial-source ingest; skipped-row warnings; missing/invalid weights, nonscalar cells, empty/constant spectra and work-limit failures produce no success artifact. |
 | `test_cluster_ages_membership.py` | M2 legacy HR corrections: log-year ages retained in Myr through the 13.8 Gyr display window; opaque ID joins independent of order; finite zero proper motion, ellipse boundaries and zero-width axes; actual registered membership ECSV output. |
 | `test_hrdiagram_legacy_science.py` | M2 legacy coordinates/extinction/mass: signed DMS/HMS and subunit negative zero against Astropy, independent CCM89 coefficients and R(V) propagation, unsupported WISE rejection, observed isotropic 1D motion RMS at extreme scales, protected mass units and labeled summary proxies. |
-| `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
+| `test_hrdiagram_py.py` | `algorithms/hrdiagram_py/hrfit.py`'s distance/E(B-V) optimizer recovers known injected values on a synthetic cluster, and `isochrone_cmd` drops thermally-pulsing-AGB rows by default (a real defect found and fixed against a live PARSEC download -- see `docs/architecture/extraction.md`, "HR Diagram (Python)"). Not a preservation test -- `hrfit.py` is a parity **port**, not an extraction, so there is no upstream Skynet/Astromancer behavior to match. |
 | `test_photometry_registry_smoke.py` | `tools/photometry.py`'s `list_photometry_targets`/`run_photometry_on_target` -- bundled-target resolution, fast offline runs, exposure-time consistency, and the sky-position/source-table fields that bridge into `tools.hr_diagram`. |
-| `test_radio_sources.py` | `algorithms/radio/`'s spectral-index/log-parabola fitting (injected-value recovery) and RA/Dec-column-guessing catalog matching, plus `tools/radio_sources.py`'s offline/error paths. New capability, no upstream to match -- see `docs/extraction.md`, "Radio Sources (Python)". |
+| `test_radio_sources.py` | `algorithms/radio/`'s spectral-index/log-parabola fitting (injected-value recovery) and RA/Dec-column-guessing catalog matching, plus `tools/radio_sources.py`'s offline/error paths. New capability, no upstream to match -- see `docs/architecture/extraction.md`, "Radio Sources (Python)". |
 
 ## Markers
 
@@ -137,9 +137,9 @@ The default suite remains deterministic: network-marked tests are skipped unless
 The descriptions below record extraction-time observations, not a current bug
 list. M2–M5 corrected many of them or removed their callers; a few rows already
 carry later correction notes. The
-[master continuation plan](../docs/working/master-continuation-plan.md) and its
+[master continuation plan](../docs/development/plans/master-continuation-plan.md) and its
 linked evidence give current dispositions, including
-[obsolete reports and instructions](../docs/analysis/m5-obsolete-reports-instructions.md).
+[obsolete reports and instructions](../docs/development/reviews/m5-obsolete-reports-instructions.md).
 Keep the original evidence distinct from current behavior.
 
 Tests named in this historical table may now assert the corrected answer.
@@ -153,7 +153,7 @@ Assess a failure against that test's current contract and independent reference.
 | `photometry/source_extraction.py` | Any crop that narrows the **columns** raises `ValueError: array is not C-contiguous` inside `sep`. `_crop_data` returns a numpy view; row-only slices stay contiguous, column slices do not. `_ensure_native_contiguous` exists in the sibling `photometry.py` and was never applied here. | `test_photometry_extraction.py` |
 | `query/geometry.py` | `clip_sources_to_box` **silently returns zero sources** near a pole. Once `sin(w/2)/cos(dec) > 1` the `arcsin` yields NaN, every subsequent comparison against NaN is `False` — including the pole and RA-wrap guards — and execution falls through to a filter that rejects everything. At dec 89.5 a 60-arcmin box is already enough. The failure surfaces as "no catalog sources", not as an error. | `test_query_geometry.py` |
 | `wcs/header_utils.py` | `_parse_ra_dec_values` **raises** on the comma decimal separators three fixture frames use (`'00:42:44,3'`), and `guess_icrs_radec_from_header` does not catch it. Latent only because those frames are solved, so `CRVAL` answers at step 1. An unsolved frame from the same telescope — exactly the case a solver hint exists for — would raise. | `test_wcs_headers.py` |
-| `wcs/wcs.py` | `_clear_wcs_solution_fields` clears `ra`/`dec`/`pixel_scale`/`rotation` while the solve writes `ra_deg`/`dec_deg`/`pixel_scale_arcsec_per_px`/`rotation_deg`. The four clears are no-ops and stale astrometry survives a failed solve. Documented in `docs/extraction.md`, WCS §5.2; `WcsSolution` is deliberately **not** a `slots` dataclass so this stays a silent no-op rather than an `AttributeError`. | `test_wcs_solution.py` |
+| `wcs/wcs.py` | `_clear_wcs_solution_fields` clears `ra`/`dec`/`pixel_scale`/`rotation` while the solve writes `ra_deg`/`dec_deg`/`pixel_scale_arcsec_per_px`/`rotation_deg`. The four clears are no-ops and stale astrometry survives a failed solve. Documented in `docs/architecture/extraction.md`, WCS §5.2; `WcsSolution` is deliberately **not** a `slots` dataclass so this stays a silent no-op rather than an `AttributeError`. | `test_wcs_solution.py` |
 | `wcs/wcs.py` | A header rewrite clears `RADESYS` but **not** `EQUINOX` or `RADECSYS`, so a stale frame declaration can outlive the solution it described — a ~0.6° error if a B1950 `EQUINOX` survives onto an ICRS solve. Latent: no fixture frame carries either keyword. | `test_wcs_solution.py` |
 
 ### Divergences and dead code
@@ -184,15 +184,15 @@ Assess a failure against that test's current contract and independent reference.
 
 Gaps are listed so they are visible rather than assumed. Their release
 acceptance checks are tracked in the
-[master continuation plan](../docs/working/master-continuation-plan.md).
+[master continuation plan](../docs/development/plans/master-continuation-plan.md).
 
 | Area | Why not, and what it would take |
 | --- | --- |
-| **`tools/hr_diagram.py`'s VizieR-backed steps** | `crossmatch_gaia` / `crossmatch_gaia_by_position` (Gaia DR3 via `I/355/gaiadr3`) and `get_literature_cluster_params` (Cantat-Gaudin & Anders 2020 via a name-resolved `target=` query) go through `tools.vizier.search_vizier`. Confirmed working manually against NGC 6124 and, for the catalog-only path, a globular cluster (via an ad hoc script no longer in the tree; see `docs/extraction.md`, "HR Diagram (Python)") — but there is still no `network`-marked automated test for any of these steps, so a future regression would not be caught by CI. |
+| **`tools/hr_diagram.py`'s VizieR-backed steps** | `crossmatch_gaia` / `crossmatch_gaia_by_position` (Gaia DR3 via `I/355/gaiadr3`) and `get_literature_cluster_params` (Cantat-Gaudin & Anders 2020 via a name-resolved `target=` query) go through `tools.vizier.search_vizier`. Confirmed working manually against NGC 6124 and, for the catalog-only path, a globular cluster (via an ad hoc script no longer in the tree; see `docs/architecture/extraction.md`, "HR Diagram (Python)") — but there is still no `network`-marked automated test for any of these steps, so a future regression would not be caught by CI. |
 | **`solve_wcs` end to end** | `tools.wcs.solve_astrometry` is covered for configuration, immutable result handling, structured failures, header short-circuiting, guarded writes, and the explicit search bounds (validation, forwarding to both backend requests, the parity default and the ATLAS narrowing pinned, the no-hint refusal). `solver_data` tests use operator configuration: `ANET_INDEX_PATH` must name directories holding indexes that cover the fixture's ~10 arcmin field (the 4200 series; the packaged 4107-4119 set starts at 22 arcmin). The M15 default and bounded tool tests reach astrometry.net. The P9 ATLAS test requires `ATLAS_CATALOG_ROOT` / `ATLAS_CATALOG` and validates a real UCAC lookup plus bounded-attempt diagnostics, without asserting convergence. The known-solution tests (M4) strip NGC 3628 V's recorded WCS and require astrometry.net (bounded and all-sky) and ATLAS (bounded; it does not search blind) to recover it within 1 arcsec, 0.5% in scale and 0.25 deg in rotation. Absent data skips with a reason naming it; a miss with the data configured fails. |
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
 | **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The APASS and VSX row mappers *are* executed against real provider rows — the recorded responses under `data/fieldcal/zp_solutions/ngc5128_b_002/` (`test_fieldcal_reference.py`) — and every catalog mapping, Landolt and USNO's overrides included, now has a `network`-marked live contract test (`test_m3_provider_responses_live.py`). They are still not covered by recorded responses in the default suite. |
-| **`tools/radio_sources.py`'s VizieR/NED-backed steps** | `identify_radio_sources`'s catalog cross-match and `analyze_source_spectrum`/`plot_field_sed`'s name-based NED lookup. Confirmed working manually end to end against a synthetic FITS frame pointed at 3C 48 (real detection, real VizieR radio-catalog match, real 85-point NED spectrum, plausible spectral index -- see `docs/extraction.md`, "Radio Sources (Python)") — but there is no `network`-marked automated test for either step, so a future regression would not be caught by CI. |
+| **`tools/radio_sources.py`'s VizieR/NED-backed steps** | `identify_radio_sources`'s catalog cross-match and `analyze_source_spectrum`/`plot_field_sed`'s name-based NED lookup. Confirmed working manually end to end against a synthetic FITS frame pointed at 3C 48 (real detection, real VizieR radio-catalog match, real 85-point NED spectrum, plausible spectral index -- see `docs/architecture/extraction.md`, "Radio Sources (Python)") — but there is no `network`-marked automated test for either step, so a future regression would not be caught by CI. |
 | **Scientific plots and host/platform behavior** | Public registry/schema, agent/LLM and MCP paths have focused coverage. Pulsar spectrum channel/axis semantics and actual trace, marker and confidence-line content are covered by `test_pulsar_spectrum_semantics.py`, and every other supported plot's drawn content by `test_plot_content.py`. Actual host and macOS/Windows installed behavior and the provider/solver paths above remain gaps. Passing preservation tests does not establish scientific correctness; the master plan tracks the remaining release gates. |
 
 ## Adding tests

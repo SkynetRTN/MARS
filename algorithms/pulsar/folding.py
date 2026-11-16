@@ -17,7 +17,7 @@ of its own because ``foldAndBin`` applies it afterwards.
 
 This stage turns a period into a profile. Its output is what the folded
 sonification renders, which is why it sits between the periodogram and the
-sonifier. See ``docs/pulsar-tool-pipeline.md``.
+sonifier. See ``docs/guides/pulsar-tool-pipeline.md``.
 """
 
 from __future__ import annotations

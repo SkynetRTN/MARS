@@ -18,7 +18,7 @@ rather than upstream defects reproduced for parity:
     - ``isochrone_cmd`` does not reproduce Astromancer's off-by-one isochrone
       splice index (its extraction defect #3).
 
-See ``docs/extraction.md``, "HR Diagram (Python)" for the full record.
+See ``docs/architecture/extraction.md``, "HR Diagram (Python)" for the full record.
 
 Core transform (matches computePlotDelta exactly)
 -------------------------------------------------

@@ -8,7 +8,7 @@ requires no independence assumption between trial frequencies.
 
 This is conditional on that noise model and a grid chosen independently of
 the flux values. It neither calibrates correlated/filtered radio noise nor
-covers subsequent retuning. See docs/analysis/pulsar-candidates-confidence.md.
+covers subsequent retuning. See docs/development/reviews/pulsar-candidates-confidence.md.
 """
 
 from __future__ import annotations

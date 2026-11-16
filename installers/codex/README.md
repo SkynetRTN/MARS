@@ -111,7 +111,7 @@ started with them:
 | `MARS_MCP_TOOLS` | A subset of tool groups to serve: `databases`, `optical`, `timeseries`, `hr`, `radio` |
 | `MARS_VERSION` | Run this exact release (for example to step back from a bad one) instead of the newest. Empty or unset means the newest |
 | `CASDA_OPAL_USERNAME` | CASDA downloads. The password is read from the system keyring, which needs `DBUS_SESSION_BUS_ADDRESS` (or `XDG_RUNTIME_DIR`); both are forwarded |
-| `MARS_CATALOG_DIR` | The folder holding your plate-solving catalogs: astrometry.net index files and the UCAC catalogue ([plate solving](../../docs/installing.md#plate-solving)) |
+| `MARS_CATALOG_DIR` | The folder holding your plate-solving catalogs: astrometry.net index files and the UCAC catalogue ([plate solving](../../docs/guides/installation/README.md#plate-solving)) |
 | `ANET_INDEX_PATH`, `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S` | The plate solvers' own settings; the two paths name their data folders directly and win over `MARS_CATALOG_DIR` |
 
 Codex forwards a variable as the app has it, an empty value included. The
@@ -191,10 +191,10 @@ Verified in clean Fedora 44 containers, x86_64 and aarch64, through Codex
 maintainer in the ChatGPT app on Fedora Workstation and Windows
 (2026-10-23); the launch command, on Windows 11 ARM64 (2026-10-27). The app on macOS is untested: a macOS VM blocks Codex
 messages by workspace settings (Issue #51667). Step-by-step installs:
-[Linux](../../docs/installing/linux.md), [Windows](../../docs/installing/windows.md),
-[macOS](../../docs/installing/macos.md). macOS and Windows use
+[Linux](../../docs/guides/installation/linux.md), [Windows](../../docs/guides/installation/windows.md),
+[macOS](../../docs/guides/installation/macos.md). macOS and Windows use
 the same wheels as the Claude Desktop extension, and the same limits apply.
 `numba` and `llvmlite` have no Intel Mac wheels. Several dependencies have
 none for Windows on ARM, so there the launcher runs MARS on the x64 Python
 under Windows' emulation; x64 Windows is no longer tested.
-What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/limitations.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/guides/limitations.md).

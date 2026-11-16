@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the architecture figures for ``docs/architecture-layers.md``.
+"""Generate the architecture figures for ``docs/architecture/architecture-layers.md``.
 
 Five figures, each drawn once and rendered in three palettes:
 
@@ -186,7 +186,7 @@ def _sweep() -> dict[str, object]:
 
     import json
 
-    report = json.loads((ROOT / "docs" / "benchmarking" / "report.json").read_text())
+    report = json.loads((ROOT / "docs" / "benchmarks" / "report.json").read_text())
     header = report["header"]
     repeats = {run["repeats"] for run in header["runs"]}
     assert len(repeats) == 1, f"mixed repeat counts: {repeats}"

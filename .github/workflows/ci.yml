@@ -38,7 +38,7 @@ jobs:
       matrix:
         # The supported Pythons: pyproject.toml's classifiers, each tested
         # (tests/test_packaging_metadata.py). 3.13 is the newest every
-        # dependency ships wheels for (docs/installing.md).
+        # dependency ships wheels for (docs/guides/installation/README.md).
         python: ["3.12", "3.13"]
     env:
       UV_PYTHON: ${{ matrix.python }}
@@ -86,7 +86,7 @@ jobs:
       matrix:
         include:
           # Windows on ARM runs the x64 Python under emulation: sep and pyerfa
-          # have no Windows ARM64 wheels (docs/installing/windows.md).
+          # have no Windows ARM64 wheels (docs/guides/installation/windows.md).
           - os: windows-11-arm
             python: cpython-3.13-windows-x86_64-none
           - os: macos-latest
@@ -169,7 +169,7 @@ jobs:
           test -f README.md
           test -f pyproject.toml
           test -f uv.lock
-          test -f docs/tool-architecture.md
+          test -f docs/architecture/tool-architecture.md
           test -f tools/registry.py
           test -f tools/agent/engine.py
           test -f tools/tui/app.py

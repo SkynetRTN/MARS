@@ -1,9 +1,9 @@
-"""M3 malformed calibration inputs (``docs/working/master-continuation-plan.md``).
+"""M3 malformed calibration inputs (``docs/development/plans/master-continuation-plan.md``).
 
 Mixed catalog row shapes and epochs, absent coordinates, missing FWHM in
 adaptive apertures and degenerate zero-point header writes must neither escape
 as exceptions nor advertise a usable calibration. Findings PHOT-04, PHOT-05,
-PHOT-08 and PHOT-11 in ``docs/analysis/algorithm-remediation-plan.md``, plus
+PHOT-08 and PHOT-11 in ``docs/development/reviews/algorithm-remediation-plan.md``, plus
 the integer row ids SkyMapper, SDSS, UCAC and PanSTARRS return live.
 
 The frame is ``ngc5128_galaxy_b_001`` against the recorded APASS rows of the

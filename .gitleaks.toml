@@ -34,9 +34,9 @@ paths = [
   '''AGENTS\.md''',
   '''CLAUDE\.md''',
   '''README\.md''',
-  '''docs/analysis/applicable-designs\.md''',
+  '''docs/development/reviews/applicable-designs\.md''',
   '''docs/examples/README\.md''',
-  '''docs/archive/model-backends\.md''',
+  '''docs/development/archive/tracks/model-backends\.md''',
   '''tests/test_agent_session_manifest\.py''',
   '''tools/ads\.py''',
   '''tools/registry\.py''',
@@ -61,7 +61,7 @@ paths = [
   '''tests/test_bench_tasks\.py''',
   '''benchmarks/fixtures/search_ads\.yaml''',
   '''benchmarks/fixtures/get_paper_abstract\.yaml''',
-  '''docs/benchmarking/harness\.md''',
+  '''docs/benchmarks/harness\.md''',
   # The console's backend selection: the .env reader that puts the key into the
   # environment (moved from tools/config.py to tools/dotenv.py so an entry
   # point can load it before any setting is read), the choice table that names
@@ -94,6 +94,14 @@ paths = [
   '''tools/skill/source/references/databases\.md''',
   '''skills/mars-tools/references/checkout\.md''',
   '''skills/mars-tools/references/databases\.md''',
+  '''docs/guides/installation/README\.md''',
+  '''docs/architecture/tool-architecture\.md''',
+  '''docs/development/archive/tracks/mcp-tool-surface\.md''',
+  # The same config scans Git history. Retain the former exact paths so
+  # reviewed placeholders in old commits keep their existing treatment.
+  '''docs/analysis/applicable-designs\.md''',
+  '''docs/archive/model-backends\.md''',
+  '''docs/benchmarking/harness\.md''',
   '''docs/installing\.md''',
   '''docs/tool-architecture\.md''',
   '''docs/archive/mcp-tool-surface\.md''',

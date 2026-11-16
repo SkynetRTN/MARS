@@ -1,4 +1,4 @@
-"""M3 direct light-curve helpers (``docs/working/master-continuation-plan.md``).
+"""M3 direct light-curve helpers (``docs/development/plans/master-continuation-plan.md``).
 
 Supported helper calls need defined results for: missing errors in variable
 folds (TS-04), all-null dates (TS-31), constant weighted spectra (TS-17),

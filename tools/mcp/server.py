@@ -15,7 +15,7 @@ its own beyond two things the SDK's low-level server leaves to its caller:
 - **One call at a time.** Tool calls run in finite owned worker processes, so
   the event loop keeps answering the host, but under a lock: every MARS tool was
   written and tested to be called sequentially, and the stdio transport has
-  one client (``docs/archive/mcp-tool-surface.md`` §3.2).
+  one client (``docs/development/archive/tracks/mcp-tool-surface.md`` §3.2).
 - **Whole-call containment.** Capacity waiting and execution have finite
   deadlines; cancellation terminates/reaps owned workers and solver groups
   before releasing the lock. Resource defaults live in ``tools.runtime``.

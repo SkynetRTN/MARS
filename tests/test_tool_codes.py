@@ -6,7 +6,7 @@ the AST of ``tools/`` and ``algorithms/`` and compares what is constructed
 against what is declared, in both directions.
 
 Three construction forms have to be collected, and missing any one of them is
-how ``docs/analysis/applicable-designs.md`` §3 came to report three error codes
+how ``docs/development/reviews/applicable-designs.md`` §3 came to report three error codes
 where there are 41:
 
 1. ``ToolError(code="x", ...)`` / ``ToolWarning(code="x", ...)``;

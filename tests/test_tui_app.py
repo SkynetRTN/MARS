@@ -983,7 +983,7 @@ def test_the_header_names_mars_and_the_backend_from_launch():
 
 
 def test_the_console_opens_in_the_skynet_palette():
-    """The brand's exact colours (docs/repository-folders.md, the palette), with the
+    """The brand's exact colours (docs/architecture/repository-folders.md, the palette), with the
     light variant registered for the theme switcher."""
     from textual.color import Color
 

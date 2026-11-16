@@ -11,7 +11,7 @@ without changing annular sky subtraction. The M3
 malformed-input guards, marked ``M3`` inline, do change outcomes: inputs that
 used to abort now solve or fail by name, unusable rows are left out, and a
 degenerate solve -- including upstream's single-star zero point with a NaN
-error -- is refused rather than returned (``docs/extraction.md``, Field
+error -- is refused rather than returned (``docs/architecture/extraction.md``, Field
 Calibration §5b).
 """
 from __future__ import annotations

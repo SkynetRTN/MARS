@@ -15,7 +15,7 @@ fast, at construction, when its key is missing. Ollama does not: a backend
 pointed at a daemon that is not running builds perfectly and then raises a
 connection error several seconds into the user's first question, after the
 transcript already shows a turn starting. The console's rule is "never a
-connection traceback" (``docs/tool-architecture.md`` 10.2), so the switch is
+connection traceback" (``docs/architecture/tool-architecture.md`` 10.2), so the switch is
 what pays the probe.
 """
 
@@ -239,7 +239,7 @@ def _require_model(backend: ModelBackend, spec: str) -> None:
     A daemon that is up is not a daemon that has your model. Ollama answers an
     unknown one with a 404 from the chat endpoint, which surfaces *mid-turn* as
     an ``httpx.HTTPStatusError`` on the user's first question -- the raw
-    traceback the console must never show (``docs/tool-architecture.md``
+    traceback the console must never show (``docs/architecture/tool-architecture.md``
     10.2). Checking here moves it to the switch, where there is still another
     backend to stay on.
 

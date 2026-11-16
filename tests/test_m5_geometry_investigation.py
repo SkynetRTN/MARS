@@ -2,7 +2,7 @@
 
 Native backends, source extraction or catalog I/O are replaced only at the
 boundary under investigation. Expectations now require corrected geometry.
-See docs/analysis/m5-coordinates-image-geometry.md for reachability and limits.
+See docs/development/reviews/m5-coordinates-image-geometry.md for reachability and limits.
 """
 
 from types import SimpleNamespace

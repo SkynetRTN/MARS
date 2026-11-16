@@ -18,6 +18,6 @@ Layout::
 The vendored Skylib astrometry stack and FITS/angle/HDU helpers now live in
 ``algorithms.skylib_lite``.
 
-See docs/extraction.md, WCS for provenance, what was left behind, and the external
+See docs/architecture/extraction.md, WCS for provenance, what was left behind, and the external
 dependencies required.
 """

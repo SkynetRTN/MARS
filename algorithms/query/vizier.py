@@ -220,7 +220,7 @@ class VizierCatalog(Catalog):
         M3 (CAT-20): a response missing its coordinate columns, or every
         declared band column, raises ``ProviderResponseError`` instead of
         mapping to ``[]``. Well-formed rows with nothing measurable still map
-        to ``[]`` (logged). See ``docs/extraction.md``, Query §5.12.
+        to ``[]`` (logged). See ``docs/architecture/extraction.md``, Query §5.12.
         """
         sources: TList[CatalogSource] = []
         if table is None or len(table) == 0:

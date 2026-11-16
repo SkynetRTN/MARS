@@ -1,4 +1,4 @@
-"""M3 WCS setup and I/O failures (``docs/working/master-continuation-plan.md``).
+"""M3 WCS setup and I/O failures (``docs/development/plans/master-continuation-plan.md``).
 
 No-hint ATLAS input (WCS-05), textual equinoxes such as ``J2000`` (WCS-22), and
 missing binaries, bad catalog roots and a full output disk (WCS-23) must be

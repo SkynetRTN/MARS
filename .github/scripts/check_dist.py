@@ -2,7 +2,7 @@
 """Check a built skynet-mars wheel before anything installs or uploads it.
 
 Run by CI on every pull request and by the release workflow before each
-publish (docs/releasing.md). ``twine check`` covers what an index would reject;
+publish (docs/development/releasing.md). ``twine check`` covers what an index would reject;
 this covers what it would accept and then ship broken:
 
 - the core data that reaches the wheel only through the ``tools/_data``

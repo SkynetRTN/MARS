@@ -3,7 +3,7 @@
 This package is a **language port**, not an extraction. Every other Python
 folder under ``algorithms/`` is byte-preserved from Skynet; this one carries
 Astromancer TypeScript logic into Python because the upstream sonifier cannot
-be run headless -- see ``docs/extraction.md``, "Pulsar (sonification)".
+be run headless -- see ``docs/architecture/extraction.md``, "Pulsar (sonification)".
 
 Port markers use ``# PORTED:`` rather than the ``# EXTRACTED:`` marker the
 byte-preserving folders use, so the extraction index stays meaningful.

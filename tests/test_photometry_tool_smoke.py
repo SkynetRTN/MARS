@@ -112,7 +112,7 @@ def test_plot_zero_point_solution_skips_unverified_zero_point() -> None:
 
 def test_compute_photometry_disables_apcorr_for_field_cal_zero_point() -> None:
     # field_cal.py solves its zero point with apcorr_tol=0 (aperture correction
-    # off -- see docs/extraction.md's apcorr_tol note and field_cal.py's own
+    # off -- see docs/architecture/extraction.md's apcorr_tol note and field_cal.py's own
     # "LEGACY AFTERGLOW PARITY -- DO NOT CLEAN UP" comment). Applying that zero
     # point to a final pass using the class default (apcorr_tol=1e-4, aperture
     # correction on) would silently bias every reported magnitude by the

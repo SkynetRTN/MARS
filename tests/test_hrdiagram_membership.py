@@ -6,7 +6,7 @@ No network access -- everything here is synthetic. Two things are checked:
    Astromancer's ``updateClusterFieldSources``
    (``git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120``),
    including its documented "correct by accident" NaN behaviour for a point
-   outside the semi-major axis (``docs/extraction.md``, HR Diagram TypeScript
+   outside the semi-major axis (``docs/architecture/extraction.md``, HR Diagram TypeScript
    defect #8).
 2. ``select_cluster_members`` end to end on a synthetic clump-plus-field
    population, including the reason the port was worth doing: a fixed
@@ -54,7 +54,7 @@ def test_elliptical_pm_mask_rejects_outside_the_semi_major_axis_via_the_preserve
     """PRESERVED: for |pmra - center| > a, 1 - ((pmra-center)/a)**2 is
     negative, sqrt gives NaN, and NaN bound comparisons are False in both
     numpy and the original TypeScript -- "correct by accident," per
-    docs/extraction.md's HR Diagram TypeScript defect #8. This must not raise
+    docs/architecture/extraction.md's HR Diagram TypeScript defect #8. This must not raise
     or warn (np.errstate suppresses the expected RuntimeWarning)."""
     with np.errstate(all="raise"):
         mask = _elliptical_pm_mask(

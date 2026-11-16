@@ -48,18 +48,18 @@ SCOPE = (
 #: names they were written with (see the last test).
 RECORDS = frozenset(
     {
-        "docs/archive/mcp-tool-surface.md",
-        "docs/archive/model-backends.md",
-        "docs/archive/optical-tools.md",
-        "docs/analysis/algorithm-remediation-plan.md",
-        "docs/analysis/applicable-designs.md",
-        "docs/benchmarking/report.md",
-        "docs/benchmarking/report.json",
-        "docs/benchmarking/results.md",
-        "docs/superpowers/plans/2026-09-14-tui-artifact-rendering.md",
+        "docs/development/archive/tracks/mcp-tool-surface.md",
+        "docs/development/archive/tracks/model-backends.md",
+        "docs/development/archive/tracks/optical-tools.md",
+        "docs/development/reviews/algorithm-remediation-plan.md",
+        "docs/development/reviews/applicable-designs.md",
+        "docs/benchmarks/report.md",
+        "docs/benchmarks/report.json",
+        "docs/benchmarks/results.md",
+        "docs/development/archive/plans/2026-09-14-tui-artifact-rendering.md",
     }
 )
-RECORD_TREES = ("docs/benchmarking/figures/",)
+RECORD_TREES = ("docs/benchmarks/figures/",)
 
 #: The telescope and the astronomer, not the project.
 _ASTRONOMER = _OLD.capitalize()

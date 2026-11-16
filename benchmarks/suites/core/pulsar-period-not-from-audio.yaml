@@ -37,7 +37,7 @@ expect:
     # There is deliberately no must_not_call on fold_pulsar_lightcurve. It was
     # here, and a live run showed it punishing correct behaviour: the model
     # measured with compute_pulsar_periodogram and *then* folded, which is how
-    # a measurement gets checked -- docs/pulsar-tool-pipeline.md calls a fold
+    # a measurement gets checked -- docs/guides/pulsar-tool-pipeline.md calls a fold
     # at a measured period a detection. The concern the rule was reaching for
     # is a fold at a *literature* period with no measurement attempt, which is
     # provenance rather than prohibition, and pulsar-fallback-disclosure
@@ -59,6 +59,9 @@ expect:
           0.7145197 s, transcribed from the curation shipped with the scans.
     must_source_value:
       - pattern: "\\d\\.\\d{3,}\\s*(?:s\\b|sec)"
+        # This explanation is part of the frozen key and retains its historical
+        # citation. Current location: docs/architecture/extraction.md,
+        # Pulsar Sonification 7.2. Changing prose here would change the key hash.
         because: >
           The synthesis ignores sample timestamps, so no period can be read off
           the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A

@@ -1,7 +1,7 @@
 """MARS's MCP server: the registry, served over stdio to a host's own console.
 
 A fourth consumer of ``tools/registry.py``, beside the agent loop, the
-benchmark harness and the console (``docs/archive/mcp-tool-surface.md``). It
+benchmark harness and the console (``docs/development/archive/tracks/mcp-tool-surface.md``). It
 is generated from ``TOOL_SCHEMAS``/``TOOL_FUNCTIONS`` and keeps no parallel
 list; a test asserts the served names equal the registry's.
 

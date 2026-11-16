@@ -1,6 +1,6 @@
 """The event union the agent loop emits.
 
-Twelve frozen dataclasses (``docs/tool-architecture.md`` section 10 is the
+Twelve frozen dataclasses (``docs/architecture/tool-architecture.md`` section 10 is the
 reference description of the contract they make up). Events are
 ephemeral snapshots for the shim, the TUI, and the benchmark harness to read;
 the durable record is the session manifest. ``arguments`` and ``result`` are

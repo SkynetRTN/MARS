@@ -5,7 +5,7 @@
 #       optical_data_processing/source_extraction.py
 # `wcs.py` imports `build_wcs_from_header` and `get_source_xy` from here, so the module was taken whole rather
 # than split; `get_source_radec` came along unused by the solve. Only the import
-# block was rewritten (changes marked `EXTRACTED:`). See docs/extraction.md, WCS.
+# block was rewritten (changes marked `EXTRACTED:`). See docs/architecture/extraction.md, WCS.
 
 from __future__ import annotations
 

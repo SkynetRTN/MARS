@@ -1,6 +1,6 @@
 """What PyPI shows for skynet-mars, kept consistent with what the package does.
 
-The release workflow publishes to TestPyPI and PyPI (docs/releasing.md); these
+The release workflow publishes to TestPyPI and PyPI (docs/development/releasing.md); these
 pin the metadata that an index displays and a resolver reads, so an edit to
 ``requires-python`` or the CI matrix cannot leave the classifiers claiming
 something else.

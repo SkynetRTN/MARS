@@ -3,7 +3,7 @@ the plot_field_sed / identify_radio_sources / analyze_source_spectrum tools.
 
 No network access by default -- VizieR/NED-backed paths are covered by
 synthetic-data unit tests here and were confirmed live manually (see
-docs/extraction.md).
+docs/architecture/extraction.md).
 """
 
 from __future__ import annotations
