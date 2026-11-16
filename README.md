@@ -23,10 +23,8 @@ University of North Carolina at Chapel Hill: Skynet itself, extracted
 directly into Python, and [Astromancer](https://astromancer.skynet.unc.edu/home),
 its light-curve, periodogram and star-cluster web application, ported from
 TypeScript. The extractions preserve upstream algorithms and recorded
-behavior, with documented corrections for verified defects. The test suite
-includes both upstream parity checks and independent correctness regressions;
-the [extraction record](https://github.com/SkynetRTN/MARS/blob/main/docs/architecture/extraction.md)
-identifies the differences.
+behavior, with documented corrections for verified defects. Note that upon the first
+stable release of MARS, future development will occur in the Skynet 2 monorepo.
 
 ## Quick Start
 
@@ -63,17 +61,6 @@ project with its own package or module by either name shadows them; and it
 reads its `MARS_*` settings once, when first imported.
 Three optional optical frames are Git LFS objects (`git lfs pull`); see
 [`data/README.md`](https://github.com/SkynetRTN/MARS/blob/main/data/README.md).
-
-## Known Limitations
-
-Most results reproduce Skynet and Astromancer, and parity with them is not a
-proof of scientific correctness; the defects corrected so far are recorded,
-each with tests against an independent reference. Plate solving needs astrometry.net
-and index files installed on your machine. The MCP server is a trusted,
-local, single-user stdio interface. Windows is supported on ARM, running an
-x64 Python. Scientific limits that apply to a result come back with it as
-warnings. Every known limitation, with where it is detailed, is in
-[`docs/guides/limitations.md`](https://github.com/SkynetRTN/MARS/blob/main/docs/guides/limitations.md).
 
 ## What's Here
 
