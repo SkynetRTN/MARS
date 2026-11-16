@@ -1318,7 +1318,7 @@ The migration updates local/hosted links, media paths, contributor routing,
 generated agent guidance, path-sensitive tests, CI's required-file check and
 figure-generator inputs. The versioned notes remain at `docs/releases/0.1.0.md`.
 Validation: 519 documentation-sensitive/packaging/benchmark checks passed;
-513 local/live-repository link targets and Markdown headings resolved; strict
+local/live-repository link targets and Markdown headings resolved; strict
 wheel/sdist metadata and source/data/licence checks passed. Historical report
 JSON, figures and audio retain their bytes; benchmark key payloads and bundle
 pins are unchanged. A frozen key explanation retains its historical citation
