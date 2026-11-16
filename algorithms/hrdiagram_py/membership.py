@@ -44,7 +44,7 @@ def _elliptical_pm_mask(
     one value per star -- the same elementwise formula handles both.
 
     Preserves upstream's documented "correct by accident" behaviour
-    (``docs/extraction.md``, HR Diagram TypeScript defect #8): for a star with
+    (``docs/architecture/extraction.md``, HR Diagram TypeScript defect #8): for a star with
     ``|pmra - center_pmra| > a``, ``1 - ((pmra-center_pmra)/a)**2`` is
     negative, so ``decDiff`` is ``NaN``, and the subsequent bound comparison
     evaluates to ``False`` in both TypeScript and here -- the right rejection,

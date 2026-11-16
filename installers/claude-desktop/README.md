@@ -39,7 +39,7 @@ This README is not packed (`.mcpbignore`).
 
 Releases after `0.1.0rc6` carry `mars.mcpb`, packed by the release workflow
 from the tagged commit and run there on macOS and Windows before publishing
-(`docs/releasing.md`). To build it yourself:
+(`docs/development/releasing.md`). To build it yourself:
 
 ```bash
 npx @anthropic-ai/mcpb@2.1.2 validate installers/claude-desktop/manifest.json
@@ -111,5 +111,5 @@ MARS on the x64 build of Python 3.13, which Windows runs under its own
 emulation. Supported: Apple Silicon Macs (verified in Claude Desktop by the
 maintainer, 2026-10-23) and Windows on ARM (the launch verified on Windows 11
 ARM64, 2026-10-27). x64 Windows is no longer tested. Step-by-step installs:
-[macOS](../../docs/installing/macos.md), [Windows](../../docs/installing/windows.md).
-What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/limitations.md).
+[macOS](../../docs/guides/installation/macos.md), [Windows](../../docs/guides/installation/windows.md).
+What MARS does not do, or does only under a condition, is in [Known limitations](../../docs/guides/limitations.md).

@@ -15,7 +15,7 @@ per-point error, which is why ``lombScargleWithError`` is not ported.
 
 This is the stage that produces a period. Everything downstream — folding, and
 the folded sonification — needs one, so nothing downstream can run until this
-does. See ``docs/pulsar-tool-pipeline.md``.
+does. See ``docs/guides/pulsar-tool-pipeline.md``.
 """
 
 from __future__ import annotations

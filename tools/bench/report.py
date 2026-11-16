@@ -1,6 +1,6 @@
 """The matrix: ``report.md`` and ``report.json``, same content.
 
-``docs/benchmarking/harness.md`` sections 7.6 and 12.
+``docs/benchmarks/harness.md`` sections 7.6 and 12.
 
 **Column order is load-bearing.** The two questions this harness exists to
 answer are read left to right -- correctness, then efficiency -- and the two

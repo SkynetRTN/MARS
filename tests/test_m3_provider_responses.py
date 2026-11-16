@@ -1,4 +1,4 @@
-"""M3 provider response changes (``docs/working/master-continuation-plan.md``).
+"""M3 provider response changes (``docs/development/plans/master-continuation-plan.md``).
 
 Renamed, missing or non-finite columns used to make a populated response look
 empty (CAT-20: ``table_to_sources`` swallowed every per-row mapping failure).

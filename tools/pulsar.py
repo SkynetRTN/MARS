@@ -11,7 +11,7 @@ runs them. Each stage's artifact is the next stage's input::
 The order is not a convention, it is a dependency chain: the fold needs a
 period, and only the periodogram produces one. Skipping a stage means guessing
 a period, which is how you end up folding on a harmonic. See
-``docs/pulsar-tool-pipeline.md`` for the flow and where each stage's algorithm
+``docs/guides/pulsar-tool-pipeline.md`` for the flow and where each stage's algorithm
 was extracted from.
 
 Every stage accepts either a raw Green Bank / Skynet pulsar file or the

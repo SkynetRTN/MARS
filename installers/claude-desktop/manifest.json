@@ -14,7 +14,7 @@
     "url": "https://github.com/SkynetRTN/MARS"
   },
   "homepage": "https://github.com/SkynetRTN/MARS",
-  "documentation": "https://github.com/SkynetRTN/MARS/blob/main/docs/installing.md",
+  "documentation": "https://github.com/SkynetRTN/MARS/blob/main/docs/guides/installation/README.md",
   "support": "https://github.com/SkynetRTN/MARS/issues",
   "icon": "icon.png",
   "server": {

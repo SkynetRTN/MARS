@@ -17,7 +17,7 @@ live remote astronomy service calls out of default checks." Requires
 
 Only frames the tool can actually resolve are covered here --
 ``data/optical/``, not ``test_subjects/``, which nothing in ``tools/`` reads
-(see ``docs/repository-folders.md``). That's 37 of the masterlist's 73 rows as of
+(see ``docs/architecture/repository-folders.md``). That's 37 of the masterlist's 73 rows as of
 this writing; the target list is discovered dynamically (same rationale as
 ``conftest.py``'s ``_discover_frames``) so a newly bundled frame with a masterlist
 entry is covered automatically, with nothing to keep in sync by hand.

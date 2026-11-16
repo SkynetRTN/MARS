@@ -30,7 +30,7 @@ false-alarm lines. Two things are legible here that a number cannot convey:
 the **harmonic comb** at P/2, P/3, P/4… receding to the left, and how far
 *below* every real feature the confidence lines sit — which is why
 `peak_confidence` is not a validity check and `peak_fold_snr` is. See
-`docs/pulsar-tool-pipeline.md` §4.
+`docs/guides/pulsar-tool-pipeline.md` §4.
 
 **`psr_b0329_54_folded.png`** — the pulse profile, 100 phase bins at the
 measured period, 293σ. The x axis runs `[0, 0.7145]`, set by upstream's

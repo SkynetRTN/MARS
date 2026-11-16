@@ -8,7 +8,7 @@ astroquery exception per service.
 Most name-based astroquery calls (VizieR/NED/MAST ``query_object``) already
 resolve names internally, so calling this first is not required before using
 them -- it exists to give a caller ``resolve_target`` as a tool in its own
-right (``docs/tool-architecture.md`` section 4) and a shared not-found path.
+right (``docs/architecture/tool-architecture.md`` section 4) and a shared not-found path.
 Resolution is strict: SIMBAD failing to answer is ``provider_unavailable``,
 never ``not_found``, and the next call retries it.
 CASDA's region query is the one backend here that only accepts coordinates,

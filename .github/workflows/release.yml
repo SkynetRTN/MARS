@@ -3,7 +3,7 @@ name: Release
 # Builds, verifies and publishes a MARS release from a `v<version>` tag, and
 # checks that the optional data bundles it pins are published. The policy --
 # what a tag, a pre-release and a data bundle version mean -- is
-# docs/releasing.md. workflow_dispatch runs everything but the publishing
+# docs/development/releasing.md. workflow_dispatch runs everything but the publishing
 # jobs, as a dry run.
 #
 # Publishing has two parallel outputs after the same build, install and data
@@ -12,7 +12,7 @@ name: Release
 # `verify-testpypi`; only that verified path can reach PyPI (`publish-pypi`).
 # The two index jobs use PyPI trusted publishing -- no token is stored anywhere
 # -- from the `testpypi` and `pypi` environments, which the maintainer
-# configures (docs/releasing.md).
+# configures (docs/development/releasing.md).
 
 on:
   push:
@@ -266,7 +266,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every supported Python, as CI tests them (docs/installing.md).
+        # Every supported Python, as CI tests them (docs/guides/installation/README.md).
         python: ["3.12", "3.13"]
     steps:
       # No checkout: the wheel must work on a machine that has none.
@@ -322,7 +322,7 @@ jobs:
             fi
             found=$(jq -r --arg a "$archive" '.[] | select(.name == $a) | "\(.size) \(.digest)"' <<<"$assets")
             if [ "$found" != "$size sha256:$sha" ]; then
-              echo "::error::the data release does not hold $archive as pinned (want: $size sha256:$sha; found: ${found:-nothing}). See docs/releasing.md."
+              echo "::error::the data release does not hold $archive as pinned (want: $size sha256:$sha; found: ${found:-nothing}). See docs/development/releasing.md."
               exit 1
             fi
             echo "ok $archive"
@@ -343,7 +343,7 @@ jobs:
         shell: bash
     steps:
       # Windows on ARM installs the x64 Python, run under emulation: sep and
-      # pyerfa have no Windows ARM64 wheels (docs/installing/windows.md).
+      # pyerfa have no Windows ARM64 wheels (docs/guides/installation/windows.md).
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
@@ -399,7 +399,7 @@ jobs:
         run: |
           # A PEP 440 pre-release is published as a GitHub pre-release; anything
           # else is a release. The build job classified the version with
-          # packaging.version. docs/releasing.md.
+          # packaging.version. docs/development/releasing.md.
           if [ "$PRERELEASE" = "true" ]; then flag=--prerelease; else flag=--latest; fi
           (cd extension && sha256sum -- mars.mcpb) | tee -a dist/SHA256SUMS
           gh release create "$TAG" dist/*.whl dist/*.tar.gz extension/mars.mcpb dist/SHA256SUMS \

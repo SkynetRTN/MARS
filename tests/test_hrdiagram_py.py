@@ -93,7 +93,7 @@ def test_isochrone_cmd_drops_thermal_pulse_agb_rows():
     `Mini` freezes while synthetic Gaia BP/RP swing by tens of magnitudes
     pulse to pulse -- a documented PARSEC dust/mass-loss modelling artifact,
     not real photometry (confirmed 2026-08-12 against a live NGC 6124 fetch;
-    see docs/extraction.md, "HR Diagram (Python)"). Plotted or fit verbatim
+    see docs/architecture/extraction.md, "HR Diagram (Python)"). Plotted or fit verbatim
     this turns a clean CMD track into a scribbled wedge and biases
     fit_distance_reddening's nearest-point cost. isochrone_cmd must drop
     those rows by default. This table is hand-built (small, exact label

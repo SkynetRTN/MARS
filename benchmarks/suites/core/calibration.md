@@ -5,11 +5,11 @@
 At 24 trials per backend no pair is separated at 95% confidence, not even
 96% against 67%. Separating the top two would take 176 trials. The suite has
 measured four backends and ordered none of them; see
-`docs/benchmarking/results.md`, *Resolution*.
+`docs/benchmarks/results.md`, *Resolution*.
 
 **Original note.** Four backends across four tiers, three repeats each —
 96 sessions. §7.1.9's gate is met. The scoreboard and the limits
-are in [../../../docs/benchmarking/results.md](../../../docs/benchmarking/results.md).
+are in [../../../docs/benchmarks/results.md](../../../docs/benchmarks/results.md).
 
 | Backend | Tier | Passed (of 24) | Stability |
 | --- | --- | --- | --- |
@@ -43,7 +43,7 @@ reported as facts.
   assertion from a mention until it was fixed; it can now. The transcripts of
   *this* run have not been re-read, so the claim is withdrawn rather than
   inverted: there is no longer evidence for it. See
-  `docs/benchmarking/results.md`, *Corrections to earlier reporting*.
+  `docs/benchmarks/results.md`, *Corrections to earlier reporting*.
 * **§7.4's prediction did not hold.** It calls `null_argument_fidelity` "the
   single most discriminating check in the suite for small local models". All
   four backends passed JSON `null` on every repeat, the 9B included. The check

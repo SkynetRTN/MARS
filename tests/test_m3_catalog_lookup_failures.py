@@ -1,8 +1,8 @@
 """M3 catalog lookup failures: SDSS named lookup, APASS U, SIMBAD recovery.
 
 Each lookup must return data or explain the specific failure, and a transient
-failure must have a defined recovery (``docs/working/master-continuation-plan.md``,
-M3; ``docs/analysis/algorithm-remediation-plan.md`` CAT-06, CAT-18, CAT-22).
+failure must have a defined recovery (``docs/development/plans/master-continuation-plan.md``,
+M3; ``docs/development/reviews/algorithm-remediation-plan.md`` CAT-06, CAT-18, CAT-22).
 None of these tests opens a socket.
 """
 

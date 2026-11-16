@@ -99,7 +99,7 @@ include = ["tools*", "algorithms*"]
 "algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
 "tools.skill" = ["source/*.md", "source/references/*.md"]
 "tools.mcp" = ["bundles.json", "icons/*.png"]
-# The core data (docs/archive/mcp-tool-surface.md §3.5). tools/_data is a
+# The core data (docs/development/archive/tracks/mcp-tool-surface.md §3.5). tools/_data is a
 # symlink to data/ in a checkout; these globs ship its core subtrees -- never
 # data/optical/, which is the fetched optical bundle -- inside the wheel.
 "tools" = [

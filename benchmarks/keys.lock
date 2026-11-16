@@ -14,7 +14,7 @@
 # alternative that moved: of the nine recorded sessions, one is an excluded
 # harness error and the other eight each matched "truncat" or "only the first"
 # in their own answer text, so all of them stand under both keys. Checked, not
-# assumed -- see docs/working/benchmark-results.md.
+# assumed -- see docs/benchmarks/results.md.
 # 2026-10-23 (M2): add metadata-grounded author/year attribution checks to
 # ned-formal-designation and abstract-before-attribution. The archived paid
 # transcripts are absent here, so historical scores are explicitly labelled

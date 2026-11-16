@@ -1,11 +1,11 @@
-"""M3 pulsar controls (``docs/working/master-continuation-plan.md``).
+"""M3 pulsar controls (``docs/development/plans/master-continuation-plan.md``).
 
 Background subtraction, plot labels, background and size controls existed in
 Python but not in the registered schemas, while the guidance told callers to
 "vary back_scale" on a tool that has no such parameter. This pins which
 controls are public, that the schemas say so, that a registered caller cannot
 reach the rest, and that the guidance matches. The decision and its reasons
-are in ``docs/pulsar-tool-pipeline.md`` ("Public and Python-only controls").
+are in ``docs/guides/pulsar-tool-pipeline.md`` ("Public and Python-only controls").
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def _guidance_texts() -> dict[str, str]:
 
     texts = {"prompt": SYSTEM_PROMPT}
     for path in [*(ROOT / "tools/skill/source").rglob("*.md"),
-                 ROOT / "docs/pulsar-tool-pipeline.md", ROOT / "CLAUDE.md"]:
+                 ROOT / "docs/guides/pulsar-tool-pipeline.md", ROOT / "CLAUDE.md"]:
         texts[str(path.relative_to(ROOT))] = path.read_text(encoding="utf-8")
     for tool in TOOL_SCHEMAS:
         if "pulsar" in tool["name"]:

@@ -13,7 +13,7 @@ host uses -- and checks, through the protocol alone:
 It opens no socket -- the chain is local -- and writes its artifacts to a
 temporary directory it removes. It reports which optional data bundles are
 installed, without requiring them. The release workflow runs it on a clean
-runner against the built wheel (``docs/releasing.md``); a tester runs it after
+runner against the built wheel (``docs/development/releasing.md``); a tester runs it after
 installing.
 """
 

@@ -137,7 +137,7 @@ PERIODOGRAM_PEAK_SERIES = SeriesSpec(
 #:
 #: These assume white noise. A peak above the green line is not thereby a
 #: pulsar; four of the five bundled scans clear it on interference. See
-#: ``docs/extraction.md``, Pulsar Sonification §8.
+#: ``docs/architecture/extraction.md``, Pulsar Sonification §8.
 CONFIDENCE_LINES = (
     SeriesSpec("67.3% Confidence", "conf-1-sigma", color="red", dash_style="ShortDash"),
     SeriesSpec("95.4% Confidence", "conf-2-sigma", color="orange", dash_style="ShortDash"),

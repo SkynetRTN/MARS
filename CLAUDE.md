@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Documentation follows [docs/README.md](docs/README.md): user guides in
+`docs/guides/`, current technical references in `docs/architecture/`, maintainer
+procedures and records in `docs/development/`, and benchmark evidence in
+`docs/benchmarks/`. Keep the single master release checklist under
+`docs/development/plans/`. Implementation scratch stays outside `docs/`;
+do not create workflow-specific documentation directories.
+
 ## What this repository is
 
 MARS (MCP Astronomy Research Suite) is a Python astronomy tool collection,
@@ -13,12 +20,12 @@ packaged as `skynet-mars`. Its main code and architecture areas are:
 2. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
    `fieldcal/`, `catalogs/`, `query/`) plus the shared `skylib_lite/` subset
    and the Python ports in `pulsar/`, `variable_star/`, and `hrdiagram_py/`.
-3. `docs/tool-architecture.md` — the master architecture for the tool collection.
+3. `docs/architecture/tool-architecture.md` — the master architecture for the tool collection.
 
 The top-level `tools/` and `algorithms/` folders are intentionally separate.
 `tools/` is the public tool surface; `algorithms/` holds lower-level extracted
-code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
-`docs/tool-architecture.md` describe the current architecture.
+code that tool wrappers may call. `README.md`, `docs/architecture/repository-folders.md`, and
+`docs/architecture/tool-architecture.md` describe the current architecture.
 
 Using the tools, as opposed to working on this repository, is taught by the agent
 skill in `skills/mars-tools/`, rendered from its one source in `tools/skill/source/`:
@@ -39,7 +46,7 @@ defects with regression tests and dated evidence. Two rules follow from this:
   selection, numerical resolution and reporting share `CATALOGS` through
   `catalogs.filters`; `CATALOG_OPTIONS` is a historical compatibility export.
   Retained quirks in `algorithms/hrdiagram_py/legacy.py` have explicit
-  dispositions in `docs/extraction.md` and the master continuation plan.
+  dispositions in `docs/architecture/extraction.md` and the master continuation plan.
   Check current callers and acceptance evidence before changing them. TS-21's
   cancelling unit factors remain protected; changing only one is incorrect.
 
@@ -50,7 +57,7 @@ defects with regression tests and dated evidence. Two rules follow from this:
   with the processing-run objects it stood in for. `_clear_wcs_solution_fields`
   is now on `tests/test_repository_shape.py`'s forbidden-API list.
 
-`docs/extraction.md` carries one section per domain with exact provenance (source path,
+`docs/architecture/extraction.md` carries one section per domain with exact provenance (source path,
 line ranges, per-file diff fidelity), the list of seams, dependency requirements, and what
 verification was actually performed. It consolidates what used to be a per-folder
 `EXTRACTION.md`; those files are gone, and references to them elsewhere are stale.
@@ -61,7 +68,7 @@ Three folders are **ports** of Astromancer TypeScript into Python rather than
 extractions: `algorithms/pulsar/`, `algorithms/variable_star/`, and
 `algorithms/hrdiagram_py/`. They are marked `# PORTED:` rather than `# EXTRACTED:` so
 the extraction-marker index stays meaningful. Their provenance and intentional
-differences are recorded in `docs/extraction.md`.
+differences are recorded in `docs/architecture/extraction.md`.
 
 ## Commands
 
@@ -75,7 +82,7 @@ git diff --check                         # whitespace check
 CI (`.github/workflows/ci.yml`) runs on **Python 3.12 and 3.13**, the
 supported versions (`pyproject.toml`'s floor is 3.12; 3.13 is the newest every
 dependency ships wheels for -- `sep` has none for 3.14; see
-`docs/installing.md`), both against `uv.lock`. Users are assumed to run 3.12
+`docs/guides/installation/README.md`), both against `uv.lock`. Users are assumed to run 3.12
 or 3.13, so neither Python nor the dependencies are chased to their newest:
 `uv.lock` moves when a change needs it or for a security fix (Dependabot's
 security updates, enabled in the repository settings), not on a schedule. Resolve paths for containment
@@ -85,7 +92,7 @@ checks through `tools.config.within`/`safe_resolve`. Required jobs include
 tests alone without the extra), packaging, native platform containment, and
 a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
-`tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
+`tools/agent/engine.py`, `tools/tui/app.py`, and `docs/architecture/tool-architecture.md`
 exist.
 
 The suite includes upstream preservation tests and independent correctness
@@ -144,10 +151,10 @@ routing; the tool layer owns remote query orchestration. Ownership is:
   period. Folding at a wrong period may yield a misleading profile without
   raising an error. Inspect `peak_fold_snr`/`pulse_snr` and the conditional
   false-alarm disclosures; the legacy `peak_confidence` label is null.
-  See `docs/pulsar-tool-pipeline.md`.
+  See `docs/guides/pulsar-tool-pipeline.md`.
 
   Never read a period off rendered audio: the synthesis ignores sample
-  timestamps (`docs/extraction.md`, Pulsar Sonification §7.2).
+  timestamps (`docs/architecture/extraction.md`, Pulsar Sonification §7.2).
 
   **A catalogued period is a check on a measured one, never an input.** The
   bundled scans carry `curated_period_s` (from `data/pulsar/curated_periods.json`,
@@ -181,7 +188,7 @@ with composition.
 `CATALOGS` supplies the production filter routes through `catalogs.filters`.
 `CATALOG_OPTIONS` retains APASS/PanSTARRS extraction-time declarations for
 compatibility and provenance; it does not drive runtime reference resolution.
-See `docs/extraction.md`, Catalogs §4 and the dated M2 corrections.
+See `docs/architecture/extraction.md`, Catalogs §4 and the dated M2 corrections.
 
 `algorithms.fieldcal` needs WCS, source extraction, and photometry but does not
 own them. **There is no dependency-injection seam.** The stateless rollout
@@ -264,7 +271,7 @@ the four adapters. Its rules:
   calls are being answered — hence for the **last** assistant message only, and
   never unsigned. Asking for a thinking budget costs `temperature`, which the
   provider refuses alongside it, so thinking is **off by default** everywhere
-  but the console (`docs/archive/model-backends.md` 4.8).
+  but the console (`docs/development/archive/tracks/model-backends.md` 4.8).
 
 `tools/bench/` owns the model benchmark harness and nothing else: the tool
 plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
@@ -348,10 +355,10 @@ home (`tools/paths.py`; `MARS_HOME`):
   `tools/mcp/bundles.json`.
 
 A changed bundle is a new, content-addressed asset on the standing `data`
-release, never a replaced one (`docs/releasing.md`).
+release, never a replaced one (`docs/development/releasing.md`).
 
-`docs/archive/model-backends.md` is the port's full design and
-`docs/benchmarking/harness.md` the harness's; `docs/tool-architecture.md`
+`docs/development/archive/tracks/model-backends.md` is the port's full design and
+`docs/benchmarks/harness.md` the harness's; `docs/architecture/tool-architecture.md`
 sections 10 and 10.1 are the summaries, and 10.3 is the MCP server's.
 
 ### Vendored `skylib` is consolidated
@@ -385,7 +392,7 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   `current_app.config` reads and Skynet's five-line literal module. Callers with
   their own configuration assign `query.config.settings`. Note that enabling the
   cache snaps query regions to a fixed grid, which is observable near a field
-  edge (`docs/extraction.md`, Query §5.1).
+  edge (`docs/architecture/extraction.md`, Query §5.1).
 - `tools/config.py` — `MARS_DATA_DIR` (default `<repo>/data`) is the data
   root: the fixture frames, the recorded reference solves, and the archive
   download root `MARS_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
@@ -419,7 +426,7 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   covers fetched data bundles (`<mars home>/bundles/`). A new fixture
   subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the tuple
   matches the directories present. An installed wheel re-anchors the data
-  and download roots; see `docs/installing.md`.
+  and download roots; see `docs/guides/installation/README.md`.
 
 ### Runtime dependencies that are not optional
 
@@ -459,7 +466,7 @@ stays the extracted all-sky search. The
 2026-10-26) strips NGC 3628 V's recorded WCS and requires each backend to
 land back on it within 1 arcsec, 0.5% in scale and 0.25 deg in rotation:
 with all three index sets, astrometry.net bounded in ~2.6 s and all-sky in
-18-19 s since 2026-10-28 (4 s and ~150 s before; `docs/extraction.md`, WCS
+18-19 s since 2026-10-28 (4 s and ~150 s before; `docs/architecture/extraction.md`, WCS
 §5), and ATLAS bounded in ~20 s. ATLAS is a pointed solver, not a blind one: with no scale or
 pointing it refuses its 2-degree footprint budget. Missing data skips by
 name; a miss with the data configured fails. Both backends still degrade to
@@ -467,8 +474,8 @@ name; a miss with the data configured fails. Both backends still degrade to
 
 This deployment uses UCAC5. UCAC4's native product remains unverified legacy;
 its absence is not a deployment blocker. M5's motion/coverage corrections and
-retained limits are recorded in `docs/working/master-continuation-plan.md` and
-`docs/analysis/m5-coordinates-image-geometry.md`. Passing the ordinary suite
+retained limits are recorded in `docs/development/plans/master-continuation-plan.md` and
+`docs/development/reviews/m5-coordinates-image-geometry.md`. Passing the ordinary suite
 without native prerequisites does not validate a new host's solver setup.
 
 ## Astromancer port boundaries
@@ -484,7 +491,7 @@ The executable Astromancer algorithms are maintained as Python ports:
 
 Browser UI, local-storage state, audio-device playback, and client-side download
 handlers were intentionally outside the Python port boundary. The retired TypeScript
-implementations remain available in git history, and `docs/extraction.md` records their
+implementations remain available in git history, and `docs/architecture/extraction.md` records their
 provenance and parity details.
 
 ## Conventions

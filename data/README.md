@@ -169,7 +169,7 @@ original extracted solver reproduced all four to the last float bit apart
 from `limmag5`'s `np.polyfit` drift. M2 intentionally corrects the scatter and
 rejection policy. `tests/test_fieldcal_solution.py` now checks these same inputs
 against an independent scientific fit while preserving all recorded outputs.
-See [the M2 acceptance record](../docs/analysis/photometric-calibration.md)
+See [the M2 acceptance record](../docs/development/reviews/photometric-calibration.md)
 for current behavior, differences and validation limits.
 
 | Directory | Upstream source | Field | Frame |

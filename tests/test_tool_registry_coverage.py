@@ -75,7 +75,7 @@ def test_schemas_and_functions_agree():
 
 
 def test_the_local_no_network_tools_are_reachable():
-    """docs/tool-architecture.md 2 calls these the first local tools."""
+    """docs/architecture/tool-architecture.md 2 calls these the first local tools."""
     for name in (
         "describe_image_wcs",
         "list_photometric_catalogs",

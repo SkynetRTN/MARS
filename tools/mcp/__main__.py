@@ -103,7 +103,7 @@ def _missing_sdk_message(prefix: str | None = None, has_pip: bool | None = None)
     return (
         "mars-mcp needs its optional [mcp] dependencies. From a checkout, run "
         "`uv sync --extra mcp`. From an install, add them to this environment: "
-        f"`{command}` (see docs/installing.md).{note}"
+        f"`{command}` (see docs/guides/installation/README.md).{note}"
     )
 
 

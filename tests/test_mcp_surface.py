@@ -619,7 +619,7 @@ def _imported_modules(path: Path) -> set[str]:
 def test_the_server_sits_beside_the_agent_loop_not_on_it():
     """``tools/mcp -> tools/registry``; never through ``tools/agent`` or ``tools/llm``.
 
-    ``docs/tool-architecture.md`` 10.3 and ``CLAUDE.md``: the server is a
+    ``docs/architecture/tool-architecture.md`` 10.3 and ``CLAUDE.md``: the server is a
     sibling consumer of the registry. And nothing under ``algorithms/``
     reaches up into it.
     """
@@ -795,7 +795,7 @@ def test_the_missing_sdk_advice_fits_an_environment_uv_made(tmp_path):
         '[tool]\nrequirements = [{ name = "skynet-mars" }]\n', encoding="utf-8"
     )
     tool = _missing_sdk_message(prefix=str(tmp_path), has_pip=False)
-    assert tool.endswith('`uv tool install --python 3.13 "skynet-mars[mcp]"` (see docs/installing.md).')
+    assert tool.endswith('`uv tool install --python 3.13 "skynet-mars[mcp]"` (see docs/guides/installation/README.md).')
     assert "pip" not in tool
 
     plain = _missing_sdk_message(prefix=str(tmp_path / "venv"), has_pip=False)

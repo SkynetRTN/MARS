@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[2]
 BRAND = ROOT / "brand"
 
-#: Skynet palette, docs/repository-folders.md, "The brand palette".
+#: Skynet palette, docs/architecture/repository-folders.md, "The brand palette".
 NAVY_BANNER = (0x1F, 0x26, 0x33)
 
 #: The social preview's background, and where its wordmark and tagline sit.

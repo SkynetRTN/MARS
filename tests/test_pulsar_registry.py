@@ -308,7 +308,7 @@ def test_the_curated_period_cannot_bias_the_measurement(
     """Stage 2 measures the same period whether or not a curation exists.
 
     This is the architectural invariant behind "measure first, check second"
-    (`docs/pulsar-tool-pipeline.md`). A fold at a measured period is a
+    (`docs/guides/pulsar-tool-pipeline.md`). A fold at a measured period is a
     detection; a fold at a literature period is a fit to a known answer. That
     distinction only survives while nothing downstream of stage 0 can see the
     curated value -- so if a future change wires it into the search bounds, a
@@ -353,7 +353,7 @@ def test_the_measured_period_is_not_the_curated_one(pulsar_path, artifact_dir) -
     Equality would mean the measurement had been replaced by the reference.
     The residual gap is the evidence that stage 2 searched a grid: the
     periodogram reports a grid peak, not a literature value. The measured
-    offset on this fixture is ~0.04% (docs/pulsar-tool-pipeline.md section 4).
+    offset on this fixture is ~0.04% (docs/guides/pulsar-tool-pipeline.md section 4).
     """
     result = compute_pulsar_periodogram(pulsar_path("b0329"))
     curated = PULSAR_PERIODS_S["b0329"]

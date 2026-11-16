@@ -1,6 +1,6 @@
 """``mars-bench`` -- the benchmark CLI.
 
-``docs/benchmarking/harness.md`` section 11. Six verbs over a directory on disk:
+``docs/benchmarks/harness.md`` section 11. Six verbs over a directory on disk:
 
 * ``run`` -- live model, replayed remote tools, live local tools.
 * ``grade`` -- offline, free, and repeatable after a grader fix.

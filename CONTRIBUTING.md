@@ -1,6 +1,6 @@
 # Contributing
 
-MARS (MCP Astronomy Research Suite) is early-stage astronomy tooling. Keep pull requests narrow and target
+MARS (MCP Astronomy Research Suite) is an astronomy tool collection. Keep pull requests narrow and target
 `main` unless a maintainer asks for a different base branch.
 
 ## Pull Requests
@@ -26,6 +26,22 @@ git diff --check
 
 See `tests/README.md` for what the suite does and does not cover, and which
 markers (`network`, `slow`, `solver_data`) gate the heavier checks.
+
+## Documentation
+
+Start with [the documentation map](docs/README.md). Keep user-facing guides in
+`docs/guides/`, technical references in `docs/architecture/`, and maintainer
+procedures and records in `docs/development/`. Keep only `README.md` at the
+docs root. Agent-session scratch belongs outside the documentation tree.
+
+The active [master continuation plan](docs/development/plans/master-continuation-plan.md)
+owns release gates. Preserve completed task plans in `development/archive/plans/`
+and implementation tracks in `development/archive/tracks/`, with dated status
+annotations. Reviews and measurements remain dated evidence; navigation can
+follow the current layout without rewriting historical results.
+
+Tool-use guidance has one source in `tools/skill/source/`. Run
+`uv run python -m tools.skill` after editing it, and commit the generated copies.
 
 ## Code Ownership
 

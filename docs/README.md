@@ -1,49 +1,51 @@
 # MARS Documentation
 
-The top level of `docs/` holds the **reference documents** — the ones that
-describe how MARS (MCP Astronomy Research Suite) is built and how it works. They track the code and are
-updated when the code changes.
+Start with the guide for your task. Current guides and architecture references
+track the code; dated reviews and completed plans live under `development/`.
 
-| Document | What it covers |
+| I want to… | Start here |
 | --- | --- |
-| [tool-architecture.md](tool-architecture.md) | The master package architecture: the public tool layer, algorithm-package ownership, shared models and artifacts, `skylib_lite` consolidation, runtime and validation policy, and the non-goals. |
-| [extraction.md](extraction.md) | The master extraction record: one section per algorithm package, with exact upstream provenance (source path, line ranges, per-file diff fidelity), every severed dependency, the preserved parity quirks, and the verification actually performed. |
-| [repository-folders.md](repository-folders.md) | A current-state guide to every source folder in the repository — responsibilities, important files, and caveats. |
-| [technical-summary.md](technical-summary.md) | A concise current-state summary of what MARS is, the capability, agent, console, and benchmark work already delivered, and its validation boundaries. |
-| [architecture-layers.md](architecture-layers.md) | The layer map over the architecture: which parts of the repository are tools, which are turn-taking, and which are harness, and the eight gates the loop adds over a bare tool-use wrapper — with five generated figures: MARS at a glance (the agent loop, from question to answer), one agent turn as a sequence diagram, MARS as built, its validation (provenance and the benchmark), and a proposed extension to Skynet 2 observing, labelled as proposed. |
-| [installing/](installing/) | Step-by-step guides for the Claude and ChatGPT desktop apps: [Windows](installing/windows.md), [macOS](installing/macos.md), [Linux](installing/linux.md). |
-| [installing.md](installing.md) | Installing MARS with no checkout: what a wheel contains, registering `mars-mcp` with a host, where artifacts and downloads go, fetching the optional data bundles, and which tools need which bundle. |
-| [limitations.md](limitations.md) | Known limitations: what MARS does not do, or does only under a condition, across installation, plate solving, the console, the MCP server, Python use, remote services, science results and the benchmark, each with a link to its details. |
-| [releasing.md](releasing.md) | How a release is cut: version and tag policy, what a pre-release means, the release workflow, and how the optional data bundles are published on the standing `data` release and pinned by each wheel. |
-| [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md) | The four-stage pulsar tool chain (light curve → periodogram → fold → sonify): why the stage order is a dependency, each stage's extracted Astromancer provenance, result contracts, and where output goes. |
+| Install MARS and connect a desktop host | [Installation](guides/installation/README.md), then [Linux](guides/installation/linux.md), [macOS](guides/installation/macos.md) or [Windows](guides/installation/windows.md) |
+| Understand the supported scope | [Known limitations](guides/limitations.md) |
+| Follow the pulsar workflow | [Pulsar tool pipeline](guides/pulsar-tool-pipeline.md) |
+| Get a technical overview | [Technical summary](architecture/technical-summary.md) |
+| Understand ownership and dependencies | [Tool architecture](architecture/tool-architecture.md), [layer map](architecture/architecture-layers.md) and [repository folders](architecture/repository-folders.md) |
+| Check algorithm provenance and retained behavior | [Extraction record](architecture/extraction.md) |
+| Read benchmark results and their limits | [Benchmarks](benchmarks/README.md) |
+| Contribute or prepare a release | [Contributing](../CONTRIBUTING.md) and [development](development/README.md) |
+| See what changed in a release | [0.1.0 release notes](releases/0.1.0.md) |
 
-## Subdirectories
+The agent guide is generated from [tools/skill/source/](../tools/skill/source/SKILL.md)
+into [skills/mars-tools/](../skills/mars-tools/SKILL.md). Edit the source and run
+`uv run python -m tools.skill` to update its distributed copies.
 
-| Directory | Contents |
+## Directory map
+
+| Directory | Purpose |
 | --- | --- |
-| [`analysis/`](analysis/README.md) | Point-in-time review and external-research output. Dated. Kept for the "why"; the action items land elsewhere as plans or code. |
-| [`benchmarking/`](benchmarking/README.md) | Measuring models on MARS's tool surface: the harness design, the 144-session sweep, the generated report, and the figures. |
-| [`archive/`](archive/README.md) | Completed track documents, kept as records rather than deleted. Not current-state. |
-| [`working/`](working/README.md) | The [master continuation plan](working/master-continuation-plan.md): current dispositions, execution order and acceptance checks for known continuing work. |
-| [`examples/`](examples/README.md) | Committed sample output — the deliberate exception to the repository's "no generated files" rule. |
-| [`releases/`](releases/0.1.0.md) | Versioned release notes, beginning with the first official stable release, `0.1.0`. The release workflow publishes the notes for its package version. |
+| `guides/` | Installation, host setup, practical workflows and user-visible limitations. |
+| `architecture/` | Current technical overview, system boundaries, source layout and algorithm provenance. |
+| [development/](development/README.md) | Maintainer procedures, active plans, dated reviews and archived implementation records. |
+| [benchmarks/](benchmarks/README.md) | Benchmark design, historical results, generated reports and figures, kept together. |
+| `releases/` | Versioned release notes; the release workflow requires `<version>.md` here. |
+| `assets/` | Brand and architecture figures, with generation scripts. |
+| [examples/](examples/README.md) | Deliberately committed sample plots and audio. |
 
 ## Document lifecycle
 
-- **Reference docs** (`docs/*.md`) describe the system as it is. Update them in
-  the same change that alters the behaviour they describe.
-- **`analysis/`** documents are snapshots. They are not kept current against the
-  code; they record what a review found on a given date. Trim or delete one when
-  it has been fully superseded.
-- **`working/`** holds the single master continuation plan. New findings get a
-  row there, linked to their evidence; completed work gets closure locators.
-  Fold durable outcomes into reference docs as they land. Archive the master
-  only after accepted work is closed and remaining scope has explicit
-  deferral/revisit decisions; preserve its verification record.
-- **`archive/`** documents are records. They are never updated to track the
-  code; a correction to one is dated and marked inline.
-- **`benchmarking/`** is the benchmark track's own folder — design, results,
-  report and figures together, because the document and its evidence are one
-  subject.
-- **`examples/`** output is regenerated deliberately and rarely; see that
-  directory's README before adding to it.
+- **Guides and architecture references** describe supported behavior. Update
+  them with the change that alters that behavior. Label proposed extensions.
+- **Active plans** live in `development/plans/`. The [master continuation
+  plan](development/plans/master-continuation-plan.md) owns release gates,
+  current dispositions and closure evidence. Keep it active through publication;
+  avoid competing gate checklists.
+- **Reviews** in `development/reviews/` are dated evidence. Preserve original
+  findings and measurements; link current dispositions from the master plan.
+- **Archived tracks and task plans** live in `development/archive/`. Add a
+  dated completion annotation and preserve their reasoning. Historical unchecked
+  recipes do not schedule new work. Fold durable outcomes into current references.
+- **Benchmark reports, figures and examples** are evidence or deliberate
+  generated output. Update navigation without silently changing measurements
+  or scores. Regenerate them only as a separate, explicit operation.
+- **Release notes** describe a version. Keep their location stable for the
+  publishing workflow and use links that resolve at that version's tag.

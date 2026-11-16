@@ -10,11 +10,11 @@
 # tools.wcs.solve_astrometry, and (P6) an opt-in `search_bounds` override that
 # is applied to the freshly built WcsCalibrationSettings exactly where
 # `solve_settings` already is; every `search_bounds`/`SearchRadiusWithoutHint`
-# line below is post-extraction. See docs/extraction.md, WCS.
+# line below is post-extraction. See docs/architecture/extraction.md, WCS.
 # WCS-02 adds shared finite attempt validation to the config builders; it does
 # not change the numerical search or provide a preprocessing/full-call deadline.
 # M2 WCS-03/14 use the solved footprint for unscaled position acceptance and
-# the reference-catalog follow-up. See docs/analysis/accepted-sky-positions.md.
+# the reference-catalog follow-up. See docs/development/reviews/accepted-sky-positions.md.
 
 from __future__ import annotations
 

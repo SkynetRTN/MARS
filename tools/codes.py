@@ -8,7 +8,7 @@ not constructed -- so this file cannot drift from the code without a test
 saying so.
 
 **Why a mapping and not a ``Literal``.**
-``docs/analysis/applicable-designs.md`` §3 recommended promoting
+``docs/development/reviews/applicable-designs.md`` §3 recommended promoting
 ``ToolError.code`` to a closed ``Literal``, on the finding that it had *"exactly
 three values in use"*. That finding was drawn from the database tools alone,
 where an error is built as a ``{"code": ..., "message": ...}`` dict literal --

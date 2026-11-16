@@ -198,7 +198,7 @@ def fetched_bundle(
 #
 # The default is artifacts/ beside the working directory only in a checkout,
 # where that is the repository. An installed MARS writes only under the
-# MARS home (docs/installing.md): an installed console used to drop
+# MARS home (docs/guides/installation/README.md): an installed console used to drop
 # an untracked artifacts/ into whatever directory it was started from.
 ARTIFACT_DIR = (
     env_path(ARTIFACT_DIR_ENV)
@@ -231,7 +231,7 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # tests/conftest.py does. Setting the environment variables is the supported
 # way to move them together.
 #
-# Re-anchored for an installed wheel (C7 of docs/archive/mcp-tool-surface.md):
+# Re-anchored for an installed wheel (C7 of docs/development/archive/tracks/mcp-tool-surface.md):
 # there DATA_DIR is the shipped core inside site-packages, which a download
 # must never write into -- it may be read-only, and it is replaced wholesale
 # by the next upgrade. An install downloads into the per-user MARS home

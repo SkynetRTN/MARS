@@ -1,6 +1,6 @@
 """The three kinds of right answer, and the four fidelity families.
 
-docs/benchmarking/harness.md section 7.1. On this surface "correct" is three
+docs/benchmarks/harness.md section 7.1. On this surface "correct" is three
 different things -- a ground truth the repository recorded before the model
 ran, fidelity to what the tools returned this session, and a correct negative
 where a confident answer is itself the failure. They need different machinery,
